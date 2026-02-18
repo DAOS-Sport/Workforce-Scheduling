@@ -495,6 +495,75 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/portal/line-callback", async (req, res) => {
+    try {
+      const { code, redirectUri } = req.body;
+      if (!code) return res.status(400).json({ message: "缺少授權碼" });
+
+      const channelId = process.env.LINE_CHANNEL_ID;
+      const channelSecret = process.env.LINE_CHANNEL_SECRET;
+      if (!channelId || !channelSecret) {
+        return res.status(500).json({ message: "LINE Login 尚未設定" });
+      }
+
+      const tokenRes = await fetch("https://api.line.me/oauth2/v2.1/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+          client_id: channelId,
+          client_secret: channelSecret,
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        console.error("LINE token error:", errText);
+        return res.status(401).json({ message: "LINE 授權失敗" });
+      }
+
+      const tokenData = await tokenRes.json();
+      const accessToken = tokenData.access_token;
+
+      const profileRes = await fetch("https://api.line.me/v2/profile", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!profileRes.ok) {
+        return res.status(401).json({ message: "無法取得 LINE 個人資料" });
+      }
+
+      const profile = await profileRes.json();
+      const lineUserId = profile.userId;
+
+      const employee = await storage.getEmployeeByLineId(lineUserId);
+      if (!employee) {
+        return res.status(404).json({
+          message: "找不到此 LINE 帳號對應的員工資料",
+          lineUserId,
+          displayName: profile.displayName,
+        });
+      }
+
+      if (employee.status !== "active") {
+        return res.status(403).json({ message: "此帳號已停用" });
+      }
+
+      res.json({
+        id: employee.id,
+        name: employee.name,
+        employeeCode: employee.employeeCode,
+        role: employee.role,
+        lineDisplayName: profile.displayName,
+      });
+    } catch (err: any) {
+      console.error("LINE callback error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/portal/verify", async (req, res) => {
     try {
       const { lineId } = req.body;

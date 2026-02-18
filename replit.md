@@ -4,14 +4,16 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
+- 2026-02-18: Added Employee Portal (/portal) with LINE Login, mandatory guidelines confirmation, personal schedule calendar, today's coworkers with one-click dial, watermark security
+- 2026-02-18: Added venue-specific fixed guidelines (固定守則 bound to venues), venue badge display, filtered acknowledgment by scheduled employees
+- 2026-02-18: Added lineId field to employees for LINE Login integration
 - 2026-02-18: Added 守則管理 (Guidelines Management) page with 3 categories (固定守則/每月說明/保密同意書), CRUD, preview, employee acknowledgment tracking
 - 2026-02-18: Added venue shift templates (venueShiftTemplates table) for weekday/weekend role-based staffing requirements per venue
 - 2026-02-18: Updated venue edit dialog with weekday/weekend tabs for managing shift templates with role/count
 - 2026-02-18: Added role-based shortage summary in schedule editor (per-venue role icons + shortage counts)
-- 2026-02-18: Added role icons (LifeBuoy/Dumbbell/UserRound/Sparkles/ShieldCheck) next to employee names in schedule cells
-- 2026-02-18: Rebuilt schedule editor: venue-centric grid (venue rows × date columns), input time slot requirements per venue per date (e.g., 0630-1600 救生1人), gap analysis in collapsible drawer
-- 2026-02-18: Added scheduleSlots table for per-date venue requirements (replaces fixed day-of-week venueRequirements for scheduling)
-- 2026-02-18: Added attendance xlsx upload & audit feature (打卡紀錄 import, anomaly detection, stats, filterable table)
+- 2026-02-18: Rebuilt schedule editor: venue-centric grid (venue rows × date columns), input time slot requirements per venue per date
+- 2026-02-18: Added scheduleSlots table for per-date venue requirements
+- 2026-02-18: Added attendance xlsx upload & audit feature
 - 2026-02-18: Initial MVP build with regional grouping, smart scheduler, labor law validation, employee/venue CRUD, seed data
 
 ## Architecture
@@ -23,7 +25,7 @@ A workforce scheduling management system for PT (personal training) staff across
 ## Project Structure
 ```
 client/src/
-  pages/          - Dashboard, Schedule, Employees, Venues, Attendance, Guidelines
+  pages/          - Dashboard, Schedule, Employees, Venues, Attendance, Guidelines, Portal
   components/     - AppSidebar, RegionTabs, ShiftCellEditor, VacancyFooter, ThemeToggle
   lib/            - queryClient, theme-provider, region-context, labor-law
 server/
@@ -43,7 +45,16 @@ shared/
 - **Labor Law Engine (HR Eye)**: 7-day rest, 12h daily limit, 11h rest gap
 - **Dispatch Mode**: Orange-highlighted cells for outsourced staff
 - **Vacancy Footer**: Real-time shortage monitoring
-- **Attendance Import**: Upload xlsx from 駿斯 attendance system, auto-parse 打卡紀錄 sheet, detect late/early/anomaly/missing punches
+- **Attendance Import**: Upload xlsx from 駿斯 attendance system
+- **Employee Portal** (/portal): LINE Login, mandatory guideline confirmation, personal schedule, today's coworkers with one-click phone call, name+code watermark security
+
+## Employee Portal (/portal)
+- **Authentication**: LINE Login OAuth 2.1 flow, verifies employee by LINE user ID in database
+- **Guidelines Check**: Full-screen mandatory confirmation before accessing schedule. Includes venue-specific rules, monthly announcements, confidentiality agreements. Monthly acknowledgment cycle.
+- **Personal Schedule**: Calendar or list view of employee's own shifts. Export to iOS (.ics) or Google Calendar.
+- **Today's Coworkers**: Shows same-venue coworkers for today with one-click phone dial (tel: link). Only shows name, role, phone - no salary/address.
+- **Watermark**: Full-page transparent watermark with employee name + code for screenshot deterrence.
+- **Required env vars**: LINE_CHANNEL_ID, LINE_CHANNEL_SECRET (server), VITE_LINE_CHANNEL_ID (client)
 
 ## Attendance Upload Format
 - Source: 駿斯運動事業股份有限公司 attendance system xlsx export
@@ -85,3 +96,9 @@ shared/
 - DELETE /api/guidelines/:id
 - GET /api/guidelines/:id/acknowledgments
 - POST /api/guideline-ack
+- POST /api/portal/line-callback (LINE OAuth token exchange)
+- POST /api/portal/verify (verify employee by LINE ID)
+- GET /api/portal/my-shifts/:employeeId/:startDate/:endDate
+- GET /api/portal/today-coworkers/:employeeId
+- GET /api/portal/guidelines-check/:employeeId
+- POST /api/portal/acknowledge-all

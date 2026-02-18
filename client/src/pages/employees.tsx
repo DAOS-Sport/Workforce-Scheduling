@@ -34,6 +34,7 @@ export default function EmployeesPage() {
     employeeCode: "",
     phone: "",
     email: "",
+    lineId: "",
     status: "active",
     role: "pt",
   });
@@ -84,7 +85,7 @@ export default function EmployeesPage() {
   });
 
   const resetForm = () => {
-    setForm({ name: "", employeeCode: "", phone: "", email: "", status: "active", role: "pt" });
+    setForm({ name: "", employeeCode: "", phone: "", email: "", lineId: "", status: "active", role: "pt" });
     setEditingEmployee(null);
   };
 
@@ -100,6 +101,7 @@ export default function EmployeesPage() {
       employeeCode: emp.employeeCode,
       phone: emp.phone || "",
       email: emp.email || "",
+      lineId: emp.lineId || "",
       status: emp.status,
       role: emp.role,
     });
@@ -273,6 +275,15 @@ export default function EmployeesPage() {
                   data-testid="input-employee-email"
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>LINE ID</Label>
+              <Input
+                value={form.lineId}
+                onChange={(e) => setForm({ ...form, lineId: e.target.value })}
+                placeholder="LINE 用戶 ID（用於員工入口登入）"
+                data-testid="input-employee-line-id"
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
