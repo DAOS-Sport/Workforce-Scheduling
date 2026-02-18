@@ -1,23 +1,28 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, getDay } from "date-fns";
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
 import { zhTW } from "date-fns/locale";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RegionTabs } from "@/components/region-tabs";
-import { VacancyFooter } from "@/components/vacancy-footer";
 import { ShiftCellEditor } from "@/components/shift-cell-editor";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronLeft, ChevronRight, CalendarDays, Plus, AlertTriangle, Shield } from "lucide-react";
-import type { Employee, Venue, Shift, VacancyInfo, VenueRequirement } from "@shared/schema";
+import { ChevronLeft, ChevronRight, CalendarDays, Plus, ChevronUp, ChevronDown, Check, AlertCircle } from "lucide-react";
+import type { Employee, Venue, Shift, VenueRequirement } from "@shared/schema";
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
+
+interface VenueDaySummary {
+  venueId: number;
+  venueName: string;
+  dateStr: string;
+  totalShortage: number;
+  details: { timeSlot: string; required: number; assigned: number; shortage: number }[];
+}
 
 export default function SchedulePage() {
   const { activeRegion } = useRegion();
@@ -28,6 +33,7 @@ export default function SchedulePage() {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedShift, setSelectedShift] = useState<Shift | undefined>();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const monthDates = useMemo(
     () => eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) }),
@@ -79,8 +85,8 @@ export default function SchedulePage() {
     return map;
   }, [shifts]);
 
-  const vacancies = useMemo<VacancyInfo[]>(() => {
-    const result: VacancyInfo[] = [];
+  const venueSummaryMap = useMemo(() => {
+    const map = new Map<string, VenueDaySummary>();
     monthDates.forEach((d) => {
       const dateStr = format(d, "yyyy-MM-dd");
       const dayOfWeek = d.getDay();
@@ -95,20 +101,58 @@ export default function SchedulePage() {
             s.startTime <= req.startTime &&
             s.endTime >= req.endTime
         ).length;
-        if (assignedCount < req.requiredCount) {
-          result.push({
+        const shortage = req.requiredCount - assignedCount;
+        const key = `${req.venueId}-${dateStr}`;
+        if (!map.has(key)) {
+          map.set(key, {
             venueId: req.venueId,
             venueName: venue.shortName,
-            timeSlot: `${format(d, "M/d")} ${req.startTime.substring(0, 5)}-${req.endTime.substring(0, 5)}`,
-            required: req.requiredCount,
-            assigned: assignedCount,
-            shortage: req.requiredCount - assignedCount,
+            dateStr,
+            totalShortage: 0,
+            details: [],
+          });
+        }
+        const entry = map.get(key)!;
+        entry.totalShortage += Math.max(0, shortage);
+        entry.details.push({
+          timeSlot: `${req.startTime.substring(0, 5)}-${req.endTime.substring(0, 5)}`,
+          required: req.requiredCount,
+          assigned: assignedCount,
+          shortage,
+        });
+      });
+    });
+    return map;
+  }, [monthDates, requirements, shifts, venueMap]);
+
+  const summaryVenues = useMemo(() => {
+    const ids = new Set<number>();
+    requirements.forEach((r) => ids.add(r.venueId));
+    return venues.filter((v) => ids.has(v.id));
+  }, [venues, requirements]);
+
+  const totalShortageCount = useMemo(() => {
+    let total = 0;
+    venueSummaryMap.forEach((s) => { total += s.totalShortage; });
+    return total;
+  }, [venueSummaryMap]);
+
+  const detailedVacancies = useMemo(() => {
+    const result: { venueName: string; date: string; timeSlot: string; shortage: number }[] = [];
+    venueSummaryMap.forEach((s) => {
+      s.details.forEach((d) => {
+        if (d.shortage > 0) {
+          result.push({
+            venueName: s.venueName,
+            date: s.dateStr,
+            timeSlot: d.timeSlot,
+            shortage: d.shortage,
           });
         }
       });
     });
     return result;
-  }, [monthDates, requirements, shifts, venueMap]);
+  }, [venueSummaryMap]);
 
   const createShift = useMutation({
     mutationFn: async (data: any) => {
@@ -244,8 +288,8 @@ export default function SchedulePage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-auto relative" ref={scrollRef}>
+      <div className="flex-1 overflow-hidden flex flex-col relative">
+        <div className="flex-1 overflow-auto" ref={scrollRef}>
           <table className="border-collapse text-sm" style={{ minWidth: `${130 + monthDates.length * 100}px` }}>
             <thead className="sticky top-0 z-20">
               <tr>
@@ -262,12 +306,12 @@ export default function SchedulePage() {
                     <th
                       key={i}
                       data-date-col={format(d, "yyyy-MM-dd")}
-                      className={`text-center p-1.5 border-b border-r font-medium bg-background ${
+                      className={`text-center p-1.5 border-b border-r font-medium ${
                         isToday
                           ? "bg-primary/5"
                           : isWeekend
                             ? "bg-muted/30"
-                            : ""
+                            : "bg-background"
                       }`}
                       style={{ minWidth: 100, width: 100 }}
                     >
@@ -281,6 +325,77 @@ export default function SchedulePage() {
                   );
                 })}
               </tr>
+              {!isLoading && summaryVenues.length > 0 && summaryVenues.map((venue) => (
+                <tr key={`summary-${venue.id}`} className="bg-muted/10">
+                  <td
+                    className="px-2 py-1 border-b border-r text-xs font-medium text-muted-foreground bg-muted/20 sticky left-0 z-30 whitespace-nowrap"
+                    style={{ minWidth: 130, width: 130 }}
+                    data-testid={`summary-venue-label-${venue.id}`}
+                  >
+                    {venue.shortName}
+                  </td>
+                  {monthDates.map((d, di) => {
+                    const dateStr = format(d, "yyyy-MM-dd");
+                    const key = `${venue.id}-${dateStr}`;
+                    const summary = venueSummaryMap.get(key);
+                    const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
+                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
+                    if (!summary) {
+                      return (
+                        <td
+                          key={di}
+                          className={`border-b border-r text-center ${
+                            isToday ? "bg-primary/5" : isWeekend ? "bg-muted/15" : "bg-muted/10"
+                          }`}
+                          style={{ minWidth: 100, width: 100 }}
+                        >
+                          <span className="text-[10px] text-muted-foreground/40">—</span>
+                        </td>
+                      );
+                    }
+
+                    const hasShortage = summary.totalShortage > 0;
+                    return (
+                      <td
+                        key={di}
+                        className={`border-b border-r text-center ${
+                          isToday ? "bg-primary/5" : isWeekend ? "bg-muted/15" : "bg-muted/10"
+                        }`}
+                        style={{ minWidth: 100, width: 100 }}
+                        data-testid={`summary-cell-${venue.id}-${dateStr}`}
+                      >
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button className="flex items-center justify-center w-full py-0.5 cursor-pointer">
+                              {hasShortage ? (
+                                <span className="text-xs font-bold text-red-600 dark:text-red-400" data-testid={`shortage-${venue.id}-${dateStr}`}>
+                                  -{summary.totalShortage}
+                                </span>
+                              ) : (
+                                <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" data-testid={`full-${venue.id}-${dateStr}`} />
+                              )}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent side="bottom" className="w-auto min-w-[160px] p-3" align="center">
+                            <div className="text-xs space-y-1.5">
+                              <div className="font-medium">{venue.shortName} — {format(d, "M/d")}</div>
+                              {summary.details.map((det, idx) => (
+                                <div key={idx} className="flex items-center justify-between gap-3">
+                                  <span className="text-muted-foreground">{det.timeSlot}</span>
+                                  <span className={det.shortage > 0 ? "text-red-500 font-medium" : "text-green-500"}>
+                                    {det.shortage > 0 ? `缺${det.shortage}人` : "滿"}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
             </thead>
             <tbody>
               {isLoading ? (
@@ -384,8 +499,50 @@ export default function SchedulePage() {
           </table>
         </div>
 
-        <div className="border-t p-4 bg-card">
-          <VacancyFooter vacancies={vacancies} />
+        <div
+          className={`border-t bg-card transition-all duration-300 ease-in-out shrink-0 ${
+            drawerOpen ? "max-h-[200px]" : "max-h-[36px]"
+          } overflow-hidden`}
+          data-testid="vacancy-drawer"
+        >
+          <button
+            onClick={() => setDrawerOpen((prev) => !prev)}
+            className="w-full flex items-center justify-between gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            data-testid="button-toggle-drawer"
+          >
+            <div className="flex items-center gap-2">
+              {totalShortageCount > 0 ? (
+                <>
+                  <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                  <span>缺班明細 — 共 {totalShortageCount} 個缺口</span>
+                </>
+              ) : (
+                <>
+                  <Check className="h-3.5 w-3.5 text-green-500" />
+                  <span>本月所有時段人力已滿</span>
+                </>
+              )}
+            </div>
+            {drawerOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+          </button>
+          {drawerOpen && detailedVacancies.length > 0 && (
+            <div className="px-4 pb-3 overflow-auto max-h-[160px]">
+              <div className="flex flex-wrap gap-1.5">
+                {detailedVacancies.map((v, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-1.5 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-2 py-1 text-xs"
+                    data-testid={`vacancy-detail-${i}`}
+                  >
+                    <span className="text-red-700 dark:text-red-300 font-medium">{v.venueName}</span>
+                    <span className="text-muted-foreground">{format(new Date(v.date), "M/d")}</span>
+                    <span className="text-muted-foreground">{v.timeSlot}</span>
+                    <span className="text-red-600 dark:text-red-400 font-bold">缺{v.shortage}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
