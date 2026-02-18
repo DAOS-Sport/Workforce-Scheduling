@@ -1,4 +1,4 @@
-import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, Settings } from "lucide-react";
+import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, Settings, BookOpen } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -22,6 +22,7 @@ const mainItems = [
 
 const toolItems = [
   { title: "考勤稽核", url: "/attendance", icon: ClipboardCheck },
+  { title: "守則管理", url: "/guidelines", icon: BookOpen },
 ];
 
 export function AppSidebar() {

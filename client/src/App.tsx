@@ -14,6 +14,7 @@ import SchedulePage from "@/pages/schedule";
 import EmployeesPage from "@/pages/employees";
 import VenuesPage from "@/pages/venues";
 import AttendancePage from "@/pages/attendance";
+import GuidelinesPage from "@/pages/guidelines";
 
 function Router() {
   return (
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/employees" component={EmployeesPage} />
       <Route path="/venues" component={VenuesPage} />
       <Route path="/attendance" component={AttendancePage} />
+      <Route path="/guidelines" component={GuidelinesPage} />
       <Route component={NotFound} />
     </Switch>
   );
