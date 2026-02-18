@@ -4,6 +4,7 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
+- 2026-02-18: Added 守則管理 (Guidelines Management) page with 3 categories (固定守則/每月說明/保密同意書), CRUD, preview, employee acknowledgment tracking
 - 2026-02-18: Added venue shift templates (venueShiftTemplates table) for weekday/weekend role-based staffing requirements per venue
 - 2026-02-18: Updated venue edit dialog with weekday/weekend tabs for managing shift templates with role/count
 - 2026-02-18: Added role-based shortage summary in schedule editor (per-venue role icons + shortage counts)
@@ -22,7 +23,7 @@ A workforce scheduling management system for PT (personal training) staff across
 ## Project Structure
 ```
 client/src/
-  pages/          - Dashboard, Schedule, Employees, Venues, Attendance
+  pages/          - Dashboard, Schedule, Employees, Venues, Attendance, Guidelines
   components/     - AppSidebar, RegionTabs, ShiftCellEditor, VacancyFooter, ThemeToggle
   lib/            - queryClient, theme-provider, region-context, labor-law
 server/
@@ -77,3 +78,10 @@ shared/
 - GET /api/attendance-records/:uploadId
 - GET /api/attendance-records?startDate=&endDate=&employeeCodes=
 - DELETE /api/attendance-upload/:id
+- GET /api/guidelines?category=fixed|monthly|confidentiality
+- GET /api/guidelines/:id
+- POST /api/guidelines
+- PATCH /api/guidelines/:id
+- DELETE /api/guidelines/:id
+- GET /api/guidelines/:id/acknowledgments
+- POST /api/guideline-ack

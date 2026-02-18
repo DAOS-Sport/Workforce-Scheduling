@@ -71,9 +71,16 @@ export default function GuidelinesPage() {
 
   const filtered = allGuidelines.filter((g) => g.category === activeTab);
 
-  const { data: allEmployees = [] } = useQuery<Employee[]>({
+  const { data: employeesA = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees", "A"],
   });
+  const { data: employeesB = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees", "B"],
+  });
+  const { data: employeesC = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees", "C"],
+  });
+  const allEmployees = [...employeesA, ...employeesB, ...employeesC];
 
   const { data: acks = [] } = useQuery<GuidelineAck[]>({
     queryKey: ["/api/guidelines", viewingGuidelineId, "acknowledgments"],
