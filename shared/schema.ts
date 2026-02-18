@@ -159,6 +159,34 @@ export const insertAttendanceRecordSchema = createInsertSchema(attendanceRecords
 export type InsertAttendanceRecord = z.infer<typeof insertAttendanceRecordSchema>;
 export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
 
+export const guidelines = pgTable("guidelines", {
+  id: serial("id").primaryKey(),
+  category: text("category").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull().default(""),
+  contentType: text("content_type").notNull().default("text"),
+  videoUrl: text("video_url"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  yearMonth: text("year_month"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertGuidelineSchema = createInsertSchema(guidelines).omit({ id: true, createdAt: true });
+export type InsertGuideline = z.infer<typeof insertGuidelineSchema>;
+export type Guideline = typeof guidelines.$inferSelect;
+
+export const guidelineAcknowledgments = pgTable("guideline_acknowledgments", {
+  id: serial("id").primaryKey(),
+  guidelineId: integer("guideline_id").notNull(),
+  employeeId: integer("employee_id").notNull(),
+  acknowledgedAt: timestamp("acknowledged_at").defaultNow(),
+});
+
+export const insertGuidelineAckSchema = createInsertSchema(guidelineAcknowledgments).omit({ id: true, acknowledgedAt: true });
+export type InsertGuidelineAck = z.infer<typeof insertGuidelineAckSchema>;
+export type GuidelineAck = typeof guidelineAcknowledgments.$inferSelect;
+
 export type RegionCode = "A" | "B" | "C";
 
 export interface ShiftValidationError {
