@@ -495,6 +495,47 @@ export async function registerRoutes(
     }
   });
 
+  const isDevMode = process.env.NODE_ENV !== "production";
+
+  app.get("/api/portal/dev-employees", async (_req, res) => {
+    if (!isDevMode) return res.status(404).json({ message: "Not found" });
+    try {
+      const regionIds = [1, 2, 3];
+      const allEmployees: any[] = [];
+      for (const rid of regionIds) {
+        const emps = await storage.getEmployeesByRegion(rid);
+        for (const e of emps) {
+          if (e.status === "active") {
+            allEmployees.push({ id: e.id, name: e.name, employeeCode: e.employeeCode, role: e.role });
+          }
+        }
+      }
+      res.json(allEmployees);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/portal/dev-login", async (req, res) => {
+    if (!isDevMode) return res.status(404).json({ message: "Not found" });
+    try {
+      const { employeeId } = req.body;
+      if (!employeeId) return res.status(400).json({ message: "缺少員工 ID" });
+      const regionIds = [1, 2, 3];
+      let found: any = null;
+      for (const rid of regionIds) {
+        const emps = await storage.getEmployeesByRegion(rid);
+        found = emps.find((e) => e.id === employeeId);
+        if (found) break;
+      }
+      if (!found) return res.status(404).json({ message: "找不到員工" });
+      if (found.status !== "active") return res.status(403).json({ message: "此帳號已停用" });
+      res.json({ id: found.id, name: found.name, employeeCode: found.employeeCode, role: found.role });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/portal/line-callback", async (req, res) => {
     try {
       const { code, redirectUri } = req.body;

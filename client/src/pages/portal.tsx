@@ -9,10 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   CalendarDays, Phone, MapPin, Clock, Users, ShieldCheck,
   ChevronLeft, ChevronRight, Calendar, List, Download,
-  Video, FileText, CheckCircle2, Lock
+  Video, FileText, CheckCircle2, Lock, UserCheck
 } from "lucide-react";
 
 interface PortalEmployee {
@@ -183,7 +184,65 @@ function LineLoginScreen({ onLogin }: { onLogin: (emp: PortalEmployee) => void }
         <div className="mt-6 pt-4 border-t">
           <p className="text-xs text-muted-foreground">首次登入請確認您的 LINE 帳號已由管理員綁定</p>
         </div>
+
+        <DevModeLogin onLogin={onLogin} />
       </Card>
+    </div>
+  );
+}
+
+function DevModeLogin({ onLogin }: { onLogin: (emp: PortalEmployee) => void }) {
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const { data: employees } = useQuery<{ id: number; name: string; employeeCode: string; role: string }[]>({
+    queryKey: ["/api/portal/dev-employees"],
+  });
+
+  async function handleDevLogin() {
+    if (!selectedId) return;
+    setLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/portal/dev-login", { employeeId: Number(selectedId) });
+      const data = await res.json();
+      onLogin(data);
+    } catch (err: any) {
+      toast({ title: "登入失敗", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!employees || employees.length === 0) return null;
+
+  return (
+    <div className="mt-4 pt-4 border-t">
+      <p className="text-xs text-muted-foreground mb-3 flex items-center justify-center gap-1">
+        <UserCheck className="h-3 w-3" />
+        開發模式 - 快速預覽
+      </p>
+      <div className="flex gap-2">
+        <Select value={selectedId} onValueChange={setSelectedId}>
+          <SelectTrigger className="flex-1" data-testid="select-dev-employee">
+            <SelectValue placeholder="選擇員工" />
+          </SelectTrigger>
+          <SelectContent>
+            {employees.map((emp) => (
+              <SelectItem key={emp.id} value={String(emp.id)} data-testid={`option-dev-employee-${emp.id}`}>
+                {emp.name}（{emp.employeeCode}）
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          onClick={handleDevLogin}
+          disabled={!selectedId || loading}
+          data-testid="button-dev-login"
+        >
+          進入
+        </Button>
+      </div>
     </div>
   );
 }
