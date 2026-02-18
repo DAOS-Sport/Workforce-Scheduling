@@ -87,6 +87,49 @@ export const VENUES_DATA = [
   { name: "新竹科學園區", shortName: "新竹科園", regionCode: "C" },
 ] as const;
 
+export const attendanceUploads = pgTable("attendance_uploads", {
+  id: serial("id").primaryKey(),
+  fileName: text("file_name").notNull(),
+  periodStart: date("period_start").notNull(),
+  periodEnd: date("period_end").notNull(),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  totalRecords: integer("total_records").default(0),
+});
+
+export const insertAttendanceUploadSchema = createInsertSchema(attendanceUploads).omit({ id: true, uploadedAt: true });
+export type InsertAttendanceUpload = z.infer<typeof insertAttendanceUploadSchema>;
+export type AttendanceUpload = typeof attendanceUploads.$inferSelect;
+
+export const attendanceRecords = pgTable("attendance_records", {
+  id: serial("id").primaryKey(),
+  uploadId: integer("upload_id").notNull(),
+  employeeCode: text("employee_code").notNull(),
+  employeeName: text("employee_name").notNull(),
+  department: text("department"),
+  date: date("date").notNull(),
+  dayType: text("day_type"),
+  shiftType: text("shift_type"),
+  scheduledStart: text("scheduled_start"),
+  scheduledEnd: text("scheduled_end"),
+  clockIn: text("clock_in"),
+  clockOut: text("clock_out"),
+  isLate: boolean("is_late").default(false),
+  isEarlyLeave: boolean("is_early_leave").default(false),
+  hasAnomaly: boolean("has_anomaly").default(false),
+  anomalyNote: text("anomaly_note"),
+  leaveHours: text("leave_hours"),
+  leaveType: text("leave_type"),
+  overtimeHours: text("overtime_hours"),
+  clockInMethod: text("clock_in_method"),
+  clockInLocation: text("clock_in_location"),
+  clockOutMethod: text("clock_out_method"),
+  clockOutLocation: text("clock_out_location"),
+});
+
+export const insertAttendanceRecordSchema = createInsertSchema(attendanceRecords).omit({ id: true });
+export type InsertAttendanceRecord = z.infer<typeof insertAttendanceRecordSchema>;
+export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
+
 export type RegionCode = "A" | "B" | "C";
 
 export interface ShiftValidationError {
