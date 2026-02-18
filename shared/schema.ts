@@ -34,6 +34,7 @@ export const employees = pgTable("employees", {
   employeeCode: text("employee_code").notNull().unique(),
   phone: text("phone"),
   email: text("email"),
+  lineId: text("line_id"),
   regionId: integer("region_id").notNull(),
   status: text("status").notNull().default("active"),
   role: text("role").notNull().default("pt"),

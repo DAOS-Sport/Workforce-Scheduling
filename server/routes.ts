@@ -495,5 +495,159 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/portal/verify", async (req, res) => {
+    try {
+      const { lineId } = req.body;
+      if (!lineId) return res.status(400).json({ message: "缺少 LINE ID" });
+      const employee = await storage.getEmployeeByLineId(lineId);
+      if (!employee) return res.status(404).json({ message: "找不到此 LINE 帳號對應的員工資料" });
+      if (employee.status !== "active") return res.status(403).json({ message: "此帳號已停用" });
+      res.json({
+        id: employee.id,
+        name: employee.name,
+        employeeCode: employee.employeeCode,
+        role: employee.role,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/portal/my-shifts/:employeeId/:startDate/:endDate", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.employeeId);
+      const { startDate, endDate } = req.params;
+      const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, startDate, endDate);
+
+      const venueIds = Array.from(new Set(myShifts.map((s) => s.venueId)));
+      const venueMap: Record<number, any> = {};
+      for (const vid of venueIds) {
+        const v = await storage.getVenue(vid);
+        if (v) venueMap[vid] = { id: v.id, name: v.name, shortName: v.shortName };
+      }
+
+      const enriched = myShifts.map((s) => ({
+        ...s,
+        venue: venueMap[s.venueId] || null,
+      }));
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/portal/today-coworkers/:employeeId", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.employeeId);
+      const today = new Date().toISOString().split("T")[0];
+
+      const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, today, today);
+      if (myShifts.length === 0) return res.json([]);
+
+      const result: any[] = [];
+      for (const shift of myShifts) {
+        const venue = await storage.getVenue(shift.venueId);
+        const coworkers = await storage.getCoworkersByVenueAndDate(shift.venueId, today, employeeId);
+        result.push({
+          venue: venue ? { id: venue.id, shortName: venue.shortName } : null,
+          shiftTime: `${shift.startTime.slice(0, 5)}-${shift.endTime.slice(0, 5)}`,
+          coworkers: coworkers.map((c) => ({
+            id: c.id,
+            name: c.name,
+            phone: c.phone,
+            role: c.role,
+          })),
+        });
+      }
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/portal/guidelines-check/:employeeId", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.employeeId);
+      const now = new Date();
+      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+      const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
+      const myVenueIds = Array.from(new Set(myShifts.map((s) => s.venueId)));
+
+      const allGuidelines = await storage.getGuidelines();
+      const activeGuidelines = allGuidelines.filter((g) => g.isActive);
+
+      const relevant = activeGuidelines.filter((g) => {
+        if (g.category === "fixed") {
+          if (g.venueId) return myVenueIds.includes(g.venueId);
+          return true;
+        }
+        if (g.category === "monthly") {
+          return g.yearMonth === yearMonth;
+        }
+        if (g.category === "confidentiality") return true;
+        return false;
+      });
+
+      const acks = await storage.getGuidelineAcksByEmployee(employeeId);
+      const ackedIds = new Set(acks.map((a) => a.guidelineId));
+
+      const currentMonthAcks = acks.filter((a) => {
+        if (!a.acknowledgedAt) return false;
+        const ackDate = new Date(a.acknowledgedAt);
+        return ackDate.getFullYear() === now.getFullYear() && ackDate.getMonth() === now.getMonth();
+      });
+      const currentMonthAckedIds = new Set(currentMonthAcks.map((a) => a.guidelineId));
+
+      const venueMap: Record<number, string> = {};
+      for (const vid of myVenueIds) {
+        const v = await storage.getVenue(vid);
+        if (v) venueMap[vid] = v.shortName;
+      }
+
+      const items = relevant.map((g) => ({
+        ...g,
+        venueName: g.venueId ? venueMap[g.venueId] || null : null,
+        acknowledged: currentMonthAckedIds.has(g.id),
+      }));
+
+      const allAcknowledged = items.every((i) => i.acknowledged);
+
+      res.json({ items, allAcknowledged });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/portal/acknowledge-all", async (req, res) => {
+    try {
+      const { employeeId, guidelineIds } = req.body;
+      if (!employeeId || !Array.isArray(guidelineIds)) {
+        return res.status(400).json({ message: "缺少必要參數" });
+      }
+
+      const existingAcks = await storage.getGuidelineAcksByEmployee(employeeId);
+      const now = new Date();
+      const existingThisMonth = existingAcks.filter((a) => {
+        if (!a.acknowledgedAt) return false;
+        const d = new Date(a.acknowledgedAt);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      });
+      const alreadyAckedIds = new Set(existingThisMonth.map((a) => a.guidelineId));
+
+      const toAck = guidelineIds.filter((id: number) => !alreadyAckedIds.has(id));
+      for (const gid of toAck) {
+        await storage.createGuidelineAck({ guidelineId: gid, employeeId });
+      }
+
+      res.json({ success: true, acknowledged: toAck.length });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }

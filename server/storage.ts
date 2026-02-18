@@ -72,6 +72,10 @@ export interface IStorage {
   getGuidelineAcks(guidelineId: number): Promise<GuidelineAck[]>;
   createGuidelineAck(data: InsertGuidelineAck): Promise<GuidelineAck>;
   getGuidelineAcksByEmployee(employeeId: number): Promise<GuidelineAck[]>;
+
+  getEmployeeByLineId(lineId: string): Promise<Employee | undefined>;
+  getShiftsByEmployeeAndDateRange(employeeId: number, startDate: string, endDate: string): Promise<Shift[]>;
+  getCoworkersByVenueAndDate(venueId: number, date: string, excludeEmployeeId: number): Promise<Employee[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -320,6 +324,36 @@ export class DatabaseStorage implements IStorage {
 
   async getGuidelineAcksByEmployee(employeeId: number): Promise<GuidelineAck[]> {
     return db.select().from(guidelineAcknowledgments).where(eq(guidelineAcknowledgments.employeeId, employeeId));
+  }
+
+  async getEmployeeByLineId(lineId: string): Promise<Employee | undefined> {
+    const [emp] = await db.select().from(employees).where(eq(employees.lineId, lineId));
+    return emp;
+  }
+
+  async getShiftsByEmployeeAndDateRange(employeeId: number, startDate: string, endDate: string): Promise<Shift[]> {
+    return db.select().from(shifts).where(
+      and(
+        eq(shifts.employeeId, employeeId),
+        gte(shifts.date, startDate),
+        lte(shifts.date, endDate)
+      )
+    );
+  }
+
+  async getCoworkersByVenueAndDate(venueId: number, date: string, excludeEmployeeId: number): Promise<Employee[]> {
+    const venueShifts = await db.select().from(shifts).where(
+      and(
+        eq(shifts.venueId, venueId),
+        eq(shifts.date, date)
+      )
+    );
+    const coworkerIds = venueShifts
+      .map((s) => s.employeeId)
+      .filter((id) => id !== excludeEmployeeId);
+    if (coworkerIds.length === 0) return [];
+    const uniqueIds = Array.from(new Set(coworkerIds));
+    return db.select().from(employees).where(inArray(employees.id, uniqueIds));
   }
 }
 
