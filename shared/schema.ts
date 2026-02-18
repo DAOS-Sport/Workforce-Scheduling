@@ -87,6 +87,21 @@ export const insertScheduleSlotSchema = createInsertSchema(scheduleSlots).omit({
 export type InsertScheduleSlot = z.infer<typeof insertScheduleSlotSchema>;
 export type ScheduleSlot = typeof scheduleSlots.$inferSelect;
 
+export const venueShiftTemplates = pgTable("venue_shift_templates", {
+  id: serial("id").primaryKey(),
+  venueId: integer("venue_id").notNull(),
+  dayType: text("day_type").notNull(),
+  shiftLabel: text("shift_label").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  role: text("role").notNull(),
+  requiredCount: integer("required_count").notNull().default(1),
+});
+
+export const insertVenueShiftTemplateSchema = createInsertSchema(venueShiftTemplates).omit({ id: true });
+export type InsertVenueShiftTemplate = z.infer<typeof insertVenueShiftTemplateSchema>;
+export type VenueShiftTemplate = typeof venueShiftTemplates.$inferSelect;
+
 export const REGIONS_DATA = [
   { name: "三蘆戰區", code: "A" },
   { name: "松山區", code: "B" },

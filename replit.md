@@ -4,6 +4,12 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
+- 2026-02-18: Added venue shift templates (venueShiftTemplates table) for weekday/weekend role-based staffing requirements per venue
+- 2026-02-18: Updated venue edit dialog with weekday/weekend tabs for managing shift templates with role/count
+- 2026-02-18: Added role-based shortage summary in schedule editor (per-venue role icons + shortage counts)
+- 2026-02-18: Added role icons (LifeBuoy/Dumbbell/UserRound/Sparkles/ShieldCheck) next to employee names in schedule cells
+- 2026-02-18: Rebuilt schedule editor: venue-centric grid (venue rows × date columns), input time slot requirements per venue per date (e.g., 0630-1600 救生1人), gap analysis in collapsible drawer
+- 2026-02-18: Added scheduleSlots table for per-date venue requirements (replaces fixed day-of-week venueRequirements for scheduling)
 - 2026-02-18: Added attendance xlsx upload & audit feature (打卡紀錄 import, anomaly detection, stats, filterable table)
 - 2026-02-18: Initial MVP build with regional grouping, smart scheduler, labor law validation, employee/venue CRUD, seed data
 
@@ -58,6 +64,14 @@ shared/
 - PATCH /api/shifts/:id
 - DELETE /api/shifts/:id
 - GET /api/venue-requirements/:regionCode
+- GET /api/schedule-slots/:regionCode/:startDate/:endDate
+- POST /api/schedule-slots
+- PATCH /api/schedule-slots/:id
+- DELETE /api/schedule-slots/:id
+- GET /api/venue-shift-templates/:venueId
+- POST /api/venue-shift-templates
+- POST /api/venue-shift-templates/batch/:venueId
+- DELETE /api/venue-shift-templates/:id
 - POST /api/attendance-upload (multipart file upload, parses xlsx)
 - GET /api/attendance-uploads
 - GET /api/attendance-records/:uploadId

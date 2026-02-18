@@ -2,12 +2,15 @@ import { db } from "./db";
 import { eq, and, gte, lte, inArray, desc } from "drizzle-orm";
 import {
   regions, venues, employees, shifts, venueRequirements,
+  scheduleSlots, venueShiftTemplates,
   attendanceUploads, attendanceRecords,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
   type Shift, type InsertShift,
   type VenueRequirement, type InsertVenueRequirement,
+  type ScheduleSlot, type InsertScheduleSlot,
+  type VenueShiftTemplate, type InsertVenueShiftTemplate,
   type AttendanceUpload, type InsertAttendanceUpload,
   type AttendanceRecord, type InsertAttendanceRecord,
 } from "@shared/schema";
@@ -37,6 +40,16 @@ export interface IStorage {
 
   getVenueRequirementsByRegion(regionId: number): Promise<VenueRequirement[]>;
   createVenueRequirement(data: InsertVenueRequirement): Promise<VenueRequirement>;
+
+  getScheduleSlotsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<ScheduleSlot[]>;
+  createScheduleSlot(data: InsertScheduleSlot): Promise<ScheduleSlot>;
+  updateScheduleSlot(id: number, data: Partial<InsertScheduleSlot>): Promise<ScheduleSlot | undefined>;
+  deleteScheduleSlot(id: number): Promise<boolean>;
+
+  getVenueShiftTemplates(venueId: number): Promise<VenueShiftTemplate[]>;
+  createVenueShiftTemplate(data: InsertVenueShiftTemplate): Promise<VenueShiftTemplate>;
+  deleteVenueShiftTemplate(id: number): Promise<boolean>;
+  deleteVenueShiftTemplatesByVenue(venueId: number): Promise<void>;
 
   getAttendanceUploads(): Promise<AttendanceUpload[]>;
   createAttendanceUpload(data: InsertAttendanceUpload): Promise<AttendanceUpload>;
@@ -152,6 +165,52 @@ export class DatabaseStorage implements IStorage {
   async createVenueRequirement(data: InsertVenueRequirement): Promise<VenueRequirement> {
     const [req] = await db.insert(venueRequirements).values(data).returning();
     return req;
+  }
+
+  async getScheduleSlotsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<ScheduleSlot[]> {
+    const regionVenues = await this.getVenuesByRegion(regionId);
+    const venueIds = regionVenues.map((v) => v.id);
+    if (venueIds.length === 0) return [];
+    return db.select().from(scheduleSlots).where(
+      and(
+        inArray(scheduleSlots.venueId, venueIds),
+        gte(scheduleSlots.date, startDate),
+        lte(scheduleSlots.date, endDate)
+      )
+    );
+  }
+
+  async createScheduleSlot(data: InsertScheduleSlot): Promise<ScheduleSlot> {
+    const [slot] = await db.insert(scheduleSlots).values(data).returning();
+    return slot;
+  }
+
+  async updateScheduleSlot(id: number, data: Partial<InsertScheduleSlot>): Promise<ScheduleSlot | undefined> {
+    const [slot] = await db.update(scheduleSlots).set(data).where(eq(scheduleSlots.id, id)).returning();
+    return slot;
+  }
+
+  async deleteScheduleSlot(id: number): Promise<boolean> {
+    const result = await db.delete(scheduleSlots).where(eq(scheduleSlots.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getVenueShiftTemplates(venueId: number): Promise<VenueShiftTemplate[]> {
+    return db.select().from(venueShiftTemplates).where(eq(venueShiftTemplates.venueId, venueId));
+  }
+
+  async createVenueShiftTemplate(data: InsertVenueShiftTemplate): Promise<VenueShiftTemplate> {
+    const [t] = await db.insert(venueShiftTemplates).values(data).returning();
+    return t;
+  }
+
+  async deleteVenueShiftTemplate(id: number): Promise<boolean> {
+    const result = await db.delete(venueShiftTemplates).where(eq(venueShiftTemplates.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async deleteVenueShiftTemplatesByVenue(venueId: number): Promise<void> {
+    await db.delete(venueShiftTemplates).where(eq(venueShiftTemplates.venueId, venueId));
   }
 
   async getEmployeeByCode(code: string): Promise<Employee | undefined> {

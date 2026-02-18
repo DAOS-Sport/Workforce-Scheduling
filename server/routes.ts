@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, insertShiftSchema, type InsertAttendanceRecord, type ShiftValidationError } from "@shared/schema";
+import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, insertShiftSchema, insertScheduleSlotSchema, insertVenueShiftTemplateSchema, type InsertAttendanceRecord, type ShiftValidationError } from "@shared/schema";
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import multer from "multer";
@@ -178,12 +178,104 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  app.get("/api/schedule-slots/:regionCode/:startDate/:endDate", async (req, res) => {
+    const { regionCode, startDate, endDate } = req.params;
+    const region = await storage.getRegionByCode(regionCode);
+    if (!region) return res.json([]);
+    const slots = await storage.getScheduleSlotsByRegionAndDateRange(region.id, startDate, endDate);
+    res.json(slots);
+  });
+
+  app.post("/api/schedule-slots", async (req, res) => {
+    try {
+      const parsed = insertScheduleSlotSchema.parse(req.body);
+      const slot = await storage.createScheduleSlot(parsed);
+      res.json(slot);
+    } catch (err: any) {
+      if (err.name === "ZodError") {
+        return res.status(400).json({ message: "資料格式錯誤" });
+      }
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/schedule-slots/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const partial = insertScheduleSlotSchema.partial().parse(req.body);
+      const slot = await storage.updateScheduleSlot(id, partial);
+      if (!slot) return res.status(404).json({ message: "Slot not found" });
+      res.json(slot);
+    } catch (err: any) {
+      if (err.name === "ZodError") {
+        return res.status(400).json({ message: "資料格式錯誤" });
+      }
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/schedule-slots/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    const deleted = await storage.deleteScheduleSlot(id);
+    if (!deleted) return res.status(404).json({ message: "Slot not found" });
+    res.json({ success: true });
+  });
+
   app.get("/api/venue-requirements/:regionCode", async (req, res) => {
     const { regionCode } = req.params;
     const region = await storage.getRegionByCode(regionCode);
     if (!region) return res.json([]);
     const requirements = await storage.getVenueRequirementsByRegion(region.id);
     res.json(requirements);
+  });
+
+  app.get("/api/venue-shift-templates/:venueId", async (req, res) => {
+    const venueId = parseInt(req.params.venueId);
+    const templates = await storage.getVenueShiftTemplates(venueId);
+    res.json(templates);
+  });
+
+  app.post("/api/venue-shift-templates", async (req, res) => {
+    try {
+      const parsed = insertVenueShiftTemplateSchema.parse(req.body);
+      const template = await storage.createVenueShiftTemplate(parsed);
+      res.json(template);
+    } catch (err: any) {
+      if (err.name === "ZodError") {
+        return res.status(400).json({ message: "資料格式錯誤" });
+      }
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/venue-shift-templates/batch/:venueId", async (req, res) => {
+    try {
+      const venueId = parseInt(req.params.venueId);
+      const { templates } = req.body;
+      if (!Array.isArray(templates)) {
+        return res.status(400).json({ message: "templates must be an array" });
+      }
+      await storage.deleteVenueShiftTemplatesByVenue(venueId);
+      const results = [];
+      for (const t of templates) {
+        const parsed = insertVenueShiftTemplateSchema.parse({ ...t, venueId });
+        const created = await storage.createVenueShiftTemplate(parsed);
+        results.push(created);
+      }
+      res.json(results);
+    } catch (err: any) {
+      if (err.name === "ZodError") {
+        return res.status(400).json({ message: "資料格式錯誤" });
+      }
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/venue-shift-templates/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    const deleted = await storage.deleteVenueShiftTemplate(id);
+    if (!deleted) return res.status(404).json({ message: "Template not found" });
+    res.json({ success: true });
   });
 
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
