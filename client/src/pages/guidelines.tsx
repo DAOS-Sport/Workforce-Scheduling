@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit2, Trash2, FileText, Video, Shield, Eye, Users, GripVertical, BookOpen, CalendarDays, Lock } from "lucide-react";
-import type { Guideline, GuidelineAck, Employee } from "@shared/schema";
+import { Plus, Edit2, Trash2, FileText, Video, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin } from "lucide-react";
+import type { Guideline, GuidelineAck, Employee, Venue, Shift } from "@shared/schema";
 
 type GuidelineCategory = "fixed" | "monthly" | "confidentiality";
 
@@ -51,7 +52,7 @@ export default function GuidelinesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Guideline | null>(null);
   const [viewAckDialogOpen, setViewAckDialogOpen] = useState(false);
-  const [viewingGuidelineId, setViewingGuidelineId] = useState<number | null>(null);
+  const [viewingGuideline, setViewingGuideline] = useState<Guideline | null>(null);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<Guideline | null>(null);
 
@@ -60,6 +61,7 @@ export default function GuidelinesPage() {
     content: "",
     contentType: "text" as "text" | "video",
     videoUrl: "",
+    venueId: null as number | null,
     sortOrder: 0,
     isActive: true,
     yearMonth: getCurrentYearMonth(),
@@ -82,9 +84,49 @@ export default function GuidelinesPage() {
   });
   const allEmployees = [...employeesA, ...employeesB, ...employeesC];
 
+  const { data: venuesA = [] } = useQuery<Venue[]>({
+    queryKey: ["/api/venues", "A"],
+  });
+  const { data: venuesB = [] } = useQuery<Venue[]>({
+    queryKey: ["/api/venues", "B"],
+  });
+  const { data: venuesC = [] } = useQuery<Venue[]>({
+    queryKey: ["/api/venues", "C"],
+  });
+  const allVenues = [...venuesA, ...venuesB, ...venuesC];
+  const venueMap = useMemo(() => {
+    const map = new Map<number, Venue>();
+    allVenues.forEach((v) => map.set(v.id, v));
+    return map;
+  }, [allVenues]);
+
+  const now = new Date();
+  const monthStart = format(startOfMonth(now), "yyyy-MM-dd");
+  const monthEnd = format(endOfMonth(now), "yyyy-MM-dd");
+
+  const { data: shiftsA = [] } = useQuery<Shift[]>({
+    queryKey: ["/api/shifts", "A", monthStart, monthEnd],
+  });
+  const { data: shiftsB = [] } = useQuery<Shift[]>({
+    queryKey: ["/api/shifts", "B", monthStart, monthEnd],
+  });
+  const { data: shiftsC = [] } = useQuery<Shift[]>({
+    queryKey: ["/api/shifts", "C", monthStart, monthEnd],
+  });
+  const allShifts = [...shiftsA, ...shiftsB, ...shiftsC];
+
+  const employeesByVenue = useMemo(() => {
+    const map = new Map<number, Set<number>>();
+    allShifts.forEach((s) => {
+      if (!map.has(s.venueId)) map.set(s.venueId, new Set());
+      map.get(s.venueId)!.add(s.employeeId);
+    });
+    return map;
+  }, [allShifts]);
+
   const { data: acks = [] } = useQuery<GuidelineAck[]>({
-    queryKey: ["/api/guidelines", viewingGuidelineId, "acknowledgments"],
-    enabled: !!viewingGuidelineId,
+    queryKey: ["/api/guidelines", viewingGuideline?.id, "acknowledgments"],
+    enabled: !!viewingGuideline?.id,
   });
 
   const createMutation = useMutation({
@@ -137,6 +179,7 @@ export default function GuidelinesPage() {
       content: "",
       contentType: "text",
       videoUrl: "",
+      venueId: null,
       sortOrder: filtered.length,
       isActive: true,
       yearMonth: getCurrentYearMonth(),
@@ -151,6 +194,7 @@ export default function GuidelinesPage() {
       content: item.content,
       contentType: item.contentType as "text" | "video",
       videoUrl: item.videoUrl || "",
+      venueId: item.venueId,
       sortOrder: item.sortOrder,
       isActive: item.isActive,
       yearMonth: item.yearMonth || getCurrentYearMonth(),
@@ -165,6 +209,7 @@ export default function GuidelinesPage() {
       content: form.content,
       contentType: form.contentType,
       videoUrl: form.videoUrl || null,
+      venueId: activeTab === "fixed" ? form.venueId : null,
       sortOrder: form.sortOrder,
       isActive: form.isActive,
       yearMonth: activeTab === "monthly" ? form.yearMonth : null,
@@ -177,8 +222,8 @@ export default function GuidelinesPage() {
     }
   }
 
-  function openAckView(guidelineId: number) {
-    setViewingGuidelineId(guidelineId);
+  function openAckView(guideline: Guideline) {
+    setViewingGuideline(guideline);
     setViewAckDialogOpen(true);
   }
 
@@ -188,6 +233,16 @@ export default function GuidelinesPage() {
   }
 
   const ackedEmployeeIds = new Set(acks.map((a) => a.employeeId));
+
+  const ackTargetEmployees = useMemo(() => {
+    if (!viewingGuideline) return allEmployees;
+    if (viewingGuideline.category === "fixed" && viewingGuideline.venueId) {
+      const scheduledEmpIds = employeesByVenue.get(viewingGuideline.venueId);
+      if (!scheduledEmpIds || scheduledEmpIds.size === 0) return [];
+      return allEmployees.filter((e) => scheduledEmpIds.has(e.id));
+    }
+    return allEmployees;
+  }, [viewingGuideline, allEmployees, employeesByVenue]);
 
   return (
     <div className="flex flex-col h-full overflow-auto p-4 gap-4">
@@ -238,9 +293,10 @@ export default function GuidelinesPage() {
                     <GuidelineCard
                       key={item.id}
                       item={item}
+                      venueName={item.venueId ? venueMap.get(item.venueId)?.shortName : undefined}
                       onEdit={() => openEdit(item)}
                       onDelete={() => deleteMutation.mutate(item.id)}
-                      onViewAck={() => openAckView(item.id)}
+                      onViewAck={() => openAckView(item)}
                       onPreview={() => openPreview(item)}
                       isDeleting={deleteMutation.isPending}
                     />
@@ -266,6 +322,27 @@ export default function GuidelinesPage() {
                 data-testid="input-guideline-title"
               />
             </div>
+
+            {activeTab === "fixed" && (
+              <div className="space-y-2">
+                <Label>所屬場館</Label>
+                <Select
+                  value={form.venueId?.toString() || "none"}
+                  onValueChange={(v) => setForm({ ...form, venueId: v === "none" ? null : parseInt(v) })}
+                >
+                  <SelectTrigger data-testid="select-guideline-venue">
+                    <SelectValue placeholder="選擇場館" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">全部場館（通用）</SelectItem>
+                    {allVenues.map((v) => (
+                      <SelectItem key={v.id} value={v.id.toString()}>{v.shortName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">指定場館後，只有當月排班到該場館的員工需要確認此守則</p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>內容類型</Label>
@@ -372,11 +449,19 @@ export default function GuidelinesPage() {
           <DialogHeader>
             <DialogTitle>確認紀錄</DialogTitle>
           </DialogHeader>
+          {viewingGuideline?.venueId && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <MapPin className="h-3 w-3" />
+              <span>僅顯示當月排班到「{venueMap.get(viewingGuideline.venueId)?.shortName}」的員工</span>
+            </div>
+          )}
           <div className="space-y-3 max-h-[400px] overflow-auto">
-            {allEmployees.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">無員工資料</p>
+            {ackTargetEmployees.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                {viewingGuideline?.venueId ? "當月無員工排班到此場館" : "無員工資料"}
+              </p>
             ) : (
-              allEmployees.map((emp) => {
+              ackTargetEmployees.map((emp) => {
                 const acked = ackedEmployeeIds.has(emp.id);
                 const ackRecord = acks.find((a) => a.employeeId === emp.id);
                 return (
@@ -412,7 +497,7 @@ export default function GuidelinesPage() {
           <DialogFooter>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Users className="h-3 w-3" />
-              {ackedEmployeeIds.size} / {allEmployees.length} 已確認
+              {ackTargetEmployees.filter((e) => ackedEmployeeIds.has(e.id)).length} / {ackTargetEmployees.length} 已確認
             </div>
           </DialogFooter>
         </DialogContent>
@@ -424,6 +509,14 @@ export default function GuidelinesPage() {
             <DialogTitle>{previewItem?.title}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {previewItem?.venueId && (
+              <div className="flex items-center gap-1.5">
+                <Badge variant="outline" className="text-xs">
+                  <MapPin className="h-3 w-3 mr-1" />
+                  {venueMap.get(previewItem.venueId)?.shortName || "未知場館"}
+                </Badge>
+              </div>
+            )}
             {previewItem?.contentType === "video" && previewItem?.videoUrl && (
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">影片連結</Label>
@@ -450,6 +543,7 @@ export default function GuidelinesPage() {
 
 function GuidelineCard({
   item,
+  venueName,
   onEdit,
   onDelete,
   onViewAck,
@@ -457,6 +551,7 @@ function GuidelineCard({
   isDeleting,
 }: {
   item: Guideline;
+  venueName?: string;
   onEdit: () => void;
   onDelete: () => void;
   onViewAck: () => void;
@@ -476,6 +571,12 @@ function GuidelineCard({
               <Badge variant="outline" className="text-xs">
                 <Video className="h-3 w-3 mr-1" />
                 影片
+              </Badge>
+            )}
+            {venueName && (
+              <Badge variant="outline" className="text-xs">
+                <MapPin className="h-3 w-3 mr-1" />
+                {venueName}
               </Badge>
             )}
             {item.yearMonth && (
