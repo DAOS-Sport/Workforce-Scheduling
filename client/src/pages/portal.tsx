@@ -12,8 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   CalendarDays, Phone, MapPin, Clock, Users, ShieldCheck,
-  ChevronLeft, ChevronRight, Calendar, List, Download,
-  Video, FileText, CheckCircle2, Lock, UserCheck
+  ChevronLeft, ChevronRight, Calendar, List,
+  Video, FileText, CheckCircle2, Lock, UserCheck,
+  AlertTriangle, ClipboardCheck, BookOpen
 } from "lucide-react";
 
 interface PortalEmployee {
@@ -37,6 +38,23 @@ interface CoworkerGroup {
   venue: { id: number; shortName: string } | null;
   shiftTime: string;
   coworkers: { id: number; name: string; phone: string | null; role: string }[];
+}
+
+interface AttendanceSummary {
+  total: number;
+  late: number;
+  earlyLeave: number;
+  anomaly: number;
+  leave: number;
+  records: {
+    date: string;
+    clockIn: string | null;
+    clockOut: string | null;
+    isLate: boolean | null;
+    isEarlyLeave: boolean | null;
+    hasAnomaly: boolean | null;
+    leaveType: string | null;
+  }[];
 }
 
 interface GuidelineItem {
@@ -432,6 +450,7 @@ function GuidelineItemCard({ item }: { item: GuidelineItem }) {
 function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [showGuidelines, setShowGuidelines] = useState(false);
 
   const monthStart = format(startOfMonth(currentMonth), "yyyy-MM-dd");
   const monthEnd = format(endOfMonth(currentMonth), "yyyy-MM-dd");
@@ -442,6 +461,15 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
 
   const { data: todayCoworkers = [], isLoading: coworkersLoading } = useQuery<CoworkerGroup[]>({
     queryKey: ["/api/portal/today-coworkers", employee.id],
+  });
+
+  const { data: attendance, isLoading: attendanceLoading } = useQuery<AttendanceSummary>({
+    queryKey: ["/api/portal/my-attendance", employee.id],
+  });
+
+  const { data: guidelinesData } = useQuery<{ items: GuidelineItem[]; allAcknowledged: boolean }>({
+    queryKey: ["/api/portal/guidelines-check", employee.id],
+    enabled: showGuidelines,
   });
 
   const shiftsByDate = useMemo(() => {
@@ -460,42 +488,6 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
 
   function nextMonth() {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
-  }
-
-  function generateICS() {
-    let ics = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//PT Schedule//EN\nCALSCALE:GREGORIAN\n";
-    myShifts.forEach((s) => {
-      const dateClean = s.date.replace(/-/g, "");
-      const startClean = s.startTime.slice(0, 5).replace(":", "") + "00";
-      const endClean = s.endTime.slice(0, 5).replace(":", "") + "00";
-      const venueName = s.venue?.shortName || "";
-      ics += "BEGIN:VEVENT\n";
-      ics += `DTSTART;TZID=Asia/Taipei:${dateClean}T${startClean}\n`;
-      ics += `DTEND;TZID=Asia/Taipei:${dateClean}T${endClean}\n`;
-      ics += `SUMMARY:${venueName} 上班\n`;
-      ics += `DESCRIPTION:${employee.name} - ${venueName}\n`;
-      ics += `UID:${s.id}-${dateClean}@pt-schedule\n`;
-      ics += "END:VEVENT\n";
-    });
-    ics += "END:VCALENDAR";
-    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `schedule-${format(currentMonth, "yyyy-MM")}.ics`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function addToGoogleCalendar() {
-    if (myShifts.length === 0) return;
-    const s = myShifts[0];
-    const dateClean = s.date.replace(/-/g, "");
-    const startClean = s.startTime.slice(0, 5).replace(":", "") + "00";
-    const endClean = s.endTime.slice(0, 5).replace(":", "") + "00";
-    const venueName = s.venue?.shortName || "上班";
-    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(venueName + " 上班")}&dates=${dateClean}T${startClean}/${dateClean}T${endClean}&ctz=Asia/Taipei&details=${encodeURIComponent(employee.name + " - " + venueName)}`;
-    window.open(url, "_blank");
   }
 
   const calendarDays = useMemo(() => {
@@ -544,9 +536,6 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
               >
                 {viewMode === "calendar" ? <List className="h-4 w-4" /> : <Calendar className="h-4 w-4" />}
               </Button>
-              <Button size="icon" variant="ghost" onClick={generateICS} data-testid="button-export-ics">
-                <Download className="h-4 w-4" />
-              </Button>
             </div>
           </div>
 
@@ -575,28 +564,29 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
               </div>
               <div className="grid grid-cols-7 gap-px">
                 {calendarDays.map((day, idx) => {
-                  if (!day) return <div key={`pad-${idx}`} className="h-16" />;
+                  if (!day) return <div key={`pad-${idx}`} className="min-h-[72px]" />;
                   const dateStr = format(day, "yyyy-MM-dd");
                   const dayShifts = shiftsByDate.get(dateStr) || [];
                   const today = isToday(day);
                   return (
                     <div
                       key={dateStr}
-                      className={`h-16 p-0.5 rounded-md border text-center ${
+                      className={`min-h-[72px] p-0.5 rounded-md border ${
                         today ? "border-primary bg-primary/5" : "border-transparent"
                       } ${dayShifts.length > 0 ? "bg-muted/50" : ""}`}
                       data-testid={`cell-day-${dateStr}`}
                     >
-                      <div className={`text-xs ${today ? "font-bold text-primary" : "text-muted-foreground"}`}>
+                      <div className={`text-xs text-center mb-0.5 ${today ? "font-bold text-primary" : "text-muted-foreground"}`}>
                         {format(day, "d")}
                       </div>
                       {dayShifts.slice(0, 2).map((s, i) => (
-                        <div key={i} className="text-[10px] leading-tight truncate">
-                          <span className="font-medium">{s.venue?.shortName?.slice(0, 3) || ""}</span>
+                        <div key={i} className="text-[10px] leading-tight px-0.5">
+                          <div className="font-medium truncate">{s.venue?.shortName?.slice(0, 3) || ""}</div>
+                          <div className="text-muted-foreground truncate">{s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}</div>
                         </div>
                       ))}
                       {dayShifts.length > 2 && (
-                        <div className="text-[10px] text-muted-foreground">+{dayShifts.length - 2}</div>
+                        <div className="text-[10px] text-muted-foreground text-center">+{dayShifts.length - 2}</div>
                       )}
                     </div>
                   );
@@ -645,16 +635,6 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
             </div>
           )}
 
-          <div className="flex gap-2 mt-3 pt-3 border-t">
-            <Button variant="outline" size="sm" className="flex-1" onClick={generateICS} data-testid="button-sync-ios">
-              <Download className="h-3 w-3 mr-1" />
-              iOS 日曆
-            </Button>
-            <Button variant="outline" size="sm" className="flex-1" onClick={addToGoogleCalendar} data-testid="button-sync-google">
-              <Calendar className="h-3 w-3 mr-1" />
-              Google 日曆
-            </Button>
-          </div>
         </Card>
 
         <Card className="p-4">
@@ -709,6 +689,94 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-4" data-testid="card-attendance-summary">
+          <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+            <ClipboardCheck className="h-4 w-4" /> 本月出缺勤
+          </h2>
+          {attendanceLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : !attendance || attendance.total === 0 ? (
+            <p className="text-sm text-center text-muted-foreground py-3">本月尚無出勤紀錄</p>
+          ) : (
+            <div>
+              <div className="grid grid-cols-4 gap-2 mb-3">
+                <div className="text-center p-2 rounded-md bg-muted/50">
+                  <div className="text-lg font-bold" data-testid="text-attendance-total">{attendance.total}</div>
+                  <div className="text-[10px] text-muted-foreground">出勤天數</div>
+                </div>
+                <div className="text-center p-2 rounded-md bg-muted/50">
+                  <div className={`text-lg font-bold ${attendance.late > 0 ? "text-destructive" : ""}`} data-testid="text-attendance-late">{attendance.late}</div>
+                  <div className="text-[10px] text-muted-foreground">遲到</div>
+                </div>
+                <div className="text-center p-2 rounded-md bg-muted/50">
+                  <div className={`text-lg font-bold ${attendance.earlyLeave > 0 ? "text-destructive" : ""}`} data-testid="text-attendance-early">{attendance.earlyLeave}</div>
+                  <div className="text-[10px] text-muted-foreground">早退</div>
+                </div>
+                <div className="text-center p-2 rounded-md bg-muted/50">
+                  <div className={`text-lg font-bold ${attendance.anomaly > 0 ? "text-destructive" : ""}`} data-testid="text-attendance-anomaly">{attendance.anomaly}</div>
+                  <div className="text-[10px] text-muted-foreground">異常</div>
+                </div>
+              </div>
+              {(attendance.late > 0 || attendance.earlyLeave > 0 || attendance.anomaly > 0) && (
+                <div className="space-y-1.5">
+                  {attendance.records
+                    .filter((r) => r.isLate || r.isEarlyLeave || r.hasAnomaly)
+                    .map((r, idx) => {
+                      const d = parseISO(r.date);
+                      const tags: string[] = [];
+                      if (r.isLate) tags.push("遲到");
+                      if (r.isEarlyLeave) tags.push("早退");
+                      if (r.hasAnomaly) tags.push("異常");
+                      return (
+                        <div key={idx} className="flex items-center gap-2 text-xs py-1 border-b last:border-b-0">
+                          <span className="text-muted-foreground min-w-[50px]">{format(d, "M/d")}</span>
+                          <span className="text-muted-foreground">{r.clockIn || "--"} ~ {r.clockOut || "--"}</span>
+                          <div className="flex gap-1 ml-auto">
+                            {tags.map((t) => (
+                              <Badge key={t} variant="destructive" className="text-[10px]">
+                                <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+                                {t}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-4" data-testid="card-guidelines-review">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold flex items-center gap-1.5">
+              <BookOpen className="h-4 w-4" /> 員工守則
+            </h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowGuidelines(!showGuidelines)}
+              data-testid="button-toggle-guidelines"
+            >
+              {showGuidelines ? "收合" : "查看守則"}
+            </Button>
+          </div>
+          {showGuidelines && (
+            <div className="mt-3 space-y-2">
+              {!guidelinesData ? (
+                <Skeleton className="h-24 w-full" />
+              ) : guidelinesData.items.length === 0 ? (
+                <p className="text-sm text-center text-muted-foreground py-3">目前沒有守則</p>
+              ) : (
+                guidelinesData.items.map((item) => (
+                  <GuidelineItemCard key={item.id} item={item} />
+                ))
+              )}
             </div>
           )}
         </Card>

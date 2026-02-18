@@ -759,5 +759,47 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/portal/my-attendance/:employeeId", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.employeeId);
+      const regionIds = [1, 2, 3];
+      let employee: any = null;
+      for (const rid of regionIds) {
+        const emps = await storage.getEmployeesByRegion(rid);
+        employee = emps.find((e) => e.id === employeeId);
+        if (employee) break;
+      }
+      if (!employee) return res.status(404).json({ message: "找不到員工" });
+
+      const now = new Date();
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+      const records = await storage.getAttendanceRecordsByDateRange(monthStart, monthEnd, [employee.employeeCode]);
+
+      const summary = {
+        total: records.length,
+        late: records.filter((r) => r.isLate).length,
+        earlyLeave: records.filter((r) => r.isEarlyLeave).length,
+        anomaly: records.filter((r) => r.hasAnomaly).length,
+        leave: records.filter((r) => r.leaveHours && r.leaveHours.trim() !== "").length,
+        records: records.map((r) => ({
+          date: r.date,
+          clockIn: r.clockIn,
+          clockOut: r.clockOut,
+          isLate: r.isLate,
+          isEarlyLeave: r.isEarlyLeave,
+          hasAnomaly: r.hasAnomaly,
+          leaveType: r.leaveType,
+        })),
+      };
+
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }
