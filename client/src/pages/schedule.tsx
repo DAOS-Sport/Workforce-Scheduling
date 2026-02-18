@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { format, addDays, startOfWeek, parseISO } from "date-fns";
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, getDay } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { RegionTabs } from "@/components/region-tabs";
 import { VacancyFooter } from "@/components/vacancy-footer";
 import { ShiftCellEditor } from "@/components/shift-cell-editor";
@@ -23,26 +22,24 @@ const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
 export default function SchedulePage() {
   const { activeRegion } = useRegion();
   const { toast } = useToast();
-  const [weekStart, setWeekStart] = useState(() => {
-    const now = new Date();
-    return startOfWeek(now, { weekStartsOn: 1 });
-  });
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedShift, setSelectedShift] = useState<Shift | undefined>();
 
-  const weekDates = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
-    [weekStart]
+  const monthDates = useMemo(
+    () => eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) }),
+    [currentMonth]
   );
 
   const dateRange = useMemo(
     () => ({
-      start: format(weekDates[0], "yyyy-MM-dd"),
-      end: format(weekDates[6], "yyyy-MM-dd"),
+      start: format(monthDates[0], "yyyy-MM-dd"),
+      end: format(monthDates[monthDates.length - 1], "yyyy-MM-dd"),
     }),
-    [weekDates]
+    [monthDates]
   );
 
   const { data: employees = [], isLoading: empLoading } = useQuery<Employee[]>({
@@ -84,7 +81,7 @@ export default function SchedulePage() {
 
   const vacancies = useMemo<VacancyInfo[]>(() => {
     const result: VacancyInfo[] = [];
-    weekDates.forEach((d) => {
+    monthDates.forEach((d) => {
       const dateStr = format(d, "yyyy-MM-dd");
       const dayOfWeek = d.getDay();
       const dayReqs = requirements.filter((r) => r.dayOfWeek === dayOfWeek);
@@ -111,7 +108,7 @@ export default function SchedulePage() {
       });
     });
     return result;
-  }, [weekDates, requirements, shifts, venueMap]);
+  }, [monthDates, requirements, shifts, venueMap]);
 
   const createShift = useMutation({
     mutationFn: async (data: any) => {
@@ -174,6 +171,16 @@ export default function SchedulePage() {
     }
   };
 
+  useEffect(() => {
+    if (scrollRef.current) {
+      const todayStr = format(new Date(), "yyyy-MM-dd");
+      const todayEl = scrollRef.current.querySelector(`[data-date-col="${todayStr}"]`);
+      if (todayEl) {
+        todayEl.scrollIntoView({ inline: "center", block: "nearest" });
+      }
+    }
+  }, [currentMonth]);
+
   const isLoading = empLoading || venLoading || shiftLoading;
 
   return (
@@ -191,175 +198,191 @@ export default function SchedulePage() {
           <Button
             size="icon"
             variant="outline"
-            onClick={() => setWeekStart((prev) => addDays(prev, -7))}
-            data-testid="button-prev-week"
+            onClick={() => setCurrentMonth((prev) => subMonths(prev, 1))}
+            data-testid="button-prev-month"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button
             size="icon"
             variant="outline"
-            onClick={() => setWeekStart((prev) => addDays(prev, 7))}
-            data-testid="button-next-week"
+            onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
+            data-testid="button-next-month"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <span className="text-sm font-medium" data-testid="text-week-range">
-            {format(weekDates[0], "yyyy/MM/dd")} — {format(weekDates[6], "MM/dd")}
+          <span className="text-sm font-medium" data-testid="text-month-range">
+            {format(currentMonth, "yyyy年 M月", { locale: zhTW })}
           </span>
         </div>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" data-testid="button-pick-date">
-              <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
-              選擇週
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
-            <Calendar
-              mode="single"
-              selected={weekStart}
-              onSelect={(d) => {
-                if (d) setWeekStart(startOfWeek(d, { weekStartsOn: 1 }));
-              }}
-            />
-          </PopoverContent>
-        </Popover>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentMonth(startOfMonth(new Date()))}
+            data-testid="button-today"
+          >
+            本月
+          </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-pick-date">
+                <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
+                選擇月份
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={currentMonth}
+                onSelect={(d) => {
+                  if (d) setCurrentMonth(startOfMonth(d));
+                }}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col">
-        <ScrollArea className="flex-1">
-          <div className="min-w-[800px]">
-            <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-background">
-                <tr>
-                  <th className="text-left p-2 border-b border-r w-32 font-medium text-muted-foreground">
-                    員工
-                  </th>
-                  {weekDates.map((d, i) => {
-                    const isToday = format(d, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
-                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                    return (
-                      <th
-                        key={i}
-                        className={`text-center p-2 border-b border-r font-medium min-w-[120px] ${
-                          isToday
-                            ? "bg-primary/5"
-                            : isWeekend
-                              ? "bg-muted/30"
-                              : ""
-                        }`}
-                      >
-                        <div className="text-xs text-muted-foreground">
-                          週{DAY_NAMES[d.getDay()]}
-                        </div>
-                        <div className={isToday ? "text-primary font-semibold" : ""}>
-                          {format(d, "M/d")}
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i}>
-                      <td className="p-2 border-b border-r">
-                        <Skeleton className="h-5 w-20" />
-                      </td>
-                      {Array.from({ length: 7 }).map((_, j) => (
-                        <td key={j} className="p-2 border-b border-r">
-                          <Skeleton className="h-8 w-full" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : activeEmployees.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-12 text-muted-foreground">
-                      此區域尚無在職員工
+        <div className="flex-1 overflow-auto relative" ref={scrollRef}>
+          <table className="border-collapse text-sm" style={{ minWidth: `${130 + monthDates.length * 100}px` }}>
+            <thead className="sticky top-0 z-20">
+              <tr>
+                <th
+                  className="text-left p-2 border-b border-r font-medium text-muted-foreground bg-background sticky left-0 z-30"
+                  style={{ minWidth: 130, width: 130 }}
+                >
+                  員工
+                </th>
+                {monthDates.map((d, i) => {
+                  const isToday = format(d, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+                  const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                  return (
+                    <th
+                      key={i}
+                      data-date-col={format(d, "yyyy-MM-dd")}
+                      className={`text-center p-1.5 border-b border-r font-medium bg-background ${
+                        isToday
+                          ? "bg-primary/5"
+                          : isWeekend
+                            ? "bg-muted/30"
+                            : ""
+                      }`}
+                      style={{ minWidth: 100, width: 100 }}
+                    >
+                      <div className={`text-xs ${isWeekend ? "text-destructive/70" : "text-muted-foreground"}`}>
+                        週{DAY_NAMES[d.getDay()]}
+                      </div>
+                      <div className={`text-xs ${isToday ? "text-primary font-semibold" : ""}`}>
+                        {format(d, "M/d")}
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    <td className="p-2 border-b border-r sticky left-0 bg-background z-[5]" style={{ minWidth: 130 }}>
+                      <Skeleton className="h-5 w-20" />
                     </td>
-                  </tr>
-                ) : (
-                  activeEmployees.map((emp) => (
-                    <tr key={emp.id} className="group">
-                      <td className="p-2 border-b border-r sticky left-0 bg-background z-[5]">
-                        <div className="flex flex-col">
-                          <span className="font-medium text-sm" data-testid={`text-employee-name-${emp.id}`}>
-                            {emp.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground">{emp.employeeCode}</span>
-                        </div>
+                    {Array.from({ length: Math.min(monthDates.length, 15) }).map((_, j) => (
+                      <td key={j} className="p-1 border-b border-r" style={{ minWidth: 100 }}>
+                        <Skeleton className="h-8 w-full" />
                       </td>
-                      {weekDates.map((d, di) => {
-                        const dateStr = format(d, "yyyy-MM-dd");
-                        const cellShifts = shiftsByEmployeeDate.get(`${emp.id}-${dateStr}`) || [];
-                        const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
-                        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                    ))}
+                  </tr>
+                ))
+              ) : activeEmployees.length === 0 ? (
+                <tr>
+                  <td colSpan={monthDates.length + 1} className="text-center py-12 text-muted-foreground">
+                    此區域尚無在職員工
+                  </td>
+                </tr>
+              ) : (
+                activeEmployees.map((emp) => (
+                  <tr key={emp.id} className="group">
+                    <td
+                      className="p-2 border-b border-r sticky left-0 bg-background z-[5]"
+                      style={{ minWidth: 130, width: 130 }}
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm whitespace-nowrap" data-testid={`text-employee-name-${emp.id}`}>
+                          {emp.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{emp.employeeCode}</span>
+                      </div>
+                    </td>
+                    {monthDates.map((d, di) => {
+                      const dateStr = format(d, "yyyy-MM-dd");
+                      const cellShifts = shiftsByEmployeeDate.get(`${emp.id}-${dateStr}`) || [];
+                      const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
+                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
 
-                        return (
-                          <td
-                            key={di}
-                            className={`p-1 border-b border-r relative min-h-[48px] cursor-pointer transition-colors hover:bg-muted/50 ${
-                              isToday ? "bg-primary/5" : isWeekend ? "bg-muted/20" : ""
-                            }`}
-                            onClick={() => {
-                              if (cellShifts.length === 0) {
-                                handleCellClick(emp, dateStr);
-                              }
-                            }}
-                            data-testid={`cell-${emp.id}-${dateStr}`}
-                          >
-                            {cellShifts.length > 0 ? (
-                              <div className="space-y-1">
-                                {cellShifts.map((s) => {
-                                  const venue = venueMap.get(s.venueId);
-                                  return (
-                                    <div
-                                      key={s.id}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleCellClick(emp, dateStr, s);
-                                      }}
-                                      className={`rounded-md px-1.5 py-1 text-xs cursor-pointer transition-colors ${
-                                        s.isDispatch
-                                          ? "bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200 border border-orange-200 dark:border-orange-800"
-                                          : "bg-primary/10 text-primary border border-primary/20"
-                                      }`}
-                                      data-testid={`shift-${s.id}`}
-                                    >
-                                      <div className="font-medium truncate">
-                                        {venue?.shortName || "未知"}
-                                      </div>
-                                      <div className="text-[10px] opacity-75">
-                                        {s.startTime.substring(0, 5)}-{s.endTime.substring(0, 5)}
-                                      </div>
-                                      {s.isDispatch && (
-                                        <div className="text-[10px] opacity-60 truncate">
-                                          派遣{s.dispatchName ? `：${s.dispatchName}` : ""}
-                                        </div>
-                                      )}
+                      return (
+                        <td
+                          key={di}
+                          className={`p-0.5 border-b border-r relative cursor-pointer transition-colors hover:bg-muted/50 align-top ${
+                            isToday ? "bg-primary/5" : isWeekend ? "bg-muted/20" : ""
+                          }`}
+                          style={{ minWidth: 100, width: 100 }}
+                          onClick={() => {
+                            if (cellShifts.length === 0) {
+                              handleCellClick(emp, dateStr);
+                            }
+                          }}
+                          data-testid={`cell-${emp.id}-${dateStr}`}
+                        >
+                          {cellShifts.length > 0 ? (
+                            <div className="space-y-0.5">
+                              {cellShifts.map((s) => {
+                                const venue = venueMap.get(s.venueId);
+                                return (
+                                  <div
+                                    key={s.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleCellClick(emp, dateStr, s);
+                                    }}
+                                    className={`rounded px-1 py-0.5 text-xs cursor-pointer transition-colors ${
+                                      s.isDispatch
+                                        ? "bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200 border border-orange-200 dark:border-orange-800"
+                                        : "bg-primary/10 text-primary border border-primary/20"
+                                    }`}
+                                    data-testid={`shift-${s.id}`}
+                                  >
+                                    <div className="font-medium truncate text-[11px] leading-tight">
+                                      {venue?.shortName || "未知"}
                                     </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-center h-[40px] opacity-0 group-hover:opacity-30 transition-opacity">
-                                <Plus className="h-4 w-4" />
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+                                    <div className="text-[10px] opacity-75 leading-tight">
+                                      {s.startTime.substring(0, 5)}-{s.endTime.substring(0, 5)}
+                                    </div>
+                                    {s.isDispatch && (
+                                      <div className="text-[9px] opacity-60 truncate leading-tight">
+                                        派遣{s.dispatchName ? `：${s.dispatchName}` : ""}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center h-[36px] opacity-0 group-hover:opacity-30 transition-opacity">
+                              <Plus className="h-3 w-3" />
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
         <div className="border-t p-4 bg-card">
           <VacancyFooter vacancies={vacancies} />
