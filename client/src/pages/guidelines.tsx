@@ -245,11 +245,14 @@ export default function GuidelinesPage() {
   }, [viewingGuideline, allEmployees, employeesByVenue]);
 
   return (
-    <div className="flex flex-col h-full overflow-auto p-4 gap-4">
-      <div>
-        <h1 className="text-xl font-bold" data-testid="text-page-title">守則管理</h1>
-        <p className="text-sm text-muted-foreground">管理員工上班守則、每月新增說明及保密同意書</p>
+    <div className="flex flex-col h-full overflow-auto">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-5 border-b border-border/50">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight" data-testid="text-page-title">守則管理</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">管理員工上班守則、每月新增說明及保密同意書</p>
+        </div>
       </div>
+      <div className="p-4 space-y-4">
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as GuidelineCategory)}>
         <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -537,6 +540,7 @@ export default function GuidelinesPage() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

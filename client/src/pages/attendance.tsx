@@ -222,10 +222,10 @@ export default function AttendancePage() {
 
   return (
     <div className="flex flex-col h-full overflow-auto">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border-b">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-5 border-b border-border/50">
         <div>
-          <h1 className="text-lg font-semibold" data-testid="text-attendance-title">考勤稽核</h1>
-          <p className="text-sm text-muted-foreground">排班與打卡自動比對</p>
+          <h1 className="text-xl font-bold tracking-tight" data-testid="text-attendance-title">考勤稽核</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">排班與打卡自動比對</p>
         </div>
         <RegionTabs />
       </div>

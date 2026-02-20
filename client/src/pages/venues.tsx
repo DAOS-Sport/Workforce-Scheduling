@@ -311,10 +311,10 @@ export default function VenuesPage() {
 
   return (
     <div className="flex flex-col h-full overflow-auto">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border-b">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-5 border-b border-border/50">
         <div>
-          <h1 className="text-lg font-semibold" data-testid="text-venues-title">場館管理</h1>
-          <p className="text-sm text-muted-foreground">管理場館地點、GPS 圍欄與班次範本</p>
+          <h1 className="text-xl font-bold tracking-tight" data-testid="text-venues-title">場館管理</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">管理場館地點、GPS 圍欄與班次範本</p>
         </div>
         <RegionTabs />
       </div>

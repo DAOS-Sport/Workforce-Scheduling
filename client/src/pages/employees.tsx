@@ -120,10 +120,10 @@ export default function EmployeesPage() {
 
   return (
     <div className="flex flex-col h-full overflow-auto">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border-b">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-5 border-b border-border/50">
         <div>
-          <h1 className="text-lg font-semibold" data-testid="text-employees-title">員工管理</h1>
-          <p className="text-sm text-muted-foreground">管理員工資料與在職狀態</p>
+          <h1 className="text-xl font-bold tracking-tight" data-testid="text-employees-title">員工管理</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">管理員工資料與在職狀態</p>
         </div>
         <RegionTabs />
       </div>

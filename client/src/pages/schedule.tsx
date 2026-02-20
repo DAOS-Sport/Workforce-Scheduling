@@ -383,10 +383,10 @@ export default function SchedulePage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border-b">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-5 border-b border-border/50">
         <div>
-          <h1 className="text-lg font-semibold" data-testid="text-page-title">排班編輯器</h1>
-          <p className="text-sm text-muted-foreground">員工排班管理 — 設定需求、指派班次、即時偵測缺班</p>
+          <h1 className="text-xl font-bold tracking-tight" data-testid="text-page-title">排班編輯器</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">員工排班管理 — 設定需求、指派班次、即時偵測缺班</p>
         </div>
         <RegionTabs />
       </div>

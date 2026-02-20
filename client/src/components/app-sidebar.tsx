@@ -1,4 +1,4 @@
-import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, Settings, BookOpen } from "lucide-react";
+import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -30,20 +30,20 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-            <Calendar className="h-4 w-4 text-primary-foreground" />
+      <SidebarHeader className="p-4 border-b border-sidebar-border">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/25">
+            <Calendar className="h-4.5 w-4.5 text-white" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold" data-testid="text-app-title">PT 排班系統</h2>
-            <p className="text-xs text-muted-foreground">Smart Scheduler</p>
+            <h2 className="text-sm font-bold tracking-tight" data-testid="text-app-title">三蘆智慧管理</h2>
+            <p className="text-[11px] text-muted-foreground font-medium">115年 PT 排班系統</p>
           </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>排班管理</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/70">排班管理</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {mainItems.map((item) => (
@@ -64,7 +64,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>行政工具</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/70">行政工具</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {toolItems.map((item) => (
@@ -85,8 +85,11 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4">
-        <p className="text-xs text-muted-foreground">v1.0 — 115年勞基法合規</p>
+      <SidebarFooter className="p-4 border-t border-sidebar-border">
+        <div className="flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+          <p className="text-[11px] text-muted-foreground font-medium">v2.0 — 115年勞基法合規</p>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
