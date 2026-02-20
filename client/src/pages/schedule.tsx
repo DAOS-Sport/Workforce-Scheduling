@@ -143,16 +143,29 @@ export default function SchedulePage() {
     return map;
   }, [scheduleSlots]);
 
+  const timeToMin = (t: string) => {
+    const [h, m] = t.substring(0, 5).split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const shiftOverlapsSlot = (sh: Shift, slot: ScheduleSlot) => {
+    const shStart = timeToMin(sh.startTime);
+    const shEnd = timeToMin(sh.endTime);
+    const slStart = timeToMin(slot.startTime);
+    const slEnd = timeToMin(slot.endTime);
+    const overlapStart = Math.max(shStart, slStart);
+    const overlapEnd = Math.min(shEnd, slEnd);
+    const overlap = overlapEnd - overlapStart;
+    const slotDuration = slEnd - slStart;
+    return overlap >= slotDuration * 0.5;
+  };
+
   const venueDateShortage = useMemo(() => {
     const map = new Map<string, Map<string, number>>();
     scheduleSlots.forEach((slot) => {
       const key = `${slot.venueId}-${slot.date}`;
       const venueDateShifts = shiftsByVenueDate.get(key) || [];
-      const assignedCount = venueDateShifts.filter((sh) => {
-        const shStart = sh.startTime.substring(0, 5);
-        const shEnd = sh.endTime.substring(0, 5);
-        return shStart <= slot.startTime && shEnd >= slot.endTime;
-      }).length;
+      const assignedCount = venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length;
       const shortage = slot.requiredCount - assignedCount;
       if (shortage > 0) {
         if (!map.has(key)) map.set(key, new Map());
@@ -169,11 +182,7 @@ export default function SchedulePage() {
     scheduleSlots.forEach((slot) => {
       const venue = venues.find((v) => v.id === slot.venueId);
       const venueDateShifts = shiftsByVenueDate.get(`${slot.venueId}-${slot.date}`) || [];
-      const assignedCount = venueDateShifts.filter((sh) => {
-        const shStart = sh.startTime.substring(0, 5);
-        const shEnd = sh.endTime.substring(0, 5);
-        return shStart <= slot.startTime && shEnd >= slot.endTime;
-      }).length;
+      const assignedCount = venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length;
       const shortage = slot.requiredCount - assignedCount;
       if (shortage > 0) {
         totalShortage += shortage;
@@ -237,8 +246,7 @@ export default function SchedulePage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
+      queryClient.invalidateQueries();
       toast({ title: "班次已新增" });
     },
     onError: (err: Error) => {
@@ -252,8 +260,7 @@ export default function SchedulePage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
+      queryClient.invalidateQueries();
       toast({ title: "班次已更新" });
     },
     onError: (err: Error) => {
@@ -266,10 +273,7 @@ export default function SchedulePage() {
       await apiRequest("DELETE", `/api/shifts/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
-      queryClient.refetchQueries({ queryKey: ["/api/shifts"] });
-      queryClient.refetchQueries({ queryKey: ["/api/schedule-slots"] });
+      queryClient.invalidateQueries();
       toast({ title: "班次已刪除" });
     },
   });
@@ -943,11 +947,7 @@ export default function SchedulePage() {
                 <div className="space-y-2">
                   {cellSlots.map((slot) => {
                     const venueDateShifts = shiftsByVenueDate.get(`${slot.venueId}-${slot.date}`) || [];
-                    const assignedCount = venueDateShifts.filter((sh) => {
-                      const shStart = sh.startTime.substring(0, 5);
-                      const shEnd = sh.endTime.substring(0, 5);
-                      return shStart <= slot.startTime && shEnd >= slot.endTime;
-                    }).length;
+                    const assignedCount = venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length;
                     const shortage = slot.requiredCount - assignedCount;
                     const isFull = shortage <= 0;
                     const RoleIcon = ROLE_ICON_MAP[slot.role] || UserRound;
