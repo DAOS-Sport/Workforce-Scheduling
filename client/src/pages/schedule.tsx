@@ -38,6 +38,14 @@ const ROLE_SHORT: Record<string, string> = {
   "管理": "管",
 };
 
+const ROLE_LABELS: Record<string, string> = {
+  pt: "教練",
+  lifeguard: "救生",
+  counter: "櫃檯",
+  cleaning: "清潔",
+  manager: "管理",
+};
+
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
 const ROLE_OPTIONS = ["救生", "教練", "櫃檯", "清潔", "管理"];
 
