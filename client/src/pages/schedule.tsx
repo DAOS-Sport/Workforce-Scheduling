@@ -268,6 +268,8 @@ export default function SchedulePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
+      queryClient.refetchQueries({ queryKey: ["/api/shifts"] });
+      queryClient.refetchQueries({ queryKey: ["/api/schedule-slots"] });
       toast({ title: "班次已刪除" });
     },
   });
