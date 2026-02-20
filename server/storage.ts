@@ -45,6 +45,7 @@ export interface IStorage {
   createVenueRequirement(data: InsertVenueRequirement): Promise<VenueRequirement>;
 
   getScheduleSlotsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<ScheduleSlot[]>;
+  getScheduleSlotsByVenueAndDate(venueId: number, date: string): Promise<ScheduleSlot[]>;
   createScheduleSlot(data: InsertScheduleSlot): Promise<ScheduleSlot>;
   updateScheduleSlot(id: number, data: Partial<InsertScheduleSlot>): Promise<ScheduleSlot | undefined>;
   deleteScheduleSlot(id: number): Promise<boolean>;
@@ -75,6 +76,7 @@ export interface IStorage {
 
   getEmployeeByLineId(lineId: string): Promise<Employee | undefined>;
   getShiftsByEmployeeAndDateRange(employeeId: number, startDate: string, endDate: string): Promise<Shift[]>;
+  getShiftsByVenueAndDate(venueId: number, date: string): Promise<Shift[]>;
   getCoworkersByVenueAndDate(venueId: number, date: string, excludeEmployeeId: number): Promise<Employee[]>;
 }
 
@@ -193,6 +195,15 @@ export class DatabaseStorage implements IStorage {
         inArray(scheduleSlots.venueId, venueIds),
         gte(scheduleSlots.date, startDate),
         lte(scheduleSlots.date, endDate)
+      )
+    );
+  }
+
+  async getScheduleSlotsByVenueAndDate(venueId: number, date: string): Promise<ScheduleSlot[]> {
+    return db.select().from(scheduleSlots).where(
+      and(
+        eq(scheduleSlots.venueId, venueId),
+        eq(scheduleSlots.date, date)
       )
     );
   }
@@ -337,6 +348,15 @@ export class DatabaseStorage implements IStorage {
         eq(shifts.employeeId, employeeId),
         gte(shifts.date, startDate),
         lte(shifts.date, endDate)
+      )
+    );
+  }
+
+  async getShiftsByVenueAndDate(venueId: number, date: string): Promise<Shift[]> {
+    return db.select().from(shifts).where(
+      and(
+        eq(shifts.venueId, venueId),
+        eq(shifts.date, date)
       )
     );
   }

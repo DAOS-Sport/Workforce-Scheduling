@@ -724,6 +724,11 @@ export async function registerRoutes(
       const { startDate, endDate } = req.params;
       const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, startDate, endDate);
 
+      const emp = await storage.getEmployee(employeeId);
+      const empRoleMap: Record<string, string> = {
+        lifeguard: "救生", counter: "櫃檯", pt: "教練", cleaning: "清潔", manager: "管理",
+      };
+
       const venueIds = Array.from(new Set(myShifts.map((s) => s.venueId)));
       const venueMap: Record<number, any> = {};
       for (const vid of venueIds) {
@@ -731,9 +736,30 @@ export async function registerRoutes(
         if (v) venueMap[vid] = { id: v.id, name: v.name, shortName: v.shortName };
       }
 
-      const enriched = myShifts.map((s) => ({
-        ...s,
-        venue: venueMap[s.venueId] || null,
+      const slotsCache: Record<string, any[]> = {};
+      async function getSlotsForVenueDate(venueId: number, date: string) {
+        const key = `${venueId}-${date}`;
+        if (!slotsCache[key]) {
+          slotsCache[key] = await storage.getScheduleSlotsByVenueAndDate(venueId, date);
+        }
+        return slotsCache[key];
+      }
+
+      const enriched = await Promise.all(myShifts.map(async (s) => {
+        const slots = await getSlotsForVenueDate(s.venueId, s.date);
+        const shiftStart = s.startTime.slice(0, 5);
+        const shiftEnd = s.endTime.slice(0, 5);
+        const matchedSlot = slots.find((sl) =>
+          sl.startTime.slice(0, 5) <= shiftStart && sl.endTime.slice(0, 5) >= shiftEnd
+        ) || slots.find((sl) =>
+          sl.startTime.slice(0, 5) <= shiftStart && shiftStart < sl.endTime.slice(0, 5)
+        );
+        const assignedRole = matchedSlot?.role || (emp ? empRoleMap[emp.role] : null) || null;
+        return {
+          ...s,
+          venue: venueMap[s.venueId] || null,
+          assignedRole,
+        };
       }));
       res.json(enriched);
     } catch (err: any) {
@@ -746,22 +772,59 @@ export async function registerRoutes(
       const employeeId = parseInt(req.params.employeeId);
       const today = new Date().toISOString().split("T")[0];
 
+      const empRoleMap: Record<string, string> = {
+        lifeguard: "救生", counter: "櫃檯", pt: "教練", cleaning: "清潔", manager: "管理",
+      };
+
       const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, today, today);
       if (myShifts.length === 0) return res.json([]);
 
       const result: any[] = [];
       for (const shift of myShifts) {
         const venue = await storage.getVenue(shift.venueId);
-        const coworkers = await storage.getCoworkersByVenueAndDate(shift.venueId, today, employeeId);
-        result.push({
-          venue: venue ? { id: venue.id, shortName: venue.shortName } : null,
-          shiftTime: `${shift.startTime.slice(0, 5)}-${shift.endTime.slice(0, 5)}`,
-          coworkers: coworkers.map((c) => ({
+        const coworkerEmployees = await storage.getCoworkersByVenueAndDate(shift.venueId, today, employeeId);
+
+        const allVenueShifts = await storage.getShiftsByVenueAndDate(shift.venueId, today);
+        const slots = await storage.getScheduleSlotsByVenueAndDate(shift.venueId, today);
+
+        const coworkersWithShiftRole = coworkerEmployees.map((c) => {
+          const cwShift = allVenueShifts.find((s) => s.employeeId === c.id);
+          let shiftRole = empRoleMap[c.role] || c.role;
+          if (cwShift) {
+            const cwStart = cwShift.startTime.slice(0, 5);
+            const cwEnd = cwShift.endTime.slice(0, 5);
+            const matchedSlot = slots.find((sl) =>
+              sl.startTime.slice(0, 5) <= cwStart && sl.endTime.slice(0, 5) >= cwEnd
+            ) || slots.find((sl) =>
+              sl.startTime.slice(0, 5) <= cwStart && cwStart < sl.endTime.slice(0, 5)
+            );
+            if (matchedSlot) shiftRole = matchedSlot.role;
+          }
+          return {
             id: c.id,
             name: c.name,
             phone: c.phone,
             role: c.role,
-          })),
+            shiftRole,
+            shiftTime: cwShift ? `${cwShift.startTime.slice(0, 5)}-${cwShift.endTime.slice(0, 5)}` : null,
+          };
+        });
+
+        const mySlot = slots.find((sl) => {
+          const st = shift.startTime.slice(0, 5);
+          return sl.startTime.slice(0, 5) <= st && sl.endTime.slice(0, 5) >= shift.endTime.slice(0, 5);
+        }) || slots.find((sl) => {
+          const st = shift.startTime.slice(0, 5);
+          return sl.startTime.slice(0, 5) <= st && st < sl.endTime.slice(0, 5);
+        });
+        const emp = await storage.getEmployee(employeeId);
+        const myRole = mySlot?.role || (emp ? empRoleMap[emp.role] : null) || null;
+
+        result.push({
+          venue: venue ? { id: venue.id, shortName: venue.shortName } : null,
+          shiftTime: `${shift.startTime.slice(0, 5)}-${shift.endTime.slice(0, 5)}`,
+          myRole,
+          coworkers: coworkersWithShiftRole,
         });
       }
       res.json(result);

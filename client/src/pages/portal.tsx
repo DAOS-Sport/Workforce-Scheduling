@@ -32,12 +32,14 @@ interface PortalShift {
   endTime: string;
   isDispatch: boolean;
   venue: { id: number; name: string; shortName: string } | null;
+  assignedRole: string | null;
 }
 
 interface CoworkerGroup {
   venue: { id: number; shortName: string } | null;
   shiftTime: string;
-  coworkers: { id: number; name: string; phone: string | null; role: string }[];
+  myRole: string | null;
+  coworkers: { id: number; name: string; phone: string | null; role: string; shiftRole: string; shiftTime: string | null }[];
 }
 
 interface AttendanceSummary {
@@ -75,6 +77,19 @@ const ROLE_LABELS: Record<string, string> = {
   cleaning: "清潔",
   manager: "管理",
 };
+
+const ROLE_DISPLAY: Record<string, { label: string; taskLabel: string; color: string; bgClass: string; borderClass: string; textClass: string; badgeBg: string }> = {
+  "櫃檯": { label: "櫃檯", taskLabel: "櫃台服務", color: "#3B82F6", bgClass: "bg-blue-500/10", borderClass: "border-l-blue-500", textClass: "text-blue-500", badgeBg: "bg-blue-500/15 text-blue-400" },
+  "救生": { label: "救生", taskLabel: "救生執勤", color: "#10B981", bgClass: "bg-emerald-500/10", borderClass: "border-l-emerald-500", textClass: "text-emerald-500", badgeBg: "bg-emerald-500/15 text-emerald-400" },
+  "教練": { label: "教練", taskLabel: "教練指導", color: "#8B5CF6", bgClass: "bg-violet-500/10", borderClass: "border-l-violet-500", textClass: "text-violet-500", badgeBg: "bg-violet-500/15 text-violet-400" },
+  "清潔": { label: "清潔", taskLabel: "清潔維護", color: "#F59E0B", bgClass: "bg-amber-500/10", borderClass: "border-l-amber-500", textClass: "text-amber-500", badgeBg: "bg-amber-500/15 text-amber-400" },
+  "管理": { label: "管理", taskLabel: "場館管理", color: "#EF4444", bgClass: "bg-red-500/10", borderClass: "border-l-red-500", textClass: "text-red-500", badgeBg: "bg-red-500/15 text-red-400" },
+};
+
+function getRoleDisplay(role: string | null | undefined) {
+  if (!role) return ROLE_DISPLAY["教練"];
+  return ROLE_DISPLAY[role] || ROLE_DISPLAY["教練"];
+}
 
 const DAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -579,12 +594,15 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                       <div className={`text-xs text-center mb-0.5 ${today ? "font-bold text-primary" : "text-muted-foreground"}`}>
                         {format(day, "d")}
                       </div>
-                      {dayShifts.slice(0, 2).map((s, i) => (
-                        <div key={i} className="text-[10px] leading-tight px-0.5">
-                          <div className="font-medium truncate">{s.venue?.shortName?.slice(0, 3) || ""}</div>
-                          <div className="text-muted-foreground truncate">{s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}</div>
-                        </div>
-                      ))}
+                      {dayShifts.slice(0, 2).map((s, i) => {
+                        const rd = getRoleDisplay(s.assignedRole);
+                        return (
+                          <div key={i} className={`text-[10px] leading-tight px-0.5 rounded-sm border-l-2 pl-1 mb-0.5 ${rd.borderClass}`}>
+                            <div className="font-medium truncate">{s.venue?.shortName?.slice(0, 3) || ""}</div>
+                            <div className={`truncate font-medium ${rd.textClass}`}>{s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}</div>
+                          </div>
+                        );
+                      })}
                       {dayShifts.length > 2 && (
                         <div className="text-[10px] text-muted-foreground text-center">+{dayShifts.length - 2}</div>
                       )}
@@ -603,29 +621,44 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                   .map((s) => {
                     const d = parseISO(s.date);
                     const dayLabel = DAY_LABELS[getDay(d)];
+                    const rd = getRoleDisplay(s.assignedRole);
+                    const isLifeguard = s.assignedRole === "救生";
                     return (
                       <div
                         key={s.id}
-                        className={`flex items-center gap-3 py-2 border-b last:border-b-0 ${
-                          isToday(d) ? "bg-primary/5 rounded-md px-2 -mx-2" : ""
+                        className={`relative flex items-center gap-3 py-3 px-3 rounded-lg border-l-4 ${rd.borderClass} ${rd.bgClass} overflow-hidden ${
+                          isToday(d) ? "ring-1 ring-primary/30" : ""
                         }`}
                         data-testid={`shift-row-${s.id}`}
                       >
-                        <div className="text-center min-w-[50px]">
+                        {isLifeguard && (
+                          <div className="absolute inset-0 pointer-events-none opacity-[0.04]" aria-hidden="true">
+                            <svg className="w-full h-full" viewBox="0 0 200 60" preserveAspectRatio="none">
+                              <path d="M0,30 Q25,10 50,30 T100,30 T150,30 T200,30" fill="none" stroke="currentColor" strokeWidth="3" className="text-emerald-500" />
+                              <path d="M0,40 Q25,20 50,40 T100,40 T150,40 T200,40" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-500" />
+                            </svg>
+                          </div>
+                        )}
+                        <div className="text-center min-w-[50px] relative z-10">
                           <div className="text-xs text-muted-foreground">{format(d, "M/d")}</div>
                           <div className={`text-xs ${dayLabel === "日" || dayLabel === "六" ? "text-destructive" : ""}`}>
                             ({dayLabel})
                           </div>
                         </div>
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 relative z-10">
                           <div className="flex items-center gap-1.5">
                             <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
                             <span className="text-sm font-medium truncate">{s.venue?.shortName || "未知"}</span>
                             {s.isDispatch && <Badge variant="secondary" className="text-xs">派遣</Badge>}
                           </div>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                            <Clock className="h-3 w-3" />
-                            {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
+                            </div>
+                            <Badge className={`text-[10px] border-0 ${rd.badgeBg}`} data-testid={`badge-role-${s.id}`}>
+                              [{rd.taskLabel}]
+                            </Badge>
                           </div>
                         </div>
                       </div>
@@ -647,48 +680,78 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
             <p className="text-sm text-center text-muted-foreground py-4">今日無排班</p>
           ) : (
             <div className="space-y-4">
-              {todayCoworkers.map((group, gIdx) => (
-                <div key={gIdx}>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Badge variant="outline" className="text-xs">
-                      <MapPin className="h-3 w-3 mr-0.5" />
-                      {group.venue?.shortName || "未知"}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">{group.shiftTime}</span>
-                  </div>
-                  {group.coworkers.length === 0 ? (
-                    <p className="text-xs text-muted-foreground pl-2">今日僅你一人在此場館</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {group.coworkers.map((cw) => (
-                        <div
-                          key={cw.id}
-                          className="flex items-center justify-between gap-2 py-1.5"
-                          data-testid={`coworker-row-${cw.id}`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{cw.name}</span>
-                            <Badge variant="secondary" className="text-xs">
-                              {ROLE_LABELS[cw.role] || cw.role}
-                            </Badge>
-                          </div>
-                          {cw.phone && (
-                            <a
-                              href={`tel:${cw.phone}`}
-                              className="shrink-0"
-                              data-testid={`button-call-${cw.id}`}
-                            >
-                              <Button size="icon" variant="ghost">
-                                <Phone className="h-4 w-4 text-green-600" />
-                              </Button>
-                            </a>
-                          )}
-                        </div>
-                      ))}
+              {todayCoworkers.map((group, gIdx) => {
+                const roleGroups = new Map<string, typeof group.coworkers>();
+                group.coworkers.forEach((cw) => {
+                  const key = cw.shiftRole || "其他";
+                  if (!roleGroups.has(key)) roleGroups.set(key, []);
+                  roleGroups.get(key)!.push(cw);
+                });
+
+                return (
+                  <div key={gIdx}>
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <Badge variant="outline" className="text-xs">
+                        <MapPin className="h-3 w-3 mr-0.5" />
+                        {group.venue?.shortName || "未知"}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{group.shiftTime}</span>
+                      {group.myRole && (
+                        <Badge className={`text-[10px] border-0 ${getRoleDisplay(group.myRole).badgeBg}`}>
+                          我的崗位：{getRoleDisplay(group.myRole).taskLabel}
+                        </Badge>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {group.coworkers.length === 0 ? (
+                      <p className="text-xs text-muted-foreground pl-2">今日僅你一人在此場館</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {Array.from(roleGroups.entries()).map(([roleName, members]) => {
+                          const rd = getRoleDisplay(roleName);
+                          return (
+                            <div key={roleName} className={`rounded-lg border-l-4 ${rd.borderClass} ${rd.bgClass} p-3`}>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className={`h-2 w-2 rounded-full`} style={{ backgroundColor: rd.color }} />
+                                <span className={`text-xs font-semibold ${rd.textClass}`}>
+                                  今日{rd.label}夥伴
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">({members.length}人)</span>
+                              </div>
+                              <div className="space-y-1.5">
+                                {members.map((cw) => (
+                                  <div
+                                    key={cw.id}
+                                    className="flex items-center justify-between gap-2 py-1"
+                                    data-testid={`coworker-row-${cw.id}`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-sm font-medium truncate">{cw.name}</span>
+                                      {cw.shiftTime && (
+                                        <span className="text-[10px] text-muted-foreground shrink-0">{cw.shiftTime}</span>
+                                      )}
+                                    </div>
+                                    {cw.phone && (
+                                      <a
+                                        href={`tel:${cw.phone}`}
+                                        className="shrink-0"
+                                        data-testid={`button-call-${cw.id}`}
+                                      >
+                                        <Button size="icon" variant="ghost">
+                                          <Phone className="h-4 w-4 text-green-500" />
+                                        </Button>
+                                      </a>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </Card>
