@@ -182,8 +182,103 @@ export async function registerRoutes(
     const { regionCode, startDate, endDate } = req.params;
     const region = await storage.getRegionByCode(regionCode);
     if (!region) return res.json([]);
-    const slots = await storage.getScheduleSlotsByRegionAndDateRange(region.id, startDate, endDate);
-    res.json(slots);
+    const realSlots = await storage.getScheduleSlotsByRegionAndDateRange(region.id, startDate, endDate);
+
+    const regionVenues = await storage.getVenuesByRegion(region.id);
+
+    const allTemplates: Record<number, any[]> = {};
+    for (const v of regionVenues) {
+      const tpls = await storage.getVenueShiftTemplates(v.id);
+      if (tpls.length > 0) allTemplates[v.id] = tpls;
+    }
+
+    const realSlotDates = new Set<string>();
+    realSlots.forEach((s) => realSlotDates.add(`${s.venueId}-${s.date}`));
+
+    const virtualSlots: any[] = [];
+    let virtualId = -1;
+
+    const start = new Date(startDate + "T00:00:00");
+    const end = new Date(endDate + "T00:00:00");
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const dateStr = `${year}-${month}-${day}`;
+      const dayOfWeek = d.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const dayType = isWeekend ? "weekend" : "weekday";
+
+      for (const venue of regionVenues) {
+        const key = `${venue.id}-${dateStr}`;
+        if (realSlotDates.has(key)) continue;
+
+        const tpls = allTemplates[venue.id];
+        if (!tpls) continue;
+
+        const matched = tpls.filter((t) => {
+          const tDayType = t.dayType.toLowerCase();
+          if (isWeekend) return tDayType === "weekend" || tDayType === "假日";
+          return tDayType === "weekday" || tDayType === "平日";
+        });
+        for (const t of matched) {
+          virtualSlots.push({
+            id: virtualId--,
+            venueId: venue.id,
+            date: dateStr,
+            startTime: t.startTime,
+            endTime: t.endTime,
+            role: t.role,
+            requiredCount: t.requiredCount,
+            _fromTemplate: true,
+          });
+        }
+      }
+    }
+
+    res.json([...realSlots, ...virtualSlots]);
+  });
+
+  app.post("/api/schedule-slots/materialize", async (req, res) => {
+    try {
+      const { venueId, date, excludeTemplateIds } = req.body;
+      if (!venueId || !date) return res.status(400).json({ message: "Missing venueId or date" });
+
+      const venue = await storage.getVenue(venueId);
+      if (!venue) return res.status(404).json({ message: "Venue not found" });
+      const existingSlots = await storage.getScheduleSlotsByRegionAndDateRange(venue.regionId, date, date);
+      const hasReal = existingSlots.some((s) => s.venueId === venueId);
+      if (hasReal) return res.json({ message: "Already has real slots", created: 0 });
+
+      const templates = await storage.getVenueShiftTemplates(venueId);
+      const d = new Date(date + "T00:00:00");
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const matched = templates.filter((t) => {
+        const dt = t.dayType.toLowerCase();
+        return isWeekend ? (dt === "weekend" || dt === "假日") : (dt === "weekday" || dt === "平日");
+      });
+
+      const excludeSlots = (excludeTemplateIds || []) as Array<{startTime: string; endTime: string; role: string}>;
+      const results = [];
+      for (const t of matched) {
+        const isExcluded = excludeSlots.some((ex: any) => 
+          ex.startTime === t.startTime && ex.endTime === t.endTime && ex.role === t.role
+        );
+        if (isExcluded) continue;
+        const slot = await storage.createScheduleSlot({
+          venueId,
+          date,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          role: t.role,
+          requiredCount: t.requiredCount,
+        });
+        results.push(slot);
+      }
+      res.json({ created: results.length, slots: results });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
   });
 
   app.post("/api/schedule-slots", async (req, res) => {

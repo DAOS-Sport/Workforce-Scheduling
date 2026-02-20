@@ -326,10 +326,10 @@ export default function SchedulePage() {
     setSlotDialogOpen(true);
   };
 
-  const handleSaveSlot = () => {
+  const handleSaveSlot = async () => {
     if (!editingSlotVenueId || !editingSlotDate || !slotStartTime || !slotEndTime) return;
     const count = parseInt(slotCount) || 1;
-    if (editingSlot) {
+    if (editingSlot && editingSlot.id > 0) {
       updateSlot.mutate({
         id: editingSlot.id,
         venueId: editingSlotVenueId,
@@ -340,6 +340,14 @@ export default function SchedulePage() {
         requiredCount: count,
       });
     } else {
+      if (editingSlot && editingSlot.id < 0) {
+        try {
+          await apiRequest("POST", "/api/schedule-slots/materialize", {
+            venueId: editingSlotVenueId,
+            date: editingSlotDate,
+          });
+        } catch {}
+      }
       createSlot.mutate({
         venueId: editingSlotVenueId,
         date: editingSlotDate,
@@ -930,6 +938,9 @@ export default function SchedulePage() {
                           <RoleIcon className="h-3.5 w-3.5" />
                           <span className="font-medium">{slot.startTime}-{slot.endTime}</span>
                           <span>{slot.role} {slot.requiredCount}人</span>
+                          {(slot as any)._fromTemplate && (
+                            <span className="text-blue-500 text-[10px] border border-blue-300 dark:border-blue-700 rounded px-1">範本</span>
+                          )}
                           {isFull ? (
                             <span className="text-green-600 dark:text-green-400 text-xs">已滿</span>
                           ) : (
@@ -948,7 +959,23 @@ export default function SchedulePage() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => deleteSlot.mutate(slot.id)}
+                            onClick={async () => {
+                              if (slot.id > 0) {
+                                deleteSlot.mutate(slot.id);
+                              } else {
+                                try {
+                                  await apiRequest("POST", "/api/schedule-slots/materialize", {
+                                    venueId: slot.venueId,
+                                    date: slot.date,
+                                    excludeTemplateIds: [{ startTime: slot.startTime, endTime: slot.endTime, role: slot.role }],
+                                  });
+                                  queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
+                                  toast({ title: "需求已刪除" });
+                                } catch {
+                                  toast({ title: "操作失敗", variant: "destructive" });
+                                }
+                              }
+                            }}
                             data-testid={`button-delete-req-${slot.id}`}
                           >
                             <Trash2 className="h-3.5 w-3.5" />

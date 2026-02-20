@@ -4,6 +4,9 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
+- 2026-02-20: Venue shift templates now auto-populate as virtual schedule slots in schedule editor; templates show with "範本" badge and can be edited/deleted (materializes to real slots)
+- 2026-02-20: Added POST /api/schedule-slots/materialize endpoint for atomic template-to-slot conversion
+- 2026-02-20: Portal enhancements: removed calendar download buttons, enlarged calendar cells with time+venue, attendance summary card, collapsible guidelines review
 - 2026-02-18: Added Employee Portal (/portal) with LINE Login, mandatory guidelines confirmation, personal schedule calendar, today's coworkers with one-click dial, watermark security
 - 2026-02-18: Added venue-specific fixed guidelines (固定守則 bound to venues), venue badge display, filtered acknowledgment by scheduled employees
 - 2026-02-18: Added lineId field to employees for LINE Login integration
