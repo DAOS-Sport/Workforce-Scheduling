@@ -609,8 +609,25 @@ export default function SchedulePage() {
                                     onClick={() => openEditShiftDialog(shift)}
                                     data-testid={`shift-${shift.id}`}
                                   >
-                                    <div className="font-medium leading-tight text-[11px]">
-                                      {venue?.shortName || "未知"}
+                                    <div className="flex items-center justify-between gap-1">
+                                      <div className="font-medium leading-tight text-[11px] truncate">
+                                        {venue?.shortName || "未知"}
+                                      </div>
+                                      {(() => {
+                                        const dateStr = format(d, "yyyy-MM-dd");
+                                        const slots = slotsByVenueDate.get(`${shift.venueId}-${dateStr}`) || [];
+                                        const sStart = shift.startTime.substring(0, 5);
+                                        const sEnd = shift.endTime.substring(0, 5);
+                                        const matchedSlot = slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sl.endTime.substring(0, 5) >= sEnd) 
+                                          || slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
+                                        const role = matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role;
+                                        const short = ROLE_SHORT[role] || role.slice(0, 1);
+                                        return (
+                                          <span className="text-[9px] px-0.5 rounded bg-background/50 border border-current opacity-70 shrink-0">
+                                            {short}
+                                          </span>
+                                        );
+                                      })()}
                                     </div>
                                     <div className="leading-tight text-[11px] text-muted-foreground">
                                       {shift.startTime.substring(0, 5)}-{shift.endTime.substring(0, 5)}
