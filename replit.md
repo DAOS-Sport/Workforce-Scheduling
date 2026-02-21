@@ -4,6 +4,8 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
+- 2026-02-21: Added batch shift creation (POST /api/shifts/batch) with labor law validation; shift dialog now has batch mode toggle with date grid picker and quick-select buttons (same weekday, all, clear)
+- 2026-02-21: Venue summary rows moved to regular tbody rows (not sticky), background #1d283a80
 - 2026-02-21: Added Ragic employee sync (server/ragic.ts) - pulls from ap7.ragic.com, auto-maps department→region (新北高中/三民高中/三重商工→三蘆戰區), sets role (救生/櫃台) and employmentType (full_time/part_time)
 - 2026-02-21: Added employmentType field to employees table for full-time/part-time classification
 - 2026-02-21: Schedule editor now groups employees by employment type × role (正職救生→正職櫃台→兼職救生→兼職櫃台), full-time on top

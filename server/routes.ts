@@ -179,6 +179,48 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  app.post("/api/shifts/batch", async (req, res) => {
+    try {
+      const { employeeId, venueId, startTime, endTime, role, isDispatch, targetDates } = req.body;
+      if (!employeeId || !venueId || !startTime || !endTime || !role || !Array.isArray(targetDates) || targetDates.length === 0) {
+        return res.status(400).json({ message: "缺少必要欄位" });
+      }
+
+      const employee = await storage.getEmployee(employeeId);
+      if (!employee || employee.status !== "active") {
+        return res.status(400).json({ message: "該員工非在職狀態，無法排班" });
+      }
+
+      const existingShifts = await storage.getShiftsByEmployee(employeeId);
+      const results: any[] = [];
+      const errors: string[] = [];
+
+      for (const date of targetDates) {
+        const dayErrors = validateAllRules(employeeId, date, startTime, endTime, existingShifts);
+        const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h");
+        if (blocking.length > 0) {
+          errors.push(`${date}: ${blocking[0].message}`);
+          continue;
+        }
+        const shift = await storage.createShift({
+          employeeId,
+          venueId: parseInt(venueId),
+          date,
+          startTime,
+          endTime,
+          role,
+          isDispatch: isDispatch || false,
+        });
+        existingShifts.push(shift as any);
+        results.push(shift);
+      }
+
+      res.json({ created: results.length, errors, shifts: results });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
   app.get("/api/schedule-slots/:regionCode/:startDate/:endDate", async (req, res) => {
     const { regionCode, startDate, endDate } = req.params;
     const region = await storage.getRegionByCode(regionCode);

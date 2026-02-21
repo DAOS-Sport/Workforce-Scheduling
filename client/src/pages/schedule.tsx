@@ -78,6 +78,8 @@ export default function SchedulePage() {
   const [shiftEndTime, setShiftEndTime] = useState("16:00");
   const [shiftIsDispatch, setShiftIsDispatch] = useState(false);
   const [shiftRole, setShiftRole] = useState<string>("救生");
+  const [shiftBatchDates, setShiftBatchDates] = useState<Set<string>>(new Set());
+  const [shiftBatchMode, setShiftBatchMode] = useState(false);
 
   const [requirementsPanelOpen, setRequirementsPanelOpen] = useState(false);
   const [reqPanelVenueId, setReqPanelVenueId] = useState<number | null>(null);
@@ -289,6 +291,24 @@ export default function SchedulePage() {
     },
   });
 
+  const batchCreateShifts = useMutation({
+    mutationFn: async (data: { employeeId: number; venueId: string; startTime: string; endTime: string; role: string; isDispatch: boolean; targetDates: string[] }) => {
+      const res = await apiRequest("POST", "/api/shifts/batch", data);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries();
+      const msg = `已新增 ${data.created} 筆班次`;
+      const errMsg = data.errors?.length > 0 ? `（${data.errors.length} 筆因勞基法限制略過）` : "";
+      toast({ title: msg + errMsg });
+      setShiftBatchDates(new Set());
+      setShiftBatchMode(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "批次新增失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
   const batchCopySlot = useMutation({
     mutationFn: async (data: { venueIds: number[]; startTime: string; endTime: string; role: string; requiredCount: number; targetDates: string[] }) => {
       const res = await apiRequest("POST", "/api/schedule-slots/batch-copy", data);
@@ -316,6 +336,8 @@ export default function SchedulePage() {
     setShiftEndTime("16:00");
     setShiftIsDispatch(false);
     setShiftRole(emp?.role === "櫃台" ? "櫃台" : "救生");
+    setShiftBatchMode(false);
+    setShiftBatchDates(new Set());
     setShiftDialogOpen(true);
   };
 
@@ -333,21 +355,42 @@ export default function SchedulePage() {
 
   const handleSaveShift = () => {
     if (!shiftEmployeeId || !shiftDate || !shiftVenueId || !shiftStartTime || !shiftEndTime) return;
-    const payload = {
-      employeeId: shiftEmployeeId,
-      venueId: parseInt(shiftVenueId),
-      date: shiftDate,
-      startTime: shiftStartTime,
-      endTime: shiftEndTime,
-      role: shiftRole,
-      isDispatch: shiftIsDispatch,
-    };
     if (editingShift) {
-      updateShift.mutate({ id: editingShift.id, ...payload });
+      updateShift.mutate({
+        id: editingShift.id,
+        employeeId: shiftEmployeeId,
+        venueId: parseInt(shiftVenueId),
+        date: shiftDate,
+        startTime: shiftStartTime,
+        endTime: shiftEndTime,
+        role: shiftRole,
+        isDispatch: shiftIsDispatch,
+      });
+      setShiftDialogOpen(false);
+    } else if (shiftBatchMode && shiftBatchDates.size > 0) {
+      const allDates = [shiftDate, ...Array.from(shiftBatchDates)];
+      batchCreateShifts.mutate({
+        employeeId: shiftEmployeeId,
+        venueId: shiftVenueId,
+        startTime: shiftStartTime,
+        endTime: shiftEndTime,
+        role: shiftRole,
+        isDispatch: shiftIsDispatch,
+        targetDates: allDates,
+      });
+      setShiftDialogOpen(false);
     } else {
-      createShift.mutate(payload);
+      createShift.mutate({
+        employeeId: shiftEmployeeId,
+        venueId: parseInt(shiftVenueId),
+        date: shiftDate,
+        startTime: shiftStartTime,
+        endTime: shiftEndTime,
+        role: shiftRole,
+        isDispatch: shiftIsDispatch,
+      });
+      setShiftDialogOpen(false);
     }
-    setShiftDialogOpen(false);
   };
 
   const openNewSlotDialog = (venueId: number, dateStr: string) => {
@@ -852,6 +895,103 @@ export default function SchedulePage() {
               預覽：{venues.find((v) => v.id.toString() === shiftVenueId)?.shortName || "—"} {shiftStartTime}-{shiftEndTime} [{shiftRole}]
               {shiftIsDispatch && " (派遣)"}
             </div>
+
+            {!editingShift && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={shiftBatchMode}
+                    onCheckedChange={(checked) => {
+                      setShiftBatchMode(checked);
+                      if (!checked) setShiftBatchDates(new Set());
+                    }}
+                    data-testid="switch-shift-batch"
+                  />
+                  <Label className="text-sm">批次排班</Label>
+                  {shiftBatchMode && shiftBatchDates.size > 0 && (
+                    <span className="text-xs text-primary font-medium ml-auto">
+                      已選 {shiftBatchDates.size + 1} 天
+                    </span>
+                  )}
+                </div>
+                {shiftBatchMode && (
+                  <div className="rounded-lg border p-3 space-y-2">
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      <CalendarDays className="h-3 w-3" />
+                      選擇其他日期同步排班：
+                    </div>
+                    <div className="flex gap-1 mb-1.5">
+                      <button
+                        type="button"
+                        className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+                        onClick={() => {
+                          const weekday = new Date(shiftDate).getDay();
+                          const sameDays = monthDates.filter(d => d.getDay() === weekday && format(d, "yyyy-MM-dd") !== shiftDate);
+                          setShiftBatchDates(new Set(sameDays.map(d => format(d, "yyyy-MM-dd"))));
+                        }}
+                        data-testid="button-batch-same-weekday"
+                      >
+                        全選同星期{DAY_NAMES[new Date(shiftDate).getDay()]}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+                        onClick={() => {
+                          const all = monthDates
+                            .map(d => format(d, "yyyy-MM-dd"))
+                            .filter(d => d !== shiftDate);
+                          setShiftBatchDates(new Set(all));
+                        }}
+                        data-testid="button-batch-all-dates"
+                      >
+                        全選
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+                        onClick={() => setShiftBatchDates(new Set())}
+                        data-testid="button-batch-clear"
+                      >
+                        清除
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1">
+                      {monthDates.map((md) => {
+                        const mdStr = format(md, "yyyy-MM-dd");
+                        const isCurrent = mdStr === shiftDate;
+                        const isSelected = shiftBatchDates.has(mdStr);
+                        const isWeekend = md.getDay() === 0 || md.getDay() === 6;
+                        return (
+                          <button
+                            key={mdStr}
+                            type="button"
+                            disabled={isCurrent}
+                            className={`text-[10px] py-1.5 rounded text-center transition-all ${
+                              isCurrent
+                                ? "bg-primary text-primary-foreground font-bold cursor-default"
+                                : isSelected
+                                  ? "bg-blue-500 text-white font-bold"
+                                  : isWeekend
+                                    ? "bg-muted/50 hover:bg-muted text-muted-foreground"
+                                    : "bg-background hover:bg-muted border border-border/50"
+                            }`}
+                            onClick={() => {
+                              const next = new Set(shiftBatchDates);
+                              if (next.has(mdStr)) next.delete(mdStr);
+                              else next.add(mdStr);
+                              setShiftBatchDates(next);
+                            }}
+                            data-testid={`batch-shift-date-${mdStr}`}
+                          >
+                            {format(md, "d")}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="flex-row gap-2 justify-between sm:justify-between">
@@ -877,10 +1017,12 @@ export default function SchedulePage() {
               </Button>
               <Button
                 onClick={handleSaveShift}
-                disabled={!shiftVenueId || !shiftStartTime || !shiftEndTime}
+                disabled={!shiftVenueId || !shiftStartTime || !shiftEndTime || batchCreateShifts.isPending}
                 data-testid="button-save-shift"
               >
-                儲存
+                {shiftBatchMode && shiftBatchDates.size > 0
+                  ? batchCreateShifts.isPending ? "排班中..." : `批次排班 (${shiftBatchDates.size + 1}天)`
+                  : "儲存"}
               </Button>
             </div>
           </DialogFooter>
