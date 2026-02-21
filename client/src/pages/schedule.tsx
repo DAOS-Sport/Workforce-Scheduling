@@ -58,7 +58,6 @@ export default function SchedulePage() {
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
   const [editingSlotVenueId, setEditingSlotVenueId] = useState<number | null>(null);
@@ -432,38 +431,35 @@ export default function SchedulePage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 px-4 py-2 border-b">
-        <div className="flex items-center gap-1.5">
-          <h1 className="text-base font-bold tracking-tight mr-2" data-testid="text-page-title">排班編輯器</h1>
-        </div>
-      </div>
-
       <div className="flex items-center justify-between gap-2 px-4 py-2 border-b flex-wrap">
         <div className="flex items-center gap-2">
+          <h1 className="text-sm font-bold tracking-tight" data-testid="text-page-title">排班編輯器</h1>
+          <span className="text-muted-foreground/40">|</span>
           <Button
             size="icon"
-            variant="outline"
+            variant="ghost"
+            className="h-7 w-7"
             onClick={() => setCurrentMonth((prev) => subMonths(prev, 1))}
             data-testid="button-prev-month"
           >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="outline"
-            onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
-            data-testid="button-next-month"
-          >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronLeft className="h-3.5 w-3.5" />
           </Button>
           <span className="text-sm font-medium" data-testid="text-month-range">
             {format(currentMonth, "yyyy年 M月", { locale: zhTW })}
           </span>
-        </div>
-        <div className="flex items-center gap-2">
           <Button
-            variant="outline"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
+            data-testid="button-next-month"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
             size="sm"
+            className="h-7 text-xs"
             onClick={() => setCurrentMonth(startOfMonth(new Date()))}
             data-testid="button-today"
           >
@@ -471,9 +467,9 @@ export default function SchedulePage() {
           </Button>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" data-testid="button-pick-date">
-                <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
-                選擇月份
+              <Button variant="ghost" size="sm" className="h-7 text-xs" data-testid="button-pick-date">
+                <CalendarDays className="h-3 w-3 mr-1" />
+                選月
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
@@ -485,6 +481,25 @@ export default function SchedulePage() {
             </PopoverContent>
           </Popover>
         </div>
+        {shortageDates.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              缺班快跳
+            </span>
+            {shortageDates.map((d) => (
+              <button
+                key={d}
+                className="text-[10px] px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors cursor-pointer font-medium"
+                onClick={() => scrollToDate(d)}
+                title={`跳至 ${d} (缺班)`}
+                data-testid={`button-jump-shortage-${d}`}
+              >
+                {format(new Date(d), "M/d")}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col relative">
@@ -493,25 +508,10 @@ export default function SchedulePage() {
             <thead className="sticky top-0 z-20">
               <tr>
                 <th
-                  className="text-left p-1 border-b border-r font-medium text-muted-foreground bg-background sticky left-0 z-30"
+                  className="text-left p-2 border-b border-r font-medium text-muted-foreground bg-background sticky left-0 z-30"
                   style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
                 >
-                  <div className="text-xs mb-0.5">員工</div>
-                  {shortageDates.length > 0 && (
-                    <div className="flex flex-wrap gap-0.5 max-h-[40px] overflow-y-auto">
-                      {shortageDates.map((d) => (
-                        <button
-                          key={d}
-                          className="text-[9px] px-1 py-0.5 rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors cursor-pointer leading-none"
-                          onClick={() => scrollToDate(d)}
-                          title={`跳至 ${d} (缺班)`}
-                          data-testid={`button-jump-shortage-${d}`}
-                        >
-                          {format(new Date(d), "M/d")}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  員工
                 </th>
                 {monthDates.map((d, i) => {
                   const isToday = format(d, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
@@ -536,8 +536,7 @@ export default function SchedulePage() {
                 })}
               </tr>
               {venues.map((venue, vi) => {
-                const headerBaseHeight = shortageDates.length > 0 ? 80 : 52;
-                const stickyTop = headerBaseHeight + vi * 28;
+                const stickyTop = 52 + vi * 28;
                 return (
                 <tr key={`summary-${venue.id}`} className="sticky z-[15] bg-muted/40" style={{ top: stickyTop }}>
                   <th
@@ -758,51 +757,43 @@ export default function SchedulePage() {
         </div>
 
         <div
-          className={`border-t bg-card transition-all duration-300 ease-in-out shrink-0 ${
-            drawerOpen ? "max-h-[200px]" : "max-h-[36px]"
-          } overflow-hidden`}
+          className="border-t bg-card shrink-0"
           data-testid="vacancy-drawer"
         >
-          <button
-            onClick={() => setDrawerOpen((prev) => !prev)}
-            className="w-full flex items-center justify-between gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            data-testid="button-toggle-drawer"
-          >
-            <div className="flex items-center gap-2">
-              {gapAnalysis.totalShortage > 0 ? (
-                <>
-                  <AlertCircle className="h-3.5 w-3.5 text-red-500" />
-                  <span>缺班明細 — 共 {gapAnalysis.totalShortage} 個缺口</span>
-                </>
-              ) : (
-                <>
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                  <span>{scheduleSlots.length > 0 ? "本月所有時段人力已滿" : "尚未建立排班需求"}</span>
-                </>
-              )}
-            </div>
-            {drawerOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-          </button>
-          {drawerOpen && gapAnalysis.gaps.length > 0 && (
-            <div className="px-4 pb-3 overflow-auto max-h-[160px]">
-              <div className="flex flex-wrap gap-1.5">
+          <div className="flex items-center gap-2 px-4 py-1.5 text-xs font-medium text-muted-foreground border-b bg-muted/30">
+            {gapAnalysis.totalShortage > 0 ? (
+              <>
+                <AlertCircle className="h-3 w-3 text-red-500 shrink-0" />
+                <span>缺班明細 — 共 {gapAnalysis.totalShortage} 個缺口</span>
+              </>
+            ) : (
+              <>
+                <Check className="h-3 w-3 text-green-500 shrink-0" />
+                <span>{scheduleSlots.length > 0 ? "本月所有時段人力已滿" : "尚未建立排班需求"}</span>
+              </>
+            )}
+          </div>
+          {gapAnalysis.gaps.length > 0 && (
+            <div className="px-3 py-2 overflow-auto max-h-[120px]">
+              <div className="flex flex-wrap gap-1">
                 {gapAnalysis.gaps.map((g, i) => {
                   const RoleIcon = ROLE_ICON_MAP[g.role] || UserRound;
                   return (
-                    <div
+                    <button
                       key={i}
-                      className="flex items-center gap-1.5 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-2 py-1 text-xs"
+                      className="flex items-center gap-1 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-1.5 py-0.5 text-[10px] hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors cursor-pointer"
+                      onClick={() => scrollToDate(g.date)}
                       data-testid={`vacancy-detail-${i}`}
                     >
                       <span className="text-red-700 dark:text-red-300 font-medium">{g.venueName}</span>
                       <span className="text-muted-foreground">{format(new Date(g.date), "M/d")}</span>
                       <span className="text-muted-foreground">{g.startTime}-{g.endTime}</span>
                       <span className="inline-flex items-center gap-0.5 text-muted-foreground">
-                        <RoleIcon className="h-3 w-3" />
+                        <RoleIcon className="h-2.5 w-2.5" />
                         {g.role}
                       </span>
                       <span className="text-red-600 dark:text-red-400 font-bold">缺{g.shortage}</span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
