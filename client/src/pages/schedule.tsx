@@ -21,7 +21,7 @@ import {
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
   Sparkles, ShieldCheck, Settings2, X, Copy, Building2
 } from "lucide-react";
-import type { Venue, Shift, ScheduleSlot, Employee } from "@shared/schema";
+import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate } from "@shared/schema";
 
 const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
   "救生": LifeBuoy,
@@ -80,6 +80,7 @@ export default function SchedulePage() {
   const [shiftRole, setShiftRole] = useState<string>("救生");
   const [shiftBatchDates, setShiftBatchDates] = useState<Set<string>>(new Set());
   const [shiftBatchMode, setShiftBatchMode] = useState(false);
+  const [shiftTemplateId, setShiftTemplateId] = useState<string>("custom");
 
   const [requirementsPanelOpen, setRequirementsPanelOpen] = useState(false);
   const [reqPanelVenueId, setReqPanelVenueId] = useState<number | null>(null);
@@ -119,6 +120,27 @@ export default function SchedulePage() {
   const { data: shifts = [] } = useQuery<Shift[]>({
     queryKey: ["/api/shifts", activeRegion, dateRange.start, dateRange.end],
   });
+
+  const { data: shiftVenueTemplates = [] } = useQuery<VenueShiftTemplate[]>({
+    queryKey: ["/api/venue-shift-templates", shiftVenueId ? parseInt(shiftVenueId) : null],
+    enabled: !!shiftVenueId && shiftDialogOpen,
+  });
+
+  const filteredTemplates = useMemo(() => {
+    if (!shiftDate || shiftVenueTemplates.length === 0) return [];
+    const dayOfWeek = new Date(shiftDate).getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const dayType = isWeekend ? "weekend" : "weekday";
+    const normalizeRole = (r: string) => r === "櫃檯" ? "櫃台" : r;
+    const matched = shiftVenueTemplates.filter(t => t.dayType === dayType && normalizeRole(t.role) === normalizeRole(shiftRole));
+    const seen = new Set<string>();
+    return matched.filter(t => {
+      const key = `${t.shiftLabel}-${t.startTime}-${t.endTime}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [shiftVenueTemplates, shiftDate, shiftRole]);
 
   const venueMap = useMemo(() => {
     const map = new Map<number, Venue>();
@@ -338,6 +360,7 @@ export default function SchedulePage() {
     setShiftRole(emp?.role === "櫃台" ? "櫃台" : "救生");
     setShiftBatchMode(false);
     setShiftBatchDates(new Set());
+    setShiftTemplateId("custom");
     setShiftDialogOpen(true);
   };
 
@@ -350,6 +373,7 @@ export default function SchedulePage() {
     setShiftEndTime(shift.endTime.substring(0, 5));
     setShiftIsDispatch(shift.isDispatch || false);
     setShiftRole(shift.role || "救生");
+    setShiftTemplateId("custom");
     setShiftDialogOpen(true);
   };
 
@@ -836,7 +860,7 @@ export default function SchedulePage() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>場館</Label>
-              <Select value={shiftVenueId} onValueChange={setShiftVenueId}>
+              <Select value={shiftVenueId} onValueChange={(v) => { setShiftVenueId(v); setShiftTemplateId("custom"); }}>
                 <SelectTrigger data-testid="select-shift-venue">
                   <SelectValue placeholder="選擇場館" />
                 </SelectTrigger>
@@ -850,7 +874,7 @@ export default function SchedulePage() {
 
             <div className="space-y-2">
               <Label>班別</Label>
-              <Select value={shiftRole} onValueChange={setShiftRole}>
+              <Select value={shiftRole} onValueChange={(v) => { setShiftRole(v); setShiftTemplateId("custom"); }}>
                 <SelectTrigger data-testid="select-shift-role">
                   <SelectValue placeholder="選擇班別" />
                 </SelectTrigger>
@@ -861,13 +885,45 @@ export default function SchedulePage() {
               </Select>
             </div>
 
+            <div className="space-y-2">
+              <Label>排班範本</Label>
+              <Select
+                value={shiftTemplateId}
+                onValueChange={(val) => {
+                  setShiftTemplateId(val);
+                  if (val !== "custom") {
+                    const tpl = filteredTemplates.find(t => t.id.toString() === val);
+                    if (tpl) {
+                      setShiftStartTime(tpl.startTime);
+                      setShiftEndTime(tpl.endTime);
+                    }
+                  }
+                }}
+              >
+                <SelectTrigger data-testid="select-shift-template">
+                  <SelectValue placeholder="選擇排班範本" />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id.toString()}>
+                      {t.shiftLabel} ({t.startTime}-{t.endTime})
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">自訂時間</SelectItem>
+                </SelectContent>
+              </Select>
+              {filteredTemplates.length === 0 && (
+                <p className="text-[10px] text-muted-foreground italic">此場館尚未設定{shiftRole}的排班範本</p>
+              )}
+            </div>
+
             <div className="flex gap-3">
               <div className="flex-1 space-y-2">
                 <Label>開始時間</Label>
                 <Input
                   type="time"
                   value={shiftStartTime}
-                  onChange={(e) => setShiftStartTime(e.target.value)}
+                  onChange={(e) => { setShiftStartTime(e.target.value); setShiftTemplateId("custom"); }}
                   data-testid="input-shift-start-time"
                 />
               </div>
@@ -876,7 +932,7 @@ export default function SchedulePage() {
                 <Input
                   type="time"
                   value={shiftEndTime}
-                  onChange={(e) => setShiftEndTime(e.target.value)}
+                  onChange={(e) => { setShiftEndTime(e.target.value); setShiftTemplateId("custom"); }}
                   data-testid="input-shift-end-time"
                 />
               </div>
