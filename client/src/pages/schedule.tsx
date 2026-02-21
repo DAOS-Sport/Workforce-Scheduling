@@ -584,74 +584,6 @@ export default function SchedulePage() {
                   );
                 })}
               </tr>
-              {venues.map((venue, vi) => {
-                const stickyTop = headerRowHeight + vi * venueRowHeight;
-                return (
-                <tr key={`summary-${venue.id}`} ref={vi === 0 ? venueRowRef : undefined}>
-                  <th
-                    className="p-1 border-b border-r bg-muted text-left"
-                    style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", left: 0, top: stickyTop, zIndex: 30 }}
-                  >
-                    <span className="font-medium text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-venue-summary-${venue.id}`}>
-                      {venue.shortName}
-                    </span>
-                  </th>
-                  {monthDates.map((d, di) => {
-                    const dateStr = format(d, "yyyy-MM-dd");
-                    const key = `${venue.id}-${dateStr}`;
-                    const roleShortages = venueDateShortage.get(key);
-                    const cellSlots = slotsByVenueDate.get(key) || [];
-                    const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
-                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                    const hasRequirements = cellSlots.length > 0;
-
-                    return (
-                      <th
-                        key={di}
-                        className={`p-0.5 border-b border-r text-center align-middle font-normal ${
-                          isToday ? "bg-background" : isWeekend ? "bg-muted" : "bg-muted"
-                        }`}
-                        style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, position: "sticky", top: stickyTop, zIndex: 20 }}
-                        data-testid={`summary-cell-${venue.id}-${dateStr}`}
-                      >
-                        {hasRequirements ? (
-                          <button
-                            className="w-full flex items-center justify-center gap-1 flex-wrap py-0.5 rounded hover:bg-muted/50 transition-colors cursor-pointer"
-                            onClick={() => openRequirementsPanel(venue.id, dateStr)}
-                            data-testid={`button-req-${venue.id}-${dateStr}`}
-                          >
-                            {roleShortages && roleShortages.size > 0 ? (
-                              Array.from(roleShortages.entries()).map(([role, count]) => {
-                                const Icon = ROLE_ICON_MAP[role] || UserRound;
-                                return (
-                                  <span key={role} className="inline-flex items-center gap-0.5 bg-red-500/15 text-red-600 dark:text-red-400 rounded-full px-1.5 py-0.5 text-[9px] font-bold animate-pulse">
-                                    <Icon className="h-2.5 w-2.5" />
-                                    -{count}
-                                  </span>
-                                );
-                              })
-                            ) : (
-                              <span className="inline-flex items-center gap-0.5 bg-green-500/15 text-green-600 dark:text-green-400 rounded-full px-1.5 py-0.5 text-[9px] font-bold">
-                                <Check className="h-2.5 w-2.5" />
-                                OK
-                              </span>
-                            )}
-                          </button>
-                        ) : (
-                          <button
-                            className="w-full flex items-center justify-center py-0.5 text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors cursor-pointer"
-                            onClick={() => openRequirementsPanel(venue.id, dateStr)}
-                            data-testid={`button-req-${venue.id}-${dateStr}`}
-                          >
-                            <Settings2 className="h-2.5 w-2.5" />
-                          </button>
-                        )}
-                      </th>
-                    );
-                  })}
-                </tr>
-                );
-              })}
             </thead>
             <tbody>
               {isLoading ? (
@@ -675,13 +607,77 @@ export default function SchedulePage() {
                 </tr>
               ) : (
                 (() => {
+                  const VENUE_BG = "#1d283a80";
+                  const venueRows = venues.map((venue, vi) => {
+                    const stickyTop = headerRowHeight + vi * venueRowHeight;
+                    return (
+                      <tr key={`summary-${venue.id}`} ref={vi === 0 ? venueRowRef : undefined}>
+                        <td
+                          className="p-1 border-b border-r text-left"
+                          style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", left: 0, top: stickyTop, zIndex: 30, backgroundColor: VENUE_BG }}
+                        >
+                          <span className="font-medium text-xs text-white/80 whitespace-nowrap" data-testid={`text-venue-summary-${venue.id}`}>
+                            {venue.shortName}
+                          </span>
+                        </td>
+                        {monthDates.map((d, di) => {
+                          const dateStr = format(d, "yyyy-MM-dd");
+                          const key = `${venue.id}-${dateStr}`;
+                          const roleShortages = venueDateShortage.get(key);
+                          const cellSlots = slotsByVenueDate.get(key) || [];
+                          const hasRequirements = cellSlots.length > 0;
+                          return (
+                            <td
+                              key={di}
+                              className="p-0.5 border-b border-r text-center align-middle"
+                              style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, position: "sticky", top: stickyTop, zIndex: 20, backgroundColor: VENUE_BG }}
+                              data-testid={`summary-cell-${venue.id}-${dateStr}`}
+                            >
+                              {hasRequirements ? (
+                                <button
+                                  className="w-full flex items-center justify-center gap-1 flex-wrap py-0.5 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                                  onClick={() => openRequirementsPanel(venue.id, dateStr)}
+                                  data-testid={`button-req-${venue.id}-${dateStr}`}
+                                >
+                                  {roleShortages && roleShortages.size > 0 ? (
+                                    Array.from(roleShortages.entries()).map(([role, count]) => {
+                                      const Icon = ROLE_ICON_MAP[role] || UserRound;
+                                      return (
+                                        <span key={role} className="inline-flex items-center gap-0.5 bg-red-500/20 text-red-300 rounded-full px-1.5 py-0.5 text-[9px] font-bold animate-pulse">
+                                          <Icon className="h-2.5 w-2.5" />
+                                          -{count}
+                                        </span>
+                                      );
+                                    })
+                                  ) : (
+                                    <span className="inline-flex items-center gap-0.5 bg-green-500/20 text-green-300 rounded-full px-1.5 py-0.5 text-[9px] font-bold">
+                                      <Check className="h-2.5 w-2.5" />
+                                      OK
+                                    </span>
+                                  )}
+                                </button>
+                              ) : (
+                                <button
+                                  className="w-full flex items-center justify-center py-0.5 text-white/20 hover:text-white/50 transition-colors cursor-pointer"
+                                  onClick={() => openRequirementsPanel(venue.id, dateStr)}
+                                  data-testid={`button-req-${venue.id}-${dateStr}`}
+                                >
+                                  <Settings2 className="h-2.5 w-2.5" />
+                                </button>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  });
                   const groups = [
                     { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
                     { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
                     { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
                     { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
                   ];
-                  return groups.flatMap(({ key, label, filter }) => {
+                  return [...venueRows, ...groups.flatMap(({ key, label, filter }) => {
                     const grouped = employees.filter(filter).sort((a, b) => {
                       const countA = employeeShiftCounts.get(a.id) || 0;
                       const countB = employeeShiftCounts.get(b.id) || 0;
@@ -798,7 +794,7 @@ export default function SchedulePage() {
                   </tr>
                 )),
                     ];
-                  });
+                  })];
                 })()
               )}
             </tbody>
