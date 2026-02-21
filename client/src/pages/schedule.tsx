@@ -58,10 +58,6 @@ export default function SchedulePage() {
   const { activeRegion } = useRegion();
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const headerRowRef = useRef<HTMLTableRowElement>(null);
-  const venueRowRef = useRef<HTMLTableRowElement>(null);
-  const [headerRowHeight, setHeaderRowHeight] = useState(42);
-  const [venueRowHeight, setVenueRowHeight] = useState(26);
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
 
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
@@ -429,24 +425,6 @@ export default function SchedulePage() {
     }
   }, [currentMonth]);
 
-  useEffect(() => {
-    const headerRow = headerRowRef.current;
-    const venueRow = venueRowRef.current;
-    const ro = new ResizeObserver(() => {
-      if (headerRow) {
-        const h = headerRow.getBoundingClientRect().height;
-        if (h > 0) setHeaderRowHeight(h);
-      }
-      if (venueRow) {
-        const h = venueRow.getBoundingClientRect().height;
-        if (h > 0) setVenueRowHeight(h);
-      }
-    });
-    if (headerRow) ro.observe(headerRow);
-    if (venueRow) ro.observe(venueRow);
-    return () => ro.disconnect();
-  }, []);
-
   const isLoading = venLoading || empLoading || slotsLoading;
 
   const COL_LEFT_WIDTH = 140;
@@ -457,12 +435,6 @@ export default function SchedulePage() {
     gapAnalysis.gaps.forEach((g) => dateSet.add(g.date));
     return Array.from(dateSet).sort();
   }, [gapAnalysis]);
-
-  const scrollToDate = (dateStr: string) => {
-    if (!scrollRef.current) return;
-    const el = scrollRef.current.querySelector(`[data-date-col="${dateStr}"]`);
-    if (el) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  };
 
   const employeeShiftCounts = useMemo(() => {
     const counts = new Map<number, number>();
@@ -540,7 +512,10 @@ export default function SchedulePage() {
               <button
                 key={d}
                 className="text-[10px] px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors cursor-pointer font-medium"
-                onClick={() => scrollToDate(d)}
+                onClick={() => {
+                  const el = scrollRef.current?.querySelector(`[data-date-col="${d}"]`);
+                  if (el) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+                }}
                 title={`跳至 ${d} (缺班)`}
                 data-testid={`button-jump-shortage-${d}`}
               >
@@ -555,7 +530,7 @@ export default function SchedulePage() {
         <div className="flex-1 overflow-auto" ref={scrollRef}>
           <table className="border-separate border-spacing-0 text-sm" style={{ minWidth: `${COL_LEFT_WIDTH + monthDates.length * COL_DATE_WIDTH}px` }}>
             <thead>
-              <tr ref={headerRowRef}>
+              <tr>
                 <th
                   className="text-left p-2 border-b border-r font-medium text-muted-foreground bg-background"
                   style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", top: 0, left: 0, zIndex: 35 }}
@@ -584,70 +559,6 @@ export default function SchedulePage() {
                   );
                 })}
               </tr>
-              {venues.map((venue, vi) => {
-                const VENUE_BG = "#1d283a80";
-                const stickyTop = headerRowHeight + vi * venueRowHeight;
-                return (
-                  <tr key={`summary-${venue.id}`} ref={vi === 0 ? venueRowRef : undefined}>
-                    <th
-                      className="p-1 border-b border-r text-left"
-                      style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", left: 0, top: stickyTop, zIndex: 30, backgroundColor: VENUE_BG }}
-                    >
-                      <span className="font-medium text-xs text-white/80 whitespace-nowrap" data-testid={`text-venue-summary-${venue.id}`}>
-                        {venue.shortName}
-                      </span>
-                    </th>
-                    {monthDates.map((d, di) => {
-                      const dateStr = format(d, "yyyy-MM-dd");
-                      const key = `${venue.id}-${dateStr}`;
-                      const roleShortages = venueDateShortage.get(key);
-                      const cellSlots = slotsByVenueDate.get(key) || [];
-                      const hasRequirements = cellSlots.length > 0;
-                      return (
-                        <th
-                          key={di}
-                          className="p-0.5 border-b border-r text-center align-middle font-normal"
-                          style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, position: "sticky", top: stickyTop, zIndex: 20, backgroundColor: VENUE_BG }}
-                          data-testid={`summary-cell-${venue.id}-${dateStr}`}
-                        >
-                          {hasRequirements ? (
-                            <button
-                              className="w-full flex items-center justify-center gap-1 flex-wrap py-0.5 rounded hover:bg-white/10 transition-colors cursor-pointer"
-                              onClick={() => openRequirementsPanel(venue.id, dateStr)}
-                              data-testid={`button-req-${venue.id}-${dateStr}`}
-                            >
-                              {roleShortages && roleShortages.size > 0 ? (
-                                Array.from(roleShortages.entries()).map(([role, count]) => {
-                                  const Icon = ROLE_ICON_MAP[role] || UserRound;
-                                  return (
-                                    <span key={role} className="inline-flex items-center gap-0.5 bg-red-500/20 text-red-300 rounded-full px-1.5 py-0.5 text-[9px] font-bold animate-pulse">
-                                      <Icon className="h-2.5 w-2.5" />
-                                      -{count}
-                                    </span>
-                                  );
-                                })
-                              ) : (
-                                <span className="inline-flex items-center gap-0.5 bg-green-500/20 text-green-300 rounded-full px-1.5 py-0.5 text-[9px] font-bold">
-                                  <Check className="h-2.5 w-2.5" />
-                                  OK
-                                </span>
-                              )}
-                            </button>
-                          ) : (
-                            <button
-                              className="w-full flex items-center justify-center py-0.5 text-white/20 hover:text-white/50 transition-colors cursor-pointer"
-                              onClick={() => openRequirementsPanel(venue.id, dateStr)}
-                              data-testid={`button-req-${venue.id}-${dateStr}`}
-                            >
-                              <Settings2 className="h-2.5 w-2.5" />
-                            </button>
-                          )}
-                        </th>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
             </thead>
             <tbody>
               {isLoading ? (
@@ -671,13 +582,76 @@ export default function SchedulePage() {
                 </tr>
               ) : (
                 (() => {
+                  const VENUE_BG = "#1d283a80";
+                  const venueRows = venues.map((venue) => (
+                    <tr key={`summary-${venue.id}`}>
+                      <td
+                        className="p-1 border-b border-r text-left sticky left-0 z-[5]"
+                        style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, backgroundColor: VENUE_BG }}
+                      >
+                        <span className="font-medium text-xs text-white/80 whitespace-nowrap" data-testid={`text-venue-summary-${venue.id}`}>
+                          {venue.shortName}
+                        </span>
+                      </td>
+                      {monthDates.map((d, di) => {
+                        const dateStr = format(d, "yyyy-MM-dd");
+                        const key = `${venue.id}-${dateStr}`;
+                        const roleShortages = venueDateShortage.get(key);
+                        const cellSlots = slotsByVenueDate.get(key) || [];
+                        const hasRequirements = cellSlots.length > 0;
+                        return (
+                          <td
+                            key={di}
+                            className="p-0.5 border-b border-r text-center align-middle"
+                            style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, backgroundColor: VENUE_BG }}
+                            data-testid={`summary-cell-${venue.id}-${dateStr}`}
+                          >
+                            {hasRequirements ? (
+                              <button
+                                className="w-full flex items-center justify-center gap-1 flex-wrap py-0.5 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                                onClick={() => openRequirementsPanel(venue.id, dateStr)}
+                                data-testid={`button-req-${venue.id}-${dateStr}`}
+                              >
+                                {roleShortages && roleShortages.size > 0 ? (
+                                  Array.from(roleShortages.entries()).map(([role, count]) => {
+                                    const Icon = ROLE_ICON_MAP[role] || UserRound;
+                                    return (
+                                      <span key={role} className="inline-flex items-center gap-0.5 bg-red-500/20 text-red-300 rounded-full px-1.5 py-0.5 text-[9px] font-bold animate-pulse">
+                                        <Icon className="h-2.5 w-2.5" />
+                                        -{count}
+                                      </span>
+                                    );
+                                  })
+                                ) : (
+                                  <span className="inline-flex items-center gap-0.5 bg-green-500/20 text-green-300 rounded-full px-1.5 py-0.5 text-[9px] font-bold">
+                                    <Check className="h-2.5 w-2.5" />
+                                    OK
+                                  </span>
+                                )}
+                              </button>
+                            ) : (
+                              <button
+                                className="w-full flex items-center justify-center py-0.5 text-white/20 hover:text-white/50 transition-colors cursor-pointer"
+                                onClick={() => openRequirementsPanel(venue.id, dateStr)}
+                                data-testid={`button-req-${venue.id}-${dateStr}`}
+                              >
+                                <Settings2 className="h-2.5 w-2.5" />
+                              </button>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ));
                   const groups = [
                     { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
                     { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
                     { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
                     { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
                   ];
-                  return groups.flatMap(({ key, label, filter }) => {
+                  return [
+                    ...venueRows,
+                    ...groups.flatMap(({ key, label, filter }) => {
                     const grouped = employees.filter(filter).sort((a, b) => {
                       const countA = employeeShiftCounts.get(a.id) || 0;
                       const countB = employeeShiftCounts.get(b.id) || 0;
@@ -794,7 +768,8 @@ export default function SchedulePage() {
                   </tr>
                 )),
                     ];
-                  });
+                  }),
+                  ];
                 })()
               )}
             </tbody>
