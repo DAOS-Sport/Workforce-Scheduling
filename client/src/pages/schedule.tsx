@@ -15,10 +15,11 @@ import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  ChevronLeft, ChevronRight, CalendarDays, Plus, ChevronUp, ChevronDown,
+  ChevronLeft, ChevronRight, CalendarDays, Plus, Minus, ChevronUp, ChevronDown,
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
-  Sparkles, ShieldCheck, Settings2
+  Sparkles, ShieldCheck, Settings2, X, Copy
 } from "lucide-react";
 import type { Venue, Shift, ScheduleSlot, Employee } from "@shared/schema";
 
@@ -51,7 +52,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
-const ROLE_OPTIONS = ["救生", "教練", "櫃檯", "清潔", "管理"];
+const ROLE_OPTIONS = ["救生", "櫃台"];
 
 export default function SchedulePage() {
   const { activeRegion } = useRegion();
@@ -81,6 +82,9 @@ export default function SchedulePage() {
   const [requirementsPanelOpen, setRequirementsPanelOpen] = useState(false);
   const [reqPanelVenueId, setReqPanelVenueId] = useState<number | null>(null);
   const [reqPanelDate, setReqPanelDate] = useState<string>("");
+
+  const [batchSlot, setBatchSlot] = useState<ScheduleSlot | null>(null);
+  const [batchTargetDates, setBatchTargetDates] = useState<Set<string>>(new Set());
 
   const monthDates = useMemo(
     () => eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) }),
@@ -279,6 +283,22 @@ export default function SchedulePage() {
     onSuccess: () => {
       queryClient.invalidateQueries();
       toast({ title: "班次已刪除" });
+    },
+  });
+
+  const batchCopySlot = useMutation({
+    mutationFn: async (data: { venueId: number; startTime: string; endTime: string; role: string; requiredCount: number; targetDates: string[] }) => {
+      const res = await apiRequest("POST", "/api/schedule-slots/batch-copy", data);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
+      toast({ title: `已套用到 ${data.created} 個日期${data.skipped > 0 ? `（${data.skipped} 個重複已略過）` : ""}` });
+      setBatchSlot(null);
+      setBatchTargetDates(new Set());
+    },
+    onError: (err: Error) => {
+      toast({ title: "批次套用失敗", description: err.message, variant: "destructive" });
     },
   });
 
@@ -567,24 +587,24 @@ export default function SchedulePage() {
                       >
                         {hasRequirements ? (
                           <button
-                            className="w-full flex items-center justify-center gap-1 flex-wrap text-[10px] py-0.5 rounded hover:bg-muted/50 transition-colors cursor-pointer"
+                            className="w-full flex items-center justify-center gap-1 flex-wrap py-0.5 rounded hover:bg-muted/50 transition-colors cursor-pointer"
                             onClick={() => openRequirementsPanel(venue.id, dateStr)}
                             data-testid={`button-req-${venue.id}-${dateStr}`}
                           >
                             {roleShortages && roleShortages.size > 0 ? (
                               Array.from(roleShortages.entries()).map(([role, count]) => {
                                 const Icon = ROLE_ICON_MAP[role] || UserRound;
-                                const short = ROLE_SHORT[role] || role;
                                 return (
-                                  <span key={role} className="inline-flex items-center gap-0.5 text-red-600 dark:text-red-400 font-medium">
+                                  <span key={role} className="inline-flex items-center gap-0.5 bg-red-500/15 text-red-600 dark:text-red-400 rounded-full px-1.5 py-0.5 text-[9px] font-bold animate-pulse">
                                     <Icon className="h-2.5 w-2.5" />
-                                    {short}-{count}
+                                    -{count}
                                   </span>
                                 );
                               })
                             ) : (
-                              <span className="text-green-600 dark:text-green-400">
-                                <Check className="h-3 w-3 inline" />
+                              <span className="inline-flex items-center gap-0.5 bg-green-500/15 text-green-600 dark:text-green-400 rounded-full px-1.5 py-0.5 text-[9px] font-bold">
+                                <Check className="h-2.5 w-2.5" />
+                                OK
                               </span>
                             )}
                           </button>
@@ -868,68 +888,95 @@ export default function SchedulePage() {
       </Dialog>
 
       <Dialog open={slotDialogOpen} onOpenChange={setSlotDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {editingSlot ? <Edit2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {editingSlot ? "編輯需求時段" : "新增需求時段"}
+              設定需求時段
             </DialogTitle>
             <DialogDescription>
               {venues.find((v) => v.id === editingSlotVenueId)?.shortName} — {editingSlotDate ? format(new Date(editingSlotDate), "M月d日 (E)", { locale: zhTW }) : ""}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="flex gap-3">
-              <div className="flex-1 space-y-2">
-                <Label>開始時間</Label>
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">時段</Label>
+              <div className="flex items-center gap-2">
                 <Input
                   type="time"
                   value={slotStartTime}
                   onChange={(e) => setSlotStartTime(e.target.value)}
+                  className="flex-1"
                   data-testid="input-slot-start-time"
                 />
-              </div>
-              <div className="flex-1 space-y-2">
-                <Label>結束時間</Label>
+                <span className="text-muted-foreground text-sm">至</span>
                 <Input
                   type="time"
                   value={slotEndTime}
                   onChange={(e) => setSlotEndTime(e.target.value)}
+                  className="flex-1"
                   data-testid="input-slot-end-time"
                 />
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <div className="flex-1 space-y-2">
-                <Label>角色</Label>
-                <Select value={slotRole} onValueChange={setSlotRole}>
-                  <SelectTrigger data-testid="select-slot-role">
-                    <SelectValue placeholder="選擇角色" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLE_OPTIONS.map((r) => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex-1 space-y-2">
-                <Label>需要人數</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={slotCount}
-                  onChange={(e) => setSlotCount(e.target.value)}
-                  data-testid="input-slot-count"
-                />
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">職位</Label>
+              <div className="flex bg-muted rounded-lg p-1" data-testid="toggle-slot-role">
+                <button
+                  type="button"
+                  className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
+                    slotRole === "救生"
+                      ? "bg-red-500 text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => setSlotRole("救生")}
+                  data-testid="toggle-role-rescue"
+                >
+                  <LifeBuoy className="h-3.5 w-3.5 inline mr-1" />
+                  救生
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
+                    slotRole === "櫃台" || slotRole === "櫃檯"
+                      ? "bg-blue-500 text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => setSlotRole("櫃台")}
+                  data-testid="toggle-role-counter"
+                >
+                  <UserRound className="h-3.5 w-3.5 inline mr-1" />
+                  櫃台
+                </button>
               </div>
             </div>
 
-            <div className="rounded-md bg-muted/30 p-3 text-xs text-muted-foreground">
-              預覽：{slotStartTime}-{slotEndTime} {slotRole}{slotCount}人
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">需求人數</Label>
+              <div className="flex items-center justify-center gap-4 bg-muted rounded-lg p-3">
+                <button
+                  type="button"
+                  className="h-10 w-10 rounded-full bg-background border border-border flex items-center justify-center hover:bg-accent transition-colors disabled:opacity-30"
+                  onClick={() => setSlotCount(String(Math.max(1, parseInt(slotCount) - 1)))}
+                  disabled={parseInt(slotCount) <= 1}
+                  data-testid="button-slot-count-minus"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <span className="text-3xl font-bold w-12 text-center tabular-nums" data-testid="text-slot-count">
+                  {slotCount}
+                </span>
+                <button
+                  type="button"
+                  className="h-10 w-10 rounded-full bg-background border border-border flex items-center justify-center hover:bg-accent transition-colors"
+                  onClick={() => setSlotCount(String(parseInt(slotCount) + 1))}
+                  data-testid="button-slot-count-plus"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -966,112 +1013,222 @@ export default function SchedulePage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={requirementsPanelOpen} onOpenChange={setRequirementsPanelOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Settings2 className="h-4 w-4" />
-              場館需求設定
-            </DialogTitle>
-            <DialogDescription>
-              {venues.find((v) => v.id === reqPanelVenueId)?.shortName} — {reqPanelDate ? format(new Date(reqPanelDate), "M月d日 (E)", { locale: zhTW }) : ""}
-            </DialogDescription>
-          </DialogHeader>
+      {requirementsPanelOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end" data-testid="requirements-panel-overlay">
+          <div className="absolute inset-0 bg-black/50" onClick={() => { setRequirementsPanelOpen(false); setBatchSlot(null); }} />
+          <div className="relative w-full max-w-sm bg-background border-l shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div>
+                <h2 className="text-base font-bold flex items-center gap-2">
+                  <Settings2 className="h-4 w-4" />
+                  場館需求設定
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {venues.find((v) => v.id === reqPanelVenueId)?.shortName} — {reqPanelDate ? format(new Date(reqPanelDate), "M月d日 (E)", { locale: zhTW }) : ""}
+                </p>
+              </div>
+              <button
+                className="h-8 w-8 rounded-md flex items-center justify-center hover:bg-muted transition-colors"
+                onClick={() => { setRequirementsPanelOpen(false); setBatchSlot(null); }}
+                data-testid="button-close-panel"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-          <div className="space-y-3">
-            {reqPanelVenueId && reqPanelDate && (() => {
-              const cellSlots = slotsByVenueDate.get(`${reqPanelVenueId}-${reqPanelDate}`) || [];
-              return cellSlots.length > 0 ? (
-                <div className="space-y-2">
-                  {cellSlots.map((slot) => {
-                    const venueDateShifts = shiftsByVenueDate.get(`${slot.venueId}-${slot.date}`) || [];
-                    const assignedCount = venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length;
-                    const shortage = slot.requiredCount - assignedCount;
-                    const isFull = shortage <= 0;
-                    const RoleIcon = ROLE_ICON_MAP[slot.role] || UserRound;
-                    return (
-                      <div
-                        key={slot.id}
-                        className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 border ${
-                          isFull
-                            ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30"
-                            : "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30"
-                        }`}
-                        data-testid={`req-slot-${slot.id}`}
-                      >
-                        <div className="flex items-center gap-2 text-sm">
-                          <RoleIcon className="h-3.5 w-3.5" />
-                          <span className="font-medium">{slot.startTime}-{slot.endTime}</span>
-                          <span>{slot.role} {slot.requiredCount}人</span>
-                          {(slot as any)._fromTemplate && (
-                            <span className="text-blue-500 text-[10px] border border-blue-300 dark:border-blue-700 rounded px-1">範本</span>
-                          )}
-                          {isFull ? (
-                            <span className="text-green-600 dark:text-green-400 text-xs">已滿</span>
-                          ) : (
-                            <span className="text-red-600 dark:text-red-400 text-xs font-bold">缺{shortage}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => openEditSlotDialog(slot)}
-                            data-testid={`button-edit-req-${slot.id}`}
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={async () => {
-                              if (slot.id > 0) {
-                                deleteSlot.mutate(slot.id);
-                              } else {
-                                try {
-                                  await apiRequest("POST", "/api/schedule-slots/materialize", {
-                                    venueId: slot.venueId,
-                                    date: slot.date,
-                                    excludeTemplateIds: [{ startTime: slot.startTime, endTime: slot.endTime, role: slot.role }],
-                                  });
-                                  queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
-                                  toast({ title: "需求已刪除" });
-                                } catch {
-                                  toast({ title: "操作失敗", variant: "destructive" });
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {reqPanelVenueId && reqPanelDate && (() => {
+                const cellSlots = slotsByVenueDate.get(`${reqPanelVenueId}-${reqPanelDate}`) || [];
+                return cellSlots.length > 0 ? (
+                  <>
+                    {cellSlots.map((slot) => {
+                      const venueDateShifts = shiftsByVenueDate.get(`${slot.venueId}-${slot.date}`) || [];
+                      const assignedCount = venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length;
+                      const shortage = slot.requiredCount - assignedCount;
+                      const isFull = shortage <= 0;
+                      const isRescue = slot.role === "救生";
+                      return (
+                        <div
+                          key={slot.id}
+                          className={`rounded-lg border-l-4 p-3 bg-muted/30 ${
+                            isRescue ? "border-l-red-500" : "border-l-blue-500"
+                          }`}
+                          data-testid={`req-slot-${slot.id}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                {isRescue ? <LifeBuoy className="h-3 w-3" /> : <UserRound className="h-3 w-3" />}
+                                {slot.role}
+                                {(slot as any)._fromTemplate && (
+                                  <span className="text-blue-500 text-[9px] border border-blue-400 dark:border-blue-700 rounded px-1 ml-1">範本</span>
+                                )}
+                              </div>
+                              <div className="text-sm font-mono font-medium">
+                                {slot.startTime.substring(0, 5)} - {slot.endTime.substring(0, 5)}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {isFull ? (
+                                <span className="bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full text-xs font-bold border border-green-500/30">
+                                  已滿
+                                </span>
+                              ) : (
+                                <span className="bg-red-500/20 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full text-xs font-bold border border-red-500/30">
+                                  缺 {shortage}
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground">{slot.requiredCount}人</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/50">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs px-2"
+                              onClick={() => openEditSlotDialog(slot)}
+                              data-testid={`button-edit-req-${slot.id}`}
+                            >
+                              <Edit2 className="h-3 w-3 mr-1" />
+                              編輯
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs px-2"
+                              onClick={() => {
+                                setBatchSlot(batchSlot?.id === slot.id ? null : slot);
+                                setBatchTargetDates(new Set());
+                              }}
+                              data-testid={`button-batch-req-${slot.id}`}
+                            >
+                              <Copy className="h-3 w-3 mr-1" />
+                              套用
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs px-2 text-destructive hover:text-destructive"
+                              onClick={async () => {
+                                if (slot.id > 0) {
+                                  deleteSlot.mutate(slot.id);
+                                } else {
+                                  try {
+                                    await apiRequest("POST", "/api/schedule-slots/materialize", {
+                                      venueId: slot.venueId,
+                                      date: slot.date,
+                                      excludeTemplateIds: [{ startTime: slot.startTime, endTime: slot.endTime, role: slot.role }],
+                                    });
+                                    queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
+                                    toast({ title: "需求已刪除" });
+                                  } catch {
+                                    toast({ title: "操作失敗", variant: "destructive" });
+                                  }
                                 }
-                              }
-                            }}
-                            data-testid={`button-delete-req-${slot.id}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                              }}
+                              data-testid={`button-delete-req-${slot.id}`}
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              刪除
+                            </Button>
+                          </div>
+                          {batchSlot?.id === slot.id && (
+                            <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
+                              <div className="text-xs text-muted-foreground font-medium">
+                                選擇要套用的目標日期：
+                              </div>
+                              <div className="grid grid-cols-7 gap-1">
+                                {monthDates.map((md) => {
+                                  const mdStr = format(md, "yyyy-MM-dd");
+                                  const isCurrent = mdStr === reqPanelDate;
+                                  const isSelected = batchTargetDates.has(mdStr);
+                                  const isWeekend = md.getDay() === 0 || md.getDay() === 6;
+                                  return (
+                                    <button
+                                      key={mdStr}
+                                      type="button"
+                                      disabled={isCurrent}
+                                      className={`text-[10px] py-1.5 rounded text-center transition-all ${
+                                        isCurrent
+                                          ? "bg-muted text-muted-foreground/40 cursor-not-allowed"
+                                          : isSelected
+                                            ? "bg-blue-500 text-white font-bold"
+                                            : isWeekend
+                                              ? "bg-muted/50 hover:bg-muted text-muted-foreground"
+                                              : "bg-background hover:bg-muted border border-border/50"
+                                      }`}
+                                      onClick={() => {
+                                        const next = new Set(batchTargetDates);
+                                        if (next.has(mdStr)) next.delete(mdStr);
+                                        else next.add(mdStr);
+                                        setBatchTargetDates(next);
+                                      }}
+                                      data-testid={`batch-date-${mdStr}`}
+                                    >
+                                      {format(md, "d")}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="flex gap-2 mt-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="flex-1 h-8 text-xs"
+                                  onClick={() => { setBatchSlot(null); setBatchTargetDates(new Set()); }}
+                                >
+                                  取消
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="flex-1 h-8 text-xs"
+                                  disabled={batchTargetDates.size === 0 || batchCopySlot.isPending}
+                                  onClick={() => {
+                                    batchCopySlot.mutate({
+                                      venueId: slot.venueId,
+                                      startTime: slot.startTime,
+                                      endTime: slot.endTime,
+                                      role: slot.role,
+                                      requiredCount: slot.requiredCount,
+                                      targetDates: Array.from(batchTargetDates),
+                                    });
+                                  }}
+                                  data-testid="button-batch-confirm"
+                                >
+                                  {batchCopySlot.isPending ? "套用中..." : `確認套用 (${batchTargetDates.size}日)`}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">尚未設定需求</p>
-              );
-            })()}
-          </div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    尚未設定需求
+                  </div>
+                );
+              })()}
+            </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (reqPanelVenueId && reqPanelDate) {
-                  openNewSlotDialog(reqPanelVenueId, reqPanelDate);
-                }
-              }}
-              data-testid="button-add-requirement"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              新增需求時段
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="p-4 border-t">
+              <button
+                className="w-full py-2.5 border-2 border-dashed border-border rounded-lg text-muted-foreground hover:border-primary hover:text-primary transition-colors text-sm"
+                onClick={() => {
+                  if (reqPanelVenueId && reqPanelDate) {
+                    openNewSlotDialog(reqPanelVenueId, reqPanelDate);
+                  }
+                }}
+                data-testid="button-add-requirement"
+              >
+                <Plus className="h-3.5 w-3.5 inline mr-1" />
+                新增需求時段
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
