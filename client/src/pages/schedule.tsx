@@ -577,7 +577,31 @@ export default function SchedulePage() {
                   </td>
                 </tr>
               ) : (
-                employees.map((emp) => (
+                (() => {
+                  const groups = [
+                    { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
+                    { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
+                    { key: "ft-other", label: "正職其他", filter: (e: Employee) => e.employmentType === "full_time" && e.role !== "救生" && e.role !== "櫃台" },
+                    { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
+                    { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                    { key: "pt-other", label: "兼職其他", filter: (e: Employee) => e.employmentType === "part_time" && e.role !== "救生" && e.role !== "櫃台" },
+                  ];
+                  return groups.flatMap(({ key, label, filter }) => {
+                    const grouped = employees.filter(filter);
+                    if (grouped.length === 0) return [];
+                    return [
+                      <tr key={`group-${key}`}>
+                        <td
+                          className="px-2 py-1 border-b border-r sticky left-0 bg-muted/50 z-[5] text-xs font-bold text-muted-foreground tracking-wide"
+                          style={{ minWidth: COL_LEFT_WIDTH }}
+                        >
+                          {label} ({grouped.length})
+                        </td>
+                        {monthDates.map((_, di) => (
+                          <td key={di} className="border-b border-r bg-muted/50" style={{ minWidth: COL_DATE_WIDTH }} />
+                        ))}
+                      </tr>,
+                      ...grouped.map((emp) => (
                   <tr key={emp.id} className="group" data-testid={`row-employee-${emp.id}`}>
                     <td
                       className="p-2 border-b border-r sticky left-0 bg-background z-[5]"
@@ -673,7 +697,10 @@ export default function SchedulePage() {
                       );
                     })}
                   </tr>
-                ))
+                )),
+                    ];
+                  });
+                })()
               )}
             </tbody>
           </table>

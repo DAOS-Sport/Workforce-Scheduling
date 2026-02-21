@@ -4,6 +4,10 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
+- 2026-02-21: Added Ragic employee sync (server/ragic.ts) - pulls from ap7.ragic.com, auto-maps department→region (新北高中/三民高中/三重商工→三蘆戰區), sets role (救生/櫃台) and employmentType (full_time/part_time)
+- 2026-02-21: Added employmentType field to employees table for full-time/part-time classification
+- 2026-02-21: Schedule editor now groups employees by employment type × role (正職救生→正職櫃台→兼職救生→兼職櫃台), full-time on top
+- 2026-02-21: Employee management page shows Ragic sync button, employment type badge, sync result summary
 - 2026-02-20: Venue shift templates now auto-populate as virtual schedule slots in schedule editor; templates show with "範本" badge and can be edited/deleted (materializes to real slots)
 - 2026-02-20: Added POST /api/schedule-slots/materialize endpoint for atomic template-to-slot conversion
 - 2026-02-20: Portal enhancements: removed calendar download buttons, enlarged calendar cells with time+venue, attendance summary card, collapsible guidelines review
@@ -105,3 +109,4 @@ shared/
 - GET /api/portal/today-coworkers/:employeeId
 - GET /api/portal/guidelines-check/:employeeId
 - POST /api/portal/acknowledge-all
+- POST /api/ragic-sync (sync employees from Ragic database)

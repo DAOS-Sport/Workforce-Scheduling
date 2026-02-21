@@ -13,9 +13,22 @@ import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, UserPlus, Phone, Mail, Edit2 } from "lucide-react";
+import { Plus, Search, UserPlus, Phone, Mail, Edit2, RefreshCw, Download } from "lucide-react";
 import type { Employee } from "@shared/schema";
 import { REGIONS_DATA } from "@shared/schema";
+
+const ROLE_LABELS: Record<string, string> = {
+  "救生": "救生員",
+  "櫃台": "行政櫃台",
+  "pt": "PT教練",
+  "manager": "管理員",
+  "admin": "系統管理",
+};
+
+const EMPLOYMENT_TYPE_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
+  full_time: { label: "正職", variant: "default" },
+  part_time: { label: "兼職", variant: "outline" },
+};
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   active: { label: "在職", variant: "default" },
@@ -37,7 +50,9 @@ export default function EmployeesPage() {
     lineId: "",
     status: "active",
     role: "pt",
+    employmentType: "full_time",
   });
+  const [syncResult, setSyncResult] = useState<{ created: number; updated: number; skipped: number; errors: string[] } | null>(null);
 
   const regionId = REGIONS_DATA.findIndex((r) => r.code === activeRegion) + 1;
 
@@ -84,8 +99,26 @@ export default function EmployeesPage() {
     },
   });
 
+  const ragicSync = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/ragic-sync");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries();
+      setSyncResult(data);
+      toast({
+        title: "Ragic 同步完成",
+        description: `新增 ${data.created} 人、更新 ${data.updated} 人、略過 ${data.skipped} 人`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "同步失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
   const resetForm = () => {
-    setForm({ name: "", employeeCode: "", phone: "", email: "", lineId: "", status: "active", role: "pt" });
+    setForm({ name: "", employeeCode: "", phone: "", email: "", lineId: "", status: "active", role: "pt", employmentType: "full_time" });
     setEditingEmployee(null);
   };
 
@@ -104,6 +137,7 @@ export default function EmployeesPage() {
       lineId: emp.lineId || "",
       status: emp.status,
       role: emp.role,
+      employmentType: emp.employmentType || "full_time",
     });
     setDialogOpen(true);
   };
@@ -140,11 +174,33 @@ export default function EmployeesPage() {
               data-testid="input-search-employee"
             />
           </div>
-          <Button onClick={openCreate} data-testid="button-add-employee">
-            <UserPlus className="h-4 w-4 mr-1.5" />
-            新增員工
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => ragicSync.mutate()}
+              disabled={ragicSync.isPending}
+              data-testid="button-ragic-sync"
+            >
+              <RefreshCw className={`h-4 w-4 mr-1.5 ${ragicSync.isPending ? "animate-spin" : ""}`} />
+              {ragicSync.isPending ? "同步中..." : "Ragic 同步"}
+            </Button>
+            <Button onClick={openCreate} data-testid="button-add-employee">
+              <UserPlus className="h-4 w-4 mr-1.5" />
+              新增員工
+            </Button>
+          </div>
         </div>
+
+        {syncResult && syncResult.errors.length > 0 && (
+          <Card className="p-4 border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">同步警告 ({syncResult.errors.length} 筆)</p>
+            <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-1 max-h-32 overflow-auto">
+              {syncResult.errors.map((err, i) => (
+                <li key={i}>• {err}</li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
         <Card>
           <Table>
@@ -154,6 +210,7 @@ export default function EmployeesPage() {
                 <TableHead>員工編號</TableHead>
                 <TableHead>電話</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>聘雇</TableHead>
                 <TableHead>職務</TableHead>
                 <TableHead>狀態</TableHead>
                 <TableHead className="w-[60px]">操作</TableHead>
@@ -163,7 +220,7 @@ export default function EmployeesPage() {
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-5 w-20" />
                       </TableCell>
@@ -172,13 +229,14 @@ export default function EmployeesPage() {
                 ))
               ) : filteredEmployees.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     {search ? "找不到符合的員工" : "尚無員工資料"}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredEmployees.map((emp) => {
                   const statusInfo = STATUS_MAP[emp.status] || STATUS_MAP.active;
+                  const empTypeInfo = EMPLOYMENT_TYPE_LABELS[emp.employmentType] || EMPLOYMENT_TYPE_LABELS.full_time;
                   return (
                     <TableRow key={emp.id} data-testid={`row-employee-${emp.id}`}>
                       <TableCell className="font-medium">{emp.name}</TableCell>
@@ -206,7 +264,10 @@ export default function EmployeesPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">{emp.role === "pt" ? "PT教練" : emp.role}</span>
+                        <Badge variant={empTypeInfo.variant}>{empTypeInfo.label}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">{ROLE_LABELS[emp.role] || emp.role}</span>
                       </TableCell>
                       <TableCell>
                         <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
@@ -287,31 +348,45 @@ export default function EmployeesPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
+                <Label>聘雇類別</Label>
+                <Select value={form.employmentType} onValueChange={(v) => setForm({ ...form, employmentType: v })}>
+                  <SelectTrigger data-testid="select-employee-employment-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full_time">正職</SelectItem>
+                    <SelectItem value="part_time">兼職</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label>職務</Label>
                 <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
                   <SelectTrigger data-testid="select-employee-role">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="救生">救生員</SelectItem>
+                    <SelectItem value="櫃台">行政櫃台</SelectItem>
                     <SelectItem value="pt">PT教練</SelectItem>
                     <SelectItem value="manager">管理員</SelectItem>
                     <SelectItem value="admin">系統管理</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>狀態</Label>
-                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
-                  <SelectTrigger data-testid="select-employee-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">在職</SelectItem>
-                    <SelectItem value="inactive">離職</SelectItem>
-                    <SelectItem value="suspended">停職</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>狀態</Label>
+              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                <SelectTrigger data-testid="select-employee-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">在職</SelectItem>
+                  <SelectItem value="inactive">離職</SelectItem>
+                  <SelectItem value="suspended">停職</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
