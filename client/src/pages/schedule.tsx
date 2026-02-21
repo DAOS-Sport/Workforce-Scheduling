@@ -404,17 +404,41 @@ export default function SchedulePage() {
   const COL_LEFT_WIDTH = 140;
   const COL_DATE_WIDTH = 130;
 
+  const shortageDates = useMemo(() => {
+    const dateSet = new Set<string>();
+    gapAnalysis.gaps.forEach((g) => dateSet.add(g.date));
+    return Array.from(dateSet).sort();
+  }, [gapAnalysis]);
+
+  const scrollToDate = (dateStr: string) => {
+    if (!scrollRef.current) return;
+    const el = scrollRef.current.querySelector(`[data-date-col="${dateStr}"]`);
+    if (el) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  };
+
+  const employeeShiftCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    shifts.forEach((s) => {
+      counts.set(s.employeeId, (counts.get(s.employeeId) || 0) + 1);
+    });
+    return counts;
+  }, [shifts]);
+
   return (
     <div className="flex flex-col h-full">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-5 border-b border-border/50">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight" data-testid="text-page-title">排班編輯器</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">員工排班管理 — 設定需求、指派班次、即時偵測缺班</p>
+      <div className="sticky top-0 z-50 bg-background border-b border-border/50">
+        <div className="flex items-center justify-center py-2 px-4">
+          <RegionTabs />
         </div>
-        <RegionTabs />
       </div>
 
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b flex-wrap">
+      <div className="flex items-center justify-between gap-2 px-4 py-2 border-b">
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-base font-bold tracking-tight mr-2" data-testid="text-page-title">排班編輯器</h1>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 px-4 py-2 border-b flex-wrap">
         <div className="flex items-center gap-2">
           <Button
             size="icon"
@@ -469,10 +493,25 @@ export default function SchedulePage() {
             <thead className="sticky top-0 z-20">
               <tr>
                 <th
-                  className="text-left p-2 border-b border-r font-medium text-muted-foreground bg-background sticky left-0 z-30"
+                  className="text-left p-1 border-b border-r font-medium text-muted-foreground bg-background sticky left-0 z-30"
                   style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
                 >
-                  員工
+                  <div className="text-xs mb-0.5">員工</div>
+                  {shortageDates.length > 0 && (
+                    <div className="flex flex-wrap gap-0.5 max-h-[40px] overflow-y-auto">
+                      {shortageDates.map((d) => (
+                        <button
+                          key={d}
+                          className="text-[9px] px-1 py-0.5 rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors cursor-pointer leading-none"
+                          onClick={() => scrollToDate(d)}
+                          title={`跳至 ${d} (缺班)`}
+                          data-testid={`button-jump-shortage-${d}`}
+                        >
+                          {format(new Date(d), "M/d")}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </th>
                 {monthDates.map((d, i) => {
                   const isToday = format(d, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
@@ -497,7 +536,8 @@ export default function SchedulePage() {
                 })}
               </tr>
               {venues.map((venue, vi) => {
-                const stickyTop = 52 + vi * 28;
+                const headerBaseHeight = shortageDates.length > 0 ? 80 : 52;
+                const stickyTop = headerBaseHeight + vi * 28;
                 return (
                 <tr key={`summary-${venue.id}`} className="sticky z-[15] bg-muted/40" style={{ top: stickyTop }}>
                   <th
@@ -594,7 +634,11 @@ export default function SchedulePage() {
                     { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
                   ];
                   return groups.flatMap(({ key, label, filter }) => {
-                    const grouped = employees.filter(filter);
+                    const grouped = employees.filter(filter).sort((a, b) => {
+                      const countA = employeeShiftCounts.get(a.id) || 0;
+                      const countB = employeeShiftCounts.get(b.id) || 0;
+                      return countB - countA;
+                    });
                     if (grouped.length === 0) return [];
                     return [
                       <tr key={`group-${key}`}>
