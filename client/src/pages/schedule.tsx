@@ -58,6 +58,10 @@ export default function SchedulePage() {
   const { activeRegion } = useRegion();
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const headerRowRef = useRef<HTMLTableRowElement>(null);
+  const venueRowRef = useRef<HTMLTableRowElement>(null);
+  const [headerRowHeight, setHeaderRowHeight] = useState(42);
+  const [venueRowHeight, setVenueRowHeight] = useState(26);
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
 
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
@@ -425,6 +429,24 @@ export default function SchedulePage() {
     }
   }, [currentMonth]);
 
+  useEffect(() => {
+    const headerRow = headerRowRef.current;
+    const venueRow = venueRowRef.current;
+    const ro = new ResizeObserver(() => {
+      if (headerRow) {
+        const h = headerRow.getBoundingClientRect().height;
+        if (h > 0) setHeaderRowHeight(h);
+      }
+      if (venueRow) {
+        const h = venueRow.getBoundingClientRect().height;
+        if (h > 0) setVenueRowHeight(h);
+      }
+    });
+    if (headerRow) ro.observe(headerRow);
+    if (venueRow) ro.observe(venueRow);
+    return () => ro.disconnect();
+  }, []);
+
   const isLoading = venLoading || empLoading || slotsLoading;
 
   const COL_LEFT_WIDTH = 140;
@@ -532,11 +554,11 @@ export default function SchedulePage() {
       <div className="flex-1 overflow-hidden flex flex-col relative">
         <div className="flex-1 overflow-auto" ref={scrollRef}>
           <table className="border-collapse text-sm" style={{ minWidth: `${COL_LEFT_WIDTH + monthDates.length * COL_DATE_WIDTH}px` }}>
-            <thead className="sticky top-0 z-20">
-              <tr>
+            <thead>
+              <tr ref={headerRowRef}>
                 <th
-                  className="text-left p-2 border-b border-r font-medium text-muted-foreground bg-background sticky left-0 z-30"
-                  style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
+                  className="text-left p-2 border-b border-r font-medium text-muted-foreground bg-background"
+                  style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", top: 0, left: 0, zIndex: 35 }}
                 >
                   員工
                 </th>
@@ -548,9 +570,9 @@ export default function SchedulePage() {
                       key={i}
                       data-date-col={format(d, "yyyy-MM-dd")}
                       className={`text-center p-1.5 border-b border-r font-medium ${
-                        isToday ? "bg-primary/5" : isWeekend ? "bg-muted/30" : "bg-background"
+                        isToday ? "bg-background" : isWeekend ? "bg-muted" : "bg-background"
                       }`}
-                      style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }}
+                      style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, position: "sticky", top: 0, zIndex: 25 }}
                     >
                       <div className={`text-xs ${isWeekend ? "text-destructive/70" : "text-muted-foreground"}`}>
                         週{DAY_NAMES[d.getDay()]}
@@ -563,12 +585,12 @@ export default function SchedulePage() {
                 })}
               </tr>
               {venues.map((venue, vi) => {
-                const stickyTop = 42 + vi * 26;
+                const stickyTop = headerRowHeight + vi * venueRowHeight;
                 return (
-                <tr key={`summary-${venue.id}`}>
+                <tr key={`summary-${venue.id}`} ref={vi === 0 ? venueRowRef : undefined}>
                   <th
-                    className="p-1 border-b border-r bg-muted/40 text-left"
-                    style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", left: 0, top: stickyTop, zIndex: 25 }}
+                    className="p-1 border-b border-r bg-muted text-left"
+                    style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", left: 0, top: stickyTop, zIndex: 30 }}
                   >
                     <span className="font-medium text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-venue-summary-${venue.id}`}>
                       {venue.shortName}
@@ -587,9 +609,9 @@ export default function SchedulePage() {
                       <th
                         key={di}
                         className={`p-0.5 border-b border-r text-center align-middle font-normal ${
-                          isToday ? "bg-primary/5" : isWeekend ? "bg-muted/30" : "bg-muted/40"
+                          isToday ? "bg-background" : isWeekend ? "bg-muted" : "bg-muted"
                         }`}
-                        style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, position: "sticky", top: stickyTop, zIndex: 15 }}
+                        style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, position: "sticky", top: stickyTop, zIndex: 20 }}
                         data-testid={`summary-cell-${venue.id}-${dateStr}`}
                       >
                         {hasRequirements ? (
@@ -669,13 +691,13 @@ export default function SchedulePage() {
                     return [
                       <tr key={`group-${key}`}>
                         <td
-                          className="px-2 py-1 border-b border-r sticky left-0 bg-muted/50 z-[5] text-xs font-bold text-muted-foreground tracking-wide"
+                          className="px-2 py-1 border-b border-r sticky left-0 bg-muted z-[5] text-xs font-bold text-muted-foreground tracking-wide"
                           style={{ minWidth: COL_LEFT_WIDTH }}
                         >
                           {label} ({grouped.length})
                         </td>
                         {monthDates.map((_, di) => (
-                          <td key={di} className="border-b border-r bg-muted/50" style={{ minWidth: COL_DATE_WIDTH }} />
+                          <td key={di} className="border-b border-r bg-muted" style={{ minWidth: COL_DATE_WIDTH }} />
                         ))}
                       </tr>,
                       ...grouped.map((emp) => (
