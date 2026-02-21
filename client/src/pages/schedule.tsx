@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronLeft, ChevronRight, CalendarDays, Plus, Minus, ChevronUp, ChevronDown,
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
-  Sparkles, ShieldCheck, Settings2, X, Copy, Pin, PinOff, Building2
+  Sparkles, ShieldCheck, Settings2, X, Copy, Building2
 } from "lucide-react";
 import type { Venue, Shift, ScheduleSlot, Employee } from "@shared/schema";
 
@@ -86,7 +86,7 @@ export default function SchedulePage() {
   const [batchSlot, setBatchSlot] = useState<ScheduleSlot | null>(null);
   const [batchTargetDates, setBatchTargetDates] = useState<Set<string>>(new Set());
   const [batchTargetVenues, setBatchTargetVenues] = useState<Set<number>>(new Set());
-  const [isPanelPinned, setIsPanelPinned] = useState(false);
+
 
   const monthDates = useMemo(
     () => eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) }),
@@ -563,12 +563,12 @@ export default function SchedulePage() {
                 })}
               </tr>
               {venues.map((venue, vi) => {
-                const stickyTop = 52 + vi * 28;
+                const stickyTop = 42 + vi * 26;
                 return (
-                <tr key={`summary-${venue.id}`} className="sticky z-[15] bg-muted/40" style={{ top: stickyTop }}>
+                <tr key={`summary-${venue.id}`}>
                   <th
-                    className="p-1 border-b border-r sticky left-0 z-[25] bg-muted/40 text-left"
-                    style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
+                    className="p-1 border-b border-r bg-muted/40 text-left"
+                    style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", left: 0, top: stickyTop, zIndex: 25 }}
                   >
                     <span className="font-medium text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-venue-summary-${venue.id}`}>
                       {venue.shortName}
@@ -589,7 +589,7 @@ export default function SchedulePage() {
                         className={`p-0.5 border-b border-r text-center align-middle font-normal ${
                           isToday ? "bg-primary/5" : isWeekend ? "bg-muted/30" : "bg-muted/40"
                         }`}
-                        style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }}
+                        style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, position: "sticky", top: stickyTop, zIndex: 15 }}
                         data-testid={`summary-cell-${venue.id}-${dateStr}`}
                       >
                         {hasRequirements ? (
@@ -631,229 +631,6 @@ export default function SchedulePage() {
                 );
               })}
             </thead>
-            {isPanelPinned && requirementsPanelOpen && reqPanelVenueId && reqPanelDate && (() => {
-              const pinnedStickyTop = 52 + venues.length * 28;
-              const pinnedSlots = slotsByVenueDate.get(`${reqPanelVenueId}-${reqPanelDate}`) || [];
-              return (
-              <tbody>
-                <tr>
-                  <td
-                    className="p-2 border-b-2 border-primary/30 border-r bg-background z-[25]"
-                    style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", left: 0, top: pinnedStickyTop }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-bold flex items-center gap-1.5">
-                        <Settings2 className="h-3.5 w-3.5" />
-                        {venues.find((v) => v.id === reqPanelVenueId)?.shortName}
-                        <span className="text-muted-foreground font-normal">
-                          {format(new Date(reqPanelDate), "M/d(E)", { locale: zhTW })}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          className="h-6 w-6 rounded flex items-center justify-center bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                          onClick={() => setIsPanelPinned(false)}
-                          title="取消釘選"
-                          data-testid="button-unpin-inline"
-                        >
-                          <PinOff className="h-3 w-3" />
-                        </button>
-                        <button
-                          className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted transition-colors"
-                          onClick={() => { setRequirementsPanelOpen(false); setBatchSlot(null); setIsPanelPinned(false); }}
-                          data-testid="button-close-inline-panel"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  </td>
-                  <td
-                    colSpan={monthDates.length}
-                    className="p-2 border-b-2 border-primary/30 bg-background"
-                    style={{ position: "sticky", top: pinnedStickyTop }}
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 overflow-x-auto">
-                        {pinnedSlots.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">尚未設定需求</span>
-                        ) : pinnedSlots.map((slot) => {
-                          const venueDateShifts = shiftsByVenueDate.get(`${slot.venueId}-${slot.date}`) || [];
-                          const assignedCount = venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length;
-                          const shortage = slot.requiredCount - assignedCount;
-                          const isFull = shortage <= 0;
-                          const isRescue = slot.role === "救生";
-                          const isBatchActive = batchSlot?.id === slot.id;
-                          return (
-                            <div
-                              key={slot.id}
-                              className={`shrink-0 rounded-lg border-l-4 px-3 py-1.5 flex items-center gap-3 ${
-                                isRescue ? "border-l-red-500" : "border-l-blue-500"
-                              } ${isBatchActive ? "bg-blue-50 dark:bg-blue-950/40 ring-1 ring-blue-400" : "bg-muted/30"}`}
-                              data-testid={`pinned-slot-${slot.id}`}
-                            >
-                              <div className="flex items-center gap-1.5">
-                                {isRescue ? <LifeBuoy className="h-3 w-3 text-muted-foreground" /> : <UserRound className="h-3 w-3 text-muted-foreground" />}
-                                <span className="text-xs font-medium">{slot.role}</span>
-                                <span className="text-xs font-mono text-muted-foreground">{slot.startTime.substring(0, 5)}-{slot.endTime.substring(0, 5)}</span>
-                              </div>
-                              {isFull ? (
-                                <span className="bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold">已滿</span>
-                              ) : (
-                                <span className="bg-red-500/20 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold">缺{shortage}</span>
-                              )}
-                              <span className="text-[10px] text-muted-foreground">{slot.requiredCount}人</span>
-                              <div className="flex items-center gap-0.5">
-                                <button className="h-5 w-5 rounded flex items-center justify-center hover:bg-muted" onClick={() => openEditSlotDialog(slot)} data-testid={`pinned-edit-${slot.id}`}>
-                                  <Edit2 className="h-2.5 w-2.5 text-muted-foreground" />
-                                </button>
-                                <button
-                                  className={`h-5 w-5 rounded flex items-center justify-center hover:bg-muted ${isBatchActive ? "text-blue-500" : ""}`}
-                                  onClick={() => { setBatchSlot(isBatchActive ? null : slot); setBatchTargetDates(new Set()); setBatchTargetVenues(new Set()); }}
-                                  data-testid={`pinned-batch-${slot.id}`}
-                                >
-                                  <Copy className="h-2.5 w-2.5" />
-                                </button>
-                                <button
-                                  className="h-5 w-5 rounded flex items-center justify-center hover:bg-muted"
-                                  onClick={async () => {
-                                    if (slot.id > 0) {
-                                      deleteSlot.mutate(slot.id);
-                                    } else {
-                                      try {
-                                        await apiRequest("POST", "/api/schedule-slots/materialize", {
-                                          venueId: slot.venueId, date: slot.date,
-                                          excludeTemplateIds: [{ startTime: slot.startTime, endTime: slot.endTime, role: slot.role }],
-                                        });
-                                        queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
-                                        toast({ title: "需求已刪除" });
-                                      } catch { toast({ title: "操作失敗", variant: "destructive" }); }
-                                    }
-                                  }}
-                                  data-testid={`pinned-delete-${slot.id}`}
-                                >
-                                  <Trash2 className="h-2.5 w-2.5 text-destructive" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        <button
-                          className="shrink-0 h-8 px-3 border-2 border-dashed border-border rounded-lg text-muted-foreground hover:border-primary hover:text-primary transition-colors text-xs flex items-center gap-1"
-                          onClick={() => { if (reqPanelVenueId && reqPanelDate) openNewSlotDialog(reqPanelVenueId, reqPanelDate); }}
-                          data-testid="button-add-requirement-inline"
-                        >
-                          <Plus className="h-3 w-3" />
-                          新增
-                        </button>
-                      </div>
-                      {batchSlot && (
-                        <div className="flex items-start gap-4 p-2 rounded-lg bg-muted/30 border border-border/50">
-                          <div className="space-y-1.5 shrink-0">
-                            <div className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
-                              <Building2 className="h-3 w-3" />
-                              目標場館
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {venues.map((v) => {
-                                const isSource = v.id === batchSlot.venueId;
-                                const isSelected = batchTargetVenues.has(v.id);
-                                return (
-                                  <button
-                                    key={v.id}
-                                    type="button"
-                                    className={`text-[10px] px-2 py-1 rounded-md border transition-all ${
-                                      isSource ? "bg-primary/10 text-primary border-primary/30 font-bold"
-                                        : isSelected ? "bg-blue-500 text-white border-blue-500 font-bold"
-                                        : "bg-background border-border hover:bg-muted"
-                                    }`}
-                                    onClick={() => {
-                                      if (isSource) return;
-                                      const next = new Set(batchTargetVenues);
-                                      if (next.has(v.id)) next.delete(v.id); else next.add(v.id);
-                                      setBatchTargetVenues(next);
-                                    }}
-                                    data-testid={`pinned-batch-venue-${v.id}`}
-                                  >
-                                    {v.shortName}{isSource && " ✓"}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          <div className="space-y-1.5 flex-1 min-w-0">
-                            <div className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
-                              <CalendarDays className="h-3 w-3" />
-                              目標日期
-                            </div>
-                            <div className="grid grid-cols-14 gap-0.5">
-                              {monthDates.map((md) => {
-                                const mdStr = format(md, "yyyy-MM-dd");
-                                const isCurrent = mdStr === reqPanelDate && batchTargetVenues.size === 0;
-                                const isSelected = batchTargetDates.has(mdStr);
-                                const isWeekend = md.getDay() === 0 || md.getDay() === 6;
-                                return (
-                                  <button
-                                    key={mdStr}
-                                    type="button"
-                                    disabled={isCurrent}
-                                    className={`text-[9px] py-1 rounded text-center transition-all ${
-                                      isCurrent ? "bg-muted text-muted-foreground/40 cursor-not-allowed"
-                                        : isSelected ? "bg-blue-500 text-white font-bold"
-                                        : isWeekend ? "bg-muted/50 hover:bg-muted text-muted-foreground"
-                                        : "bg-background hover:bg-muted border border-border/50"
-                                    }`}
-                                    onClick={() => {
-                                      const next = new Set(batchTargetDates);
-                                      if (next.has(mdStr)) next.delete(mdStr); else next.add(mdStr);
-                                      setBatchTargetDates(next);
-                                    }}
-                                    data-testid={`pinned-batch-date-${mdStr}`}
-                                  >
-                                    {format(md, "d")}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0 pt-3">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs px-2"
-                              onClick={() => { setBatchSlot(null); setBatchTargetDates(new Set()); setBatchTargetVenues(new Set()); }}
-                              data-testid="pinned-batch-cancel"
-                            >
-                              取消
-                            </Button>
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs px-2"
-                              disabled={batchTargetDates.size === 0 || batchCopySlot.isPending}
-                              onClick={() => {
-                                const allVenueIds = [batchSlot.venueId, ...Array.from(batchTargetVenues)];
-                                batchCopySlot.mutate({
-                                  venueIds: allVenueIds,
-                                  startTime: batchSlot.startTime,
-                                  endTime: batchSlot.endTime,
-                                  role: batchSlot.role,
-                                  requiredCount: batchSlot.requiredCount,
-                                  targetDates: Array.from(batchTargetDates),
-                                });
-                              }}
-                              data-testid="pinned-batch-confirm"
-                            >
-                              {batchCopySlot.isPending ? "套用中..." : `確認 (${batchTargetVenues.size + 1}館×${batchTargetDates.size}日)`}
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-              );
-            })()}
             <tbody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
@@ -1243,7 +1020,7 @@ export default function SchedulePage() {
         </DialogContent>
       </Dialog>
 
-      {requirementsPanelOpen && !isPanelPinned && (
+      {requirementsPanelOpen && (
         <div className="fixed inset-0 z-50 flex justify-end" data-testid="requirements-panel-overlay">
           <div className="absolute inset-0 bg-black/50" onClick={() => { setRequirementsPanelOpen(false); setBatchSlot(null); }} />
           <div className="relative w-full max-w-sm bg-background border-l shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
@@ -1258,14 +1035,6 @@ export default function SchedulePage() {
                 </p>
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  className="h-8 w-8 rounded-md flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors"
-                  onClick={() => setIsPanelPinned(true)}
-                  title="釘選到表格上方"
-                  data-testid="button-pin-panel"
-                >
-                  <Pin className="h-4 w-4" />
-                </button>
                 <button
                   className="h-8 w-8 rounded-md flex items-center justify-center hover:bg-muted transition-colors"
                   onClick={() => { setRequirementsPanelOpen(false); setBatchSlot(null); }}
