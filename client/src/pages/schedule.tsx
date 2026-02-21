@@ -756,50 +756,6 @@ export default function SchedulePage() {
           </table>
         </div>
 
-        <div
-          className="border-t bg-card shrink-0"
-          data-testid="vacancy-drawer"
-        >
-          <div className="flex items-center gap-2 px-4 py-1.5 text-xs font-medium text-muted-foreground border-b bg-muted/30">
-            {gapAnalysis.totalShortage > 0 ? (
-              <>
-                <AlertCircle className="h-3 w-3 text-red-500 shrink-0" />
-                <span>缺班明細 — 共 {gapAnalysis.totalShortage} 個缺口</span>
-              </>
-            ) : (
-              <>
-                <Check className="h-3 w-3 text-green-500 shrink-0" />
-                <span>{scheduleSlots.length > 0 ? "本月所有時段人力已滿" : "尚未建立排班需求"}</span>
-              </>
-            )}
-          </div>
-          {gapAnalysis.gaps.length > 0 && (
-            <div className="px-3 py-2 overflow-auto max-h-[120px]">
-              <div className="flex flex-wrap gap-1">
-                {gapAnalysis.gaps.map((g, i) => {
-                  const RoleIcon = ROLE_ICON_MAP[g.role] || UserRound;
-                  return (
-                    <button
-                      key={i}
-                      className="flex items-center gap-1 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-1.5 py-0.5 text-[10px] hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors cursor-pointer"
-                      onClick={() => scrollToDate(g.date)}
-                      data-testid={`vacancy-detail-${i}`}
-                    >
-                      <span className="text-red-700 dark:text-red-300 font-medium">{g.venueName}</span>
-                      <span className="text-muted-foreground">{format(new Date(g.date), "M/d")}</span>
-                      <span className="text-muted-foreground">{g.startTime}-{g.endTime}</span>
-                      <span className="inline-flex items-center gap-0.5 text-muted-foreground">
-                        <RoleIcon className="h-2.5 w-2.5" />
-                        {g.role}
-                      </span>
-                      <span className="text-red-600 dark:text-red-400 font-bold">缺{g.shortage}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       <Dialog open={shiftDialogOpen} onOpenChange={setShiftDialogOpen}>
