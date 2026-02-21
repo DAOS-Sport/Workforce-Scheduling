@@ -52,6 +52,7 @@ export const shifts = pgTable("shifts", {
   date: date("date").notNull(),
   startTime: time("start_time").notNull(),
   endTime: time("end_time").notNull(),
+  role: text("role").notNull().default("救生"),
   isDispatch: boolean("is_dispatch").default(false),
   dispatchCompany: text("dispatch_company"),
   dispatchName: text("dispatch_name"),

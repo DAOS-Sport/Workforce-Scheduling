@@ -25,6 +25,7 @@ import type { Venue, Shift, ScheduleSlot, Employee } from "@shared/schema";
 const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
   "救生": LifeBuoy,
   "教練": Dumbbell,
+  "櫃台": UserRound,
   "櫃檯": UserRound,
   "清潔": Sparkles,
   "管理": ShieldCheck,
@@ -33,17 +34,20 @@ const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
 const ROLE_SHORT: Record<string, string> = {
   "救生": "救",
   "教練": "練",
+  "櫃台": "櫃",
   "櫃檯": "櫃",
   "清潔": "潔",
   "管理": "管",
 };
 
 const ROLE_LABELS: Record<string, string> = {
-  pt: "教練",
+  pt: "救生",
   lifeguard: "救生",
-  counter: "櫃檯",
+  counter: "櫃台",
   cleaning: "清潔",
   manager: "管理",
+  "救生": "救生",
+  "櫃台": "櫃台",
 };
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
@@ -73,6 +77,7 @@ export default function SchedulePage() {
   const [shiftStartTime, setShiftStartTime] = useState("06:30");
   const [shiftEndTime, setShiftEndTime] = useState("16:00");
   const [shiftIsDispatch, setShiftIsDispatch] = useState(false);
+  const [shiftRole, setShiftRole] = useState<string>("救生");
 
   const [requirementsPanelOpen, setRequirementsPanelOpen] = useState(false);
   const [reqPanelVenueId, setReqPanelVenueId] = useState<number | null>(null);
@@ -279,6 +284,7 @@ export default function SchedulePage() {
   });
 
   const openNewShiftDialog = (employeeId: number, dateStr: string) => {
+    const emp = employees.find((e) => e.id === employeeId);
     setShiftEmployeeId(employeeId);
     setShiftDate(dateStr);
     setEditingShift(null);
@@ -286,6 +292,7 @@ export default function SchedulePage() {
     setShiftStartTime("06:30");
     setShiftEndTime("16:00");
     setShiftIsDispatch(false);
+    setShiftRole(emp?.role === "櫃台" ? "櫃台" : "救生");
     setShiftDialogOpen(true);
   };
 
@@ -297,6 +304,7 @@ export default function SchedulePage() {
     setShiftStartTime(shift.startTime.substring(0, 5));
     setShiftEndTime(shift.endTime.substring(0, 5));
     setShiftIsDispatch(shift.isDispatch || false);
+    setShiftRole(shift.role || "救生");
     setShiftDialogOpen(true);
   };
 
@@ -308,6 +316,7 @@ export default function SchedulePage() {
       date: shiftDate,
       startTime: shiftStartTime,
       endTime: shiftEndTime,
+      role: shiftRole,
       isDispatch: shiftIsDispatch,
     };
     if (editingShift) {
@@ -579,12 +588,10 @@ export default function SchedulePage() {
               ) : (
                 (() => {
                   const groups = [
-                    { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
                     { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
-                    { key: "ft-other", label: "正職其他", filter: (e: Employee) => e.employmentType === "full_time" && e.role !== "救生" && e.role !== "櫃台" },
-                    { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
                     { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
-                    { key: "pt-other", label: "兼職其他", filter: (e: Employee) => e.employmentType === "part_time" && e.role !== "救生" && e.role !== "櫃台" },
+                    { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
+                    { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
                   ];
                   return groups.flatMap(({ key, label, filter }) => {
                     const grouped = employees.filter(filter);
@@ -787,6 +794,19 @@ export default function SchedulePage() {
               </Select>
             </div>
 
+            <div className="space-y-2">
+              <Label>班別</Label>
+              <Select value={shiftRole} onValueChange={setShiftRole}>
+                <SelectTrigger data-testid="select-shift-role">
+                  <SelectValue placeholder="選擇班別" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="救生">救生</SelectItem>
+                  <SelectItem value="櫃台">櫃台</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex gap-3">
               <div className="flex-1 space-y-2">
                 <Label>開始時間</Label>
@@ -818,7 +838,7 @@ export default function SchedulePage() {
             </div>
 
             <div className="rounded-md bg-muted/30 p-3 text-xs text-muted-foreground">
-              預覽：{venues.find((v) => v.id.toString() === shiftVenueId)?.shortName || "—"} {shiftStartTime}-{shiftEndTime}
+              預覽：{venues.find((v) => v.id.toString() === shiftVenueId)?.shortName || "—"} {shiftStartTime}-{shiftEndTime} [{shiftRole}]
               {shiftIsDispatch && " (派遣)"}
             </div>
           </div>

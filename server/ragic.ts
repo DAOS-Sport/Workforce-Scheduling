@@ -90,7 +90,12 @@ export async function syncFromRagic(): Promise<{
 
   const result = { created: 0, updated: 0, skipped: 0, errors: [] as string[] };
 
-  const response = await fetch(`${RAGIC_API_URL}?v=3&limit=1000`, {
+  const params = new URLSearchParams({
+    v: "3",
+    limit: "1000",
+    where: JSON.stringify({ "3000945": "在職" }),
+  });
+  const response = await fetch(`${RAGIC_API_URL}?${params.toString()}`, {
     headers: { Authorization: `Basic ${apiKey}` },
   });
 
