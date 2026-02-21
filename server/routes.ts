@@ -319,21 +319,24 @@ export async function registerRoutes(
 
   app.post("/api/schedule-slots/batch-copy", async (req, res) => {
     try {
-      const { venueId, startTime, endTime, role, requiredCount, targetDates } = req.body;
-      if (!venueId || !startTime || !endTime || !role || !requiredCount || !Array.isArray(targetDates) || targetDates.length === 0) {
+      const { venueId, venueIds, startTime, endTime, role, requiredCount, targetDates } = req.body;
+      const resolvedVenueIds: number[] = Array.isArray(venueIds) && venueIds.length > 0 ? venueIds : (venueId ? [venueId] : []);
+      if (resolvedVenueIds.length === 0 || !startTime || !endTime || !role || !requiredCount || !Array.isArray(targetDates) || targetDates.length === 0) {
         return res.status(400).json({ message: "缺少必要欄位" });
       }
       const results: any[] = [];
       let skipped = 0;
-      for (const date of targetDates) {
-        const existing = await storage.getScheduleSlotsByVenueAndDate(venueId, date);
-        const duplicate = existing.find(s => s.startTime === startTime && s.endTime === endTime && s.role === role);
-        if (duplicate) {
-          skipped++;
-          continue;
+      for (const vid of resolvedVenueIds) {
+        for (const date of targetDates) {
+          const existing = await storage.getScheduleSlotsByVenueAndDate(vid, date);
+          const duplicate = existing.find(s => s.startTime === startTime && s.endTime === endTime && s.role === role);
+          if (duplicate) {
+            skipped++;
+            continue;
+          }
+          const slot = await storage.createScheduleSlot({ venueId: vid, date, startTime, endTime, role, requiredCount });
+          results.push(slot);
         }
-        const slot = await storage.createScheduleSlot({ venueId, date, startTime, endTime, role, requiredCount });
-        results.push(slot);
       }
       res.json({ created: results.length, skipped, slots: results });
     } catch (err: any) {

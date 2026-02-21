@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronLeft, ChevronRight, CalendarDays, Plus, Minus, ChevronUp, ChevronDown,
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
-  Sparkles, ShieldCheck, Settings2, X, Copy
+  Sparkles, ShieldCheck, Settings2, X, Copy, Pin, PinOff, Building2
 } from "lucide-react";
 import type { Venue, Shift, ScheduleSlot, Employee } from "@shared/schema";
 
@@ -85,6 +85,8 @@ export default function SchedulePage() {
 
   const [batchSlot, setBatchSlot] = useState<ScheduleSlot | null>(null);
   const [batchTargetDates, setBatchTargetDates] = useState<Set<string>>(new Set());
+  const [batchTargetVenues, setBatchTargetVenues] = useState<Set<number>>(new Set());
+  const [isPanelPinned, setIsPanelPinned] = useState(false);
 
   const monthDates = useMemo(
     () => eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) }),
@@ -103,9 +105,10 @@ export default function SchedulePage() {
     queryKey: ["/api/venues", activeRegion],
   });
 
-  const { data: employees = [], isLoading: empLoading } = useQuery<Employee[]>({
+  const { data: allEmployees = [], isLoading: empLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees", activeRegion],
   });
+  const employees = useMemo(() => allEmployees.filter(e => e.status !== "inactive"), [allEmployees]);
 
   const { data: scheduleSlots = [], isLoading: slotsLoading } = useQuery<ScheduleSlot[]>({
     queryKey: ["/api/schedule-slots", activeRegion, dateRange.start, dateRange.end],
@@ -287,15 +290,16 @@ export default function SchedulePage() {
   });
 
   const batchCopySlot = useMutation({
-    mutationFn: async (data: { venueId: number; startTime: string; endTime: string; role: string; requiredCount: number; targetDates: string[] }) => {
+    mutationFn: async (data: { venueIds: number[]; startTime: string; endTime: string; role: string; requiredCount: number; targetDates: string[] }) => {
       const res = await apiRequest("POST", "/api/schedule-slots/batch-copy", data);
       return res.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
-      toast({ title: `已套用到 ${data.created} 個日期${data.skipped > 0 ? `（${data.skipped} 個重複已略過）` : ""}` });
+      toast({ title: `已套用 ${data.created} 筆${data.skipped > 0 ? `（${data.skipped} 筆重複略過）` : ""}` });
       setBatchSlot(null);
       setBatchTargetDates(new Set());
+      setBatchTargetVenues(new Set());
     },
     onError: (err: Error) => {
       toast({ title: "批次套用失敗", description: err.message, variant: "destructive" });
@@ -405,6 +409,9 @@ export default function SchedulePage() {
   const openRequirementsPanel = (venueId: number, dateStr: string) => {
     setReqPanelVenueId(venueId);
     setReqPanelDate(dateStr);
+    setBatchSlot(null);
+    setBatchTargetDates(new Set());
+    setBatchTargetVenues(new Set());
     setRequirementsPanelOpen(true);
   };
 
@@ -1014,9 +1021,11 @@ export default function SchedulePage() {
       </Dialog>
 
       {requirementsPanelOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end" data-testid="requirements-panel-overlay">
-          <div className="absolute inset-0 bg-black/50" onClick={() => { setRequirementsPanelOpen(false); setBatchSlot(null); }} />
-          <div className="relative w-full max-w-sm bg-background border-l shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+        <div className={`fixed inset-0 z-50 flex justify-end ${isPanelPinned ? "pointer-events-none" : ""}`} data-testid="requirements-panel-overlay">
+          {!isPanelPinned && (
+            <div className="absolute inset-0 bg-black/50" onClick={() => { setRequirementsPanelOpen(false); setBatchSlot(null); }} />
+          )}
+          <div className={`relative w-full max-w-sm bg-background border-l shadow-2xl flex flex-col animate-in slide-in-from-right duration-200 pointer-events-auto ${isPanelPinned ? "shadow-lg" : ""}`}>
             <div className="flex items-center justify-between p-4 border-b">
               <div>
                 <h2 className="text-base font-bold flex items-center gap-2">
@@ -1027,13 +1036,27 @@ export default function SchedulePage() {
                   {venues.find((v) => v.id === reqPanelVenueId)?.shortName} — {reqPanelDate ? format(new Date(reqPanelDate), "M月d日 (E)", { locale: zhTW }) : ""}
                 </p>
               </div>
-              <button
-                className="h-8 w-8 rounded-md flex items-center justify-center hover:bg-muted transition-colors"
-                onClick={() => { setRequirementsPanelOpen(false); setBatchSlot(null); }}
-                data-testid="button-close-panel"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  className={`h-8 w-8 rounded-md flex items-center justify-center transition-colors ${
+                    isPanelPinned
+                      ? "bg-primary/10 text-primary hover:bg-primary/20"
+                      : "hover:bg-muted text-muted-foreground"
+                  }`}
+                  onClick={() => setIsPanelPinned(!isPanelPinned)}
+                  title={isPanelPinned ? "取消釘選" : "釘選面板"}
+                  data-testid="button-pin-panel"
+                >
+                  {isPanelPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                </button>
+                <button
+                  className="h-8 w-8 rounded-md flex items-center justify-center hover:bg-muted transition-colors"
+                  onClick={() => { setRequirementsPanelOpen(false); setBatchSlot(null); setIsPanelPinned(false); }}
+                  data-testid="button-close-panel"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -1099,6 +1122,7 @@ export default function SchedulePage() {
                               onClick={() => {
                                 setBatchSlot(batchSlot?.id === slot.id ? null : slot);
                                 setBatchTargetDates(new Set());
+                                setBatchTargetVenues(new Set());
                               }}
                               data-testid={`button-batch-req-${slot.id}`}
                             >
@@ -1133,49 +1157,88 @@ export default function SchedulePage() {
                             </Button>
                           </div>
                           {batchSlot?.id === slot.id && (
-                            <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
-                              <div className="text-xs text-muted-foreground font-medium">
-                                選擇要套用的目標日期：
+                            <div className="mt-3 pt-3 border-t border-border/50 space-y-3">
+                              <div className="space-y-1.5">
+                                <div className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                                  <Building2 className="h-3 w-3" />
+                                  選擇目標場館：
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {venues.map((v) => {
+                                    const isSource = v.id === slot.venueId;
+                                    const isSelected = batchTargetVenues.has(v.id);
+                                    return (
+                                      <button
+                                        key={v.id}
+                                        type="button"
+                                        className={`text-[10px] px-2 py-1 rounded-md border transition-all ${
+                                          isSource
+                                            ? "bg-primary/10 text-primary border-primary/30 font-bold"
+                                            : isSelected
+                                              ? "bg-blue-500 text-white border-blue-500 font-bold"
+                                              : "bg-background border-border hover:bg-muted"
+                                        }`}
+                                        onClick={() => {
+                                          if (isSource) return;
+                                          const next = new Set(batchTargetVenues);
+                                          if (next.has(v.id)) next.delete(v.id);
+                                          else next.add(v.id);
+                                          setBatchTargetVenues(next);
+                                        }}
+                                        data-testid={`batch-venue-${v.id}`}
+                                      >
+                                        {v.shortName}
+                                        {isSource && " ✓"}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                              <div className="grid grid-cols-7 gap-1">
-                                {monthDates.map((md) => {
-                                  const mdStr = format(md, "yyyy-MM-dd");
-                                  const isCurrent = mdStr === reqPanelDate;
-                                  const isSelected = batchTargetDates.has(mdStr);
-                                  const isWeekend = md.getDay() === 0 || md.getDay() === 6;
-                                  return (
-                                    <button
-                                      key={mdStr}
-                                      type="button"
-                                      disabled={isCurrent}
-                                      className={`text-[10px] py-1.5 rounded text-center transition-all ${
-                                        isCurrent
-                                          ? "bg-muted text-muted-foreground/40 cursor-not-allowed"
-                                          : isSelected
-                                            ? "bg-blue-500 text-white font-bold"
-                                            : isWeekend
-                                              ? "bg-muted/50 hover:bg-muted text-muted-foreground"
-                                              : "bg-background hover:bg-muted border border-border/50"
-                                      }`}
-                                      onClick={() => {
-                                        const next = new Set(batchTargetDates);
-                                        if (next.has(mdStr)) next.delete(mdStr);
-                                        else next.add(mdStr);
-                                        setBatchTargetDates(next);
-                                      }}
-                                      data-testid={`batch-date-${mdStr}`}
-                                    >
-                                      {format(md, "d")}
-                                    </button>
-                                  );
-                                })}
+                              <div className="space-y-1.5">
+                                <div className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                                  <CalendarDays className="h-3 w-3" />
+                                  選擇目標日期：
+                                </div>
+                                <div className="grid grid-cols-7 gap-1">
+                                  {monthDates.map((md) => {
+                                    const mdStr = format(md, "yyyy-MM-dd");
+                                    const isCurrent = mdStr === reqPanelDate && batchTargetVenues.size === 0;
+                                    const isSelected = batchTargetDates.has(mdStr);
+                                    const isWeekend = md.getDay() === 0 || md.getDay() === 6;
+                                    return (
+                                      <button
+                                        key={mdStr}
+                                        type="button"
+                                        disabled={isCurrent}
+                                        className={`text-[10px] py-1.5 rounded text-center transition-all ${
+                                          isCurrent
+                                            ? "bg-muted text-muted-foreground/40 cursor-not-allowed"
+                                            : isSelected
+                                              ? "bg-blue-500 text-white font-bold"
+                                              : isWeekend
+                                                ? "bg-muted/50 hover:bg-muted text-muted-foreground"
+                                                : "bg-background hover:bg-muted border border-border/50"
+                                        }`}
+                                        onClick={() => {
+                                          const next = new Set(batchTargetDates);
+                                          if (next.has(mdStr)) next.delete(mdStr);
+                                          else next.add(mdStr);
+                                          setBatchTargetDates(next);
+                                        }}
+                                        data-testid={`batch-date-${mdStr}`}
+                                      >
+                                        {format(md, "d")}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                              <div className="flex gap-2 mt-2">
+                              <div className="flex gap-2">
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   className="flex-1 h-8 text-xs"
-                                  onClick={() => { setBatchSlot(null); setBatchTargetDates(new Set()); }}
+                                  onClick={() => { setBatchSlot(null); setBatchTargetDates(new Set()); setBatchTargetVenues(new Set()); }}
                                 >
                                   取消
                                 </Button>
@@ -1184,8 +1247,9 @@ export default function SchedulePage() {
                                   className="flex-1 h-8 text-xs"
                                   disabled={batchTargetDates.size === 0 || batchCopySlot.isPending}
                                   onClick={() => {
+                                    const allVenueIds = [slot.venueId, ...Array.from(batchTargetVenues)];
                                     batchCopySlot.mutate({
-                                      venueId: slot.venueId,
+                                      venueIds: allVenueIds,
                                       startTime: slot.startTime,
                                       endTime: slot.endTime,
                                       role: slot.role,
@@ -1195,7 +1259,7 @@ export default function SchedulePage() {
                                   }}
                                   data-testid="button-batch-confirm"
                                 >
-                                  {batchCopySlot.isPending ? "套用中..." : `確認套用 (${batchTargetDates.size}日)`}
+                                  {batchCopySlot.isPending ? "套用中..." : `確認套用 (${batchTargetVenues.size + 1}館 × ${batchTargetDates.size}日)`}
                                 </Button>
                               </div>
                             </div>

@@ -52,7 +52,7 @@ export default function EmployeesPage() {
     role: "pt",
     employmentType: "full_time",
   });
-  const [syncResult, setSyncResult] = useState<{ created: number; updated: number; skipped: number; errors: string[] } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ created: number; updated: number; skipped: number; deactivated: number; errors: string[] } | null>(null);
 
   const regionId = REGIONS_DATA.findIndex((r) => r.code === activeRegion) + 1;
 
@@ -109,7 +109,7 @@ export default function EmployeesPage() {
       setSyncResult(data);
       toast({
         title: "Ragic 同步完成",
-        description: `新增 ${data.created} 人、更新 ${data.updated} 人、略過 ${data.skipped} 人`,
+        description: `新增 ${data.created} 人、更新 ${data.updated} 人${data.deactivated > 0 ? `、停用 ${data.deactivated} 人` : ""}、略過 ${data.skipped} 人`,
       });
     },
     onError: (err: Error) => {

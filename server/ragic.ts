@@ -83,12 +83,13 @@ export async function syncFromRagic(): Promise<{
   created: number;
   updated: number;
   skipped: number;
+  deactivated: number;
   errors: string[];
 }> {
   const apiKey = process.env.RAGIC_API_KEY;
   if (!apiKey) throw new Error("RAGIC_API_KEY not configured");
 
-  const result = { created: 0, updated: 0, skipped: 0, errors: [] as string[] };
+  const result = { created: 0, updated: 0, skipped: 0, deactivated: 0, errors: [] as string[] };
 
   const params = new URLSearchParams({
     v: "3",
@@ -107,6 +108,8 @@ export async function syncFromRagic(): Promise<{
   const regions = await storage.getRegions();
   const regionMap = new Map(regions.map((r) => [r.code, r.id]));
 
+  const syncedCodes = new Set<string>();
+
   for (const [ragicId, record] of Object.entries(data)) {
     try {
       const parsed = parseRagicRecord(record as Record<string, any>);
@@ -114,6 +117,8 @@ export async function syncFromRagic(): Promise<{
         result.skipped++;
         continue;
       }
+
+      syncedCodes.add(parsed.employeeCode);
 
       const regionCode = mapDepartmentToRegionCode(parsed.department);
       if (!regionCode) {
@@ -137,7 +142,7 @@ export async function syncFromRagic(): Promise<{
         email: parsed.email || null,
         lineId: parsed.lineId || null,
         regionId,
-        status: parsed.status,
+        status: "active",
         role: parsed.role,
         employmentType: parsed.employmentType,
       };
@@ -152,6 +157,16 @@ export async function syncFromRagic(): Promise<{
       }
     } catch (err: any) {
       result.errors.push(`Record ${ragicId}: ${err.message}`);
+    }
+  }
+
+  for (const region of regions) {
+    const regionEmployees = await storage.getEmployeesByRegion(region.id);
+    for (const emp of regionEmployees) {
+      if (emp.employeeCode && !syncedCodes.has(emp.employeeCode) && emp.status === "active") {
+        await storage.updateEmployee(emp.id, { status: "inactive" });
+        result.deactivated++;
+      }
     }
   }
 
