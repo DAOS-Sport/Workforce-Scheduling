@@ -553,7 +553,7 @@ export default function SchedulePage() {
 
       <div className="flex-1 overflow-hidden flex flex-col relative">
         <div className="flex-1 overflow-auto" ref={scrollRef}>
-          <table className="border-collapse text-sm" style={{ minWidth: `${COL_LEFT_WIDTH + monthDates.length * COL_DATE_WIDTH}px` }}>
+          <table className="border-separate border-spacing-0 text-sm" style={{ minWidth: `${COL_LEFT_WIDTH + monthDates.length * COL_DATE_WIDTH}px` }}>
             <thead>
               <tr ref={headerRowRef}>
                 <th
