@@ -40,6 +40,7 @@ export default function EmployeesPage() {
   const { activeRegion } = useRegion();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [form, setForm] = useState({
@@ -61,10 +62,13 @@ export default function EmployeesPage() {
   });
 
   const filteredEmployees = employees.filter(
-    (e) =>
-      e.name.includes(search) ||
-      e.employeeCode.includes(search) ||
-      (e.phone && e.phone.includes(search))
+    (e) => {
+      const matchesSearch = e.name.includes(search) ||
+        e.employeeCode.includes(search) ||
+        (e.phone && e.phone.includes(search));
+      const matchesStatus = statusFilter === "all" || e.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    }
   );
 
   const createEmployee = useMutation({
@@ -164,15 +168,27 @@ export default function EmployeesPage() {
 
       <div className="p-4 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜尋姓名、編號、電話..."
-              className="pl-8"
-              data-testid="input-search-employee"
-            />
+          <div className="flex gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-64 sm:flex-none">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜尋姓名、編號、電話..."
+                className="pl-8"
+                data-testid="input-search-employee"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-28" data-testid="select-status-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部狀態</SelectItem>
+                <SelectItem value="active">在職</SelectItem>
+                <SelectItem value="inactive">離職</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex gap-2">
             <Button
