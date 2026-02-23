@@ -109,10 +109,10 @@ export type InsertVenueShiftTemplate = z.infer<typeof insertVenueShiftTemplateSc
 export type VenueShiftTemplate = typeof venueShiftTemplates.$inferSelect;
 
 export const REGIONS_DATA = [
-  { name: "內勤", code: "D" },
   { name: "三蘆戰區", code: "A" },
   { name: "台北區", code: "B" },
   { name: "新竹區", code: "C" },
+  { name: "內勤", code: "D" },
 ] as const;
 
 export const VENUES_DATA = [
