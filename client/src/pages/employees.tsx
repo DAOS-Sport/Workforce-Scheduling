@@ -47,7 +47,7 @@ export default function EmployeesPage() {
     email: "",
     lineId: "",
     status: "active",
-    role: "pt",
+    role: "救生",
     employmentType: "full_time",
   });
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number; skipped: number; deactivated: number; errors: string[] } | null>(null);
@@ -120,7 +120,7 @@ export default function EmployeesPage() {
   });
 
   const resetForm = () => {
-    setForm({ name: "", employeeCode: "", phone: "", email: "", lineId: "", status: "active", role: "pt", employmentType: "full_time" });
+    setForm({ name: "", employeeCode: "", phone: "", email: "", lineId: "", status: "active", role: "救生", employmentType: "full_time" });
     setEditingEmployee(null);
   };
 
