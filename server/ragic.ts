@@ -21,9 +21,22 @@ const VENUE_TO_REGION: Record<string, string> = {
   "新北高中": "A",
   "三民高中": "A",
   "三重商工": "A",
+  "新莊國中": "A",
   "松山國小": "B",
+  "國防醫學大學": "B",
+  "士東國小": "B",
+  "大湖國小": "B",
+  "溪口國小": "B",
+  "建成國中": "B",
+  "士林國小": "B",
+  "義方國小": "B",
+  "百齡高中": "B",
+  "清江國小": "B",
   "新竹科學園區": "C",
+  "新屋高中": "C",
 };
+
+const INTERNAL_DEPTS = ["駿斯運動事業股份有限公司", "人力資源處", "數位轉型發展處", "營運管理處", "行銷事業處"];
 
 function mapDepartmentToRegionCode(department: string): string | null {
   for (const [venue, regionCode] of Object.entries(VENUE_TO_REGION)) {
@@ -190,6 +203,96 @@ export async function syncFromRagic(): Promise<{
       }
     } catch (err: any) {
       result.errors.push(`Record ${ragicId}: ${err.message}`);
+    }
+  }
+
+  return result;
+}
+
+export async function syncVenuesFromRagic(): Promise<{
+  created: number;
+  existing: number;
+  skipped: number;
+  errors: string[];
+}> {
+  const apiKey = process.env.RAGIC_API_KEY;
+  if (!apiKey) throw new Error("RAGIC_API_KEY not configured");
+
+  const result = { created: 0, existing: 0, skipped: 0, errors: [] as string[] };
+
+  const params = new URLSearchParams({
+    v: "3",
+    limit: "1000",
+    _: String(Date.now()),
+  });
+  const response = await fetch(`${RAGIC_API_URL}?${params.toString()}`, {
+    headers: {
+      Authorization: `Basic ${apiKey}`,
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ragic API error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const regions = await storage.getRegions();
+  const regionMap = new Map(regions.map((r) => [r.code, r.id]));
+
+  const allVenues = await Promise.all(regions.map((r) => storage.getVenuesByRegion(r.id)));
+  const existingVenueNames = new Set(allVenues.flat().map((v) => v.name.replace(/館$/, "")));
+
+  const deptSet = new Set<string>();
+  for (const record of Object.values(data)) {
+    const rawDept = (record as any)["部門"];
+    const depts = Array.isArray(rawDept) ? rawDept : [String(rawDept || "")];
+    depts.forEach((d: string) => {
+      const dt = d.trim();
+      if (dt) deptSet.add(dt);
+    });
+  }
+
+  for (const dept of Array.from(deptSet)) {
+    if (dept.startsWith("勞務-")) {
+      result.skipped++;
+      continue;
+    }
+    if (INTERNAL_DEPTS.includes(dept)) {
+      result.skipped++;
+      continue;
+    }
+
+    if (existingVenueNames.has(dept) || existingVenueNames.has(dept.replace(/館$/, ""))) {
+      result.existing++;
+      continue;
+    }
+
+    const regionCode = VENUE_TO_REGION[dept];
+    if (!regionCode) {
+      result.errors.push(`${dept}: 無對應區域，跳過新增`);
+      result.skipped++;
+      continue;
+    }
+
+    const regionId = regionMap.get(regionCode);
+    if (!regionId) {
+      result.errors.push(`${dept}: 區域代碼「${regionCode}」不存在`);
+      result.skipped++;
+      continue;
+    }
+
+    try {
+      await storage.createVenue({
+        name: dept,
+        shortName: dept,
+        regionId,
+        address: "",
+      });
+      result.created++;
+    } catch (err: any) {
+      result.errors.push(`${dept}: ${err.message}`);
     }
   }
 

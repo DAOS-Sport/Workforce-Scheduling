@@ -13,7 +13,7 @@ import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, MapPin, Plus, Edit2, Navigation, Trash2, LifeBuoy, UserRound, Sparkles, ShieldCheck, Clock } from "lucide-react";
+import { Building2, MapPin, Plus, Edit2, Navigation, Trash2, LifeBuoy, UserRound, Sparkles, ShieldCheck, Clock, RefreshCw } from "lucide-react";
 import type { Venue, VenueShiftTemplate } from "@shared/schema";
 import { REGIONS_DATA } from "@shared/schema";
 
@@ -43,6 +43,7 @@ function generateId() {
 export default function VenuesPage() {
   const { activeRegion } = useRegion();
   const { toast } = useToast();
+  const [venueSyncing, setVenueSyncing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVenue, setEditingVenue] = useState<Venue | null>(null);
   const [form, setForm] = useState({
@@ -320,7 +321,31 @@ export default function VenuesPage() {
       </div>
 
       <div className="p-4 space-y-4">
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            disabled={venueSyncing}
+            onClick={async () => {
+              setVenueSyncing(true);
+              try {
+                const res = await apiRequest("POST", "/api/ragic-venue-sync");
+                const data = await res.json();
+                queryClient.invalidateQueries({ queryKey: ["/api/venues", activeRegion] });
+                toast({
+                  title: "Ragic 場館同步完成",
+                  description: `新增 ${data.created} 個場館，既有 ${data.existing} 個，跳過 ${data.skipped} 個${data.errors?.length ? `，${data.errors.length} 個錯誤` : ""}`,
+                });
+              } catch (err: any) {
+                toast({ title: "同步失敗", description: err.message, variant: "destructive" });
+              } finally {
+                setVenueSyncing(false);
+              }
+            }}
+            data-testid="button-ragic-venue-sync"
+          >
+            <RefreshCw className={`h-4 w-4 mr-1.5 ${venueSyncing ? "animate-spin" : ""}`} />
+            {venueSyncing ? "同步中..." : "Ragic 同步"}
+          </Button>
           <Button onClick={openCreate} data-testid="button-add-venue">
             <Plus className="h-4 w-4 mr-1.5" />
             新增場館

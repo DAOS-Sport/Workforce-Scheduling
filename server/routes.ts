@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, insertShiftSchema, insertScheduleSlotSchema, insertVenueShiftTemplateSchema, insertGuidelineSchema, insertGuidelineAckSchema, type InsertAttendanceRecord, type ShiftValidationError } from "@shared/schema";
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
-import { syncFromRagic } from "./ragic";
+import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
 import multer from "multer";
 import * as XLSX from "xlsx";
 
@@ -1028,6 +1028,15 @@ export async function registerRoutes(
       };
 
       res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/ragic-venue-sync", async (_req, res) => {
+    try {
+      const result = await syncVenuesFromRagic();
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
