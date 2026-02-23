@@ -22,6 +22,8 @@ export const venues = pgTable("venues", {
   latitude: real("latitude"),
   longitude: real("longitude"),
   radius: integer("radius").default(100),
+  taxId: text("tax_id"),
+  isInternal: boolean("is_internal").default(false),
 });
 
 export const insertVenueSchema = createInsertSchema(venues).omit({ id: true });

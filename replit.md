@@ -4,8 +4,9 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
-- 2026-02-23: Renamed 松山區 to 台北區; added addresses and GPS coordinates for all 16 venues; VENUE_DATA in ragic.ts now stores address/lat/lng for auto-population on venue sync
-- 2026-02-23: Venue Ragic sync now creates venues with full address and GPS coordinates from VENUE_DATA
+- 2026-02-23: Venues schema expanded: added taxId and isInternal fields; all 28 departments from Ragic imported (23 場館 + 5 內勤部門), each with address, GPS, 統編
+- 2026-02-23: VENUE_DATA now contains all 28 entries including 勞務 venues and internal departments (人力資源處/數位轉型發展處/營運管理處/行銷事業處/駿斯本部)
+- 2026-02-23: Venue cards show 內勤 badge, 統編, and dashed border for internal departments
 - 2026-02-23: Added 教練 as independent role (not mapped to 救生); 教練 employees exist in system but don't appear in shift scheduling grid
 - 2026-02-23: Ragic sync rewritten: role priority (救生>教練>櫃台), 聘雇類別 only accepts 正職/兼職 (約聘/永久/空白 skipped for new), blank fields don't overwrite existing data, unmapped departments skip creation
 - 2026-02-23: Ragic sync restructured: existing employees always get status/name/phone/email/empType updated regardless of role; mapStatus uses whitelist for precision

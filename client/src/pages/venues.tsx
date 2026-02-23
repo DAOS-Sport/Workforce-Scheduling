@@ -53,6 +53,8 @@ export default function VenuesPage() {
     latitude: "",
     longitude: "",
     radius: "100",
+    taxId: "",
+    isInternal: false,
   });
   const [activeTemplateTab, setActiveTemplateTab] = useState("weekday");
   const [weekdayTemplates, setWeekdayTemplates] = useState<TemplateRow[]>([]);
@@ -143,7 +145,7 @@ export default function VenuesPage() {
   });
 
   const resetForm = () => {
-    setForm({ name: "", shortName: "", address: "", latitude: "", longitude: "", radius: "100" });
+    setForm({ name: "", shortName: "", address: "", latitude: "", longitude: "", radius: "100", taxId: "", isInternal: false });
     setEditingVenue(null);
     setWeekdayTemplates([]);
     setWeekendTemplates([]);
@@ -164,6 +166,8 @@ export default function VenuesPage() {
       latitude: venue.latitude?.toString() || "",
       longitude: venue.longitude?.toString() || "",
       radius: venue.radius?.toString() || "100",
+      taxId: venue.taxId || "",
+      isInternal: venue.isInternal || false,
     });
     setDialogOpen(true);
   };
@@ -177,6 +181,8 @@ export default function VenuesPage() {
       latitude: form.latitude ? parseFloat(form.latitude) : null,
       longitude: form.longitude ? parseFloat(form.longitude) : null,
       radius: parseInt(form.radius) || 100,
+      taxId: form.taxId || null,
+      isInternal: form.isInternal,
       regionId,
     };
 
@@ -402,14 +408,38 @@ export default function VenuesPage() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>地址</Label>
-              <Input
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-                placeholder="新北市三重區..."
-                data-testid="input-venue-address"
+
+            <div className="grid grid-cols-[1fr_auto] gap-3">
+              <div className="space-y-2">
+                <Label>地址</Label>
+                <Input
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  placeholder="新北市三重區..."
+                  data-testid="input-venue-address"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>統編</Label>
+                <Input
+                  value={form.taxId}
+                  onChange={(e) => setForm({ ...form, taxId: e.target.value })}
+                  placeholder="66601546"
+                  className="w-28"
+                  data-testid="input-venue-tax-id"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="isInternal"
+                checked={form.isInternal}
+                onChange={(e) => setForm({ ...form, isInternal: e.target.checked })}
+                className="h-4 w-4 rounded border-border"
+                data-testid="checkbox-venue-internal"
               />
+              <Label htmlFor="isInternal" className="text-sm cursor-pointer">內勤部門</Label>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
@@ -534,15 +564,21 @@ function VenueCard({ venue, onEdit }: { venue: Venue; onEdit: () => void }) {
   };
 
   return (
-    <Card className="p-4" data-testid={`card-venue-${venue.id}`}>
+    <Card className={`p-4 ${venue.isInternal ? "border-dashed opacity-80" : ""}`} data-testid={`card-venue-${venue.id}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 mb-2">
-          <div className="p-2 rounded-md bg-primary/10">
-            <Building2 className="h-4 w-4 text-primary" />
+          <div className={`p-2 rounded-md ${venue.isInternal ? "bg-muted" : "bg-primary/10"}`}>
+            <Building2 className={`h-4 w-4 ${venue.isInternal ? "text-muted-foreground" : "text-primary"}`} />
           </div>
           <div>
-            <h3 className="font-medium text-sm">{venue.name}</h3>
-            <p className="text-xs text-muted-foreground">{venue.shortName}</p>
+            <div className="flex items-center gap-1.5">
+              <h3 className="font-medium text-sm">{venue.name}</h3>
+              {venue.isInternal && <Badge variant="outline" className="text-[10px] px-1.5 py-0">內勤</Badge>}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs text-muted-foreground">{venue.shortName}</p>
+              {venue.taxId && <span className="text-[10px] text-muted-foreground/60">統編 {venue.taxId}</span>}
+            </div>
           </div>
         </div>
         <Button
@@ -564,9 +600,11 @@ function VenueCard({ venue, onEdit }: { venue: Venue; onEdit: () => void }) {
         <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground flex-wrap">
           <Navigation className="h-3 w-3 shrink-0" />
           <span>{venue.latitude?.toFixed(4)}, {venue.longitude?.toFixed(4)}</span>
-          <Badge variant="secondary" className="text-[10px]">
-            半徑 {venue.radius}m
-          </Badge>
+          {!venue.isInternal && (
+            <Badge variant="secondary" className="text-[10px]">
+              半徑 {venue.radius}m
+            </Badge>
+          )}
         </div>
       )}
       {renderMiniTemplates(weekdayTemplates, "平日")}
