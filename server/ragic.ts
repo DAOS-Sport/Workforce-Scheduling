@@ -44,13 +44,12 @@ function mapEmploymentType(type: string): string {
   return "full_time";
 }
 
-const ACTIVE_STATUSES = new Set(["在職", "試用"]);
-const INACTIVE_STATUSES = new Set(["離職", "留職停薪", "留停", "合約到期", "退休", "開除", "資遣"]);
-
 function mapStatus(status: string): string | null {
   if (!status) return null;
-  if (ACTIVE_STATUSES.has(status)) return "active";
-  if (INACTIVE_STATUSES.has(status)) return "inactive";
+  if (status === "在職" || status === "試用") return "active";
+  if (status.includes("離職") || status.includes("留") || status.includes("合約到期") ||
+      status.includes("退休") || status.includes("開除") || status.includes("資遣") ||
+      status.includes("停")) return "inactive";
   return null;
 }
 
