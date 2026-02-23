@@ -575,7 +575,7 @@ function VenueCard({ venue, onEdit }: { venue: Venue; onEdit: () => void }) {
           <div>
             <div className="flex items-center gap-1.5">
               <h3 className="font-medium text-sm">{venue.name}</h3>
-              {venue.isInternal && <Badge variant="outline" className="text-[10px] px-1.5 py-0">內勤</Badge>}
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">{venue.isInternal ? "內勤" : "場館"}</Badge>
             </div>
             <div className="flex items-center gap-1.5">
               <p className="text-xs text-muted-foreground">{venue.shortName}</p>
