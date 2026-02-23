@@ -61,9 +61,9 @@ function parseRagicRecord(record: Record<string, any>): RagicEmployee | null {
   if (!name || !employeeCode) return null;
 
   const rawDept = record["部門"];
-  const department = Array.isArray(rawDept) ? rawDept[0] || "" : String(rawDept || "");
+  const department = Array.isArray(rawDept) ? rawDept.join(", ") : String(rawDept || "");
   const rawRole = record["應徵職務"];
-  const roleStr = Array.isArray(rawRole) ? rawRole[0] || "" : String(rawRole || "");
+  const roleStr = Array.isArray(rawRole) ? rawRole.join(", ") : String(rawRole || "");
   const rawType = record["聘雇類別"];
   const typeStr = Array.isArray(rawType) ? rawType[0] || "" : String(rawType || "");
   const rawStatusField = record["在職狀態"];
