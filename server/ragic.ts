@@ -11,8 +11,9 @@ interface RagicEmployee {
   department: string;
   role: string | null;
   rawRole: string;
+  rawStatus: string;
+  status: string | null;
   employmentType: string;
-  status: string;
 }
 
 const VENUE_TO_REGION: Record<string, string> = {
@@ -43,11 +44,14 @@ function mapEmploymentType(type: string): string {
   return "full_time";
 }
 
-function mapStatus(status: string): string {
-  if (status === "在職") return "active";
-  if (status === "離職") return "inactive";
-  if (status === "停職") return "suspended";
-  return "active";
+const ACTIVE_STATUSES = new Set(["在職", "試用"]);
+const INACTIVE_STATUSES = new Set(["離職", "留職停薪", "留停", "合約到期", "退休", "開除", "資遣"]);
+
+function mapStatus(status: string): string | null {
+  if (!status) return null;
+  if (ACTIVE_STATUSES.has(status)) return "active";
+  if (INACTIVE_STATUSES.has(status)) return "inactive";
+  return null;
 }
 
 function parseRagicRecord(record: Record<string, any>): RagicEmployee | null {
@@ -63,8 +67,8 @@ function parseRagicRecord(record: Record<string, any>): RagicEmployee | null {
   const roleStr = Array.isArray(rawRole) ? rawRole[0] || "" : String(rawRole || "");
   const rawType = record["聘雇類別"];
   const typeStr = Array.isArray(rawType) ? rawType[0] || "" : String(rawType || "");
-  const rawStatus = record["在職狀態"];
-  const statusStr = Array.isArray(rawStatus) ? rawStatus[0] || "" : String(rawStatus || "");
+  const rawStatusField = record["在職狀態"];
+  const statusStr = Array.isArray(rawStatusField) ? rawStatusField[0] || "" : String(rawStatusField || "");
 
   return {
     name: name.trim(),
@@ -75,8 +79,9 @@ function parseRagicRecord(record: Record<string, any>): RagicEmployee | null {
     department: department.trim(),
     role: mapRole(roleStr.trim()),
     rawRole: roleStr.trim(),
-    employmentType: mapEmploymentType(typeStr.trim()),
+    rawStatus: statusStr.trim(),
     status: mapStatus(statusStr.trim()),
+    employmentType: mapEmploymentType(typeStr.trim()),
   };
 }
 
@@ -95,9 +100,14 @@ export async function syncFromRagic(): Promise<{
   const params = new URLSearchParams({
     v: "3",
     limit: "1000",
+    _: String(Date.now()),
   });
   const response = await fetch(`${RAGIC_API_URL}?${params.toString()}`, {
-    headers: { Authorization: `Basic ${apiKey}` },
+    headers: {
+      Authorization: `Basic ${apiKey}`,
+      "Cache-Control": "no-cache",
+      "Pragma": "no-cache",
+    },
   });
 
   if (!response.ok) {
@@ -117,6 +127,12 @@ export async function syncFromRagic(): Promise<{
       }
 
       if (!parsed.role) {
+        result.skipped++;
+        continue;
+      }
+
+      if (parsed.status === null) {
+        result.errors.push(`${parsed.name}(${parsed.employeeCode}): 無法辨識在職狀態「${parsed.rawStatus}」，跳過不處理`);
         result.skipped++;
         continue;
       }
@@ -144,7 +160,7 @@ export async function syncFromRagic(): Promise<{
         email: parsed.email || null,
         lineId: parsed.lineId || null,
         regionId,
-        status: isActive ? "active" : "inactive",
+        status: parsed.status,
         role: parsed.role!,
         employmentType: parsed.employmentType,
       };

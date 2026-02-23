@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import cron from "node-cron";
+import { syncFromRagic } from "./ragic";
 
 const app = express();
 const httpServer = createServer(app);
@@ -105,6 +107,23 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+
+      cron.schedule("0 3 * * *", async () => {
+        log("開始執行每日 Ragic 員工同步...", "cron");
+        try {
+          const syncResult = await syncFromRagic();
+          log(
+            `Ragic 同步完成: 新增 ${syncResult.created}, 更新 ${syncResult.updated}, 停用 ${syncResult.deactivated}, 跳過 ${syncResult.skipped}, 錯誤 ${syncResult.errors.length}`,
+            "cron"
+          );
+          if (syncResult.errors.length > 0) {
+            log(`同步錯誤: ${syncResult.errors.slice(0, 10).join("; ")}`, "cron");
+          }
+        } catch (err: any) {
+          log(`Ragic 同步失敗: ${err.message}`, "cron");
+        }
+      }, { timezone: "Asia/Taipei" });
+      log("已排程每日凌晨 3:00 (台灣時間) 自動執行 Ragic 同步", "cron");
     },
   );
 })();
