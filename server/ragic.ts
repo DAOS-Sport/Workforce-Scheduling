@@ -48,14 +48,12 @@ function mapEmploymentType(type: string): string | null {
 }
 
 const ACTIVE_STATUSES = ["在職", "試用"];
-const INACTIVE_STATUSES = ["離職", "留職停薪", "留停", "停職", "合約到期", "退休", "開除", "資遣"];
+const INACTIVE_STATUSES = ["離職", "留職停薪", "合約到期", "退休", "已歿", "資遣", "開除"];
 
 function mapStatus(status: string): string | null {
   if (!status) return null;
   if (ACTIVE_STATUSES.includes(status)) return "active";
-  for (const inactive of INACTIVE_STATUSES) {
-    if (status.includes(inactive)) return "inactive";
-  }
+  if (INACTIVE_STATUSES.includes(status)) return "inactive";
   return null;
 }
 
