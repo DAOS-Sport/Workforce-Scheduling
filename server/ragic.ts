@@ -54,7 +54,7 @@ function mapEmploymentType(type: string): string | null {
 
 const SYNC_ROLES = ["救生", "守望", "櫃台"];
 
-const ACTIVE_STATUSES = ["在職", "試用"];
+const ACTIVE_STATUSES = ["在職"];
 const INACTIVE_STATUSES = ["離職", "留職停薪", "合約到期", "退休", "已歿", "資遣", "開除"];
 
 function mapStatus(status: string): string | null {
