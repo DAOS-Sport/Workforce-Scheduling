@@ -4,6 +4,8 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
+- 2026-02-23: Added LINE GPS clock-in module: LINE webhook receives location messages, Haversine formula compares with venue GPS/radius, auto-determines clock-in/out, replies result in LINE chat. Admin page at /clock-records shows records with status/distance/venue.
+- 2026-02-23: Added clockRecords table (employeeId, venueId, shiftId, clockType, lat/lng, distance, status, failReason, clockTime, matchedVenueName)
 - 2026-02-23: Created 內勤 region (code "D") for 5 internal departments; default tab is now 內勤; region tabs order: 內勤→三蘆戰區→台北區→新竹區
 - 2026-02-23: Fixed regionId lookup: venues/employees pages now use /api/regions API instead of fragile index-based calculation
 - 2026-02-23: Added operationType field to venues (OT/勞務採購/內勤單位), reads from Ragic field 1002826; replaces isInternal checkbox with dropdown; badge shows on all venue cards
@@ -123,3 +125,5 @@ shared/
 - GET /api/portal/guidelines-check/:employeeId
 - POST /api/portal/acknowledge-all
 - POST /api/ragic-sync (sync employees from Ragic database)
+- POST /api/line/webhook (LINE Messaging API webhook for GPS clock-in)
+- GET /api/clock-records?startDate=&endDate=&employeeId= (clock-in records query)

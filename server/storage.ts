@@ -5,6 +5,7 @@ import {
   scheduleSlots, venueShiftTemplates,
   attendanceUploads, attendanceRecords,
   guidelines, guidelineAcknowledgments,
+  clockRecords,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -16,6 +17,7 @@ import {
   type AttendanceRecord, type InsertAttendanceRecord,
   type Guideline, type InsertGuideline,
   type GuidelineAck, type InsertGuidelineAck,
+  type ClockRecord, type InsertClockRecord,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -78,6 +80,11 @@ export interface IStorage {
   getShiftsByEmployeeAndDateRange(employeeId: number, startDate: string, endDate: string): Promise<Shift[]>;
   getShiftsByVenueAndDate(venueId: number, date: string): Promise<Shift[]>;
   getCoworkersByVenueAndDate(venueId: number, date: string, excludeEmployeeId: number): Promise<Employee[]>;
+
+  getAllVenues(): Promise<Venue[]>;
+  createClockRecord(data: InsertClockRecord): Promise<ClockRecord>;
+  getClockRecordsByDateRange(startDate: string, endDate: string): Promise<ClockRecord[]>;
+  getClockRecordsByEmployee(employeeId: number, startDate: string, endDate: string): Promise<ClockRecord[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -374,6 +381,34 @@ export class DatabaseStorage implements IStorage {
     if (coworkerIds.length === 0) return [];
     const uniqueIds = Array.from(new Set(coworkerIds));
     return db.select().from(employees).where(inArray(employees.id, uniqueIds));
+  }
+
+  async getAllVenues(): Promise<Venue[]> {
+    return db.select().from(venues);
+  }
+
+  async createClockRecord(data: InsertClockRecord): Promise<ClockRecord> {
+    const [record] = await db.insert(clockRecords).values(data).returning();
+    return record;
+  }
+
+  async getClockRecordsByDateRange(startDate: string, endDate: string): Promise<ClockRecord[]> {
+    return db.select().from(clockRecords).where(
+      and(
+        gte(clockRecords.clockTime, new Date(startDate + "T00:00:00+08:00")),
+        lte(clockRecords.clockTime, new Date(endDate + "T23:59:59+08:00"))
+      )
+    ).orderBy(desc(clockRecords.clockTime));
+  }
+
+  async getClockRecordsByEmployee(employeeId: number, startDate: string, endDate: string): Promise<ClockRecord[]> {
+    return db.select().from(clockRecords).where(
+      and(
+        eq(clockRecords.employeeId, employeeId),
+        gte(clockRecords.clockTime, new Date(startDate + "T00:00:00+08:00")),
+        lte(clockRecords.clockTime, new Date(endDate + "T23:59:59+08:00"))
+      )
+    ).orderBy(desc(clockRecords.clockTime));
   }
 }
 

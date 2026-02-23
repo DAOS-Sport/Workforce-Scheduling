@@ -195,6 +195,25 @@ export const insertGuidelineAckSchema = createInsertSchema(guidelineAcknowledgme
 export type InsertGuidelineAck = z.infer<typeof insertGuidelineAckSchema>;
 export type GuidelineAck = typeof guidelineAcknowledgments.$inferSelect;
 
+export const clockRecords = pgTable("clock_records", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  venueId: integer("venue_id"),
+  shiftId: integer("shift_id"),
+  clockType: text("clock_type").notNull().default("in"),
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  distance: real("distance"),
+  status: text("status").notNull().default("success"),
+  failReason: text("fail_reason"),
+  clockTime: timestamp("clock_time").defaultNow(),
+  matchedVenueName: text("matched_venue_name"),
+});
+
+export const insertClockRecordSchema = createInsertSchema(clockRecords).omit({ id: true, clockTime: true });
+export type InsertClockRecord = z.infer<typeof insertClockRecordSchema>;
+export type ClockRecord = typeof clockRecords.$inferSelect;
+
 export type RegionCode = "D" | "A" | "B" | "C";
 
 export interface ShiftValidationError {

@@ -1,10 +1,11 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, insertShiftSchema, insertScheduleSlotSchema, insertVenueShiftTemplateSchema, insertGuidelineSchema, insertGuidelineAckSchema, type InsertAttendanceRecord, type ShiftValidationError } from "@shared/schema";
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
+import { verifyLineSignature, handleLineWebhook } from "./line-webhook";
 import multer from "multer";
 import * as XLSX from "xlsx";
 
@@ -1046,6 +1047,65 @@ export async function registerRoutes(
     try {
       const result = await syncFromRagic();
       res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/line/webhook", async (req: Request, res: Response) => {
+    const signature = req.headers["x-line-signature"] as string;
+    const rawBody = req.rawBody ? Buffer.from(req.rawBody as any).toString("utf8") : JSON.stringify(req.body);
+
+    if (!signature || !verifyLineSignature(rawBody, signature)) {
+      console.error("[LINE Webhook] Signature verification failed");
+      res.status(403).json({ message: "Invalid signature" });
+      return;
+    }
+
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    res.status(200).json({ status: "ok" });
+
+    try {
+      await handleLineWebhook(body);
+    } catch (err) {
+      console.error("[LINE Webhook] Error handling event:", err);
+    }
+  });
+
+  app.get("/api/clock-records", async (req, res) => {
+    try {
+      const { startDate, endDate, employeeId } = req.query;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "startDate and endDate required" });
+      }
+      let records;
+      if (employeeId) {
+        records = await storage.getClockRecordsByEmployee(
+          Number(employeeId),
+          startDate as string,
+          endDate as string
+        );
+      } else {
+        records = await storage.getClockRecordsByDateRange(
+          startDate as string,
+          endDate as string
+        );
+      }
+
+      const employeeIds = [...new Set(records.map((r) => r.employeeId))];
+      const employeeMap = new Map<number, any>();
+      for (const id of employeeIds) {
+        const emp = await storage.getEmployee(id);
+        if (emp) employeeMap.set(id, emp);
+      }
+
+      const enriched = records.map((r) => ({
+        ...r,
+        employeeName: employeeMap.get(r.employeeId)?.name || "未知",
+        employeeCode: employeeMap.get(r.employeeId)?.employeeCode || "",
+      }));
+
+      res.json(enriched);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

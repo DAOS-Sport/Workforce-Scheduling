@@ -15,6 +15,7 @@ import EmployeesPage from "@/pages/employees";
 import VenuesPage from "@/pages/venues";
 import AttendancePage from "@/pages/attendance";
 import GuidelinesPage from "@/pages/guidelines";
+import ClockRecordsPage from "@/pages/clock-records";
 import PortalPage from "@/pages/portal";
 
 function AdminRouter() {
@@ -26,6 +27,7 @@ function AdminRouter() {
       <Route path="/venues" component={VenuesPage} />
       <Route path="/attendance" component={AttendancePage} />
       <Route path="/guidelines" component={GuidelinesPage} />
+      <Route path="/clock-records" component={ClockRecordsPage} />
       <Route component={NotFound} />
     </Switch>
   );
