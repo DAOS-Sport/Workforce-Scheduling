@@ -5,7 +5,7 @@ import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, ins
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
-import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook } from "./line-webhook";
+import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn } from "./line-webhook";
 import multer from "multer";
 import * as XLSX from "xlsx";
 
@@ -1087,6 +1087,21 @@ export async function registerRoutes(
       await handleLineWebhook(body);
     } catch (err) {
       console.error("[LINE Webhook] Error handling event:", err);
+    }
+  });
+
+  app.post("/api/liff/clock-in", async (req: Request, res: Response) => {
+    try {
+      const { lineUserId, latitude, longitude, accuracy } = req.body;
+      if (!lineUserId || latitude === undefined || longitude === undefined) {
+        return res.status(400).json({ message: "lineUserId, latitude, longitude are required" });
+      }
+      console.log(`[LIFF Clock-in] User: ${lineUserId}, Lat: ${latitude}, Lng: ${longitude}, Accuracy: ${accuracy}m`);
+      const result = await processClockIn(lineUserId, latitude, longitude);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[LIFF Clock-in] Error:", err);
+      res.status(500).json({ message: err.message });
     }
   });
 

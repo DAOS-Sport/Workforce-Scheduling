@@ -17,6 +17,7 @@ import AttendancePage from "@/pages/attendance";
 import GuidelinesPage from "@/pages/guidelines";
 import ClockRecordsPage from "@/pages/clock-records";
 import PortalPage from "@/pages/portal";
+import LiffClockInPage from "@/pages/liff-clock-in";
 
 function AdminRouter() {
   return (
@@ -62,9 +63,14 @@ function AdminLayout() {
 function AppRouter() {
   const [location] = useLocation();
   const isPortal = location.startsWith("/portal");
+  const isLiff = location.startsWith("/liff");
 
   if (isPortal) {
     return <PortalPage />;
+  }
+
+  if (isLiff) {
+    return <LiffClockInPage />;
   }
 
   return <AdminLayout />;
