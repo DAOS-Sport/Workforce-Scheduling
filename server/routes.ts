@@ -24,7 +24,7 @@ export async function registerRoutes(
     const region = await storage.getRegionByCode(regionCode);
     if (!region) return res.json([]);
     const allEmployees = await storage.getEmployeesByRegion(region.id);
-    const DISPLAY_ROLES = ["救生", "守望", "櫃台"];
+    const DISPLAY_ROLES = ["救生", "守望", "櫃台", "教練", "主管職"];
     const employees = allEmployees.filter(
       (e) => DISPLAY_ROLES.includes(e.role) && e.status === "active"
     );
