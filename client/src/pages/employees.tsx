@@ -22,6 +22,13 @@ const ROLE_LABELS: Record<string, string> = {
   "守望": "守望員",
   "櫃台": "行政櫃台",
   "教練": "教練",
+  "機電": "機電人員",
+  "清潔": "清潔人員",
+  "行政專員": "行政專員",
+  "資訊工程師": "資訊工程師",
+  "主管職": "主管職",
+  "在校實習": "在校實習",
+  "無職": "無職",
 };
 
 const EMPLOYMENT_TYPE_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
@@ -62,7 +69,6 @@ export default function EmployeesPage() {
   const filteredEmployees = employees.filter(
     (e) => {
       if (e.status === "inactive") return false;
-      if (e.role === "教練") return false;
       const matchesSearch = e.name.includes(search) ||
         e.employeeCode.includes(search) ||
         (e.phone && e.phone.includes(search));
@@ -370,8 +376,16 @@ export default function EmployeesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="救生">救生員</SelectItem>
+                    <SelectItem value="守望">守望員</SelectItem>
                     <SelectItem value="櫃台">行政櫃台</SelectItem>
                     <SelectItem value="教練">教練</SelectItem>
+                    <SelectItem value="機電">機電人員</SelectItem>
+                    <SelectItem value="清潔">清潔人員</SelectItem>
+                    <SelectItem value="行政專員">行政專員</SelectItem>
+                    <SelectItem value="資訊工程師">資訊工程師</SelectItem>
+                    <SelectItem value="主管職">主管職</SelectItem>
+                    <SelectItem value="在校實習">在校實習</SelectItem>
+                    <SelectItem value="無職">無職</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -9,7 +9,7 @@ interface RagicEmployee {
   email: string;
   lineId: string;
   department: string;
-  role: string | null;
+  role: string;
   rawRole: string;
   rawStatus: string;
   rawEmploymentType: string;
@@ -32,13 +32,19 @@ function mapDepartmentToRegionCode(department: string): string | null {
   return null;
 }
 
-function mapRole(jobTitle: string): string | null {
-  if (!jobTitle) return null;
+function mapRole(jobTitle: string): string {
+  if (!jobTitle) return "無職";
   if (jobTitle.includes("救生")) return "救生";
   if (jobTitle.includes("守望")) return "守望";
   if (jobTitle.includes("教練")) return "教練";
   if (jobTitle.includes("櫃台") || jobTitle.includes("櫃檯")) return "櫃台";
-  return null;
+  if (jobTitle.includes("機電")) return "機電";
+  if (jobTitle.includes("清潔")) return "清潔";
+  if (jobTitle.includes("行政專員")) return "行政專員";
+  if (jobTitle.includes("資訊工程師")) return "資訊工程師";
+  if (jobTitle.includes("主管")) return "主管職";
+  if (jobTitle.includes("實習") || jobTitle.includes("在校")) return "在校實習";
+  return "無職";
 }
 
 function mapEmploymentType(type: string): string | null {
@@ -46,6 +52,8 @@ function mapEmploymentType(type: string): string | null {
   if (type === "兼職") return "part_time";
   return null;
 }
+
+const SYNC_ROLES = ["救生", "守望", "櫃台"];
 
 const ACTIVE_STATUSES = ["在職", "試用"];
 const INACTIVE_STATUSES = ["離職", "留職停薪", "合約到期", "退休", "已歿", "資遣", "開除"];
@@ -182,8 +190,8 @@ export async function syncFromRagic(): Promise<{
           result.deactivated++;
         }
       } else if (isActive) {
-        if (!parsed.role) {
-          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 職務「${parsed.rawRole}」無法對應系統角色，跳過新增`);
+        if (!SYNC_ROLES.includes(parsed.role)) {
+          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 職務「${parsed.rawRole}」→${parsed.role}，非排班職務，跳過新增`);
           result.skipped++;
           continue;
         }
