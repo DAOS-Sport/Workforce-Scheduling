@@ -4,6 +4,8 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
+- 2026-02-23: Created 內勤 region (code "D") for 5 internal departments; default tab is now 內勤; region tabs order: 內勤→三蘆戰區→台北區→新竹區
+- 2026-02-23: Fixed regionId lookup: venues/employees pages now use /api/regions API instead of fragile index-based calculation
 - 2026-02-23: Venues schema expanded: added taxId and isInternal fields; all 28 departments from Ragic imported (23 場館 + 5 內勤部門), each with address, GPS, 統編
 - 2026-02-23: VENUE_DATA now contains all 28 entries including 勞務 venues and internal departments (人力資源處/數位轉型發展處/營運管理處/行銷事業處/駿斯本部)
 - 2026-02-23: Venue cards show 內勤 badge, 統編, and dashed border for internal departments

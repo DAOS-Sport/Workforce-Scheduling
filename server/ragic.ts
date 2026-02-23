@@ -55,11 +55,11 @@ const VENUE_DATA: Record<string, VenueInfo> = {
   "台灣科技大學": { region: "B", address: "台北市大安區基隆路四段43號", lat: 25.0127, lng: 121.5416, taxId: COMPANY_TAX_ID, isInternal: false },
   "新竹科學園區": { region: "C", address: "新竹市東區新安路2號", lat: 24.7862, lng: 120.9976, taxId: COMPANY_TAX_ID, isInternal: false },
   "新屋高中": { region: "C", address: "桃園市新屋區中興路111號", lat: 24.9722, lng: 121.1061, taxId: COMPANY_TAX_ID, isInternal: false },
-  "駿斯運動事業股份有限公司": { region: "A", address: HQ_ADDRESS, lat: HQ_LAT, lng: HQ_LNG, taxId: COMPANY_TAX_ID, isInternal: true },
-  "人力資源處": { region: "A", address: HQ_ADDRESS, lat: HQ_LAT, lng: HQ_LNG, taxId: COMPANY_TAX_ID, isInternal: true },
-  "數位轉型發展處": { region: "A", address: HQ_ADDRESS, lat: HQ_LAT, lng: HQ_LNG, taxId: COMPANY_TAX_ID, isInternal: true },
-  "營運管理處": { region: "A", address: HQ_ADDRESS, lat: HQ_LAT, lng: HQ_LNG, taxId: COMPANY_TAX_ID, isInternal: true },
-  "行銷事業處": { region: "A", address: HQ_ADDRESS, lat: HQ_LAT, lng: HQ_LNG, taxId: COMPANY_TAX_ID, isInternal: true },
+  "駿斯運動事業股份有限公司": { region: "D", address: HQ_ADDRESS, lat: HQ_LAT, lng: HQ_LNG, taxId: COMPANY_TAX_ID, isInternal: true },
+  "人力資源處": { region: "D", address: HQ_ADDRESS, lat: HQ_LAT, lng: HQ_LNG, taxId: COMPANY_TAX_ID, isInternal: true },
+  "數位轉型發展處": { region: "D", address: HQ_ADDRESS, lat: HQ_LAT, lng: HQ_LNG, taxId: COMPANY_TAX_ID, isInternal: true },
+  "營運管理處": { region: "D", address: HQ_ADDRESS, lat: HQ_LAT, lng: HQ_LNG, taxId: COMPANY_TAX_ID, isInternal: true },
+  "行銷事業處": { region: "D", address: HQ_ADDRESS, lat: HQ_LAT, lng: HQ_LNG, taxId: COMPANY_TAX_ID, isInternal: true },
 };
 
 const VENUE_TO_REGION: Record<string, string> = Object.fromEntries(

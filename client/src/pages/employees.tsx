@@ -15,7 +15,6 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Search, UserPlus, Phone, Mail, Edit2, RefreshCw, Download } from "lucide-react";
 import type { Employee } from "@shared/schema";
-import { REGIONS_DATA } from "@shared/schema";
 
 const ROLE_LABELS: Record<string, string> = {
   "救生": "救生員",
@@ -60,7 +59,10 @@ export default function EmployeesPage() {
   });
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number; skipped: number; deactivated: number; errors: string[] } | null>(null);
 
-  const regionId = REGIONS_DATA.findIndex((r) => r.code === activeRegion) + 1;
+  const { data: regionsData = [] } = useQuery<{ id: number; name: string; code: string }[]>({
+    queryKey: ["/api/regions"],
+  });
+  const regionId = regionsData.find((r) => r.code === activeRegion)?.id ?? 0;
 
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees", activeRegion],

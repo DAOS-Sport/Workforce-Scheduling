@@ -108,6 +108,7 @@ export type InsertVenueShiftTemplate = z.infer<typeof insertVenueShiftTemplateSc
 export type VenueShiftTemplate = typeof venueShiftTemplates.$inferSelect;
 
 export const REGIONS_DATA = [
+  { name: "內勤", code: "D" },
   { name: "三蘆戰區", code: "A" },
   { name: "台北區", code: "B" },
   { name: "新竹區", code: "C" },
@@ -193,7 +194,7 @@ export const insertGuidelineAckSchema = createInsertSchema(guidelineAcknowledgme
 export type InsertGuidelineAck = z.infer<typeof insertGuidelineAckSchema>;
 export type GuidelineAck = typeof guidelineAcknowledgments.$inferSelect;
 
-export type RegionCode = "A" | "B" | "C";
+export type RegionCode = "D" | "A" | "B" | "C";
 
 export interface ShiftValidationError {
   type: "seven_day_rest" | "daily_12h" | "rest_11h" | "inactive_employee";

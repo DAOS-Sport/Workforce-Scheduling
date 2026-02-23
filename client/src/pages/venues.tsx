@@ -15,7 +15,6 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, MapPin, Plus, Edit2, Navigation, Trash2, LifeBuoy, UserRound, Sparkles, ShieldCheck, Clock, RefreshCw } from "lucide-react";
 import type { Venue, VenueShiftTemplate } from "@shared/schema";
-import { REGIONS_DATA } from "@shared/schema";
 
 const ROLE_OPTIONS = ["救生", "守望", "櫃檯", "清潔", "管理"];
 
@@ -60,7 +59,10 @@ export default function VenuesPage() {
   const [weekdayTemplates, setWeekdayTemplates] = useState<TemplateRow[]>([]);
   const [weekendTemplates, setWeekendTemplates] = useState<TemplateRow[]>([]);
 
-  const regionId = REGIONS_DATA.findIndex((r) => r.code === activeRegion) + 1;
+  const { data: regionsData = [] } = useQuery<{ id: number; name: string; code: string }[]>({
+    queryKey: ["/api/regions"],
+  });
+  const regionId = regionsData.find((r) => r.code === activeRegion)?.id ?? 0;
 
   const { data: venues = [], isLoading } = useQuery<Venue[]>({
     queryKey: ["/api/venues", activeRegion],

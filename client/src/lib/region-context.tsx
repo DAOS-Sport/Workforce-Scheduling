@@ -12,7 +12,7 @@ const RegionContext = createContext<RegionContextType>({
 });
 
 export function RegionProvider({ children }: { children: React.ReactNode }) {
-  const [activeRegion, setActiveRegion] = useState<RegionCode>("A");
+  const [activeRegion, setActiveRegion] = useState<RegionCode>("D");
 
   return (
     <RegionContext.Provider value={{ activeRegion, setActiveRegion }}>
