@@ -215,6 +215,7 @@ export default function EmployeesPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>聘雇</TableHead>
                 <TableHead>職務</TableHead>
+                <TableHead>狀態</TableHead>
                 <TableHead className="w-[60px]">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -222,7 +223,7 @@ export default function EmployeesPage() {
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-5 w-20" />
                       </TableCell>
@@ -231,12 +232,13 @@ export default function EmployeesPage() {
                 ))
               ) : filteredEmployees.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     {search ? "找不到符合的員工" : "尚無員工資料"}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredEmployees.map((emp) => {
+                  const statusInfo = STATUS_MAP[emp.status] || STATUS_MAP.active;
                   const empTypeInfo = EMPLOYMENT_TYPE_LABELS[emp.employmentType] || EMPLOYMENT_TYPE_LABELS.full_time;
                   return (
                     <TableRow key={emp.id} data-testid={`row-employee-${emp.id}`}>
@@ -269,6 +271,9 @@ export default function EmployeesPage() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">{ROLE_LABELS[emp.role] || emp.role}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                       </TableCell>
                       <TableCell>
                         <Button
