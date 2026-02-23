@@ -6,9 +6,10 @@ A workforce scheduling management system for PT (personal training) staff across
 ## Recent Changes
 - 2026-02-23: Created 內勤 region (code "D") for 5 internal departments; default tab is now 內勤; region tabs order: 內勤→三蘆戰區→台北區→新竹區
 - 2026-02-23: Fixed regionId lookup: venues/employees pages now use /api/regions API instead of fragile index-based calculation
-- 2026-02-23: Venues schema expanded: added taxId and isInternal fields; all 28 departments from Ragic imported (23 場館 + 5 內勤部門), each with address, GPS, 統編
+- 2026-02-23: Added operationType field to venues (OT/勞務採購/內勤單位), reads from Ragic field 1002826; replaces isInternal checkbox with dropdown; badge shows on all venue cards
+- 2026-02-23: Venues schema expanded: added taxId, isInternal, operationType fields; all 28 departments from Ragic imported (23 場館 + 5 內勤部門), each with address, GPS, 統編
 - 2026-02-23: VENUE_DATA now contains all 28 entries including 勞務 venues and internal departments (人力資源處/數位轉型發展處/營運管理處/行銷事業處/駿斯本部)
-- 2026-02-23: Venue cards show 內勤 badge, 統編, and dashed border for internal departments
+- 2026-02-23: Venue cards show operationType badge (OT/勞務採購/內勤單位), 統編, and dashed border for 內勤單位
 - 2026-02-23: Added 教練 as independent role (not mapped to 救生); 教練 employees exist in system but don't appear in shift scheduling grid
 - 2026-02-23: Ragic sync rewritten: role priority (救生>教練>櫃台), 聘雇類別 only accepts 正職/兼職 (約聘/永久/空白 skipped for new), blank fields don't overwrite existing data, unmapped departments skip creation
 - 2026-02-23: Ragic sync restructured: existing employees always get status/name/phone/email/empType updated regardless of role; mapStatus uses whitelist for precision
