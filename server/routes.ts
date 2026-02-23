@@ -22,7 +22,11 @@ export async function registerRoutes(
     const { regionCode } = req.params;
     const region = await storage.getRegionByCode(regionCode);
     if (!region) return res.json([]);
-    const employees = await storage.getEmployeesByRegion(region.id);
+    const allEmployees = await storage.getEmployeesByRegion(region.id);
+    const DISPLAY_ROLES = ["救生", "守望", "櫃台"];
+    const employees = allEmployees.filter(
+      (e) => DISPLAY_ROLES.includes(e.role) && e.status === "active"
+    );
     res.json(employees);
   });
 
