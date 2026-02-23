@@ -661,12 +661,12 @@ export default function SchedulePage() {
                     });
                     const labelBg = hasAnyShortage ? VENUE_BG_SHORT : VENUE_BG_OK;
                     return (
-                    <tr key={`summary-${venue.id}`}>
+                    <tr key={`summary-${venue.id}`} style={{ height: 36 }}>
                       <td
-                        className="p-1 border-b border-r text-left sticky left-0 z-[5]"
+                        className="p-2 border-b border-r text-left sticky left-0 z-[5]"
                         style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, backgroundColor: labelBg }}
                       >
-                        <span className="font-medium text-xs text-white/80 whitespace-nowrap" data-testid={`text-venue-summary-${venue.id}`}>
+                        <span className="font-medium text-xs text-white whitespace-nowrap" data-testid={`text-venue-summary-${venue.id}`}>
                           {venue.shortName}
                         </span>
                       </td>
@@ -682,26 +682,28 @@ export default function SchedulePage() {
                         return (
                           <td
                             key={di}
-                            className="p-0.5 border-b border-r text-center align-middle"
-                            style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, backgroundColor: cellBg }}
+                            className="p-0.5 border-b border-r text-center align-middle overflow-hidden"
+                            style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, maxWidth: COL_DATE_WIDTH, backgroundColor: cellBg }}
                             data-testid={`summary-cell-${venue.id}-${dateStr}`}
                           >
                             <button
-                              className="w-full flex items-center justify-center gap-1 flex-wrap py-0.5 rounded hover:brightness-125 transition-all cursor-pointer"
+                              className="w-full h-full flex items-center justify-center gap-0.5 py-0.5 rounded hover:brightness-125 transition-all cursor-pointer overflow-hidden"
                               onClick={() => openRequirementsPanel(venue.id, dateStr)}
                               data-testid={`button-req-${venue.id}-${dateStr}`}
                             >
                               {hasRequirements ? (
                                 roleShortages && roleShortages.size > 0 ? (
-                                  Array.from(roleShortages.entries()).map(([role, count]) => {
-                                    const Icon = ROLE_ICON_MAP[role] || UserRound;
-                                    return (
-                                      <span key={role} className="inline-flex items-center gap-0.5 text-white text-[9px] font-bold">
-                                        <Icon className="h-2.5 w-2.5" />
-                                        -{count}
-                                      </span>
-                                    );
-                                  })
+                                  <span className="inline-flex items-center gap-0.5 text-white text-[9px] font-bold truncate">
+                                    {Array.from(roleShortages.entries()).map(([role, count]) => {
+                                      const Icon = ROLE_ICON_MAP[role] || UserRound;
+                                      return (
+                                        <span key={role} className="inline-flex items-center gap-0.5">
+                                          <Icon className="h-2.5 w-2.5 shrink-0" />
+                                          -{count}
+                                        </span>
+                                      );
+                                    })}
+                                  </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-0.5 text-white text-[9px] font-bold">
                                     <Check className="h-2.5 w-2.5" />
