@@ -13,6 +13,11 @@ export function verifyLineSignature(body: string, signature: string): boolean {
   return hash === signature;
 }
 
+export function verifyForwardedRequest(secret: string): boolean {
+  if (!LINE_CHANNEL_SECRET) return false;
+  return secret === LINE_CHANNEL_SECRET;
+}
+
 function haversineDistance(
   lat1: number, lng1: number,
   lat2: number, lng2: number

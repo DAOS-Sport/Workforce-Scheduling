@@ -5,7 +5,7 @@ import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, ins
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
-import { verifyLineSignature, handleLineWebhook } from "./line-webhook";
+import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook } from "./line-webhook";
 import multer from "multer";
 import * as XLSX from "xlsx";
 
@@ -1054,15 +1054,22 @@ export async function registerRoutes(
 
   app.post("/api/line/webhook", async (req: Request, res: Response) => {
     const signature = req.headers["x-line-signature"] as string;
+    const forwardSecret = req.headers["x-forward-secret"] as string;
     const rawBody = req.rawBody ? Buffer.from(req.rawBody as any).toString("utf8") : JSON.stringify(req.body);
 
-    if (!signature || !verifyLineSignature(rawBody, signature)) {
-      console.error("[LINE Webhook] Signature verification failed");
+    const isDirectLine = signature && verifyLineSignature(rawBody, signature);
+    const isForwarded = forwardSecret && verifyForwardedRequest(forwardSecret);
+
+    if (!isDirectLine && !isForwarded) {
+      console.error("[LINE Webhook] Authentication failed (neither LINE signature nor forward secret valid)");
       res.status(403).json({ message: "Invalid signature" });
       return;
     }
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    if (isForwarded) {
+      console.log("[LINE Webhook] Received forwarded request with", (body.events || []).length, "events");
+    }
     res.status(200).json({ status: "ok" });
 
     try {
