@@ -650,16 +650,18 @@ export default function SchedulePage() {
               ) : (
                 (() => {
                   const activeVenues = venues.filter((v) => venuesWithRequirements.has(v.id));
-                  const VENUE_BG_OK = "rgba(34,197,94,0.25)";
-                  const VENUE_BG_SHORT = "rgba(239,68,68,0.25)";
-                  const VENUE_BG_NONE = "#1d283a";
+                  const VENUE_LABEL_OK = "#1a3a2a";
+                  const VENUE_LABEL_SHORT = "#3a1a1a";
+                  const VENUE_CELL_OK = "#1a3a2a";
+                  const VENUE_CELL_SHORT = "#3a1a1a";
+                  const VENUE_CELL_NONE = "#1d283a";
                   const venueRows = activeVenues.map((venue) => {
                     const hasAnyShortage = monthDates.some((d) => {
                       const key = `${venue.id}-${format(d, "yyyy-MM-dd")}`;
                       const sh = venueDateShortage.get(key);
                       return sh && sh.size > 0;
                     });
-                    const labelBg = hasAnyShortage ? VENUE_BG_SHORT : VENUE_BG_OK;
+                    const labelBg = hasAnyShortage ? VENUE_LABEL_SHORT : VENUE_LABEL_OK;
                     return (
                     <tr key={`summary-${venue.id}`} style={{ height: 36 }}>
                       <td
@@ -677,8 +679,8 @@ export default function SchedulePage() {
                         const cellSlots = slotsByVenueDate.get(key) || [];
                         const hasRequirements = cellSlots.length > 0;
                         const cellBg = hasRequirements
-                          ? (roleShortages && roleShortages.size > 0 ? VENUE_BG_SHORT : VENUE_BG_OK)
-                          : VENUE_BG_NONE;
+                          ? (roleShortages && roleShortages.size > 0 ? VENUE_CELL_SHORT : VENUE_CELL_OK)
+                          : VENUE_CELL_NONE;
                         return (
                           <td
                             key={di}
@@ -693,7 +695,7 @@ export default function SchedulePage() {
                             >
                               {hasRequirements ? (
                                 roleShortages && roleShortages.size > 0 ? (
-                                  <span className="inline-flex items-center gap-0.5 text-white text-[9px] font-bold truncate">
+                                  <span className="inline-flex items-center gap-0.5 text-red-300 text-[9px] font-bold truncate">
                                     {Array.from(roleShortages.entries()).map(([role, count]) => {
                                       const Icon = ROLE_ICON_MAP[role] || UserRound;
                                       return (
@@ -705,7 +707,7 @@ export default function SchedulePage() {
                                     })}
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-0.5 text-white text-[9px] font-bold">
+                                  <span className="inline-flex items-center gap-0.5 text-green-300 text-[9px] font-bold">
                                     <Check className="h-2.5 w-2.5" />
                                     OK
                                   </span>
