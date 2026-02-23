@@ -9,7 +9,8 @@ interface RagicEmployee {
   email: string;
   lineId: string;
   department: string;
-  role: string;
+  role: string | null;
+  rawRole: string;
   employmentType: string;
   status: string;
 }
@@ -29,12 +30,11 @@ function mapDepartmentToRegionCode(department: string): string | null {
   return null;
 }
 
-function mapRole(jobTitle: string): string {
-  if (!jobTitle) return "pt";
+function mapRole(jobTitle: string): string | null {
+  if (!jobTitle) return null;
   if (jobTitle.includes("救生")) return "救生";
-  if (jobTitle.includes("櫃台") || jobTitle.includes("行政")) return "櫃台";
-  if (jobTitle.includes("教練")) return "救生";
-  return "pt";
+  if (jobTitle.includes("櫃台") || jobTitle.includes("櫃檯") || jobTitle.includes("行政")) return "櫃台";
+  return null;
 }
 
 function mapEmploymentType(type: string): string {
@@ -74,6 +74,7 @@ function parseRagicRecord(record: Record<string, any>): RagicEmployee | null {
     lineId: String(record["個人LINE ID"] || "").trim(),
     department: department.trim(),
     role: mapRole(roleStr.trim()),
+    rawRole: roleStr.trim(),
     employmentType: mapEmploymentType(typeStr.trim()),
     status: mapStatus(statusStr.trim()),
   };
@@ -118,6 +119,12 @@ export async function syncFromRagic(): Promise<{
         continue;
       }
 
+      if (!parsed.role) {
+        result.errors.push(`${parsed.name}(${parsed.employeeCode}): 職務「${parsed.rawRole}」非行政櫃台或救生員，跳過`);
+        result.skipped++;
+        continue;
+      }
+
       syncedCodes.add(parsed.employeeCode);
 
       const regionCode = mapDepartmentToRegionCode(parsed.department);
@@ -143,7 +150,7 @@ export async function syncFromRagic(): Promise<{
         lineId: parsed.lineId || null,
         regionId,
         status: "active",
-        role: parsed.role,
+        role: parsed.role!,
         employmentType: parsed.employmentType,
       };
 
