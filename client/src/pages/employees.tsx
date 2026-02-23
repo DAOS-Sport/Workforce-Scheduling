@@ -64,6 +64,7 @@ export default function EmployeesPage() {
   const filteredEmployees = employees.filter(
     (e) => {
       if (e.status === "inactive") return false;
+      if (e.role === "教練") return false;
       const matchesSearch = e.name.includes(search) ||
         e.employeeCode.includes(search) ||
         (e.phone && e.phone.includes(search));
