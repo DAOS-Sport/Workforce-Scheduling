@@ -17,24 +17,35 @@ interface RagicEmployee {
   employmentType: string | null;
 }
 
-const VENUE_TO_REGION: Record<string, string> = {
-  "新北高中": "A",
-  "三民高中": "A",
-  "三重商工": "A",
-  "新莊國中": "A",
-  "松山國小": "B",
-  "國防醫學大學": "B",
-  "士東國小": "B",
-  "大湖國小": "B",
-  "溪口國小": "B",
-  "建成國中": "B",
-  "士林國小": "B",
-  "義方國小": "B",
-  "百齡高中": "B",
-  "清江國小": "B",
-  "新竹科學園區": "C",
-  "新屋高中": "C",
+interface VenueInfo {
+  region: string;
+  address: string;
+  lat: number;
+  lng: number;
+}
+
+const VENUE_DATA: Record<string, VenueInfo> = {
+  "新北高中": { region: "A", address: "新北市三重區三信路1號", lat: 25.0712, lng: 121.4956 },
+  "三民高中": { region: "A", address: "新北市蘆洲區三民路60號", lat: 25.0834, lng: 121.4789 },
+  "三重商工": { region: "A", address: "新北市三重區中正北路163號", lat: 25.0645, lng: 121.4873 },
+  "新莊國中": { region: "A", address: "新北市新莊區中正路211號", lat: 25.0358, lng: 121.4520 },
+  "松山國小": { region: "B", address: "台北市松山區八德路四段746號", lat: 25.0498, lng: 121.5785 },
+  "國防醫學大學": { region: "B", address: "台北市內湖區民權東路六段161號", lat: 25.0640, lng: 121.6076 },
+  "士東國小": { region: "B", address: "台北市士林區中山北路六段392號", lat: 25.1110, lng: 121.5275 },
+  "大湖國小": { region: "B", address: "台北市內湖區大湖山莊街170號", lat: 25.0832, lng: 121.6016 },
+  "溪口國小": { region: "B", address: "台北市文山區景福街225號", lat: 24.9893, lng: 121.5391 },
+  "建成國中": { region: "B", address: "台北市大同區長安西路37-1號", lat: 25.0513, lng: 121.5212 },
+  "士林國小": { region: "B", address: "台北市士林區大東路165號", lat: 25.0937, lng: 121.5253 },
+  "義方國小": { region: "B", address: "台北市北投區珠海路155號", lat: 25.1326, lng: 121.5065 },
+  "百齡高中": { region: "B", address: "台北市士林區承德路四段177號", lat: 25.0867, lng: 121.5213 },
+  "清江國小": { region: "B", address: "台北市北投區公館路220號", lat: 25.1218, lng: 121.5029 },
+  "新竹科學園區": { region: "C", address: "新竹市東區新安路2號", lat: 24.7862, lng: 120.9976 },
+  "新屋高中": { region: "C", address: "桃園市新屋區中興路111號", lat: 24.9722, lng: 121.1061 },
 };
+
+const VENUE_TO_REGION: Record<string, string> = Object.fromEntries(
+  Object.entries(VENUE_DATA).map(([k, v]) => [k, v.region])
+);
 
 const INTERNAL_DEPTS = ["駿斯運動事業股份有限公司", "人力資源處", "數位轉型發展處", "營運管理處", "行銷事業處"];
 
@@ -269,16 +280,16 @@ export async function syncVenuesFromRagic(): Promise<{
       continue;
     }
 
-    const regionCode = VENUE_TO_REGION[dept];
-    if (!regionCode) {
+    const venueInfo = VENUE_DATA[dept];
+    if (!venueInfo) {
       result.errors.push(`${dept}: 無對應區域，跳過新增`);
       result.skipped++;
       continue;
     }
 
-    const regionId = regionMap.get(regionCode);
+    const regionId = regionMap.get(venueInfo.region);
     if (!regionId) {
-      result.errors.push(`${dept}: 區域代碼「${regionCode}」不存在`);
+      result.errors.push(`${dept}: 區域代碼「${venueInfo.region}」不存在`);
       result.skipped++;
       continue;
     }
@@ -288,7 +299,9 @@ export async function syncVenuesFromRagic(): Promise<{
         name: dept,
         shortName: dept,
         regionId,
-        address: "",
+        address: venueInfo.address,
+        latitude: venueInfo.lat,
+        longitude: venueInfo.lng,
       });
       result.created++;
     } catch (err: any) {

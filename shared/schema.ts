@@ -107,7 +107,7 @@ export type VenueShiftTemplate = typeof venueShiftTemplates.$inferSelect;
 
 export const REGIONS_DATA = [
   { name: "三蘆戰區", code: "A" },
-  { name: "松山區", code: "B" },
+  { name: "台北區", code: "B" },
   { name: "新竹區", code: "C" },
 ] as const;
 
