@@ -21,9 +21,6 @@ const ROLE_LABELS: Record<string, string> = {
   "救生": "救生員",
   "櫃台": "行政櫃台",
   "教練": "教練",
-  "pt": "PT教練",
-  "manager": "管理員",
-  "admin": "系統管理",
 };
 
 const EMPLOYMENT_TYPE_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
@@ -374,9 +371,6 @@ export default function EmployeesPage() {
                     <SelectItem value="救生">救生員</SelectItem>
                     <SelectItem value="櫃台">行政櫃台</SelectItem>
                     <SelectItem value="教練">教練</SelectItem>
-                    <SelectItem value="pt">PT教練</SelectItem>
-                    <SelectItem value="manager">管理員</SelectItem>
-                    <SelectItem value="admin">系統管理</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
