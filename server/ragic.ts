@@ -95,7 +95,6 @@ export async function syncFromRagic(): Promise<{
   const params = new URLSearchParams({
     v: "3",
     limit: "1000",
-    where: JSON.stringify({ "3000945": "在職" }),
   });
   const response = await fetch(`${RAGIC_API_URL}?${params.toString()}`, {
     headers: { Authorization: `Basic ${apiKey}` },
@@ -109,8 +108,6 @@ export async function syncFromRagic(): Promise<{
   const regions = await storage.getRegions();
   const regionMap = new Map(regions.map((r) => [r.code, r.id]));
 
-  const syncedCodes = new Set<string>();
-
   for (const [ragicId, record] of Object.entries(data)) {
     try {
       const parsed = parseRagicRecord(record as Record<string, any>);
@@ -120,12 +117,9 @@ export async function syncFromRagic(): Promise<{
       }
 
       if (!parsed.role) {
-        result.errors.push(`${parsed.name}(${parsed.employeeCode}): 職務「${parsed.rawRole}」非行政櫃台或救生員，跳過`);
         result.skipped++;
         continue;
       }
-
-      syncedCodes.add(parsed.employeeCode);
 
       const regionCode = mapDepartmentToRegionCode(parsed.department);
       if (!regionCode) {
@@ -141,6 +135,7 @@ export async function syncFromRagic(): Promise<{
         continue;
       }
 
+      const isActive = parsed.status === "active";
       const existing = await storage.getEmployeeByCode(parsed.employeeCode);
       const employeeData = {
         name: parsed.name,
@@ -149,7 +144,7 @@ export async function syncFromRagic(): Promise<{
         email: parsed.email || null,
         lineId: parsed.lineId || null,
         regionId,
-        status: "active",
+        status: isActive ? "active" : "inactive",
         role: parsed.role!,
         employmentType: parsed.employmentType,
       };
@@ -158,22 +153,17 @@ export async function syncFromRagic(): Promise<{
         const { employeeCode, ...updateData } = employeeData;
         await storage.updateEmployee(existing.id, updateData);
         result.updated++;
-      } else {
+        if (!isActive && existing.status === "active") {
+          result.deactivated++;
+        }
+      } else if (isActive) {
         await storage.createEmployee(employeeData);
         result.created++;
+      } else {
+        result.skipped++;
       }
     } catch (err: any) {
       result.errors.push(`Record ${ragicId}: ${err.message}`);
-    }
-  }
-
-  for (const region of regions) {
-    const regionEmployees = await storage.getEmployeesByRegion(region.id);
-    for (const emp of regionEmployees) {
-      if (emp.employeeCode && !syncedCodes.has(emp.employeeCode) && emp.status === "active") {
-        await storage.updateEmployee(emp.id, { status: "inactive" });
-        result.deactivated++;
-      }
     }
   }
 
