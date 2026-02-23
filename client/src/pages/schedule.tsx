@@ -602,7 +602,7 @@ export default function SchedulePage() {
                   className="text-left p-2 border-b border-r font-medium text-muted-foreground bg-background"
                   style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", top: 0, left: 0, zIndex: 35 }}
                 >
-                  員工
+                  員工/場館
                 </th>
                 {monthDates.map((d, i) => {
                   const isToday = format(d, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
@@ -649,13 +649,22 @@ export default function SchedulePage() {
                 </tr>
               ) : (
                 (() => {
-                  const VENUE_BG = "#1d283a80";
                   const activeVenues = venues.filter((v) => venuesWithRequirements.has(v.id));
-                  const venueRows = activeVenues.map((venue) => (
+                  const VENUE_BG_OK = "rgba(34,197,94,0.25)";
+                  const VENUE_BG_SHORT = "rgba(239,68,68,0.25)";
+                  const VENUE_BG_NONE = "#1d283a";
+                  const venueRows = activeVenues.map((venue) => {
+                    const hasAnyShortage = monthDates.some((d) => {
+                      const key = `${venue.id}-${format(d, "yyyy-MM-dd")}`;
+                      const sh = venueDateShortage.get(key);
+                      return sh && sh.size > 0;
+                    });
+                    const labelBg = hasAnyShortage ? VENUE_BG_SHORT : VENUE_BG_OK;
+                    return (
                     <tr key={`summary-${venue.id}`}>
                       <td
                         className="p-1 border-b border-r text-left sticky left-0 z-[5]"
-                        style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, backgroundColor: VENUE_BG }}
+                        style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, backgroundColor: labelBg }}
                       >
                         <span className="font-medium text-xs text-white/80 whitespace-nowrap" data-testid={`text-venue-summary-${venue.id}`}>
                           {venue.shortName}
@@ -667,11 +676,14 @@ export default function SchedulePage() {
                         const roleShortages = venueDateShortage.get(key);
                         const cellSlots = slotsByVenueDate.get(key) || [];
                         const hasRequirements = cellSlots.length > 0;
+                        const cellBg = hasRequirements
+                          ? (roleShortages && roleShortages.size > 0 ? VENUE_BG_SHORT : VENUE_BG_OK)
+                          : VENUE_BG_NONE;
                         return (
                           <td
                             key={di}
                             className="p-0.5 border-b border-r text-center align-middle"
-                            style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, backgroundColor: VENUE_BG }}
+                            style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, backgroundColor: cellBg }}
                             data-testid={`summary-cell-${venue.id}-${dateStr}`}
                           >
                             {hasRequirements ? (
@@ -684,14 +696,14 @@ export default function SchedulePage() {
                                   Array.from(roleShortages.entries()).map(([role, count]) => {
                                     const Icon = ROLE_ICON_MAP[role] || UserRound;
                                     return (
-                                      <span key={role} className="inline-flex items-center gap-0.5 bg-red-500/20 text-red-300 rounded-full px-1.5 py-0.5 text-[9px] font-bold animate-pulse">
+                                      <span key={role} className="inline-flex items-center gap-0.5 text-red-200 rounded-full px-1.5 py-0.5 text-[9px] font-bold">
                                         <Icon className="h-2.5 w-2.5" />
                                         -{count}
                                       </span>
                                     );
                                   })
                                 ) : (
-                                  <span className="inline-flex items-center gap-0.5 bg-green-500/20 text-green-300 rounded-full px-1.5 py-0.5 text-[9px] font-bold">
+                                  <span className="inline-flex items-center gap-0.5 text-green-200 rounded-full px-1.5 py-0.5 text-[9px] font-bold">
                                     <Check className="h-2.5 w-2.5" />
                                     OK
                                   </span>
@@ -710,7 +722,7 @@ export default function SchedulePage() {
                         );
                       })}
                     </tr>
-                  ));
+                  );});
                   const groups = [
                     { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
                     { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
