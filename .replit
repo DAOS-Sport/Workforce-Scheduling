@@ -43,3 +43,4 @@ waitForPort = 5000
 
 [userenv.shared]
 VITE_LINE_CHANNEL_ID = "2009202105"
+LINE_CHANNEL_ID = "2009202105"

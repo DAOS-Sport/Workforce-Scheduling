@@ -712,7 +712,7 @@ export async function registerRoutes(
       if (!code) return res.status(400).json({ message: "缺少授權碼" });
 
       const channelId = process.env.LINE_CHANNEL_ID;
-      const channelSecret = process.env.LINE_CHANNEL_SECRET;
+      const channelSecret = process.env.LINE_LOGIN_CHANNEL_SECRET || process.env.LINE_CHANNEL_SECRET;
       if (!channelId || !channelSecret) {
         return res.status(500).json({ message: "LINE Login 尚未設定" });
       }
