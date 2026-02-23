@@ -172,6 +172,12 @@ export default function SchedulePage() {
     return map;
   }, [scheduleSlots]);
 
+  const venuesWithRequirements = useMemo(() => {
+    const ids = new Set<number>();
+    scheduleSlots.forEach((s) => ids.add(s.venueId));
+    return ids;
+  }, [scheduleSlots]);
+
   const timeToMin = (t: string) => {
     const [h, m] = t.substring(0, 5).split(":").map(Number);
     return h * 60 + m;
@@ -644,7 +650,8 @@ export default function SchedulePage() {
               ) : (
                 (() => {
                   const VENUE_BG = "#1d283a80";
-                  const venueRows = venues.map((venue) => (
+                  const activeVenues = venues.filter((v) => venuesWithRequirements.has(v.id));
+                  const venueRows = activeVenues.map((venue) => (
                     <tr key={`summary-${venue.id}`}>
                       <td
                         className="p-1 border-b border-r text-left sticky left-0 z-[5]"
@@ -861,7 +868,7 @@ export default function SchedulePage() {
                   <SelectValue placeholder="選擇場館" />
                 </SelectTrigger>
                 <SelectContent>
-                  {venues.map((v) => (
+                  {venues.filter((v) => venuesWithRequirements.has(v.id)).map((v) => (
                     <SelectItem key={v.id} value={v.id.toString()}>{v.shortName}</SelectItem>
                   ))}
                 </SelectContent>
