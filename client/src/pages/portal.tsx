@@ -74,19 +74,17 @@ const ROLE_LABELS: Record<string, string> = {
   "救生": "救生",
   "守望": "守望",
   "櫃台": "櫃台",
-  "教練": "教練",
 };
 
 const ROLE_DISPLAY: Record<string, { label: string; taskLabel: string; color: string; bgClass: string; borderClass: string; textClass: string; badgeBg: string }> = {
   "櫃檯": { label: "櫃檯", taskLabel: "櫃台服務", color: "#3B82F6", bgClass: "bg-blue-500/10", borderClass: "border-l-blue-500", textClass: "text-blue-500", badgeBg: "bg-blue-500/15 text-blue-400" },
   "救生": { label: "救生", taskLabel: "救生執勤", color: "#10B981", bgClass: "bg-emerald-500/10", borderClass: "border-l-emerald-500", textClass: "text-emerald-500", badgeBg: "bg-emerald-500/15 text-emerald-400" },
-  "教練": { label: "教練", taskLabel: "教練指導", color: "#8B5CF6", bgClass: "bg-violet-500/10", borderClass: "border-l-violet-500", textClass: "text-violet-500", badgeBg: "bg-violet-500/15 text-violet-400" },
   "守望": { label: "守望", taskLabel: "守望執勤", color: "#F59E0B", bgClass: "bg-amber-500/10", borderClass: "border-l-amber-500", textClass: "text-amber-500", badgeBg: "bg-amber-500/15 text-amber-400" },
 };
 
 function getRoleDisplay(role: string | null | undefined) {
-  if (!role) return ROLE_DISPLAY["教練"];
-  return ROLE_DISPLAY[role] || ROLE_DISPLAY["教練"];
+  if (!role) return ROLE_DISPLAY["救生"];
+  return ROLE_DISPLAY[role] || ROLE_DISPLAY["救生"];
 }
 
 const DAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];

@@ -13,15 +13,15 @@ import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, MapPin, Plus, Edit2, Navigation, Trash2, LifeBuoy, Dumbbell, UserRound, Sparkles, ShieldCheck, Clock } from "lucide-react";
+import { Building2, MapPin, Plus, Edit2, Navigation, Trash2, LifeBuoy, UserRound, Sparkles, ShieldCheck, Clock } from "lucide-react";
 import type { Venue, VenueShiftTemplate } from "@shared/schema";
 import { REGIONS_DATA } from "@shared/schema";
 
-const ROLE_OPTIONS = ["救生", "教練", "櫃檯", "清潔", "管理"];
+const ROLE_OPTIONS = ["救生", "守望", "櫃檯", "清潔", "管理"];
 
 const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
   "救生": LifeBuoy,
-  "教練": Dumbbell,
+  "守望": ShieldCheck,
   "櫃檯": UserRound,
   "清潔": Sparkles,
   "管理": ShieldCheck,

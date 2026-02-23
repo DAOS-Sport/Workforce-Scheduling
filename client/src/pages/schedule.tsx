@@ -25,7 +25,6 @@ import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate } from "@
 
 const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
   "救生": LifeBuoy,
-  "教練": Dumbbell,
   "櫃台": UserRound,
   "櫃檯": UserRound,
   "清潔": Sparkles,
@@ -34,7 +33,6 @@ const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
 
 const ROLE_SHORT: Record<string, string> = {
   "救生": "救",
-  "教練": "練",
   "櫃台": "櫃",
   "櫃檯": "櫃",
   "清潔": "潔",
@@ -45,7 +43,6 @@ const ROLE_LABELS: Record<string, string> = {
   "救生": "救生",
   "守望": "守望",
   "櫃台": "櫃台",
-  "教練": "教練",
 };
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];

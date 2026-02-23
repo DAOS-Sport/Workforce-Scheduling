@@ -796,7 +796,7 @@ export async function registerRoutes(
 
       const emp = await storage.getEmployee(employeeId);
       const empRoleMap: Record<string, string> = {
-        lifeguard: "救生", counter: "櫃檯", pt: "教練", cleaning: "清潔", manager: "管理",
+        lifeguard: "救生", counter: "櫃檯", cleaning: "清潔", manager: "管理",
       };
 
       const venueIds = Array.from(new Set(myShifts.map((s) => s.venueId)));
@@ -843,7 +843,7 @@ export async function registerRoutes(
       const today = new Date().toISOString().split("T")[0];
 
       const empRoleMap: Record<string, string> = {
-        lifeguard: "救生", counter: "櫃檯", pt: "教練", cleaning: "清潔", manager: "管理",
+        lifeguard: "救生", counter: "櫃檯", cleaning: "清潔", manager: "管理",
       };
 
       const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, today, today);
