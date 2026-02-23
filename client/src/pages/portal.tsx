@@ -1006,13 +1006,48 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
 }
 
 export default function PortalPage() {
-  const [employee, setEmployee] = useState<PortalEmployee | null>(null);
+  const [employee, setEmployee] = useState<PortalEmployee | null>(() => {
+    try {
+      const saved = localStorage.getItem("portal_employee");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
   const [guidelinesConfirmed, setGuidelinesConfirmed] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (employee && !verifying) {
+      const lineUserId = localStorage.getItem("portal_line_user_id");
+      if (lineUserId) {
+        setVerifying(true);
+        fetch("/api/portal/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lineId: lineUserId }),
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              const data = await res.json();
+              setEmployee(data);
+              localStorage.setItem("portal_employee", JSON.stringify(data));
+            } else {
+              localStorage.removeItem("portal_employee");
+              localStorage.removeItem("portal_line_user_id");
+              setEmployee(null);
+            }
+          })
+          .catch(() => {})
+          .finally(() => setVerifying(false));
+      }
+    }
+  }, []);
 
   const handleLogin = useCallback((emp: any) => {
     if (emp.lineUserId) {
       localStorage.setItem("portal_line_user_id", emp.lineUserId);
     }
+    localStorage.setItem("portal_employee", JSON.stringify(emp));
     setEmployee(emp);
   }, []);
 
