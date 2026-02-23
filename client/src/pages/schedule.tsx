@@ -686,38 +686,32 @@ export default function SchedulePage() {
                             style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, backgroundColor: cellBg }}
                             data-testid={`summary-cell-${venue.id}-${dateStr}`}
                           >
-                            {hasRequirements ? (
-                              <button
-                                className="w-full flex items-center justify-center gap-1 flex-wrap py-0.5 rounded hover:bg-white/10 transition-colors cursor-pointer"
-                                onClick={() => openRequirementsPanel(venue.id, dateStr)}
-                                data-testid={`button-req-${venue.id}-${dateStr}`}
-                              >
-                                {roleShortages && roleShortages.size > 0 ? (
+                            <button
+                              className="w-full flex items-center justify-center gap-1 flex-wrap py-0.5 rounded hover:brightness-125 transition-all cursor-pointer"
+                              onClick={() => openRequirementsPanel(venue.id, dateStr)}
+                              data-testid={`button-req-${venue.id}-${dateStr}`}
+                            >
+                              {hasRequirements ? (
+                                roleShortages && roleShortages.size > 0 ? (
                                   Array.from(roleShortages.entries()).map(([role, count]) => {
                                     const Icon = ROLE_ICON_MAP[role] || UserRound;
                                     return (
-                                      <span key={role} className="inline-flex items-center gap-0.5 text-red-200 rounded-full px-1.5 py-0.5 text-[9px] font-bold">
+                                      <span key={role} className="inline-flex items-center gap-0.5 text-white text-[9px] font-bold">
                                         <Icon className="h-2.5 w-2.5" />
                                         -{count}
                                       </span>
                                     );
                                   })
                                 ) : (
-                                  <span className="inline-flex items-center gap-0.5 text-green-200 rounded-full px-1.5 py-0.5 text-[9px] font-bold">
+                                  <span className="inline-flex items-center gap-0.5 text-white text-[9px] font-bold">
                                     <Check className="h-2.5 w-2.5" />
                                     OK
                                   </span>
-                                )}
-                              </button>
-                            ) : (
-                              <button
-                                className="w-full flex items-center justify-center py-0.5 text-white/20 hover:text-white/50 transition-colors cursor-pointer"
-                                onClick={() => openRequirementsPanel(venue.id, dateStr)}
-                                data-testid={`button-req-${venue.id}-${dateStr}`}
-                              >
-                                <Settings2 className="h-2.5 w-2.5" />
-                              </button>
-                            )}
+                                )
+                              ) : (
+                                <Settings2 className="h-2.5 w-2.5 text-white/30" />
+                              )}
+                            </button>
                           </td>
                         );
                       })}
