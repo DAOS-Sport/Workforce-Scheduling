@@ -13,7 +13,7 @@ import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, UserPlus, Phone, Mail, Edit2, RefreshCw, Download } from "lucide-react";
+import { Plus, Search, UserPlus, Phone, Mail, Edit2, RefreshCw, Download, Trash2 } from "lucide-react";
 import type { Employee } from "@shared/schema";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -107,6 +107,20 @@ export default function EmployeesPage() {
     },
     onError: (err: Error) => {
       toast({ title: "更新失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteEmployee = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/employees/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      toast({ title: "員工已刪除" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "刪除失敗", description: err.message, variant: "destructive" });
     },
   });
 
@@ -284,14 +298,29 @@ export default function EmployeesPage() {
                         <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => openEdit(emp)}
-                          data-testid={`button-edit-employee-${emp.id}`}
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => openEdit(emp)}
+                            data-testid={`button-edit-employee-${emp.id}`}
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                            onClick={() => {
+                              if (confirm(`確定要刪除員工「${emp.name}」嗎？此操作無法復原。`)) {
+                                deleteEmployee.mutate(emp.id);
+                              }
+                            }}
+                            data-testid={`button-delete-employee-${emp.id}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

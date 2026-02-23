@@ -59,6 +59,17 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/employees/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteEmployee(id);
+      if (!deleted) return res.status(404).json({ message: "Employee not found" });
+      res.json({ message: "Employee deleted" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/venues/:regionCode", async (req, res) => {
     const { regionCode } = req.params;
     const region = await storage.getRegionByCode(regionCode);

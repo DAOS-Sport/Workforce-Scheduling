@@ -81,6 +81,8 @@ export interface IStorage {
   getShiftsByVenueAndDate(venueId: number, date: string): Promise<Shift[]>;
   getCoworkersByVenueAndDate(venueId: number, date: string, excludeEmployeeId: number): Promise<Employee[]>;
 
+  deleteEmployee(id: number): Promise<boolean>;
+
   getAllVenues(): Promise<Venue[]>;
   createClockRecord(data: InsertClockRecord): Promise<ClockRecord>;
   getClockRecordsByDateRange(startDate: string, endDate: string): Promise<ClockRecord[]>;
@@ -381,6 +383,11 @@ export class DatabaseStorage implements IStorage {
     if (coworkerIds.length === 0) return [];
     const uniqueIds = Array.from(new Set(coworkerIds));
     return db.select().from(employees).where(inArray(employees.id, uniqueIds));
+  }
+
+  async deleteEmployee(id: number): Promise<boolean> {
+    const result = await db.delete(employees).where(eq(employees.id, id)).returning();
+    return result.length > 0;
   }
 
   async getAllVenues(): Promise<Venue[]> {
