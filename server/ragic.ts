@@ -138,33 +138,13 @@ export async function syncFromRagic(): Promise<{
         continue;
       }
 
-      if (parsed.status === null) {
-        result.errors.push(`${parsed.name}(${parsed.employeeCode}): 無法辨識在職狀態「${parsed.rawStatus}」，跳過不處理`);
+      if (!SYNC_ROLES.includes(parsed.role)) {
         result.skipped++;
         continue;
       }
 
-      if (parsed.employmentType === null) {
-        const existing = await storage.getEmployeeByCode(parsed.employeeCode);
-        if (existing) {
-          const updateData: Record<string, any> = {};
-          if (parsed.name) updateData.name = parsed.name;
-          updateData.status = parsed.status;
-          if (parsed.phone) updateData.phone = parsed.phone;
-          if (parsed.email) updateData.email = parsed.email;
-          if (parsed.lineId) updateData.lineId = parsed.lineId;
-          if (parsed.role) updateData.role = parsed.role;
-          const regionCode = mapDepartmentToRegionCode(parsed.department);
-          const regionId = regionCode ? regionMap.get(regionCode) : null;
-          if (regionId) updateData.regionId = regionId;
-          if (Object.keys(updateData).length > 0) {
-            await storage.updateEmployee(existing.id, updateData);
-            result.updated++;
-          }
-        } else {
-          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 聘雇類別「${parsed.rawEmploymentType}」不是正職/兼職，跳過新增`);
-          result.skipped++;
-        }
+      if (!ACTIVE_STATUSES.includes(parsed.rawStatus)) {
+        result.skipped++;
         continue;
       }
 
@@ -172,7 +152,6 @@ export async function syncFromRagic(): Promise<{
       const regionId = regionCode ? regionMap.get(regionCode) : null;
 
       const existing = await storage.getEmployeeByCode(parsed.employeeCode);
-      const isActive = parsed.status === "active";
 
       if (existing) {
         const updateData: Record<string, any> = {};
@@ -181,22 +160,19 @@ export async function syncFromRagic(): Promise<{
         if (parsed.phone) updateData.phone = parsed.phone;
         if (parsed.email) updateData.email = parsed.email;
         if (parsed.lineId) updateData.lineId = parsed.lineId;
-        updateData.employmentType = parsed.employmentType;
+        if (parsed.employmentType) updateData.employmentType = parsed.employmentType;
         if (parsed.role) updateData.role = parsed.role;
         if (regionId) updateData.regionId = regionId;
         await storage.updateEmployee(existing.id, updateData);
         result.updated++;
-        if (!isActive && existing.status === "active") {
-          result.deactivated++;
-        }
-      } else if (isActive) {
-        if (!SYNC_ROLES.includes(parsed.role)) {
-          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 職務「${parsed.rawRole}」→${parsed.role}，非排班職務，跳過新增`);
+      } else {
+        if (!regionId) {
+          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 部門「${parsed.department}」無對應區域，跳過新增`);
           result.skipped++;
           continue;
         }
-        if (!regionId) {
-          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 部門「${parsed.department}」無對應區域，跳過新增`);
+        if (!parsed.employmentType) {
+          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 聘雇類別「${parsed.rawEmploymentType}」不是正職/兼職，跳過新增`);
           result.skipped++;
           continue;
         }
@@ -207,13 +183,11 @@ export async function syncFromRagic(): Promise<{
           email: parsed.email || null,
           lineId: parsed.lineId || null,
           regionId,
-          status: parsed.status,
+          status: parsed.status!,
           role: parsed.role,
           employmentType: parsed.employmentType,
         });
         result.created++;
-      } else {
-        result.skipped++;
       }
     } catch (err: any) {
       result.errors.push(`Record ${ragicId}: ${err.message}`);
