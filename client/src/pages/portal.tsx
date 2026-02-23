@@ -76,6 +76,7 @@ const ROLE_LABELS: Record<string, string> = {
   counter: "櫃檯",
   cleaning: "清潔",
   manager: "管理",
+  "教練": "教練",
 };
 
 const ROLE_DISPLAY: Record<string, { label: string; taskLabel: string; color: string; bgClass: string; borderClass: string; textClass: string; badgeBg: string }> = {

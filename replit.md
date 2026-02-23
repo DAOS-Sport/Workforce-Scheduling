@@ -4,7 +4,9 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
-- 2026-02-23: Ragic sync restructured: existing employees always get status/name/phone/email/empType updated regardless of role; role mapping expanded (守望員→救生, 教練→救生); multi-value array fields joined properly; mapStatus uses whitelist for precision
+- 2026-02-23: Added 教練 as independent role (not mapped to 救生); 教練 employees exist in system but don't appear in shift scheduling grid
+- 2026-02-23: Ragic sync rewritten: role priority (救生>教練>櫃台), 聘雇類別 only accepts 正職/兼職 (約聘/永久/空白 skipped for new), blank fields don't overwrite existing data, unmapped departments skip creation
+- 2026-02-23: Ragic sync restructured: existing employees always get status/name/phone/email/empType updated regardless of role; mapStatus uses whitelist for precision
 - 2026-02-21: Ragic sync now strictly filters: only imports employees with status "在職" AND role "行政櫃台" or "救生員"; other roles are skipped with error message
 - 2026-02-21: Shift dialog now includes "排班範本" dropdown between role and time inputs; loads venue shift templates filtered by dayType (weekday/weekend) and role, auto-fills start/end time on selection; "自訂時間" option for manual input
 - 2026-02-21: Added batch shift creation (POST /api/shifts/batch) with labor law validation; shift dialog now has batch mode toggle with date grid picker and quick-select buttons (same weekday, all, clear)

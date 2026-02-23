@@ -49,6 +49,7 @@ const ROLE_LABELS: Record<string, string> = {
   manager: "管理",
   "救生": "救生",
   "櫃台": "櫃台",
+  "教練": "教練",
 };
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];

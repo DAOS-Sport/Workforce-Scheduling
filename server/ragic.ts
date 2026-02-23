@@ -12,8 +12,9 @@ interface RagicEmployee {
   role: string | null;
   rawRole: string;
   rawStatus: string;
+  rawEmploymentType: string;
   status: string | null;
-  employmentType: string;
+  employmentType: string | null;
 }
 
 const VENUE_TO_REGION: Record<string, string> = {
@@ -33,18 +34,17 @@ function mapDepartmentToRegionCode(department: string): string | null {
 
 function mapRole(jobTitle: string): string | null {
   if (!jobTitle) return null;
-  if (jobTitle.includes("救生") || jobTitle.includes("守望")) return "救生";
+  if (jobTitle.includes("救生")) return "救生";
+  if (jobTitle.includes("守望")) return "救生";
+  if (jobTitle.includes("教練")) return "教練";
   if (jobTitle.includes("櫃台") || jobTitle.includes("櫃檯")) return "櫃台";
-  if (jobTitle.includes("教練")) return "救生";
-  if (jobTitle.includes("行政")) return "櫃台";
-  if (jobTitle.includes("清潔") || jobTitle.includes("主管") || jobTitle.includes("資訊")) return null;
   return null;
 }
 
-function mapEmploymentType(type: string): string {
+function mapEmploymentType(type: string): string | null {
   if (type === "正職") return "full_time";
   if (type === "兼職") return "part_time";
-  return "full_time";
+  return null;
 }
 
 const ACTIVE_STATUSES = ["在職", "試用"];
@@ -85,6 +85,7 @@ function parseRagicRecord(record: Record<string, any>): RagicEmployee | null {
     role: mapRole(roleStr.trim()),
     rawRole: roleStr.trim(),
     rawStatus: statusStr.trim(),
+    rawEmploymentType: typeStr.trim(),
     status: mapStatus(statusStr.trim()),
     employmentType: mapEmploymentType(typeStr.trim()),
   };
@@ -137,6 +138,30 @@ export async function syncFromRagic(): Promise<{
         continue;
       }
 
+      if (parsed.employmentType === null) {
+        const existing = await storage.getEmployeeByCode(parsed.employeeCode);
+        if (existing) {
+          const updateData: Record<string, any> = {};
+          if (parsed.name) updateData.name = parsed.name;
+          updateData.status = parsed.status;
+          if (parsed.phone) updateData.phone = parsed.phone;
+          if (parsed.email) updateData.email = parsed.email;
+          if (parsed.lineId) updateData.lineId = parsed.lineId;
+          if (parsed.role) updateData.role = parsed.role;
+          const regionCode = mapDepartmentToRegionCode(parsed.department);
+          const regionId = regionCode ? regionMap.get(regionCode) : null;
+          if (regionId) updateData.regionId = regionId;
+          if (Object.keys(updateData).length > 0) {
+            await storage.updateEmployee(existing.id, updateData);
+            result.updated++;
+          }
+        } else {
+          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 聘雇類別「${parsed.rawEmploymentType}」不是正職/兼職，跳過新增`);
+          result.skipped++;
+        }
+        continue;
+      }
+
       const regionCode = mapDepartmentToRegionCode(parsed.department);
       const regionId = regionCode ? regionMap.get(regionCode) : null;
 
@@ -144,14 +169,13 @@ export async function syncFromRagic(): Promise<{
       const isActive = parsed.status === "active";
 
       if (existing) {
-        const updateData: Record<string, any> = {
-          name: parsed.name,
-          status: parsed.status,
-          phone: parsed.phone || null,
-          email: parsed.email || null,
-          lineId: parsed.lineId || null,
-          employmentType: parsed.employmentType,
-        };
+        const updateData: Record<string, any> = {};
+        if (parsed.name) updateData.name = parsed.name;
+        updateData.status = parsed.status;
+        if (parsed.phone) updateData.phone = parsed.phone;
+        if (parsed.email) updateData.email = parsed.email;
+        if (parsed.lineId) updateData.lineId = parsed.lineId;
+        updateData.employmentType = parsed.employmentType;
         if (parsed.role) updateData.role = parsed.role;
         if (regionId) updateData.regionId = regionId;
         await storage.updateEmployee(existing.id, updateData);
@@ -166,7 +190,7 @@ export async function syncFromRagic(): Promise<{
           continue;
         }
         if (!regionId) {
-          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 無法辨識部門「${parsed.department}」的所屬區域`);
+          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 部門「${parsed.department}」無對應區域，跳過新增`);
           result.skipped++;
           continue;
         }

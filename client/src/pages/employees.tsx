@@ -20,6 +20,7 @@ import { REGIONS_DATA } from "@shared/schema";
 const ROLE_LABELS: Record<string, string> = {
   "救生": "救生員",
   "櫃台": "行政櫃台",
+  "教練": "教練",
   "pt": "PT教練",
   "manager": "管理員",
   "admin": "系統管理",
@@ -371,6 +372,7 @@ export default function EmployeesPage() {
                   <SelectContent>
                     <SelectItem value="救生">救生員</SelectItem>
                     <SelectItem value="櫃台">行政櫃台</SelectItem>
+                    <SelectItem value="教練">教練</SelectItem>
                     <SelectItem value="pt">PT教練</SelectItem>
                     <SelectItem value="manager">管理員</SelectItem>
                     <SelectItem value="admin">系統管理</SelectItem>
