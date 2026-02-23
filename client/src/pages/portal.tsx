@@ -14,7 +14,7 @@ import {
   CalendarDays, Phone, MapPin, Clock, Users, ShieldCheck,
   ChevronLeft, ChevronRight, Calendar, List,
   Video, FileText, CheckCircle2, Lock, UserCheck,
-  AlertTriangle, ClipboardCheck, BookOpen
+  AlertTriangle, ClipboardCheck, BookOpen, Navigation, Loader2, XCircle
 } from "lucide-react";
 
 interface PortalEmployee {
@@ -458,6 +458,165 @@ function GuidelineItemCard({ item }: { item: GuidelineItem }) {
   );
 }
 
+interface ClockInResult {
+  status: "success" | "warning" | "fail" | "error";
+  clockType: "in" | "out";
+  venueName: string | null;
+  distance: number | null;
+  time: string;
+  date: string;
+  shiftInfo: string | null;
+  failReason: string | null;
+  employeeName: string | null;
+  radius: number | null;
+}
+
+function GpsClockInCard({ employee }: { employee: PortalEmployee }) {
+  const [stage, setStage] = useState<"idle" | "locating" | "submitting" | "done" | "error">("idle");
+  const [result, setResult] = useState<ClockInResult | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [accuracy, setAccuracy] = useState<number | null>(null);
+  const { toast } = useToast();
+
+  const [lineUserId, setLineUserId] = useState<string | null>(null);
+  useEffect(() => {
+    const stored = localStorage.getItem("portal_line_user_id");
+    if (stored) setLineUserId(stored);
+  }, []);
+
+  const handleClockIn = useCallback(async () => {
+    if (!lineUserId) {
+      toast({ title: "無法打卡", description: "請重新登入以綁定 LINE 帳號", variant: "destructive" });
+      return;
+    }
+    setStage("locating");
+    setResult(null);
+
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
+        });
+      });
+
+      const { latitude, longitude, accuracy: acc } = position.coords;
+      setAccuracy(Math.round(acc));
+      setStage("submitting");
+
+      const resp = await fetch("/api/liff/clock-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lineUserId, latitude, longitude, accuracy: Math.round(acc) }),
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.message || "打卡請求失敗");
+      }
+
+      const data: ClockInResult = await resp.json();
+      setResult(data);
+      setStage("done");
+    } catch (err: any) {
+      if (err.code === 1) {
+        setErrorMsg("請允許位置存取權限");
+      } else if (err.code === 2) {
+        setErrorMsg("無法取得位置，請確認 GPS 已開啟");
+      } else if (err.code === 3) {
+        setErrorMsg("定位逾時，請到空曠處再試");
+      } else {
+        setErrorMsg(err.message || "打卡過程發生錯誤");
+      }
+      setStage("error");
+    }
+  }, [lineUserId, toast]);
+
+  const statusConfig = result ? {
+    success: { icon: CheckCircle2, color: "text-green-500", bg: "bg-green-500/10", label: result.clockType === "in" ? "上班打卡成功" : "下班打卡成功" },
+    warning: { icon: AlertTriangle, color: "text-yellow-500", bg: "bg-yellow-500/10", label: "已記錄（無排班）" },
+    fail: { icon: XCircle, color: "text-red-500", bg: "bg-red-500/10", label: result.failReason || "打卡失敗" },
+    error: { icon: XCircle, color: "text-red-500", bg: "bg-red-500/10", label: result.failReason || "錯誤" },
+  }[result.status] : null;
+
+  return (
+    <Card className="p-4" data-testid="card-gps-clock-in">
+      <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+        <Navigation className="h-4 w-4" /> GPS 打卡
+      </h2>
+
+      {stage === "idle" && (
+        <Button
+          className="w-full h-12 text-base font-semibold"
+          onClick={handleClockIn}
+          data-testid="button-gps-clock-in"
+        >
+          <MapPin className="mr-2 h-5 w-5" />
+          一鍵打卡
+        </Button>
+      )}
+
+      {stage === "locating" && (
+        <div className="flex items-center justify-center gap-2 py-3">
+          <Navigation className="h-5 w-5 text-blue-500 animate-pulse" />
+          <span className="text-sm text-muted-foreground">正在定位中...</span>
+        </div>
+      )}
+
+      {stage === "submitting" && (
+        <div className="flex items-center justify-center gap-2 py-3">
+          <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+          <span className="text-sm text-muted-foreground">處理打卡中...</span>
+        </div>
+      )}
+
+      {stage === "done" && result && statusConfig && (
+        <div>
+          <div className={`flex items-center gap-2 p-3 rounded-lg ${statusConfig.bg} mb-3`}>
+            <statusConfig.icon className={`h-5 w-5 ${statusConfig.color}`} />
+            <span className={`font-medium text-sm ${statusConfig.color}`}>{statusConfig.label}</span>
+          </div>
+          <div className="text-xs space-y-1 text-muted-foreground">
+            {result.venueName && <p>場館：{result.venueName}</p>}
+            {result.distance !== null && <p>距離：{result.distance}m{result.radius ? ` / 需在 ${result.radius}m 內` : ""}</p>}
+            <p>時間：{result.time}</p>
+            {result.shiftInfo && <p>班別：{result.shiftInfo}</p>}
+            {accuracy && <p>GPS 精度：±{accuracy}m</p>}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full mt-3"
+            onClick={() => { setStage("idle"); setResult(null); }}
+            data-testid="button-clock-again"
+          >
+            再次打卡
+          </Button>
+        </div>
+      )}
+
+      {stage === "error" && (
+        <div>
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 mb-3">
+            <XCircle className="h-5 w-5 text-red-500" />
+            <span className="font-medium text-sm text-red-500">{errorMsg}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => { setStage("idle"); setErrorMsg(""); }}
+            data-testid="button-retry-clock"
+          >
+            重試
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -533,6 +692,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
       </div>
 
       <div className="max-w-lg mx-auto p-4 space-y-4">
+        <GpsClockInCard employee={employee} />
+
         <Card className="p-4">
           <div className="flex items-center justify-between gap-2 mb-3">
             <h2 className="text-sm font-semibold flex items-center gap-1.5">
@@ -848,7 +1009,10 @@ export default function PortalPage() {
   const [employee, setEmployee] = useState<PortalEmployee | null>(null);
   const [guidelinesConfirmed, setGuidelinesConfirmed] = useState(false);
 
-  const handleLogin = useCallback((emp: PortalEmployee) => {
+  const handleLogin = useCallback((emp: any) => {
+    if (emp.lineUserId) {
+      localStorage.setItem("portal_line_user_id", emp.lineUserId);
+    }
     setEmployee(emp);
   }, []);
 

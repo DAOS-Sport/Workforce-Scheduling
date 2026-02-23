@@ -779,6 +779,7 @@ export async function registerRoutes(
         employeeCode: employee.employeeCode,
         role: employee.role,
         lineDisplayName: profile.displayName,
+        lineUserId,
       });
     } catch (err: any) {
       console.error("LINE callback error:", err);
@@ -798,6 +799,7 @@ export async function registerRoutes(
         name: employee.name,
         employeeCode: employee.employeeCode,
         role: employee.role,
+        lineUserId: lineId,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
