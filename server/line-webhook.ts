@@ -59,9 +59,30 @@ function isTimeInShiftWindow(now: Date, shift: Shift, bufferMinutes: number = 30
   return nowMinutes >= shiftStart && nowMinutes <= shiftEnd;
 }
 
-async function replyToLine(replyToken: string, text: string): Promise<void> {
+async function pushToLine(userId: string, text: string): Promise<void> {
   try {
-    await fetch("https://api.line.me/v2/bot/message/reply", {
+    const resp = await fetch("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
+      },
+      body: JSON.stringify({
+        to: userId,
+        messages: [{ type: "text", text }],
+      }),
+    });
+    if (!resp.ok) {
+      console.error("[LINE] Push failed:", resp.status, await resp.text());
+    }
+  } catch (err) {
+    console.error("[LINE] Push failed:", err);
+  }
+}
+
+async function replyToLine(replyToken: string, text: string, fallbackUserId?: string): Promise<void> {
+  try {
+    const resp = await fetch("https://api.line.me/v2/bot/message/reply", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -72,8 +93,15 @@ async function replyToLine(replyToken: string, text: string): Promise<void> {
         messages: [{ type: "text", text }],
       }),
     });
+    if (!resp.ok && fallbackUserId) {
+      console.log("[LINE] Reply token expired, using push message instead");
+      await pushToLine(fallbackUserId, text);
+    }
   } catch (err) {
-    console.error("[LINE] Reply failed:", err);
+    console.error("[LINE] Reply failed, trying push:", err);
+    if (fallbackUserId) {
+      await pushToLine(fallbackUserId, text);
+    }
   }
 }
 
@@ -95,14 +123,16 @@ export async function handleLineWebhook(body: any): Promise<void> {
       continue;
     }
 
+    try {
+
     const employee = await storage.getEmployeeByLineId(lineUserId);
     if (!employee) {
-      await replyToLine(replyToken, "❌ 您的 LINE 帳號尚未綁定員工資料，請聯繫管理員。");
+      await replyToLine(replyToken, "❌ 您的 LINE 帳號尚未綁定員工資料，請聯繫管理員。", lineUserId);
       continue;
     }
 
     if (employee.status !== "active") {
-      await replyToLine(replyToken, "❌ 您的帳號目前為非在職狀態，無法打卡。");
+      await replyToLine(replyToken, "❌ 您的帳號目前為非在職狀態，無法打卡。", lineUserId);
       continue;
     }
 
@@ -112,7 +142,7 @@ export async function handleLineWebhook(body: any): Promise<void> {
 
     const allVenues = await storage.getAllVenues();
     const validVenues = allVenues.filter(
-      (v) => v.latitude && v.longitude && !v.isInternal
+      (v) => v.latitude && v.longitude
     );
 
     let closestVenue: Venue | null = null;
@@ -145,7 +175,8 @@ export async function handleLineWebhook(body: any): Promise<void> {
         : "";
       await replyToLine(
         replyToken,
-        `❌ 打卡失敗！\n您不在任何場館的 GPS 範圍內。${distText}\n\n時間：${timeStr}\n如有問題請聯繫管理員。`
+        `❌ 打卡失敗！\n您不在任何場館的 GPS 範圍內。${distText}\n\n時間：${timeStr}\n如有問題請聯繫管理員。`,
+        lineUserId
       );
       continue;
     }
@@ -170,7 +201,8 @@ export async function handleLineWebhook(body: any): Promise<void> {
 
       await replyToLine(
         replyToken,
-        `⚠️ 打卡紀錄已儲存（無排班）\n\n場館：${closestVenue.shortName}\n距離：${Math.round(closestDistance)}m\n時間：${timeStr}\n\n提醒：今日您在此場館無排班紀錄。`
+        `⚠️ 打卡紀錄已儲存（無排班）\n\n場館：${closestVenue.shortName}\n距離：${Math.round(closestDistance)}m\n時間：${timeStr}\n\n提醒：今日您在此場館無排班紀錄。`,
+        lineUserId
       );
       continue;
     }
@@ -195,8 +227,14 @@ export async function handleLineWebhook(body: any): Promise<void> {
 
     await replyToLine(
       replyToken,
-      `✅ ${clockLabel}打卡成功！\n\n場館：${closestVenue.shortName}\n距離：${Math.round(closestDistance)}m\n時間：${timeStr}\n班別：${shiftInfo.startTime.slice(0, 5)}-${shiftInfo.endTime.slice(0, 5)}`
+      `✅ ${clockLabel}打卡成功！\n\n場館：${closestVenue.shortName}\n距離：${Math.round(closestDistance)}m\n時間：${timeStr}\n班別：${shiftInfo.startTime.slice(0, 5)}-${shiftInfo.endTime.slice(0, 5)}`,
+      lineUserId
     );
+
+    } catch (err) {
+      console.error("[LINE Webhook] Error processing clock-in:", err);
+      await pushToLine(lineUserId, "❌ 系統處理打卡時發生錯誤，請稍後再試或聯繫管理員。");
+    }
   }
 }
 
