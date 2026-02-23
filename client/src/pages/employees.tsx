@@ -40,7 +40,6 @@ export default function EmployeesPage() {
   const { activeRegion } = useRegion();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [form, setForm] = useState({
@@ -63,11 +62,11 @@ export default function EmployeesPage() {
 
   const filteredEmployees = employees.filter(
     (e) => {
+      if (e.status === "inactive") return false;
       const matchesSearch = e.name.includes(search) ||
         e.employeeCode.includes(search) ||
         (e.phone && e.phone.includes(search));
-      const matchesStatus = statusFilter === "all" || e.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      return matchesSearch;
     }
   );
 
@@ -168,27 +167,15 @@ export default function EmployeesPage() {
 
       <div className="p-4 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex gap-2 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-64 sm:flex-none">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="搜尋姓名、編號、電話..."
-                className="pl-8"
-                data-testid="input-search-employee"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-28" data-testid="select-status-filter">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部狀態</SelectItem>
-                <SelectItem value="active">在職</SelectItem>
-                <SelectItem value="inactive">離職</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜尋姓名、編號、電話..."
+              className="pl-8"
+              data-testid="input-search-employee"
+            />
           </div>
           <div className="flex gap-2">
             <Button
@@ -228,7 +215,6 @@ export default function EmployeesPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>聘雇</TableHead>
                 <TableHead>職務</TableHead>
-                <TableHead>狀態</TableHead>
                 <TableHead className="w-[60px]">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -236,7 +222,7 @@ export default function EmployeesPage() {
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-5 w-20" />
                       </TableCell>
@@ -245,13 +231,12 @@ export default function EmployeesPage() {
                 ))
               ) : filteredEmployees.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     {search ? "找不到符合的員工" : "尚無員工資料"}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredEmployees.map((emp) => {
-                  const statusInfo = STATUS_MAP[emp.status] || STATUS_MAP.active;
                   const empTypeInfo = EMPLOYMENT_TYPE_LABELS[emp.employmentType] || EMPLOYMENT_TYPE_LABELS.full_time;
                   return (
                     <TableRow key={emp.id} data-testid={`row-employee-${emp.id}`}>
@@ -284,9 +269,6 @@ export default function EmployeesPage() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">{ROLE_LABELS[emp.role] || emp.role}</span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                       </TableCell>
                       <TableCell>
                         <Button
@@ -390,19 +372,6 @@ export default function EmployeesPage() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>狀態</Label>
-              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
-                <SelectTrigger data-testid="select-employee-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">在職</SelectItem>
-                  <SelectItem value="inactive">離職</SelectItem>
-                  <SelectItem value="suspended">停職</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
           <DialogFooter>
