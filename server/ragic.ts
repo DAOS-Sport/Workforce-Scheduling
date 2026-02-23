@@ -35,7 +35,7 @@ function mapDepartmentToRegionCode(department: string): string | null {
 function mapRole(jobTitle: string): string | null {
   if (!jobTitle) return null;
   if (jobTitle.includes("救生")) return "救生";
-  if (jobTitle.includes("守望")) return "救生";
+  if (jobTitle.includes("守望")) return "守望";
   if (jobTitle.includes("教練")) return "教練";
   if (jobTitle.includes("櫃台") || jobTitle.includes("櫃檯")) return "櫃台";
   return null;

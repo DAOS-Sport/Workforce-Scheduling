@@ -42,18 +42,14 @@ const ROLE_SHORT: Record<string, string> = {
 };
 
 const ROLE_LABELS: Record<string, string> = {
-  pt: "救生",
-  lifeguard: "救生",
-  counter: "櫃台",
-  cleaning: "清潔",
-  manager: "管理",
   "救生": "救生",
+  "守望": "守望",
   "櫃台": "櫃台",
   "教練": "教練",
 };
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
-const ROLE_OPTIONS = ["救生", "櫃台"];
+const ROLE_OPTIONS = ["救生", "守望", "櫃台"];
 
 export default function SchedulePage() {
   const { activeRegion } = useRegion();
@@ -358,7 +354,7 @@ export default function SchedulePage() {
     setShiftStartTime("06:30");
     setShiftEndTime("16:00");
     setShiftIsDispatch(false);
-    setShiftRole(emp?.role === "櫃台" ? "櫃台" : "救生");
+    setShiftRole(emp?.role === "櫃台" ? "櫃台" : emp?.role === "守望" ? "守望" : "救生");
     setShiftBatchMode(false);
     setShiftBatchDates(new Set());
     setShiftTemplateId("custom");
@@ -716,6 +712,8 @@ export default function SchedulePage() {
                     { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
                     { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
                     { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
+                    { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
+                    { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
                   ];
                   return [
                     ...venueRows,
@@ -1248,18 +1246,18 @@ export default function SchedulePage() {
                       const shortage = slot.requiredCount - assignedCount;
                       const isFull = shortage <= 0;
                       const isRescue = slot.role === "救生";
+                      const isGuard = slot.role === "守望";
+                      const borderColor = isRescue ? "border-l-red-500" : isGuard ? "border-l-amber-500" : "border-l-blue-500";
                       return (
                         <div
                           key={slot.id}
-                          className={`rounded-lg border-l-4 p-3 bg-muted/30 ${
-                            isRescue ? "border-l-red-500" : "border-l-blue-500"
-                          }`}
+                          className={`rounded-lg border-l-4 p-3 bg-muted/30 ${borderColor}`}
                           data-testid={`req-slot-${slot.id}`}
                         >
                           <div className="flex items-center justify-between">
                             <div className="space-y-0.5">
                               <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                {isRescue ? <LifeBuoy className="h-3 w-3" /> : <UserRound className="h-3 w-3" />}
+                                {isRescue ? <LifeBuoy className="h-3 w-3" /> : isGuard ? <LifeBuoy className="h-3 w-3" /> : <UserRound className="h-3 w-3" />}
                                 {slot.role}
                                 {(slot as any)._fromTemplate && (
                                   <span className="text-blue-500 text-[9px] border border-blue-400 dark:border-blue-700 rounded px-1 ml-1">範本</span>

@@ -19,6 +19,7 @@ import { REGIONS_DATA } from "@shared/schema";
 
 const ROLE_LABELS: Record<string, string> = {
   "救生": "救生員",
+  "守望": "守望員",
   "櫃台": "行政櫃台",
   "教練": "教練",
 };
