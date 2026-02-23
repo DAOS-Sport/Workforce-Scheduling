@@ -61,6 +61,7 @@ function mapRole(jobTitle: string): string {
   if (jobTitle.includes("救生")) return "救生";
   if (jobTitle.includes("守望")) return "守望";
   if (jobTitle.includes("櫃台") || jobTitle.includes("櫃檯")) return "櫃台";
+  if (jobTitle.includes("教練")) return "教練";
   if (jobTitle.includes("機電")) return "機電";
   if (jobTitle.includes("清潔")) return "清潔";
   if (jobTitle.includes("行政專員")) return "行政專員";
@@ -75,8 +76,6 @@ function mapEmploymentType(type: string): string | null {
   if (type === "兼職") return "part_time";
   return null;
 }
-
-const SYNC_ROLES = ["救生", "守望", "櫃台"];
 
 const ACTIVE_STATUSES = ["在職"];
 const INACTIVE_STATUSES = ["離職", "留職停薪", "合約到期", "退休", "已歿", "資遣", "開除"];
@@ -161,29 +160,22 @@ export async function syncFromRagic(): Promise<{
         continue;
       }
 
-      if (!SYNC_ROLES.includes(parsed.role)) {
-        result.skipped++;
-        continue;
-      }
-
-      if (!ACTIVE_STATUSES.includes(parsed.rawStatus)) {
-        result.skipped++;
-        continue;
-      }
-
       const regionCode = mapDepartmentToRegionCode(parsed.department);
       const regionId = regionCode ? regionMap.get(regionCode) : null;
 
       const existing = await storage.getEmployeeByCode(parsed.employeeCode);
 
+      const effectiveStatus = parsed.status || "active";
+      const effectiveEmploymentType = parsed.employmentType || "full_time";
+
       if (existing) {
         const updateData: Record<string, any> = {};
         if (parsed.name) updateData.name = parsed.name;
-        updateData.status = parsed.status;
+        updateData.status = effectiveStatus;
         if (parsed.phone) updateData.phone = parsed.phone;
         if (parsed.email) updateData.email = parsed.email;
         if (parsed.lineId) updateData.lineId = parsed.lineId;
-        if (parsed.employmentType) updateData.employmentType = parsed.employmentType;
+        updateData.employmentType = effectiveEmploymentType;
         if (parsed.role) updateData.role = parsed.role;
         if (regionId) updateData.regionId = regionId;
         await storage.updateEmployee(existing.id, updateData);
@@ -194,11 +186,6 @@ export async function syncFromRagic(): Promise<{
           result.skipped++;
           continue;
         }
-        if (!parsed.employmentType) {
-          result.errors.push(`${parsed.name}(${parsed.employeeCode}): 聘雇類別「${parsed.rawEmploymentType}」不是正職/兼職，跳過新增`);
-          result.skipped++;
-          continue;
-        }
         await storage.createEmployee({
           name: parsed.name,
           employeeCode: parsed.employeeCode,
@@ -206,9 +193,9 @@ export async function syncFromRagic(): Promise<{
           email: parsed.email || null,
           lineId: parsed.lineId || null,
           regionId,
-          status: parsed.status!,
+          status: effectiveStatus,
           role: parsed.role,
-          employmentType: parsed.employmentType,
+          employmentType: effectiveEmploymentType,
         });
         result.created++;
       }

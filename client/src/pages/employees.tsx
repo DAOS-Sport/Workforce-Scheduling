@@ -21,6 +21,7 @@ const ROLE_LABELS: Record<string, string> = {
   "救生": "救生員",
   "守望": "守望員",
   "櫃台": "行政櫃台",
+  "教練": "教練",
   "機電": "機電人員",
   "清潔": "清潔人員",
   "行政專員": "行政專員",
@@ -377,6 +378,7 @@ export default function EmployeesPage() {
                     <SelectItem value="救生">救生員</SelectItem>
                     <SelectItem value="守望">守望員</SelectItem>
                     <SelectItem value="櫃台">行政櫃台</SelectItem>
+                    <SelectItem value="教練">教練</SelectItem>
                     <SelectItem value="機電">機電人員</SelectItem>
                     <SelectItem value="清潔">清潔人員</SelectItem>
                     <SelectItem value="行政專員">行政專員</SelectItem>
