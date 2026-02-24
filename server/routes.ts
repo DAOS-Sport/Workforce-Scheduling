@@ -1094,15 +1094,16 @@ export async function registerRoutes(
 
   app.post("/api/liff/clock-in", async (req: Request, res: Response) => {
     try {
-      const { lineUserId, latitude, longitude, accuracy } = req.body;
-      if (!lineUserId || latitude === undefined || longitude === undefined) {
-        return res.status(400).json({ message: "lineUserId, latitude, longitude are required" });
+      const { lineUserId, employeeId, latitude, longitude, accuracy } = req.body;
+      if ((!lineUserId && !employeeId) || latitude === undefined || longitude === undefined) {
+        return res.status(400).json({ message: "lineUserId or employeeId, latitude, longitude are required" });
       }
-      console.log(`[LIFF Clock-in] User: ${lineUserId}, Lat: ${latitude}, Lng: ${longitude}, Accuracy: ${accuracy}m`);
-      const result = await processClockIn(lineUserId, latitude, longitude);
+      console.log(`[Clock-in] User: ${lineUserId || `emp#${employeeId}`}, Lat: ${latitude}, Lng: ${longitude}, Accuracy: ${accuracy}m`);
+      const params = employeeId ? { employeeId: Number(employeeId) } : { lineUserId };
+      const result = await processClockIn(params, latitude, longitude);
       res.json(result);
     } catch (err: any) {
-      console.error("[LIFF Clock-in] Error:", err);
+      console.error("[Clock-in] Error:", err);
       res.status(500).json({ message: err.message });
     }
   });

@@ -11,6 +11,13 @@ export default {
         sm: ".1875rem", /* 3px */
       },
       colors: {
+        juns: {
+          navy: '#183059',
+          green: '#8CC63F',
+          teal: '#1BB1A5',
+          surface: '#FCFCFD',
+          border: '#EAEAEA',
+        },
         // Flat / base colors (regular buttons)
         background: "hsl(var(--background) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
@@ -86,6 +93,10 @@ export default {
         sans: ["var(--font-sans)"],
         serif: ["var(--font-serif)"],
         mono: ["var(--font-mono)"],
+      },
+      boxShadow: {
+        'flat': '0 2px 8px -2px rgba(0, 0, 0, 0.05)',
+        'glow': '0 0 15px rgba(27, 177, 165, 0.3)',
       },
       keyframes: {
         "accordion-down": {
