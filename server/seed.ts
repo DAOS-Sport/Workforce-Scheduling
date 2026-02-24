@@ -4,9 +4,9 @@ import { REGIONS_DATA } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 const VENUE_FULL_DATA = [
-  { name: "新北高中", shortName: "新北高中", regionCode: "A", address: "新北市三重區三信路1號", lat: 25.0712, lng: 121.4956, taxId: "85300099", operationType: "OT" },
-  { name: "三民高中", shortName: "三民高中", regionCode: "A", address: "新北市蘆洲區三民路60號", lat: 25.0834, lng: 121.4789, taxId: "66601546", operationType: "OT" },
-  { name: "三重商工", shortName: "三重商工", regionCode: "A", address: "新北市三重區中正北路163號", lat: 25.0645, lng: 121.4873, taxId: "85184649", operationType: "OT" },
+  { name: "新北高中", shortName: "新北高中", regionCode: "A", address: "新北市三重區三信路1號", lat: 25.0584, lng: 121.4858, taxId: "85300099", operationType: "OT" },
+  { name: "三民高中", shortName: "三民高中", regionCode: "A", address: "新北市蘆洲區三民路96號", lat: 25.08556, lng: 121.47278, taxId: "66601546", operationType: "OT" },
+  { name: "三重商工", shortName: "三重商工", regionCode: "A", address: "新北市三重區中正北路163號", lat: 25.0648, lng: 121.4884, taxId: "85184649", operationType: "OT" },
   { name: "新莊國中", shortName: "新莊國中", regionCode: "A", address: "新北市新莊區中正路211號", lat: 25.0358, lng: 121.4520, taxId: "66601546", operationType: "OT" },
   { name: "松山國小", shortName: "松山國小", regionCode: "B", address: "台北市松山區八德路四段746號", lat: 25.0498, lng: 121.5785, taxId: "66601546", operationType: "OT" },
   { name: "國防醫學大學", shortName: "國防醫學大學", regionCode: "B", address: "台北市內湖區民權東路六段161號", lat: 25.0640, lng: 121.6076, taxId: "66601546", operationType: "OT" },

@@ -33,9 +33,9 @@ const HQ_LNG = 121.5133;
 const COMPANY_TAX_ID = "66601546";
 
 const VENUE_DATA: Record<string, VenueInfo> = {
-  "新北高中": { region: "A", address: "新北市三重區三信路1號", lat: 25.0712, lng: 121.4956, taxId: "85300099", isInternal: false, operationType: "OT" },
-  "三民高中": { region: "A", address: "新北市蘆洲區三民路60號", lat: 25.0834, lng: 121.4789, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
-  "三重商工": { region: "A", address: "新北市三重區中正北路163號", lat: 25.0645, lng: 121.4873, taxId: "85184649", isInternal: false, operationType: "OT" },
+  "新北高中": { region: "A", address: "新北市三重區三信路1號", lat: 25.0584, lng: 121.4858, taxId: "85300099", isInternal: false, operationType: "OT" },
+  "三民高中": { region: "A", address: "新北市蘆洲區三民路96號", lat: 25.08556, lng: 121.47278, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
+  "三重商工": { region: "A", address: "新北市三重區中正北路163號", lat: 25.0648, lng: 121.4884, taxId: "85184649", isInternal: false, operationType: "OT" },
   "新莊國中": { region: "A", address: "新北市新莊區中正路211號", lat: 25.0358, lng: 121.4520, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
   "松山國小": { region: "B", address: "台北市松山區八德路四段746號", lat: 25.0498, lng: 121.5785, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
   "國防醫學大學": { region: "B", address: "台北市內湖區民權東路六段161號", lat: 25.0640, lng: 121.6076, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
