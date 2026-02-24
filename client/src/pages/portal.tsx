@@ -661,7 +661,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
     }
   }, [stage]);
 
-  const handleClockIn = useCallback(async () => {
+  const handleClockIn = useCallback(async (clockType: "in" | "out" = "in") => {
     setStage("scanning");
     setResult(null);
     setScanAngle(0);
@@ -683,7 +683,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
       const resp = await fetch("/api/liff/clock-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId: employee.id, latitude, longitude, accuracy: Math.round(acc) }),
+        body: JSON.stringify({ employeeId: employee.id, latitude, longitude, accuracy: Math.round(acc), clockType }),
       });
 
       if (!resp.ok) {
@@ -722,14 +722,14 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
             <div className="grid grid-cols-2 gap-3">
               <button
                 className="h-12 rounded-lg bg-juns-green hover:bg-juns-green/90 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-                onClick={handleClockIn}
+                onClick={() => handleClockIn("in")}
                 data-testid="button-clock-in"
               >
                 上班
               </button>
               <button
                 className="h-12 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-                onClick={handleClockIn}
+                onClick={() => handleClockIn("out")}
                 data-testid="button-clock-out"
               >
                 下班
@@ -944,7 +944,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
         <RadarClockIn employee={employee} onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })} onResult={setClockInResult} />
 
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-outing-signin">
-          <button className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+          <button className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors" data-testid="button-outing-signin">
             <span className="text-sm font-semibold text-juns-navy">外出/簽到</span>
             <ChevronRight className="h-4 w-4 text-slate-400" />
           </button>

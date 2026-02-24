@@ -101,7 +101,8 @@ export interface ClockInResult {
 export async function processClockIn(
   params: { lineUserId?: string; employeeId?: number },
   lat: number,
-  lng: number
+  lng: number,
+  forcedClockType?: "in" | "out"
 ): Promise<ClockInResult> {
   const now = getTaiwanNow();
   const todayStr = formatTaiwanDate(now);
@@ -257,7 +258,7 @@ export async function processClockIn(
     };
   }
 
-  const clockType = determineClockType(now, venueShifts);
+  const clockType = forcedClockType || determineClockType(now, venueShifts);
   const shiftInfo = matchingShift || venueShifts[0];
 
   await storage.createClockRecord({
