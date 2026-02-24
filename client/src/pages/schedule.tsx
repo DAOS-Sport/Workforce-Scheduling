@@ -552,7 +552,7 @@ export default function SchedulePage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 px-4 py-2 border-b flex-wrap">
+      <div className="sticky top-[49px] z-40 bg-background flex items-center justify-between gap-2 px-4 py-2 border-b flex-wrap">
         <div className="flex items-center gap-2">
           <h1 className="text-sm font-bold tracking-tight" data-testid="text-page-title">排班編輯器</h1>
           <span className="text-muted-foreground/40">|</span>
