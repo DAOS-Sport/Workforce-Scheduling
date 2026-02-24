@@ -81,22 +81,11 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
-        juns: {
-          navy: '#183059',
-          green: '#8CC63F',
-          teal: '#1BB1A5',
-          surface: '#FCFCFD',
-          border: '#EAEAEA',
-        },
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
         serif: ["var(--font-serif)"],
         mono: ["var(--font-mono)"],
-      },
-      boxShadow: {
-        'flat': '0 2px 8px -2px rgba(0, 0, 0, 0.05)',
-        'glow': '0 0 15px rgba(27, 177, 165, 0.3)',
       },
       keyframes: {
         "accordion-down": {
@@ -121,14 +110,6 @@ export default {
           from: { opacity: "0", transform: "translateY(8px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
-        "radar-sweep": {
-          from: { transform: "rotate(0deg)" },
-          to: { transform: "rotate(360deg)" },
-        },
-        "radar-ping": {
-          "0%": { transform: "scale(0.5)", opacity: "0.8" },
-          "100%": { transform: "scale(2.5)", opacity: "0" },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -136,8 +117,6 @@ export default {
         "scale-pulse": "scale-pulse 0.4s ease-in-out",
         "shake": "shake 0.5s ease-in-out",
         "fade-in-up": "fade-in-up 0.3s ease-out both",
-        "radar-sweep": "radar-sweep 2s linear infinite",
-        "radar-ping": "radar-ping 1.5s ease-out infinite",
       },
     },
   },

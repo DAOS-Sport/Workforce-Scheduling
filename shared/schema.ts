@@ -21,7 +21,7 @@ export const venues = pgTable("venues", {
   address: text("address"),
   latitude: real("latitude"),
   longitude: real("longitude"),
-  radius: integer("radius").default(300),
+  radius: integer("radius").default(100),
   taxId: text("tax_id"),
   isInternal: boolean("is_internal").default(false),
   operationType: text("operation_type"),
