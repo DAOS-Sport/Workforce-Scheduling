@@ -120,7 +120,7 @@ export default function SchedulePage() {
     queryKey: ["/api/schedule-slots", activeRegion, dateRange.start, dateRange.end],
   });
 
-  const { data: shifts = [] } = useQuery<Shift[]>({
+  const { data: shifts = [], isLoading: shiftsLoading } = useQuery<Shift[]>({
     queryKey: ["/api/shifts", activeRegion, dateRange.start, dateRange.end],
   });
 
@@ -353,6 +353,20 @@ export default function SchedulePage() {
     },
     onError: (err: Error) => {
       toast({ title: "批次新增失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const copyFromPrevious = useMutation({
+    mutationFn: async (data: { regionCode: string; targetYear: number; targetMonth: number }) => {
+      const res = await apiRequest("POST", "/api/shifts/copy-from-previous", data);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries();
+      toast({ title: data.message || `已複製 ${data.created} 筆班表` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "複製失敗", description: err.message, variant: "destructive" });
     },
   });
 
@@ -720,6 +734,28 @@ export default function SchedulePage() {
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col relative">
+        {shifts.length === 0 && !shiftsLoading && (
+          <div className="mx-2 mb-2 rounded-lg border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 p-3 flex items-center justify-between gap-3">
+            <div className="text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2">
+              <Copy className="h-4 w-4 shrink-0" />
+              <span>本月尚無排班，是否從上個月複製班表？</span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+              disabled={copyFromPrevious.isPending}
+              onClick={() => {
+                const targetYear = currentMonth.getFullYear();
+                const targetMonth = currentMonth.getMonth() + 1;
+                copyFromPrevious.mutate({ regionCode: activeRegion, targetYear, targetMonth });
+              }}
+              data-testid="button-copy-previous-month"
+            >
+              {copyFromPrevious.isPending ? "複製中..." : "從上月複製"}
+            </Button>
+          </div>
+        )}
         <div className="flex-1 overflow-auto" ref={scrollRef}>
           <table className="border-separate border-spacing-0 text-sm" style={{ minWidth: `${COL_LEFT_WIDTH + monthDates.length * COL_DATE_WIDTH}px` }}>
             <thead>
@@ -1175,40 +1211,6 @@ export default function SchedulePage() {
               預覽：{venues.find((v) => v.id.toString() === shiftVenueId)?.shortName || "—"} {shiftStartTime}-{shiftEndTime} [{shiftRole}]
               {shiftIsDispatch && " (派遣)"}
             </div>
-
-            {shiftEmployeeId && (() => {
-              const empShifts = shifts.filter(s => s.employeeId === shiftEmployeeId)
-                .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
-              return (
-                <div className="rounded-lg border p-3 space-y-1.5">
-                  <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                    <CalendarDays className="h-3 w-3" />
-                    本月排班狀況 ({empShifts.length} 筆)
-                  </div>
-                  {empShifts.length === 0 ? (
-                    <div className="text-xs text-muted-foreground/60">本月尚無排班</div>
-                  ) : (
-                    <div className="max-h-[120px] overflow-auto space-y-0.5">
-                      {empShifts.map(s => {
-                        const v = venues.find(vn => vn.id === s.venueId);
-                        const isCurrentDate = s.date === shiftDate;
-                        return (
-                          <div
-                            key={s.id}
-                            className={`text-[11px] flex items-center gap-1.5 px-1.5 py-0.5 rounded ${isCurrentDate ? "bg-primary/10 font-semibold" : ""}`}
-                          >
-                            <span className="text-muted-foreground w-[36px] shrink-0">{format(new Date(s.date), "M/d")}</span>
-                            <span className="text-muted-foreground w-[14px] shrink-0">{DAY_NAMES[new Date(s.date).getDay()]}</span>
-                            <span className="truncate">{v?.shortName || "?"}</span>
-                            <span className="text-muted-foreground">{s.startTime.substring(0, 5)}-{s.endTime.substring(0, 5)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
 
             <div className="space-y-2">
               <div className="flex items-center gap-2">

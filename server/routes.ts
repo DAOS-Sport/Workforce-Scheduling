@@ -273,6 +273,72 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/shifts/copy-from-previous", async (req, res) => {
+    try {
+      const { regionCode, targetYear, targetMonth } = req.body;
+      if (!regionCode || !targetYear || !targetMonth) {
+        return res.status(400).json({ message: "缺少必要欄位" });
+      }
+      const region = await storage.getRegionByCode(regionCode);
+      if (!region) return res.status(404).json({ message: "找不到區域" });
+
+      const prevDate = new Date(targetYear, targetMonth - 2, 1);
+      const prevYear = prevDate.getFullYear();
+      const prevMonth = prevDate.getMonth() + 1;
+      const prevStart = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
+      const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
+      const prevEnd = `${prevYear}-${String(prevMonth).padStart(2, "0")}-${String(prevLastDay).padStart(2, "0")}`;
+
+      const targetStart = `${targetYear}-${String(targetMonth).padStart(2, "0")}-01`;
+      const targetLastDay = new Date(targetYear, targetMonth, 0).getDate();
+      const targetEnd = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(targetLastDay).padStart(2, "0")}`;
+
+      const existingTargetShifts = await storage.getShiftsByRegionAndDateRange(region.id, targetStart, targetEnd);
+      if (existingTargetShifts.length > 0) {
+        return res.status(400).json({ message: "目標月份已有排班資料，無法覆蓋" });
+      }
+
+      const prevShifts = await storage.getShiftsByRegionAndDateRange(region.id, prevStart, prevEnd);
+      if (prevShifts.length === 0) {
+        return res.status(400).json({ message: "上個月無排班資料可複製" });
+      }
+
+      const results: any[] = [];
+      const errors: string[] = [];
+
+      for (const s of prevShifts) {
+        const dateParts = s.date.split("-");
+        const dayOfMonth = parseInt(dateParts[2], 10);
+        if (dayOfMonth > targetLastDay) {
+          continue;
+        }
+        const newDate = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`;
+
+        try {
+          const shift = await storage.createShift({
+            employeeId: s.employeeId,
+            venueId: s.venueId,
+            date: newDate,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            role: s.role,
+            isDispatch: s.isDispatch,
+            dispatchCompany: s.dispatchCompany,
+            dispatchName: s.dispatchName,
+            dispatchPhone: s.dispatchPhone,
+          });
+          results.push(shift);
+        } catch (err: any) {
+          errors.push(`${newDate}: ${err.message}`);
+        }
+      }
+
+      res.json({ created: results.length, errors, message: `已從${prevMonth}月複製 ${results.length} 筆班表` });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/schedule-slots/:regionCode/:startDate/:endDate", async (req, res) => {
     const { regionCode, startDate, endDate } = req.params;
     const region = await storage.getRegionByCode(regionCode);
