@@ -916,14 +916,24 @@ export default function SchedulePage() {
                             <div className="space-y-0.5">
                               {cellShifts.map((shift) => {
                                 const venue = venueMap.get(shift.venueId);
+                                const shiftDateStr = format(d, "yyyy-MM-dd");
+                                const slots = slotsByVenueDate.get(`${shift.venueId}-${shiftDateStr}`) || [];
+                                const sStart = shift.startTime.substring(0, 5);
+                                const sEnd = shift.endTime.substring(0, 5);
+                                const matchedSlot = slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sl.endTime.substring(0, 5) >= sEnd) 
+                                  || slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
+                                const shiftRole = matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role;
+                                const roleShort = ROLE_SHORT[shiftRole] || shiftRole.slice(0, 1);
+                                const isCounter = shiftRole === "櫃台" || shiftRole === "櫃檯";
+                                const cardColor = shift.isDispatch
+                                  ? "bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800"
+                                  : isCounter
+                                    ? "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800"
+                                    : "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800";
                                 return (
                                   <div
                                     key={shift.id}
-                                    className={`rounded px-1 py-0.5 text-xs cursor-pointer transition-colors ${
-                                      shift.isDispatch
-                                        ? "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800"
-                                        : "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800"
-                                    }`}
+                                    className={`rounded px-1 py-0.5 text-xs cursor-pointer transition-colors ${cardColor}`}
                                     onClick={() => openEditShiftDialog(shift)}
                                     data-testid={`shift-${shift.id}`}
                                   >
@@ -931,27 +941,15 @@ export default function SchedulePage() {
                                       <div className="font-medium leading-tight text-[11px] truncate">
                                         {venue?.shortName || "未知"}
                                       </div>
-                                      {(() => {
-                                        const dateStr = format(d, "yyyy-MM-dd");
-                                        const slots = slotsByVenueDate.get(`${shift.venueId}-${dateStr}`) || [];
-                                        const sStart = shift.startTime.substring(0, 5);
-                                        const sEnd = shift.endTime.substring(0, 5);
-                                        const matchedSlot = slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sl.endTime.substring(0, 5) >= sEnd) 
-                                          || slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
-                                        const role = matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role;
-                                        const short = ROLE_SHORT[role] || role.slice(0, 1);
-                                        return (
-                                          <span className="text-[9px] px-0.5 rounded bg-background/50 border border-current opacity-70 shrink-0">
-                                            {short}
-                                          </span>
-                                        );
-                                      })()}
+                                      <span className="text-[9px] px-0.5 rounded bg-background/50 border border-current opacity-70 shrink-0">
+                                        {roleShort}
+                                      </span>
                                     </div>
                                     <div className="leading-tight text-[11px] text-muted-foreground">
-                                      {shift.startTime.substring(0, 5)}-{shift.endTime.substring(0, 5)}
+                                      {sStart}-{sEnd}
                                     </div>
                                     {shift.isDispatch && (
-                                      <div className="text-[10px] text-orange-600 dark:text-orange-400 font-medium">派遣</div>
+                                      <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">派遣</div>
                                     )}
                                   </div>
                                 );
@@ -1212,102 +1210,100 @@ export default function SchedulePage() {
               );
             })()}
 
-            {!editingShift && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={shiftBatchMode}
-                    onCheckedChange={(checked) => {
-                      setShiftBatchMode(checked);
-                      if (!checked) setShiftBatchDates(new Set());
-                    }}
-                    data-testid="switch-shift-batch"
-                  />
-                  <Label className="text-sm">批次調整</Label>
-                  {shiftBatchMode && shiftBatchDates.size > 0 && (
-                    <span className="text-xs text-primary font-medium ml-auto">
-                      已選 {shiftBatchDates.size + 1} 天
-                    </span>
-                  )}
-                </div>
-                {shiftBatchMode && (
-                  <div className="rounded-lg border p-3 space-y-2">
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      <CalendarDays className="h-3 w-3" />
-                      選擇其他日期同步調整：
-                    </div>
-                    <div className="flex gap-1 mb-1.5">
-                      <button
-                        type="button"
-                        className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
-                        onClick={() => {
-                          const weekday = new Date(shiftDate).getDay();
-                          const sameDays = monthDates.filter(d => d.getDay() === weekday && format(d, "yyyy-MM-dd") !== shiftDate);
-                          setShiftBatchDates(new Set(sameDays.map(d => format(d, "yyyy-MM-dd"))));
-                        }}
-                        data-testid="button-batch-same-weekday"
-                      >
-                        全選同星期{DAY_NAMES[new Date(shiftDate).getDay()]}
-                      </button>
-                      <button
-                        type="button"
-                        className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
-                        onClick={() => {
-                          const all = monthDates
-                            .map(d => format(d, "yyyy-MM-dd"))
-                            .filter(d => d !== shiftDate);
-                          setShiftBatchDates(new Set(all));
-                        }}
-                        data-testid="button-batch-all-dates"
-                      >
-                        全選
-                      </button>
-                      <button
-                        type="button"
-                        className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
-                        onClick={() => setShiftBatchDates(new Set())}
-                        data-testid="button-batch-clear"
-                      >
-                        清除
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-7 gap-1">
-                      {monthDates.map((md) => {
-                        const mdStr = format(md, "yyyy-MM-dd");
-                        const isCurrent = mdStr === shiftDate;
-                        const isSelected = shiftBatchDates.has(mdStr);
-                        const isWeekend = md.getDay() === 0 || md.getDay() === 6;
-                        return (
-                          <button
-                            key={mdStr}
-                            type="button"
-                            disabled={isCurrent}
-                            className={`text-[10px] py-1.5 rounded text-center transition-all ${
-                              isCurrent
-                                ? "bg-primary text-primary-foreground font-bold cursor-default"
-                                : isSelected
-                                  ? "bg-blue-500 text-white font-bold"
-                                  : isWeekend
-                                    ? "bg-muted/50 hover:bg-muted text-muted-foreground"
-                                    : "bg-background hover:bg-muted border border-border/50"
-                            }`}
-                            onClick={() => {
-                              const next = new Set(shiftBatchDates);
-                              if (next.has(mdStr)) next.delete(mdStr);
-                              else next.add(mdStr);
-                              setShiftBatchDates(next);
-                            }}
-                            data-testid={`batch-shift-date-${mdStr}`}
-                          >
-                            {format(md, "d")}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={shiftBatchMode}
+                  onCheckedChange={(checked) => {
+                    setShiftBatchMode(checked);
+                    if (!checked) setShiftBatchDates(new Set());
+                  }}
+                  data-testid="switch-shift-batch"
+                />
+                <Label className="text-sm">批次調整</Label>
+                {shiftBatchMode && shiftBatchDates.size > 0 && (
+                  <span className="text-xs text-primary font-medium ml-auto">
+                    已選 {shiftBatchDates.size + 1} 天
+                  </span>
                 )}
               </div>
-            )}
+              {shiftBatchMode && (
+                <div className="rounded-lg border p-3 space-y-2">
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />
+                    選擇其他日期同步調整：
+                  </div>
+                  <div className="flex gap-1 mb-1.5">
+                    <button
+                      type="button"
+                      className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+                      onClick={() => {
+                        const weekday = new Date(shiftDate).getDay();
+                        const sameDays = monthDates.filter(d => d.getDay() === weekday && format(d, "yyyy-MM-dd") !== shiftDate);
+                        setShiftBatchDates(new Set(sameDays.map(d => format(d, "yyyy-MM-dd"))));
+                      }}
+                      data-testid="button-batch-same-weekday"
+                    >
+                      全選同星期{DAY_NAMES[new Date(shiftDate).getDay()]}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+                      onClick={() => {
+                        const all = monthDates
+                          .map(d => format(d, "yyyy-MM-dd"))
+                          .filter(d => d !== shiftDate);
+                        setShiftBatchDates(new Set(all));
+                      }}
+                      data-testid="button-batch-all-dates"
+                    >
+                      全選
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+                      onClick={() => setShiftBatchDates(new Set())}
+                      data-testid="button-batch-clear"
+                    >
+                      清除
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {monthDates.map((md) => {
+                      const mdStr = format(md, "yyyy-MM-dd");
+                      const isCurrent = mdStr === shiftDate;
+                      const isSelected = shiftBatchDates.has(mdStr);
+                      const isWeekend = md.getDay() === 0 || md.getDay() === 6;
+                      return (
+                        <button
+                          key={mdStr}
+                          type="button"
+                          disabled={isCurrent}
+                          className={`text-[10px] py-1.5 rounded text-center transition-all ${
+                            isCurrent
+                              ? "bg-primary text-primary-foreground font-bold cursor-default"
+                              : isSelected
+                                ? "bg-blue-500 text-white font-bold"
+                                : isWeekend
+                                  ? "bg-muted/50 hover:bg-muted text-muted-foreground"
+                                  : "bg-background hover:bg-muted border border-border/50"
+                          }`}
+                          onClick={() => {
+                            const next = new Set(shiftBatchDates);
+                            if (next.has(mdStr)) next.delete(mdStr);
+                            else next.add(mdStr);
+                            setShiftBatchDates(next);
+                          }}
+                          data-testid={`batch-shift-date-${mdStr}`}
+                        >
+                          {format(md, "d")}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="flex-row gap-2 justify-between sm:justify-between">
@@ -1320,11 +1316,11 @@ export default function SchedulePage() {
                     if (shiftBatchMode && shiftBatchDates.size > 0) {
                       const allDates = [shiftDate, ...Array.from(shiftBatchDates)];
                       batchDeleteShifts.mutate({
-                        employeeId: shiftEmployeeId,
+                        employeeId: shiftEmployeeId!,
                         venueId: editingShift.venueId,
                         startTime: editingShift.startTime,
                         endTime: editingShift.endTime,
-                        role: editingShift.assignedRole || undefined,
+                        role: editingShift.role || undefined,
                         targetDates: allDates,
                       });
                     } else {
