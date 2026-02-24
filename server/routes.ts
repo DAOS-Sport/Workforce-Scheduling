@@ -195,6 +195,33 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  app.post("/api/shifts/batch-delete", async (req, res) => {
+    try {
+      const { employeeId, venueId, startTime, endTime, role, targetDates } = req.body;
+      const empId = Number(employeeId);
+      if (!empId || !Array.isArray(targetDates) || targetDates.length === 0) {
+        return res.status(400).json({ message: "employeeId and targetDates are required" });
+      }
+      let deletedCount = 0;
+      for (const date of targetDates) {
+        const shifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
+        const matching = shifts.filter(s =>
+          (!venueId || s.venueId === Number(venueId)) &&
+          (!startTime || s.startTime === startTime) &&
+          (!endTime || s.endTime === endTime) &&
+          (!role || s.role === role)
+        );
+        for (const s of matching) {
+          await storage.deleteShift(s.id);
+          deletedCount++;
+        }
+      }
+      res.json({ success: true, deletedCount });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/shifts/batch", async (req, res) => {
     try {
       const { employeeId, venueId, startTime, endTime, role, isDispatch, targetDates } = req.body;

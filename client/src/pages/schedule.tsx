@@ -313,6 +313,22 @@ export default function SchedulePage() {
     },
   });
 
+  const batchDeleteShifts = useMutation({
+    mutationFn: async (data: { employeeId: number; venueId?: number; startTime?: string; endTime?: string; role?: string; targetDates: string[] }) => {
+      const res = await apiRequest("POST", "/api/shifts/batch-delete", data);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries();
+      toast({ title: `已刪除 ${data.deletedCount} 筆班次` });
+      setShiftBatchDates(new Set());
+      setShiftBatchMode(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "批次刪除失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
   const batchCreateShifts = useMutation({
     mutationFn: async (data: { employeeId: number; venueId: string; startTime: string; endTime: string; role: string; isDispatch: boolean; targetDates: string[] }) => {
       const res = await apiRequest("POST", "/api/shifts/batch", data);
@@ -861,13 +877,12 @@ export default function SchedulePage() {
       <Dialog open={shiftDialogOpen} onOpenChange={setShiftDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {editingShift ? <Edit2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {editingShift ? "編輯班次" : "新增班次"}
+            <DialogTitle className="text-base font-bold">
+              {employees.find((e) => e.id === shiftEmployeeId)?.name} — {shiftDate ? format(new Date(shiftDate), "M月d日 (E)", { locale: zhTW }) : ""}
             </DialogTitle>
-            <div className="flex items-center gap-2 pt-1">
-              <span className="text-base font-bold text-foreground">{employees.find((e) => e.id === shiftEmployeeId)?.name}</span>
-              <span className="text-sm text-muted-foreground">— {shiftDate ? format(new Date(shiftDate), "M月d日 (E)", { locale: zhTW }) : ""}</span>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {editingShift ? <Edit2 className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+              <span>{editingShift ? "編輯班次" : "新增班次"}</span>
             </div>
           </DialogHeader>
 
@@ -1067,19 +1082,32 @@ export default function SchedulePage() {
           </div>
 
           <DialogFooter className="flex-row gap-2 justify-between sm:justify-between">
-            <div>
+            <div className="flex gap-2">
               {editingShift && (
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={() => {
-                    deleteShift.mutate(editingShift.id);
+                    if (shiftBatchMode && shiftBatchDates.size > 0) {
+                      const allDates = [shiftDate, ...Array.from(shiftBatchDates)];
+                      batchDeleteShifts.mutate({
+                        employeeId: shiftEmployeeId,
+                        venueId: editingShift.venueId,
+                        startTime: editingShift.startTime,
+                        endTime: editingShift.endTime,
+                        role: editingShift.assignedRole || undefined,
+                        targetDates: allDates,
+                      });
+                    } else {
+                      deleteShift.mutate(editingShift.id);
+                    }
                     setShiftDialogOpen(false);
                   }}
+                  disabled={batchDeleteShifts.isPending}
                   data-testid="button-delete-shift"
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1" />
-                  刪除
+                  {shiftBatchMode && shiftBatchDates.size > 0 ? `批次刪除 (${shiftBatchDates.size + 1})` : "刪除"}
                 </Button>
               )}
             </div>
