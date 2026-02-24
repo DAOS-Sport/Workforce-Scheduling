@@ -820,6 +820,19 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
               )}
             </div>
 
+            {result.userLat !== null && result.userLng !== null && (
+              <div className="mb-3 p-2.5 rounded-lg bg-slate-50 border border-dashed border-slate-200">
+                <div className="text-[10px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Debug 定位資訊</div>
+                <div className="space-y-1 text-[11px] font-mono text-slate-500">
+                  <div>User: {result.userLat.toFixed(6)}, {result.userLng.toFixed(6)}</div>
+                  {result.nearbyVenues?.[0] && (
+                    <div>Target ({result.nearbyVenues[0].shortName}): <a href={`https://www.google.com/maps?q=${result.userLat},${result.userLng}`} target="_blank" rel="noopener noreferrer" className="text-juns-teal underline">查看地圖</a></div>
+                  )}
+                  {result.distance !== null && <div>Raw Distance: {result.distance}m</div>}
+                </div>
+              </div>
+            )}
+
             {result.nearbyVenues && result.nearbyVenues.length > 0 && (
               <div className="border border-juns-border rounded-lg overflow-hidden mb-3">
                 <div className="px-3 py-1.5 bg-slate-50 border-b border-juns-border">
