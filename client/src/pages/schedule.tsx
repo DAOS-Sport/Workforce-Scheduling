@@ -75,6 +75,8 @@ export default function SchedulePage() {
   const [shiftBatchDates, setShiftBatchDates] = useState<Set<string>>(new Set());
   const [shiftBatchMode, setShiftBatchMode] = useState(false);
   const [shiftTemplateId, setShiftTemplateId] = useState<string>("custom");
+  const [shiftSelectedEmployeeIds, setShiftSelectedEmployeeIds] = useState<Set<number>>(new Set());
+  const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
 
   const [requirementsPanelOpen, setRequirementsPanelOpen] = useState(false);
   const [reqPanelVenueId, setReqPanelVenueId] = useState<number | null>(null);
@@ -377,6 +379,8 @@ export default function SchedulePage() {
     setShiftBatchMode(false);
     setShiftBatchDates(new Set());
     setShiftTemplateId("custom");
+    setShiftSelectedEmployeeIds(new Set([employeeId]));
+    setEmployeeDropdownOpen(false);
     setShiftDialogOpen(true);
   };
 
@@ -394,41 +398,52 @@ export default function SchedulePage() {
   };
 
   const handleSaveShift = () => {
-    if (!shiftEmployeeId || !shiftDate || !shiftVenueId || !shiftStartTime || !shiftEndTime) return;
+    if (!shiftDate || !shiftVenueId || !shiftStartTime || !shiftEndTime) return;
     if (editingShift) {
       updateShift.mutate({
         id: editingShift.id,
-        employeeId: shiftEmployeeId,
+        employeeId: shiftEmployeeId!,
         venueId: parseInt(shiftVenueId),
         date: shiftDate,
         startTime: shiftStartTime,
         endTime: shiftEndTime,
         role: shiftRole,
         isDispatch: shiftIsDispatch,
-      });
-      setShiftDialogOpen(false);
-    } else if (shiftBatchMode && shiftBatchDates.size > 0) {
-      const allDates = [shiftDate, ...Array.from(shiftBatchDates)];
-      batchCreateShifts.mutate({
-        employeeId: shiftEmployeeId,
-        venueId: shiftVenueId,
-        startTime: shiftStartTime,
-        endTime: shiftEndTime,
-        role: shiftRole,
-        isDispatch: shiftIsDispatch,
-        targetDates: allDates,
       });
       setShiftDialogOpen(false);
     } else {
-      createShift.mutate({
-        employeeId: shiftEmployeeId,
-        venueId: parseInt(shiftVenueId),
-        date: shiftDate,
-        startTime: shiftStartTime,
-        endTime: shiftEndTime,
-        role: shiftRole,
-        isDispatch: shiftIsDispatch,
-      });
+      const targetEmployeeIds = shiftSelectedEmployeeIds.size > 0
+        ? Array.from(shiftSelectedEmployeeIds)
+        : shiftEmployeeId ? [shiftEmployeeId] : [];
+      if (targetEmployeeIds.length === 0) return;
+
+      const allDates = shiftBatchMode && shiftBatchDates.size > 0
+        ? [shiftDate, ...Array.from(shiftBatchDates)]
+        : [shiftDate];
+
+      for (const empId of targetEmployeeIds) {
+        if (allDates.length > 1) {
+          batchCreateShifts.mutate({
+            employeeId: empId,
+            venueId: shiftVenueId,
+            startTime: shiftStartTime,
+            endTime: shiftEndTime,
+            role: shiftRole,
+            isDispatch: shiftIsDispatch,
+            targetDates: allDates,
+          });
+        } else {
+          createShift.mutate({
+            employeeId: empId,
+            venueId: parseInt(shiftVenueId),
+            date: shiftDate,
+            startTime: shiftStartTime,
+            endTime: shiftEndTime,
+            role: shiftRole,
+            isDispatch: shiftIsDispatch,
+          });
+        }
+      }
       setShiftDialogOpen(false);
     }
   };
@@ -887,6 +902,82 @@ export default function SchedulePage() {
           </DialogHeader>
 
           <div className="space-y-4">
+            {!editingShift && (
+              <div className="space-y-2">
+                <Label>排班人員</Label>
+                <Popover open={employeeDropdownOpen} onOpenChange={setEmployeeDropdownOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent hover:text-accent-foreground"
+                      data-testid="button-select-employees"
+                    >
+                      <span className="truncate">
+                        {shiftSelectedEmployeeIds.size === 0
+                          ? "選擇人員"
+                          : shiftSelectedEmployeeIds.size === 1
+                            ? employees.find(e => shiftSelectedEmployeeIds.has(e.id))?.name || "1 人"
+                            : `已選 ${shiftSelectedEmployeeIds.size} 人`}
+                      </span>
+                      <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[280px] p-0" align="start">
+                    <div className="max-h-[300px] overflow-auto p-1">
+                      {[
+                        { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
+                        { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
+                        { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
+                        { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                        { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
+                        { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
+                      ].map(group => {
+                        const groupEmps = employees.filter(group.filter);
+                        if (groupEmps.length === 0) return null;
+                        const allSelected = groupEmps.every(e => shiftSelectedEmployeeIds.has(e.id));
+                        return (
+                          <div key={group.key} className="mb-1">
+                            <button
+                              type="button"
+                              className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-sm"
+                              onClick={() => {
+                                const next = new Set(shiftSelectedEmployeeIds);
+                                if (allSelected) {
+                                  groupEmps.forEach(e => next.delete(e.id));
+                                } else {
+                                  groupEmps.forEach(e => next.add(e.id));
+                                }
+                                setShiftSelectedEmployeeIds(next);
+                              }}
+                            >
+                              <Checkbox checked={allSelected} className="h-3.5 w-3.5" />
+                              {group.label} ({groupEmps.length})
+                            </button>
+                            {groupEmps.map(emp => (
+                              <button
+                                key={emp.id}
+                                type="button"
+                                className="w-full flex items-center gap-2 pl-6 pr-2 py-1.5 text-sm hover:bg-muted rounded-sm"
+                                onClick={() => {
+                                  const next = new Set(shiftSelectedEmployeeIds);
+                                  if (next.has(emp.id)) next.delete(emp.id);
+                                  else next.add(emp.id);
+                                  setShiftSelectedEmployeeIds(next);
+                                }}
+                                data-testid={`checkbox-employee-${emp.id}`}
+                              >
+                                <Checkbox checked={shiftSelectedEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
+                                <span className="text-foreground">{emp.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <div className="flex-1 space-y-2">
                 <Label>場館</Label>
