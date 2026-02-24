@@ -73,6 +73,13 @@ function determineClockType(now: Date, shifts: Shift[]): "in" | "out" {
   return "in";
 }
 
+interface NearbyVenue {
+  name: string;
+  distance: number;
+  radius: number;
+  inRange: boolean;
+}
+
 export interface ClockInResult {
   status: "success" | "warning" | "fail" | "error";
   clockType: "in" | "out";
@@ -84,14 +91,29 @@ export interface ClockInResult {
   failReason: string | null;
   employeeName: string | null;
   radius: number | null;
+  nearbyVenues: NearbyVenue[];
+  accuracy?: number;
+  userLat?: number;
+  userLng?: number;
 }
 
-export async function processClockIn(lineUserId: string, lat: number, lng: number): Promise<ClockInResult> {
+export async function processClockIn(
+  identifier: { lineUserId?: string; employeeId?: number },
+  lat: number,
+  lng: number,
+  accuracy?: number
+): Promise<ClockInResult> {
   const now = getTaiwanNow();
   const todayStr = formatTaiwanDate(now);
   const timeStr = formatTaiwanTime(now);
 
-  const employee = await storage.getEmployeeByLineId(lineUserId);
+  let employee;
+  if (identifier.employeeId) {
+    employee = await storage.getEmployee(identifier.employeeId);
+  } else if (identifier.lineUserId) {
+    employee = await storage.getEmployeeByLineId(identifier.lineUserId);
+  }
+
   if (!employee) {
     return {
       status: "error",
@@ -101,9 +123,10 @@ export async function processClockIn(lineUserId: string, lat: number, lng: numbe
       time: timeStr,
       date: todayStr,
       shiftInfo: null,
-      failReason: "LINE 帳號尚未綁定員工資料",
+      failReason: identifier.lineUserId ? "LINE 帳號尚未綁定員工資料" : "找不到員工資料",
       employeeName: null,
       radius: null,
+      nearbyVenues: [],
     };
   }
 
@@ -119,24 +142,27 @@ export async function processClockIn(lineUserId: string, lat: number, lng: numbe
       failReason: "帳號目前為非在職狀態",
       employeeName: employee.name,
       radius: null,
+      nearbyVenues: [],
     };
   }
 
   const allVenues = await storage.getAllVenues();
   const validVenues = allVenues.filter((v) => v.latitude && v.longitude);
 
-  let closestVenue: Venue | null = null;
-  let closestDistance = Infinity;
+  const venueDistances = validVenues.map((v) => ({
+    venue: v,
+    distance: haversineDistance(lat, lng, v.latitude!, v.longitude!),
+  })).sort((a, b) => a.distance - b.distance);
 
-  for (const venue of validVenues) {
-    const dist = haversineDistance(lat, lng, venue.latitude!, venue.longitude!);
-    if (dist < closestDistance) {
-      closestDistance = dist;
-      closestVenue = venue;
-    }
-  }
+  const nearbyVenues: NearbyVenue[] = venueDistances.slice(0, 5).map((vd) => ({
+    name: vd.venue.shortName || vd.venue.name,
+    distance: Math.round(vd.distance),
+    radius: vd.venue.radius || 300,
+    inRange: vd.distance <= (vd.venue.radius || 300),
+  }));
 
-  if (!closestVenue || closestDistance > (closestVenue.radius || 100)) {
+  const closest = venueDistances[0];
+  if (!closest || closest.distance > (closest.venue.radius || 300)) {
     await storage.createClockRecord({
       employeeId: employee.id,
       venueId: null,
@@ -144,28 +170,35 @@ export async function processClockIn(lineUserId: string, lat: number, lng: numbe
       clockType: "in",
       latitude: lat,
       longitude: lng,
-      distance: closestDistance === Infinity ? null : Math.round(closestDistance),
+      distance: closest ? Math.round(closest.distance) : null,
       status: "fail",
       failReason: "不在任何場館範圍內",
-      matchedVenueName: closestVenue?.shortName || null,
+      matchedVenueName: closest?.venue.shortName || null,
     });
 
     return {
       status: "fail",
       clockType: "in",
-      venueName: closestVenue?.shortName || null,
-      distance: closestDistance === Infinity ? null : Math.round(closestDistance),
+      venueName: closest?.venue.shortName || null,
+      distance: closest ? Math.round(closest.distance) : null,
       time: timeStr,
       date: todayStr,
       shiftInfo: null,
       failReason: "不在任何場館範圍內",
       employeeName: employee.name,
-      radius: closestVenue?.radius || 100,
+      radius: closest?.venue.radius || 300,
+      nearbyVenues,
+      accuracy,
+      userLat: lat,
+      userLng: lng,
     };
   }
 
+  const closestVenue = closest.venue;
+  const closestDistance = closest.distance;
+
   const todayShifts = await storage.getShiftsByEmployeeAndDateRange(employee.id, todayStr, todayStr);
-  const venueShifts = todayShifts.filter((s) => s.venueId === closestVenue!.id);
+  const venueShifts = todayShifts.filter((s) => s.venueId === closestVenue.id);
   const matchingShift = venueShifts.find((s) => isTimeInShiftWindow(now, s));
 
   if (venueShifts.length === 0) {
@@ -192,7 +225,11 @@ export async function processClockIn(lineUserId: string, lat: number, lng: numbe
       shiftInfo: null,
       failReason: "今日無排班",
       employeeName: employee.name,
-      radius: closestVenue.radius || 100,
+      radius: closestVenue.radius || 300,
+      nearbyVenues,
+      accuracy,
+      userLat: lat,
+      userLng: lng,
     };
   }
 
@@ -222,7 +259,11 @@ export async function processClockIn(lineUserId: string, lat: number, lng: numbe
     shiftInfo: `${shiftInfo.startTime.slice(0, 5)}-${shiftInfo.endTime.slice(0, 5)}`,
     failReason: null,
     employeeName: employee.name,
-    radius: closestVenue.radius || 100,
+    radius: closestVenue.radius || 300,
+    nearbyVenues,
+    accuracy,
+    userLat: lat,
+    userLng: lng,
   };
 }
 
@@ -313,7 +354,7 @@ export async function handleLineWebhook(body: any): Promise<void> {
     }
 
     try {
-      const result = await processClockIn(lineUserId, userLat, userLng);
+      const result = await processClockIn({ lineUserId }, userLat, userLng);
       const message = formatClockInMessage(result);
       await replyToLine(replyToken, message, lineUserId);
     } catch (err) {
