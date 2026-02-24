@@ -660,15 +660,15 @@ export default function SchedulePage() {
               </div>
               <div className="max-h-[350px] overflow-auto p-1">
                 {[
-                  { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
                   { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
-                  { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
-                  { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
-                  { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
-                  { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
+                  { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
                   { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
-                  { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
+                  { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
                   { key: "ft-manager", label: "正職主管職", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "主管職" },
+                  { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                  { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
+                  { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
+                  { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
                   { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
                 ].map(group => {
                   const groupEmps = pickerEmployees.filter(group.filter);
@@ -850,13 +850,15 @@ export default function SchedulePage() {
                   );});
                   const groups = [
                     { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
-                    { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
                     { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
-                    { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
-                    { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
-                    { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
                     { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
+                    { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
+                    { key: "ft-manager", label: "正職主管職", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "主管職" },
+                    { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                    { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
                     { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
+                    { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
+                    { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
                   ];
                   const visibleEmployees = pickerEmployees.filter(e => scheduleVisibleEmployeeIds.has(e.id));
                   return [
@@ -1023,14 +1025,16 @@ export default function SchedulePage() {
                   <PopoverContent className="w-[280px] p-0" align="start">
                     <div className="max-h-[300px] overflow-auto p-1">
                       {[
-                        { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
                         { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
-                        { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
-                        { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
-                        { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
-                        { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
+                        { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
                         { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
+                        { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
+                        { key: "ft-manager", label: "正職主管職", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "主管職" },
+                        { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                        { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
                         { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
+                        { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
+                        { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
                       ].map(group => {
                         const groupEmps = employees.filter(group.filter);
                         if (groupEmps.length === 0) return null;
