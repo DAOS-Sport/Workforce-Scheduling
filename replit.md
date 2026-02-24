@@ -4,9 +4,6 @@
 A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
 
 ## Recent Changes
-- 2026-02-24: LIFF clock-in page (/liff/clock-in) rebuilt: dual auth mode — uses LINE Login OAuth when VITE_LIFF_ID not set (testing), auto-switches to LIFF SDK when set (production in LINE App). Juns brand design, radar scan animation, nearby venues list in results.
-- 2026-02-24: Portal + LIFF clock-in now use Juns Sports brand design: navy header (#183059), teal accents (#1BB1A5), green CTA (#8CC63F), white cards with ultra-fine borders (#EAEAEA), radar-sweep/ping animations
-- 2026-02-24: processClockIn accepts { employeeId } or { lineUserId } identifier; returns nearbyVenues array (top 5 sorted by distance); venue geofence radius default 300m
 - 2026-02-23: Added LIFF GPS 打卡網頁 (/liff/clock-in): uses browser navigator.geolocation for tamper-proof GPS, LIFF SDK for LINE auth, displays result directly on page. Refactored processClockIn() as shared core function used by both LIFF and webhook.
 - 2026-02-23: Added LINE GPS clock-in module: LINE webhook receives location messages, Haversine formula compares with venue GPS/radius, auto-determines clock-in/out, replies result in LINE chat. Admin page at /clock-records shows records with status/distance/venue.
 - 2026-02-23: Added clockRecords table (employeeId, venueId, shiftId, clockType, lat/lng, distance, status, failReason, clockTime, matchedVenueName)
