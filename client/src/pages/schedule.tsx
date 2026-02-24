@@ -111,6 +111,11 @@ export default function SchedulePage() {
   });
   const employees = useMemo(() => allEmployees.filter(e => e.status !== "inactive"), [allEmployees]);
 
+  const { data: allSystemEmployees = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees-all"],
+  });
+  const pickerEmployees = useMemo(() => allSystemEmployees.filter(e => e.status !== "inactive"), [allSystemEmployees]);
+
   const { data: scheduleSlots = [], isLoading: slotsLoading } = useQuery<ScheduleSlot[]>({
     queryKey: ["/api/schedule-slots", activeRegion, dateRange.start, dateRange.end],
   });
@@ -639,7 +644,7 @@ export default function SchedulePage() {
               <div className="flex gap-1">
                 <button
                   className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground"
-                  onClick={() => setScheduleVisibleEmployeeIds(new Set(employees.map(e => e.id)))}
+                  onClick={() => setScheduleVisibleEmployeeIds(new Set(pickerEmployees.map(e => e.id)))}
                 >
                   全選
                 </button>
@@ -660,7 +665,7 @@ export default function SchedulePage() {
                 { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
                 { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
               ].map(group => {
-                const groupEmps = employees.filter(group.filter);
+                const groupEmps = pickerEmployees.filter(group.filter);
                 if (groupEmps.length === 0) return null;
                 const allSelected = groupEmps.every(e => scheduleVisibleEmployeeIds.has(e.id));
                 const someSelected = groupEmps.some(e => scheduleVisibleEmployeeIds.has(e.id));
@@ -844,7 +849,7 @@ export default function SchedulePage() {
                     { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
                     { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
                   ];
-                  const visibleEmployees = employees.filter(e => scheduleVisibleEmployeeIds.has(e.id));
+                  const visibleEmployees = pickerEmployees.filter(e => scheduleVisibleEmployeeIds.has(e.id));
                   return [
                     ...venueRows,
                     ...groups.flatMap(({ key, label, filter }) => {
@@ -1159,6 +1164,40 @@ export default function SchedulePage() {
               {shiftIsDispatch && " (派遣)"}
             </div>
 
+            {shiftEmployeeId && (() => {
+              const empShifts = shifts.filter(s => s.employeeId === shiftEmployeeId)
+                .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+              return (
+                <div className="rounded-lg border p-3 space-y-1.5">
+                  <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />
+                    本月排班狀況 ({empShifts.length} 筆)
+                  </div>
+                  {empShifts.length === 0 ? (
+                    <div className="text-xs text-muted-foreground/60">本月尚無排班</div>
+                  ) : (
+                    <div className="max-h-[120px] overflow-auto space-y-0.5">
+                      {empShifts.map(s => {
+                        const v = venues.find(vn => vn.id === s.venueId);
+                        const isCurrentDate = s.date === shiftDate;
+                        return (
+                          <div
+                            key={s.id}
+                            className={`text-[11px] flex items-center gap-1.5 px-1.5 py-0.5 rounded ${isCurrentDate ? "bg-primary/10 font-semibold" : ""}`}
+                          >
+                            <span className="text-muted-foreground w-[36px] shrink-0">{format(new Date(s.date), "M/d")}</span>
+                            <span className="text-muted-foreground w-[14px] shrink-0">{DAY_NAMES[new Date(s.date).getDay()]}</span>
+                            <span className="truncate">{v?.shortName || "?"}</span>
+                            <span className="text-muted-foreground">{s.startTime.substring(0, 5)}-{s.endTime.substring(0, 5)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {!editingShift && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -1170,7 +1209,7 @@ export default function SchedulePage() {
                     }}
                     data-testid="switch-shift-batch"
                   />
-                  <Label className="text-sm">批次排班</Label>
+                  <Label className="text-sm">批次調整</Label>
                   {shiftBatchMode && shiftBatchDates.size > 0 && (
                     <span className="text-xs text-primary font-medium ml-auto">
                       已選 {shiftBatchDates.size + 1} 天
@@ -1181,7 +1220,7 @@ export default function SchedulePage() {
                   <div className="rounded-lg border p-3 space-y-2">
                     <div className="text-xs text-muted-foreground flex items-center gap-1">
                       <CalendarDays className="h-3 w-3" />
-                      選擇其他日期同步排班：
+                      選擇其他日期同步調整：
                     </div>
                     <div className="flex gap-1 mb-1.5">
                       <button
@@ -1297,7 +1336,7 @@ export default function SchedulePage() {
                 data-testid="button-save-shift"
               >
                 {shiftBatchMode && shiftBatchDates.size > 0
-                  ? batchCreateShifts.isPending ? "排班中..." : `批次排班 (${shiftBatchDates.size + 1}天)`
+                  ? batchCreateShifts.isPending ? "調整中..." : `批次調整 (${shiftBatchDates.size + 1}天)`
                   : "儲存"}
               </Button>
             </div>

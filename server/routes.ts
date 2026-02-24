@@ -19,6 +19,15 @@ export async function registerRoutes(
     res.json(regions);
   });
 
+  app.get("/api/employees-all", async (_req, res) => {
+    const allEmployees = await storage.getAllEmployees();
+    const DISPLAY_ROLES = ["救生", "守望", "櫃台", "教練", "主管職"];
+    const filtered = allEmployees.filter(
+      (e) => DISPLAY_ROLES.includes(e.role) && e.status === "active"
+    );
+    res.json(filtered);
+  });
+
   app.get("/api/employees/:regionCode", async (req, res) => {
     const { regionCode } = req.params;
     const region = await storage.getRegionByCode(regionCode);

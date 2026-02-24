@@ -31,6 +31,7 @@ export interface IStorage {
   updateVenue(id: number, data: Partial<InsertVenue>): Promise<Venue | undefined>;
 
   getEmployeesByRegion(regionId: number): Promise<Employee[]>;
+  getAllEmployees(): Promise<Employee[]>;
   getEmployee(id: number): Promise<Employee | undefined>;
   getEmployeeByCode(code: string): Promise<Employee | undefined>;
   createEmployee(data: InsertEmployee): Promise<Employee>;
@@ -125,6 +126,10 @@ export class DatabaseStorage implements IStorage {
 
   async getEmployeesByRegion(regionId: number): Promise<Employee[]> {
     return db.select().from(employees).where(eq(employees.regionId, regionId));
+  }
+
+  async getAllEmployees(): Promise<Employee[]> {
+    return db.select().from(employees);
   }
 
   async getEmployee(id: number): Promise<Employee | undefined> {
