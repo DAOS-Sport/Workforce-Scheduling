@@ -877,8 +877,8 @@ export default function SchedulePage() {
       <Dialog open={shiftDialogOpen} onOpenChange={setShiftDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base font-bold">
-              {employees.find((e) => e.id === shiftEmployeeId)?.name} — {shiftDate ? format(new Date(shiftDate), "M月d日 (E)", { locale: zhTW }) : ""}
+            <DialogTitle className="text-lg font-bold">
+              {employees.find((e) => e.id === shiftEmployeeId)?.name} <span className="text-sm font-normal text-muted-foreground">— {shiftDate ? format(new Date(shiftDate), "M月d日 (E)", { locale: zhTW }) : ""}</span>
             </DialogTitle>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               {editingShift ? <Edit2 className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
