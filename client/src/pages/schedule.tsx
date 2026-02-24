@@ -607,110 +607,117 @@ export default function SchedulePage() {
             </PopoverContent>
           </Popover>
         </div>
-        {shortageDates.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" />
-              缺班快跳
-            </span>
-            {shortageDates.map((d) => (
-              <button
-                key={d}
-                className="text-[10px] px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors cursor-pointer font-medium"
-                onClick={() => {
-                  const el = scrollRef.current?.querySelector(`[data-date-col="${d}"]`);
-                  if (el) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-                }}
-                title={`跳至 ${d} (缺班)`}
-                data-testid={`button-jump-shortage-${d}`}
-              >
-                {format(new Date(d), "M/d")}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {shortageDates.length > 0 && (
+            <>
+              <span className="text-[10px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                缺班快跳
+              </span>
+              {shortageDates.map((d) => (
+                <button
+                  key={d}
+                  className="text-[10px] px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors cursor-pointer font-medium"
+                  onClick={() => {
+                    const el = scrollRef.current?.querySelector(`[data-date-col="${d}"]`);
+                    if (el) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+                  }}
+                  title={`跳至 ${d} (缺班)`}
+                  data-testid={`button-jump-shortage-${d}`}
+                >
+                  {format(new Date(d), "M/d")}
+                </button>
+              ))}
+              <span className="text-muted-foreground/30">|</span>
+            </>
+          )}
 
-        <Popover open={empPickerOpen} onOpenChange={setEmpPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" data-testid="button-employee-picker">
-              <Users className="h-3.5 w-3.5" />
-              {scheduleVisibleEmployeeIds.size === 0 ? "選擇排班人員" : `已選 ${scheduleVisibleEmployeeIds.size} 人`}
-              <ChevronDown className="h-3 w-3 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[300px] p-0" align="start">
-            <div className="flex items-center justify-between px-3 py-2 border-b">
-              <span className="text-xs font-semibold">選擇排班人員</span>
-              <div className="flex gap-1">
-                <button
-                  className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground"
-                  onClick={() => setScheduleVisibleEmployeeIds(new Set(pickerEmployees.map(e => e.id)))}
-                >
-                  全選
-                </button>
-                <button
-                  className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground"
-                  onClick={() => setScheduleVisibleEmployeeIds(new Set())}
-                >
-                  清空
-                </button>
+          <Popover open={empPickerOpen} onOpenChange={setEmpPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 shrink-0" data-testid="button-employee-picker">
+                <Users className="h-3.5 w-3.5" />
+                {scheduleVisibleEmployeeIds.size === 0 ? "選擇排班人員" : `已選 ${scheduleVisibleEmployeeIds.size} 人`}
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[300px] p-0" align="end">
+              <div className="flex items-center justify-between px-3 py-2 border-b">
+                <span className="text-xs font-semibold">選擇排班人員</span>
+                <div className="flex gap-1">
+                  <button
+                    className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground"
+                    onClick={() => setScheduleVisibleEmployeeIds(new Set(pickerEmployees.map(e => e.id)))}
+                  >
+                    全選
+                  </button>
+                  <button
+                    className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground"
+                    onClick={() => setScheduleVisibleEmployeeIds(new Set())}
+                  >
+                    清空
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="max-h-[350px] overflow-auto p-1">
-              {[
-                { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
-                { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
-                { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
-                { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
-                { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
-                { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
-              ].map(group => {
-                const groupEmps = pickerEmployees.filter(group.filter);
-                if (groupEmps.length === 0) return null;
-                const allSelected = groupEmps.every(e => scheduleVisibleEmployeeIds.has(e.id));
-                const someSelected = groupEmps.some(e => scheduleVisibleEmployeeIds.has(e.id));
-                return (
-                  <div key={group.key} className="mb-0.5">
-                    <button
-                      type="button"
-                      className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-sm"
-                      onClick={() => {
-                        const next = new Set(scheduleVisibleEmployeeIds);
-                        if (allSelected) {
-                          groupEmps.forEach(e => next.delete(e.id));
-                        } else {
-                          groupEmps.forEach(e => next.add(e.id));
-                        }
-                        setScheduleVisibleEmployeeIds(next);
-                      }}
-                      data-testid={`picker-group-${group.key}`}
-                    >
-                      <Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} className="h-3.5 w-3.5" />
-                      {group.label} ({groupEmps.length})
-                    </button>
-                    {groupEmps.map(emp => (
+              <div className="max-h-[350px] overflow-auto p-1">
+                {[
+                  { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
+                  { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
+                  { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
+                  { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
+                  { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                  { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
+                  { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
+                  { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
+                  { key: "ft-manager", label: "正職主管職", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "主管職" },
+                  { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
+                ].map(group => {
+                  const groupEmps = pickerEmployees.filter(group.filter);
+                  if (groupEmps.length === 0) return null;
+                  const allSelected = groupEmps.every(e => scheduleVisibleEmployeeIds.has(e.id));
+                  const someSelected = groupEmps.some(e => scheduleVisibleEmployeeIds.has(e.id));
+                  return (
+                    <div key={group.key} className="mb-0.5">
                       <button
-                        key={emp.id}
                         type="button"
-                        className="w-full flex items-center gap-2 pl-6 pr-2 py-1 text-sm hover:bg-muted rounded-sm"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-sm"
                         onClick={() => {
                           const next = new Set(scheduleVisibleEmployeeIds);
-                          if (next.has(emp.id)) next.delete(emp.id);
-                          else next.add(emp.id);
+                          if (allSelected) {
+                            groupEmps.forEach(e => next.delete(e.id));
+                          } else {
+                            groupEmps.forEach(e => next.add(e.id));
+                          }
                           setScheduleVisibleEmployeeIds(next);
                         }}
-                        data-testid={`picker-emp-${emp.id}`}
+                        data-testid={`picker-group-${group.key}`}
                       >
-                        <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
-                        <span className="text-foreground">{emp.name}</span>
+                        <Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} className="h-3.5 w-3.5" />
+                        {group.label} ({groupEmps.length})
                       </button>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
+                      {groupEmps.map(emp => (
+                        <button
+                          key={emp.id}
+                          type="button"
+                          className="w-full flex items-center gap-2 pl-6 pr-2 py-1 text-sm hover:bg-muted rounded-sm"
+                          onClick={() => {
+                            const next = new Set(scheduleVisibleEmployeeIds);
+                            if (next.has(emp.id)) next.delete(emp.id);
+                            else next.add(emp.id);
+                            setScheduleVisibleEmployeeIds(next);
+                          }}
+                          data-testid={`picker-emp-${emp.id}`}
+                        >
+                          <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
+                          <span className="text-foreground">{emp.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col relative">
@@ -846,6 +853,8 @@ export default function SchedulePage() {
                     { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
                     { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
                     { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
+                    { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
+                    { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
                     { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
                     { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
                   ];
@@ -1016,8 +1025,10 @@ export default function SchedulePage() {
                       {[
                         { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
                         { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
+                        { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
                         { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
                         { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                        { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
                         { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
                         { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
                       ].map(group => {
