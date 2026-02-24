@@ -898,6 +898,18 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [clockInResult, setClockInResult] = useState<ClockInResult | null>(null);
 
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserPos({ lat: position.coords.latitude, lng: position.coords.longitude });
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+  }, []);
+
   const monthStart = format(startOfMonth(currentMonth), "yyyy-MM-dd");
   const monthEnd = format(endOfMonth(currentMonth), "yyyy-MM-dd");
 
@@ -1002,35 +1014,32 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     </div>
                   ))}
                 </div>
-                <div className="grid grid-cols-7 gap-px">
+                <div className="grid grid-cols-7 gap-1">
                   {calendarDays.map((day, idx) => {
-                    if (!day) return <div key={`pad-${idx}`} className="min-h-[72px]" />;
+                    if (!day) return <div key={`pad-${idx}`} className="min-h-[90px]" />;
                     const dateStr = format(day, "yyyy-MM-dd");
                     const dayShifts = shiftsByDate.get(dateStr) || [];
                     const today = isToday(day);
                     return (
                       <div
                         key={dateStr}
-                        className={`min-h-[72px] p-0.5 rounded-md border ${
-                          today ? "border-juns-teal bg-juns-teal/5" : "border-transparent"
+                        className={`min-h-[90px] p-1 rounded-md border ${
+                          today ? "border-juns-teal bg-juns-teal/5" : "border-slate-100"
                         } ${dayShifts.length > 0 ? "bg-slate-50" : ""}`}
                         data-testid={`cell-day-${dateStr}`}
                       >
-                        <div className={`text-[11px] text-center mb-0.5 ${today ? "font-bold text-juns-teal" : "text-slate-400"}`}>
+                        <div className={`text-xs text-center mb-1 ${today ? "font-bold text-juns-teal" : "text-slate-400"}`}>
                           {format(day, "d")}
                         </div>
-                        {dayShifts.slice(0, 2).map((s, i) => {
+                        {dayShifts.map((s, i) => {
                           const rd = getRoleDisplay(s.assignedRole);
                           return (
-                            <div key={i} className={`text-[10px] leading-tight px-0.5 rounded-sm border-l-2 pl-1 mb-0.5 ${rd.borderClass}`}>
-                              <div className="font-medium truncate text-juns-navy">{s.venue?.shortName?.slice(0, 3) || ""}</div>
-                              <div className={`truncate font-medium ${rd.textClass}`}>{s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}</div>
+                            <div key={i} className={`text-[10px] leading-snug px-1 py-0.5 rounded border-l-2 pl-1 mb-0.5 ${rd.borderClass} bg-white overflow-hidden`}>
+                              <div className="font-semibold text-juns-navy break-all">{s.venue?.shortName || ""}</div>
+                              <div className={`font-medium ${rd.textClass}`}>{s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}</div>
                             </div>
                           );
                         })}
-                        {dayShifts.length > 2 && (
-                          <div className="text-[10px] text-slate-400 text-center">+{dayShifts.length - 2}</div>
-                        )}
                       </div>
                     );
                   })}

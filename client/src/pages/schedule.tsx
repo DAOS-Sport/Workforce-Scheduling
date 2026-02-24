@@ -865,37 +865,40 @@ export default function SchedulePage() {
               {editingShift ? <Edit2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {editingShift ? "編輯班次" : "新增班次"}
             </DialogTitle>
-            <DialogDescription>
-              {employees.find((e) => e.id === shiftEmployeeId)?.name} — {shiftDate ? format(new Date(shiftDate), "M月d日 (E)", { locale: zhTW }) : ""}
-            </DialogDescription>
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-base font-bold text-foreground">{employees.find((e) => e.id === shiftEmployeeId)?.name}</span>
+              <span className="text-sm text-muted-foreground">— {shiftDate ? format(new Date(shiftDate), "M月d日 (E)", { locale: zhTW }) : ""}</span>
+            </div>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>場館</Label>
-              <Select value={shiftVenueId} onValueChange={(v) => { setShiftVenueId(v); setShiftTemplateId("custom"); }}>
-                <SelectTrigger data-testid="select-shift-venue">
-                  <SelectValue placeholder="選擇場館" />
-                </SelectTrigger>
-                <SelectContent>
-                  {venues.filter((v) => venuesWithRequirements.has(v.id)).map((v) => (
-                    <SelectItem key={v.id} value={v.id.toString()}>{v.shortName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="flex gap-3">
+              <div className="flex-1 space-y-2">
+                <Label>場館</Label>
+                <Select value={shiftVenueId} onValueChange={(v) => { setShiftVenueId(v); setShiftTemplateId("custom"); }}>
+                  <SelectTrigger data-testid="select-shift-venue">
+                    <SelectValue placeholder="選擇場館" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {venues.filter((v) => venuesWithRequirements.has(v.id)).map((v) => (
+                      <SelectItem key={v.id} value={v.id.toString()}>{v.shortName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label>班別</Label>
-              <Select value={shiftRole} onValueChange={(v) => { setShiftRole(v); setShiftTemplateId("custom"); }}>
-                <SelectTrigger data-testid="select-shift-role">
-                  <SelectValue placeholder="選擇班別" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="救生">救生</SelectItem>
-                  <SelectItem value="櫃台">櫃台</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex-1 space-y-2">
+                <Label>班別</Label>
+                <Select value={shiftRole} onValueChange={(v) => { setShiftRole(v); setShiftTemplateId("custom"); }}>
+                  <SelectTrigger data-testid="select-shift-role">
+                    <SelectValue placeholder="選擇班別" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="救生">救生</SelectItem>
+                    <SelectItem value="櫃台">櫃台</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="space-y-2">
