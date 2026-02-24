@@ -607,10 +607,10 @@ export default function SchedulePage() {
             </PopoverContent>
           </Popover>
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-start gap-2">
           {shortageDates.length > 0 && (
-            <>
-              <span className="text-[10px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
+            <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+              <span className="text-[10px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1 shrink-0">
                 <AlertCircle className="h-3 w-3" />
                 缺班快跳
               </span>
@@ -628,13 +628,12 @@ export default function SchedulePage() {
                   {format(new Date(d), "M/d")}
                 </button>
               ))}
-              <span className="text-muted-foreground/30">|</span>
-            </>
+            </div>
           )}
 
           <Popover open={empPickerOpen} onOpenChange={setEmpPickerOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 shrink-0" data-testid="button-employee-picker">
+              <Button variant="outline" size="sm" className={`h-7 text-xs gap-1.5 shrink-0 ${shortageDates.length === 0 ? "ml-auto" : ""}`} data-testid="button-employee-picker">
                 <Users className="h-3.5 w-3.5" />
                 {scheduleVisibleEmployeeIds.size === 0 ? "選擇排班人員" : `已選 ${scheduleVisibleEmployeeIds.size} 人`}
                 <ChevronDown className="h-3 w-3 opacity-50" />
