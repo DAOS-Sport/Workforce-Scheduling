@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronLeft, ChevronRight, CalendarDays, Plus, Minus, ChevronUp, ChevronDown,
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
-  Sparkles, ShieldCheck, Settings2, X, Copy, Building2
+  Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users
 } from "lucide-react";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate } from "@shared/schema";
 
@@ -77,6 +77,8 @@ export default function SchedulePage() {
   const [shiftTemplateId, setShiftTemplateId] = useState<string>("custom");
   const [shiftSelectedEmployeeIds, setShiftSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
+  const [scheduleVisibleEmployeeIds, setScheduleVisibleEmployeeIds] = useState<Set<number>>(new Set());
+  const [empPickerOpen, setEmpPickerOpen] = useState(false);
 
   const [requirementsPanelOpen, setRequirementsPanelOpen] = useState(false);
   const [reqPanelVenueId, setReqPanelVenueId] = useState<number | null>(null);
@@ -622,6 +624,88 @@ export default function SchedulePage() {
             ))}
           </div>
         )}
+
+        <Popover open={empPickerOpen} onOpenChange={setEmpPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" data-testid="button-employee-picker">
+              <Users className="h-3.5 w-3.5" />
+              {scheduleVisibleEmployeeIds.size === 0 ? "選擇排班人員" : `已選 ${scheduleVisibleEmployeeIds.size} 人`}
+              <ChevronDown className="h-3 w-3 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[300px] p-0" align="start">
+            <div className="flex items-center justify-between px-3 py-2 border-b">
+              <span className="text-xs font-semibold">選擇排班人員</span>
+              <div className="flex gap-1">
+                <button
+                  className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground"
+                  onClick={() => setScheduleVisibleEmployeeIds(new Set(employees.map(e => e.id)))}
+                >
+                  全選
+                </button>
+                <button
+                  className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground"
+                  onClick={() => setScheduleVisibleEmployeeIds(new Set())}
+                >
+                  清空
+                </button>
+              </div>
+            </div>
+            <div className="max-h-[350px] overflow-auto p-1">
+              {[
+                { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
+                { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
+                { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
+                { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
+                { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
+              ].map(group => {
+                const groupEmps = employees.filter(group.filter);
+                if (groupEmps.length === 0) return null;
+                const allSelected = groupEmps.every(e => scheduleVisibleEmployeeIds.has(e.id));
+                const someSelected = groupEmps.some(e => scheduleVisibleEmployeeIds.has(e.id));
+                return (
+                  <div key={group.key} className="mb-0.5">
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-sm"
+                      onClick={() => {
+                        const next = new Set(scheduleVisibleEmployeeIds);
+                        if (allSelected) {
+                          groupEmps.forEach(e => next.delete(e.id));
+                        } else {
+                          groupEmps.forEach(e => next.add(e.id));
+                        }
+                        setScheduleVisibleEmployeeIds(next);
+                      }}
+                      data-testid={`picker-group-${group.key}`}
+                    >
+                      <Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} className="h-3.5 w-3.5" />
+                      {group.label} ({groupEmps.length})
+                    </button>
+                    {groupEmps.map(emp => (
+                      <button
+                        key={emp.id}
+                        type="button"
+                        className="w-full flex items-center gap-2 pl-6 pr-2 py-1 text-sm hover:bg-muted rounded-sm"
+                        onClick={() => {
+                          const next = new Set(scheduleVisibleEmployeeIds);
+                          if (next.has(emp.id)) next.delete(emp.id);
+                          else next.add(emp.id);
+                          setScheduleVisibleEmployeeIds(next);
+                        }}
+                        data-testid={`picker-emp-${emp.id}`}
+                      >
+                        <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
+                        <span className="text-foreground">{emp.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col relative">
@@ -760,10 +844,11 @@ export default function SchedulePage() {
                     { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
                     { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
                   ];
+                  const visibleEmployees = employees.filter(e => scheduleVisibleEmployeeIds.has(e.id));
                   return [
                     ...venueRows,
                     ...groups.flatMap(({ key, label, filter }) => {
-                    const grouped = employees.filter(filter).sort((a, b) => {
+                    const grouped = visibleEmployees.filter(filter).sort((a, b) => {
                       const countA = employeeShiftCounts.get(a.id) || 0;
                       const countB = employeeShiftCounts.get(b.id) || 0;
                       return countB - countA;
