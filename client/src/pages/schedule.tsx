@@ -111,10 +111,11 @@ export default function SchedulePage() {
   });
   const employees = useMemo(() => allEmployees.filter(e => e.status !== "inactive"), [allEmployees]);
 
-  const { data: allSystemEmployees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees-all"],
-  });
-  const pickerEmployees = useMemo(() => allSystemEmployees.filter(e => e.status !== "inactive"), [allSystemEmployees]);
+  const pickerEmployees = employees;
+
+  useEffect(() => {
+    setScheduleVisibleEmployeeIds(new Set());
+  }, [activeRegion]);
 
   const { data: scheduleSlots = [], isLoading: slotsLoading } = useQuery<ScheduleSlot[]>({
     queryKey: ["/api/schedule-slots", activeRegion, dateRange.start, dateRange.end],
@@ -123,6 +124,17 @@ export default function SchedulePage() {
   const { data: shifts = [], isLoading: shiftsLoading } = useQuery<Shift[]>({
     queryKey: ["/api/shifts", activeRegion, dateRange.start, dateRange.end],
   });
+
+  const empVenueMap = useMemo(() => {
+    const map = new Map<number, Set<string>>();
+    for (const s of shifts) {
+      const v = venues.find(v => v.id === s.venueId);
+      if (!v) continue;
+      if (!map.has(s.employeeId)) map.set(s.employeeId, new Set());
+      map.get(s.employeeId)!.add(v.shortName);
+    }
+    return map;
+  }, [shifts, venues]);
 
   const { data: shiftVenueTemplates = [] } = useQuery<VenueShiftTemplate[]>({
     queryKey: ["/api/venue-shift-templates", shiftVenueId ? parseInt(shiftVenueId) : null],
@@ -721,7 +733,14 @@ export default function SchedulePage() {
                           data-testid={`picker-emp-${emp.id}`}
                         >
                           <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
-                          <span className="text-foreground">{emp.name}</span>
+                          <span className="text-foreground flex-1 text-left">{emp.name}</span>
+                          {empVenueMap.has(emp.id) && (
+                            <span className="flex gap-0.5 flex-wrap justify-end">
+                              {[...empVenueMap.get(emp.id)!].map(vn => (
+                                <span key={vn} className="text-[9px] px-1 py-0 rounded bg-primary/10 text-primary leading-4">{vn}</span>
+                              ))}
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>
