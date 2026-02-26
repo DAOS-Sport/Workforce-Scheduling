@@ -19,9 +19,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronLeft, ChevronRight, CalendarDays, Plus, Minus, ChevronUp, ChevronDown,
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
-  Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users
+  Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft
 } from "lucide-react";
-import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate } from "@shared/schema";
+import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region } from "@shared/schema";
 
 const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
   "救生": LifeBuoy,
@@ -79,6 +79,10 @@ export default function SchedulePage() {
   const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
   const [scheduleVisibleEmployeeIds, setScheduleVisibleEmployeeIds] = useState<Set<number>>(new Set());
   const [empPickerOpen, setEmpPickerOpen] = useState(false);
+  const [crossRegionEmployeeIds, setCrossRegionEmployeeIds] = useState<Set<number>>(new Set());
+  const [crossRegionDialogOpen, setCrossRegionDialogOpen] = useState(false);
+  const [crossRegionSearch, setCrossRegionSearch] = useState("");
+  const [crossRegionTab, setCrossRegionTab] = useState("");
 
   const [requirementsPanelOpen, setRequirementsPanelOpen] = useState(false);
   const [reqPanelVenueId, setReqPanelVenueId] = useState<number | null>(null);
@@ -111,10 +115,34 @@ export default function SchedulePage() {
   });
   const employees = useMemo(() => allEmployees.filter(e => e.status !== "inactive"), [allEmployees]);
 
-  const pickerEmployees = employees;
+  const { data: allSystemEmployees = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees-all"],
+  });
+
+  const { data: regionsData = [] } = useQuery<Region[]>({
+    queryKey: ["/api/regions"],
+  });
+
+  const regionCodeToId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of regionsData) map.set(r.code, r.id);
+    return map;
+  }, [regionsData]);
+
+  const crossRegionEmployees = useMemo(() =>
+    allSystemEmployees.filter(e => crossRegionEmployeeIds.has(e.id) && e.status !== "inactive"),
+    [allSystemEmployees, crossRegionEmployeeIds]
+  );
+
+  const pickerEmployees = useMemo(() => {
+    const regionEmpIds = new Set(employees.map(e => e.id));
+    const extras = crossRegionEmployees.filter(e => !regionEmpIds.has(e.id));
+    return [...employees, ...extras];
+  }, [employees, crossRegionEmployees]);
 
   useEffect(() => {
     setScheduleVisibleEmployeeIds(new Set());
+    setCrossRegionEmployeeIds(new Set());
   }, [activeRegion]);
 
   const { data: scheduleSlots = [], isLoading: slotsLoading } = useQuery<ScheduleSlot[]>({
@@ -455,6 +483,8 @@ export default function SchedulePage() {
         : [shiftDate];
 
       for (const empId of targetEmployeeIds) {
+        const isCrossRegion = crossRegionEmployeeIds.has(empId);
+        const dispatch = shiftIsDispatch || isCrossRegion;
         if (allDates.length > 1) {
           batchCreateShifts.mutate({
             employeeId: empId,
@@ -462,7 +492,7 @@ export default function SchedulePage() {
             startTime: shiftStartTime,
             endTime: shiftEndTime,
             role: shiftRole,
-            isDispatch: shiftIsDispatch,
+            isDispatch: dispatch,
             targetDates: allDates,
           });
         } else {
@@ -473,7 +503,7 @@ export default function SchedulePage() {
             startTime: shiftStartTime,
             endTime: shiftEndTime,
             role: shiftRole,
-            isDispatch: shiftIsDispatch,
+            isDispatch: dispatch,
           });
         }
       }
@@ -734,6 +764,9 @@ export default function SchedulePage() {
                         >
                           <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
                           <span className="text-foreground flex-1 text-left">{emp.name}</span>
+                          {crossRegionEmployeeIds.has(emp.id) && (
+                            <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4 shrink-0">支援</span>
+                          )}
                           {empVenueMap.has(emp.id) && (
                             <span className="flex gap-0.5 flex-wrap justify-end">
                               {[...empVenueMap.get(emp.id)!].map(vn => (
@@ -746,6 +779,22 @@ export default function SchedulePage() {
                     </div>
                   );
                 })}
+              </div>
+              <div className="border-t px-3 py-2">
+                <button
+                  className="w-full flex items-center justify-center gap-1.5 text-xs text-orange-500 hover:text-orange-400 py-1"
+                  onClick={() => {
+                    setEmpPickerOpen(false);
+                    const otherRegions = regionsData.filter(r => r.code !== activeRegion);
+                    setCrossRegionTab(otherRegions[0]?.code || "");
+                    setCrossRegionSearch("");
+                    setCrossRegionDialogOpen(true);
+                  }}
+                  data-testid="button-cross-region"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  跨區支援
+                </button>
               </div>
             </PopoverContent>
           </Popover>
@@ -950,6 +999,9 @@ export default function SchedulePage() {
                         <span className="font-medium text-sm whitespace-nowrap" data-testid={`text-employee-name-${emp.id}`}>
                           {emp.name}
                         </span>
+                        {crossRegionEmployeeIds.has(emp.id) && (
+                          <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4 shrink-0">支援</span>
+                        )}
                       </div>
                     </td>
                     {monthDates.map((d, di) => {
@@ -1068,7 +1120,7 @@ export default function SchedulePage() {
                         {shiftSelectedEmployeeIds.size === 0
                           ? "選擇人員"
                           : shiftSelectedEmployeeIds.size === 1
-                            ? employees.find(e => shiftSelectedEmployeeIds.has(e.id))?.name || "1 人"
+                            ? pickerEmployees.find(e => shiftSelectedEmployeeIds.has(e.id))?.name || "1 人"
                             : `已選 ${shiftSelectedEmployeeIds.size} 人`}
                       </span>
                       <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
@@ -1088,7 +1140,7 @@ export default function SchedulePage() {
                         { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
                         { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
                       ].map(group => {
-                        const groupEmps = employees.filter(group.filter);
+                        const groupEmps = pickerEmployees.filter(group.filter);
                         if (groupEmps.length === 0) return null;
                         const allSelected = groupEmps.every(e => shiftSelectedEmployeeIds.has(e.id));
                         return (
@@ -1124,6 +1176,9 @@ export default function SchedulePage() {
                               >
                                 <Checkbox checked={shiftSelectedEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
                                 <span className="text-foreground">{emp.name}</span>
+                                {crossRegionEmployeeIds.has(emp.id) && (
+                                  <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4">支援</span>
+                                )}
                               </button>
                             ))}
                           </div>
@@ -1798,6 +1853,111 @@ export default function SchedulePage() {
           </div>
         </div>
       )}
+
+      <Dialog open={crossRegionDialogOpen} onOpenChange={setCrossRegionDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-4 w-4 text-orange-500" />
+              跨區支援人員
+            </DialogTitle>
+            <DialogDescription>從其他區域選擇支援人員加入排班</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="flex gap-1 border-b pb-2">
+              {regionsData.filter(r => r.code !== activeRegion).map(r => (
+                <button
+                  key={r.code}
+                  className={`text-xs px-3 py-1.5 rounded-md transition-colors ${crossRegionTab === r.code ? "bg-orange-500/15 text-orange-500 font-medium" : "text-muted-foreground hover:bg-muted"}`}
+                  onClick={() => setCrossRegionTab(r.code)}
+                  data-testid={`cross-region-tab-${r.code}`}
+                >
+                  {r.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="搜尋姓名..."
+                value={crossRegionSearch}
+                onChange={(e) => setCrossRegionSearch(e.target.value)}
+                className="pl-8 h-8 text-sm"
+                data-testid="input-cross-region-search"
+              />
+            </div>
+
+            <div className="max-h-[300px] overflow-auto border rounded-md p-1">
+              {(() => {
+                const regionEmps = allSystemEmployees
+                  .filter(e => {
+                    const regionId = regionCodeToId.get(crossRegionTab);
+                    return regionId && e.regionId === regionId && e.status !== "inactive"
+                      && ["救生", "守望", "櫃台", "教練", "主管職"].includes(e.role);
+                  })
+                  .filter(e => !crossRegionSearch || e.name.includes(crossRegionSearch));
+
+                if (regionEmps.length === 0) {
+                  return <div className="text-center py-6 text-muted-foreground text-sm">此區域無可選員工</div>;
+                }
+
+                const groups = [
+                  { label: "正職", filter: (e: Employee) => e.employmentType === "full_time" },
+                  { label: "兼職", filter: (e: Employee) => e.employmentType === "part_time" },
+                ];
+
+                return groups.map(group => {
+                  const groupEmps = regionEmps.filter(group.filter);
+                  if (groupEmps.length === 0) return null;
+                  return (
+                    <div key={group.label} className="mb-1">
+                      <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        {group.label} ({groupEmps.length})
+                      </div>
+                      {groupEmps.map(emp => {
+                        const isSelected = crossRegionEmployeeIds.has(emp.id);
+                        return (
+                          <button
+                            key={emp.id}
+                            type="button"
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm transition-colors ${isSelected ? "bg-orange-500/10" : "hover:bg-muted"}`}
+                            onClick={() => {
+                              const next = new Set(crossRegionEmployeeIds);
+                              if (next.has(emp.id)) next.delete(emp.id);
+                              else next.add(emp.id);
+                              setCrossRegionEmployeeIds(next);
+                            }}
+                            data-testid={`cross-region-emp-${emp.id}`}
+                          >
+                            <Checkbox checked={isSelected} className="h-3.5 w-3.5" />
+                            <span className="text-foreground flex-1 text-left">{emp.name}</span>
+                            <span className="text-[10px] text-muted-foreground">{emp.role}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {crossRegionEmployeeIds.size > 0 && (
+              <div className="text-xs text-orange-500 flex items-center gap-1">
+                <ArrowRightLeft className="h-3 w-3" />
+                已選 {crossRegionEmployeeIds.size} 位跨區支援人員（排班自動標記為派遣）
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCrossRegionDialogOpen(false)}>
+              完成
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

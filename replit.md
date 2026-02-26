@@ -9,6 +9,8 @@ A workforce scheduling management system for PT (personal training) staff across
 - 2026-02-23: Added LIFF GPS 打卡網頁 (/liff/clock-in): uses browser navigator.geolocation for tamper-proof GPS, LIFF SDK for LINE auth, displays result directly on page. Refactored processClockIn() as shared core function used by both LIFF and webhook.
 - 2026-02-23: Added LINE GPS clock-in module: LINE webhook receives location messages, Haversine formula compares with venue GPS/radius, auto-determines clock-in/out, replies result in LINE chat. Admin page at /clock-records shows records with status/distance/venue.
 - 2026-02-23: Added clockRecords table (employeeId, venueId, shiftId, clockType, lat/lng, distance, status, failReason, clockTime, matchedVenueName)
+- 2026-02-26: Added cross-region support (跨區支援): employee picker shows "跨區支援" button opening dialog to select employees from other regions; cross-region employees marked with orange "支援" badge in picker, shift dialog, and schedule grid; shifts auto-set isDispatch=true for cross-region employees
+- 2026-02-26: Employee picker now filtered by active region with venue tags showing assigned venues from current shifts
 - 2026-02-26: Renamed region "台北區" → "松山國小" (code "B" unchanged)
 - 2026-02-23: Created 內勤 region (code "D") for 5 internal departments; default tab is now 內勤; region tabs order: 內勤→三蘆戰區→松山國小→新竹區
 - 2026-02-23: Fixed regionId lookup: venues/employees pages now use /api/regions API instead of fragile index-based calculation
