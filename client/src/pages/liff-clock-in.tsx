@@ -244,6 +244,12 @@ function ResultCard({ result, accuracy, onRetry }: { result: ClockInResult; accu
         {result.shiftInfo && (
           <InfoRow label="班別" value={result.shiftInfo} />
         )}
+        {isSuccess && result.failReason && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
+            <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0" />
+            <span className="text-orange-300 font-medium text-sm" data-testid="text-late-info">{result.failReason}</span>
+          </div>
+        )}
         {accuracy && (
           <InfoRow label="GPS 精度" value={`±${accuracy}m`} />
         )}

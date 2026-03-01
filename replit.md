@@ -8,6 +8,7 @@ A workforce scheduling management system for PT (personal training) staff across
 - 2026-03-01: Admin auth flow: GET /api/admin/me checks session, POST /api/admin/line-callback exchanges LINE code for profile and verifies isAdmin, POST /api/admin/logout destroys session
 - 2026-03-01: All /api/ routes (except /api/admin/, /api/portal/, /api/liff/, /api/line/) require admin session
 - 2026-03-01: LINE Login redirect URI for admin: {origin}/admin/callback (must be added to LINE Developers Console)
+- 2026-03-01: GPS clock-in now detects late/early: compares clock-in time vs shift start (遲到), clock-out time vs shift end (早退); written to failReason field; shown in LINE reply, LIFF page (orange alert), clock-records page (orange text + separate stats card)
 - 2026-02-24: Portal top modules added: LiveClock (real-time date/time display), Google Maps embed (shows user position after GPS clock-in), VenueShiftInfo (venue name + shift times), 上班/下班 split buttons with explicit clockType, 外出/簽到 card
 - 2026-02-24: processClockIn now accepts optional forcedClockType parameter; POST /api/liff/clock-in accepts clockType field ("in"|"out") to override auto-detection
 - 2026-02-23: Added LIFF GPS 打卡網頁 (/liff/clock-in): uses browser navigator.geolocation for tamper-proof GPS, LIFF SDK for LINE auth, displays result directly on page. Refactored processClockIn() as shared core function used by both LIFF and webhook.

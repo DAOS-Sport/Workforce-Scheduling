@@ -261,6 +261,33 @@ export async function processClockIn(
   const clockType = forcedClockType || determineClockType(now, venueShifts);
   const shiftInfo = matchingShift || venueShifts[0];
 
+  let lateReason: string | null = null;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  if (clockType === "in") {
+    const [sh, sm] = shiftInfo.startTime.split(":").map(Number);
+    const shiftStartMinutes = sh * 60 + sm;
+    const diff = nowMinutes - shiftStartMinutes;
+    if (diff > 0) {
+      const hours = Math.floor(diff / 60);
+      const mins = diff % 60;
+      lateReason = hours > 0
+        ? `遲到 ${hours} 小時 ${mins} 分鐘`
+        : `遲到 ${mins} 分鐘`;
+    }
+  } else if (clockType === "out") {
+    const [eh, em] = shiftInfo.endTime.split(":").map(Number);
+    const shiftEndMinutes = eh * 60 + em;
+    const diff = shiftEndMinutes - nowMinutes;
+    if (diff > 0) {
+      const hours = Math.floor(diff / 60);
+      const mins = diff % 60;
+      lateReason = hours > 0
+        ? `早退 ${hours} 小時 ${mins} 分鐘`
+        : `早退 ${mins} 分鐘`;
+    }
+  }
+
   await storage.createClockRecord({
     employeeId: employee.id,
     venueId: closestVenue.id,
@@ -270,7 +297,7 @@ export async function processClockIn(
     longitude: lng,
     distance: Math.round(closestDistance),
     status: "success",
-    failReason: null,
+    failReason: lateReason,
     matchedVenueName: closestVenue.shortName,
   });
 
@@ -282,7 +309,7 @@ export async function processClockIn(
     time: timeStr,
     date: todayStr,
     shiftInfo: `${shiftInfo.startTime.slice(0, 5)}-${shiftInfo.endTime.slice(0, 5)}`,
-    failReason: null,
+    failReason: lateReason,
     employeeName: employee.name,
     radius: effectiveRadius,
     nearbyVenues,
@@ -356,7 +383,8 @@ function formatClockInMessage(result: ClockInResult): string {
   }
 
   const clockLabel = result.clockType === "in" ? "上班" : "下班";
-  return `✅ ${clockLabel}打卡成功！\n\n場館：${result.venueName}\n距離：${result.distance}m\n時間：${result.time}\n班別：${result.shiftInfo}${liffHint}`;
+  const lateText = result.failReason ? `\n⚠️ ${result.failReason}` : "";
+  return `✅ ${clockLabel}打卡成功！\n\n場館：${result.venueName}\n距離：${result.distance}m\n時間：${result.time}\n班別：${result.shiftInfo}${lateText}${liffHint}`;
 }
 
 export async function handleLineWebhook(body: any): Promise<void> {

@@ -41,7 +41,8 @@ export default function ClockRecordsPage() {
     },
   });
 
-  const successCount = records.filter((r) => r.status === "success").length;
+  const successCount = records.filter((r) => r.status === "success" && !r.failReason).length;
+  const lateCount = records.filter((r) => r.status === "success" && r.failReason).length;
   const warningCount = records.filter((r) => r.status === "warning").length;
   const failCount = records.filter((r) => r.status === "fail").length;
 
@@ -94,15 +95,26 @@ export default function ClockRecordsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <Card data-testid="card-stat-success">
           <CardContent className="p-3 flex items-center gap-3">
             <div className="h-9 w-9 rounded-lg bg-green-500/10 flex items-center justify-center">
               <CheckCircle className="h-5 w-5 text-green-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">打卡成功</p>
+              <p className="text-xs text-muted-foreground">準時打卡</p>
               <p className="text-lg font-bold text-green-600">{successCount}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-stat-late">
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-orange-500/10 flex items-center justify-center">
+              <Clock className="h-5 w-5 text-orange-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">遲到/早退</p>
+              <p className="text-lg font-bold text-orange-600">{lateCount}</p>
             </div>
           </CardContent>
         </Card>
@@ -203,8 +215,16 @@ export default function ClockRecordsPage() {
                           </Badge>
                         )}
                       </td>
-                      <td className="p-3 text-muted-foreground text-xs max-w-[200px] truncate">
-                        {r.failReason || "—"}
+                      <td className="p-3 text-xs max-w-[200px] truncate">
+                        {r.status === "success" && r.failReason ? (
+                          <span className="text-orange-600 dark:text-orange-400 font-medium" data-testid={`text-late-${r.id}`}>
+                            ⚠ {r.failReason}
+                          </span>
+                        ) : r.failReason ? (
+                          <span className="text-muted-foreground">{r.failReason}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}
