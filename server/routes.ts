@@ -14,6 +14,90 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  app.post("/api/admin/line-callback", async (req, res) => {
+    try {
+      const { code, redirectUri } = req.body;
+      if (!code) return res.status(400).json({ message: "缺少授權碼" });
+
+      const channelId = process.env.LINE_CHANNEL_ID;
+      const channelSecret = process.env.LINE_LOGIN_CHANNEL_SECRET || process.env.LINE_CHANNEL_SECRET;
+      if (!channelId || !channelSecret) {
+        return res.status(500).json({ message: "LINE Login 尚未設定" });
+      }
+
+      const tokenRes = await fetch("https://api.line.me/oauth2/v2.1/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+          client_id: channelId,
+          client_secret: channelSecret,
+        }),
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenData.access_token) {
+        return res.status(401).json({ message: "LINE 授權失敗" });
+      }
+
+      const profileRes = await fetch("https://api.line.me/v2/profile", {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+      const profile = await profileRes.json();
+      if (!profile.userId) {
+        return res.status(401).json({ message: "無法取得 LINE 使用者資訊" });
+      }
+
+      const employee = await storage.getEmployeeByLineId(profile.userId);
+      if (!employee) {
+        return res.status(403).json({ message: "此 LINE 帳號尚未綁定員工資料" });
+      }
+      if (!employee.isAdmin) {
+        return res.status(403).json({ message: "您沒有管理員權限" });
+      }
+
+      req.session.adminId = employee.id;
+      req.session.adminName = employee.name;
+      req.session.adminLineId = profile.userId;
+
+      res.json({ id: employee.id, name: employee.name, role: employee.role });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/me", (req, res) => {
+    if (req.session.adminId) {
+      res.json({ id: req.session.adminId, name: req.session.adminName });
+    } else {
+      res.status(401).json({ message: "未登入" });
+    }
+  });
+
+  app.post("/api/admin/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.json({ ok: true });
+    });
+  });
+
+  function requireAdmin(req: Request, res: Response, next: Function) {
+    if (req.session.adminId) return next();
+    return res.status(401).json({ message: "請先登入管理後台" });
+  }
+
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api/")) return next();
+    const openPrefixes = [
+      "/api/admin/",
+      "/api/portal/",
+      "/api/liff/",
+      "/api/line/",
+    ];
+    if (openPrefixes.some(p => req.path.startsWith(p))) return next();
+    requireAdmin(req, res, next);
+  });
+
   app.get("/api/regions", async (_req, res) => {
     const regions = await storage.getRegions();
     res.json(regions);
