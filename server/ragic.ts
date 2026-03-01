@@ -33,11 +33,11 @@ const HQ_LNG = 121.5133;
 const COMPANY_TAX_ID = "66601546";
 
 const VENUE_DATA: Record<string, VenueInfo> = {
-  "新北高中": { region: "A", address: "新北市三重區三信路1號", lat: 25.0584, lng: 121.4858, taxId: "85300099", isInternal: false, operationType: "OT" },
-  "三民高中": { region: "A", address: "新北市蘆洲區三民路96號", lat: 25.08556, lng: 121.47278, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
-  "三重商工": { region: "A", address: "新北市三重區中正北路163號", lat: 25.0648, lng: 121.4884, taxId: "85184649", isInternal: false, operationType: "OT" },
+  "新北高中": { region: "A", address: "新北市三重區三信路1號", lat: 25.08725005030422, lng: 121.49125601819283, taxId: "85300099", isInternal: false, operationType: "OT" },
+  "三民高中": { region: "A", address: "新北市蘆洲區三民路96號", lat: 25.08647850866701, lng: 121.4742795576005, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
+  "三重商工": { region: "A", address: "新北市三重區中正北路163號", lat: 25.068783172507857, lng: 121.48241151452356, taxId: "85184649", isInternal: false, operationType: "OT" },
   "新莊國中": { region: "A", address: "新北市新莊區中正路211號", lat: 25.0358, lng: 121.4520, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
-  "松山國小": { region: "B", address: "台北市松山區八德路四段746號", lat: 25.0498, lng: 121.5785, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
+  "松山國小": { region: "B", address: "台北市松山區八德路四段746號", lat: 25.050835631078957, lng: 121.57794212990194, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
   "國防醫學大學": { region: "B", address: "台北市內湖區民權東路六段161號", lat: 25.0640, lng: 121.6076, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
   "士東國小": { region: "B", address: "台北市士林區中山北路六段392號", lat: 25.1110, lng: 121.5275, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
   "大湖國小": { region: "B", address: "台北市內湖區大湖山莊街170號", lat: 25.0832, lng: 121.6016, taxId: COMPANY_TAX_ID, isInternal: false, operationType: "OT" },
@@ -317,8 +317,8 @@ export async function syncVenuesFromRagic(): Promise<{
         shortName: venueName,
         regionId,
         address: venueInfo.address,
-        latitude: venueInfo.lat,
-        longitude: venueInfo.lng,
+        latitude: null,
+        longitude: null,
         taxId: venueInfo.taxId,
         isInternal: venueInfo.isInternal,
         operationType: opType || null,

@@ -4,11 +4,11 @@ import { REGIONS_DATA } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 const VENUE_FULL_DATA = [
-  { name: "新北高中", shortName: "新北高中", regionCode: "A", address: "新北市三重區三信路1號", lat: 25.0584, lng: 121.4858, taxId: "85300099", operationType: "OT" },
-  { name: "三民高中", shortName: "三民高中", regionCode: "A", address: "新北市蘆洲區三民路96號", lat: 25.08556, lng: 121.47278, taxId: "66601546", operationType: "OT" },
-  { name: "三重商工", shortName: "三重商工", regionCode: "A", address: "新北市三重區中正北路163號", lat: 25.0648, lng: 121.4884, taxId: "85184649", operationType: "OT" },
+  { name: "新北高中", shortName: "新北高中", regionCode: "A", address: "新北市三重區三信路1號", lat: 25.08725005030422, lng: 121.49125601819283, taxId: "85300099", operationType: "OT" },
+  { name: "三民高中", shortName: "三民高中", regionCode: "A", address: "新北市蘆洲區三民路96號", lat: 25.08647850866701, lng: 121.4742795576005, taxId: "66601546", operationType: "OT" },
+  { name: "三重商工", shortName: "三重商工", regionCode: "A", address: "新北市三重區中正北路163號", lat: 25.068783172507857, lng: 121.48241151452356, taxId: "85184649", operationType: "OT" },
   { name: "新莊國中", shortName: "新莊國中", regionCode: "A", address: "新北市新莊區中正路211號", lat: 25.0358, lng: 121.4520, taxId: "66601546", operationType: "OT" },
-  { name: "松山國小", shortName: "松山國小", regionCode: "B", address: "台北市松山區八德路四段746號", lat: 25.0498, lng: 121.5785, taxId: "66601546", operationType: "OT" },
+  { name: "松山國小", shortName: "松山國小", regionCode: "B", address: "台北市松山區八德路四段746號", lat: 25.050835631078957, lng: 121.57794212990194, taxId: "66601546", operationType: "OT" },
   { name: "國防醫學大學", shortName: "國防醫學大學", regionCode: "B", address: "台北市內湖區民權東路六段161號", lat: 25.0640, lng: 121.6076, taxId: "66601546", operationType: "OT" },
   { name: "士東國小", shortName: "士東國小", regionCode: "B", address: "台北市士林區中山北路六段392號", lat: 25.1110, lng: 121.5275, taxId: "66601546", operationType: "OT" },
   { name: "大湖國小", shortName: "大湖國小", regionCode: "B", address: "台北市內湖區大湖山莊街170號", lat: 25.0832, lng: 121.6016, taxId: "66601546", operationType: "OT" },
@@ -53,7 +53,7 @@ export async function seedDatabase() {
         address: v.address,
         latitude: v.lat,
         longitude: v.lng,
-        radius: 300,
+        radius: 200,
         taxId: v.taxId,
         isInternal: !!(v as any).isInternal,
         operationType: v.operationType,
@@ -94,8 +94,9 @@ export async function seedDatabase() {
       if (!existing.taxId && v.taxId) updates.taxId = v.taxId;
       if (!existing.operationType) updates.operationType = v.operationType;
       if (!existing.address && v.address) updates.address = v.address;
-      if (!existing.latitude && v.lat) updates.latitude = v.lat;
-      if (!existing.longitude && v.lng) updates.longitude = v.lng;
+      if (v.lat && existing.latitude !== v.lat) updates.latitude = v.lat;
+      if (v.lng && existing.longitude !== v.lng) updates.longitude = v.lng;
+      updates.radius = 200;
       if (v.regionCode === "D" && existing.regionId !== regionId) {
         updates.regionId = regionId;
         updates.isInternal = true;
@@ -113,7 +114,7 @@ export async function seedDatabase() {
         address: v.address,
         latitude: v.lat,
         longitude: v.lng,
-        radius: 300,
+        radius: 200,
         taxId: v.taxId,
         isInternal: !!(v as any).isInternal,
         operationType: v.operationType,
