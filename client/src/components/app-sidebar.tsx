@@ -1,5 +1,6 @@
-import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin } from "lucide-react";
+import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck } from "lucide-react";
 import { useLocation, Link } from "wouter";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -26,7 +27,12 @@ const toolItems = [
   { title: "守則管理", url: "/guidelines", icon: BookOpen },
 ];
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  adminName?: string;
+  onLogout?: () => void;
+}
+
+export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
   const [location] = useLocation();
 
   return (
@@ -86,7 +92,27 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
+      <SidebarFooter className="p-3 border-t border-sidebar-border space-y-2">
+        {adminName && (
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <ShieldCheck className="h-4 w-4 text-blue-500 shrink-0" />
+              <span className="text-xs font-medium truncate" data-testid="text-admin-name">{adminName}</span>
+            </div>
+            {onLogout && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-red-500"
+                onClick={onLogout}
+                title="登出"
+                data-testid="button-admin-logout"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
           <p className="text-[11px] text-muted-foreground font-medium">v2.0 — 115年勞基法合規</p>

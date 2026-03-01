@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, venues } from "@shared/schema";
+import { regions, venues, employees } from "@shared/schema";
 import { REGIONS_DATA } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
@@ -127,5 +127,12 @@ export async function seedDatabase() {
     console.log(`  Venues: ${addedCount} added, ${updatedCount} updated`);
   } else {
     console.log("  All venues up to date");
+  }
+
+  const INITIAL_ADMIN_LINE_ID = "U8fd0e4be4e44a1304f9fa2e9855f4559";
+  const [adminEmp] = await db.select().from(employees).where(eq(employees.lineId, INITIAL_ADMIN_LINE_ID));
+  if (adminEmp && !adminEmp.isAdmin) {
+    await db.update(employees).set({ isAdmin: true }).where(eq(employees.id, adminEmp.id));
+    console.log(`  Set ${adminEmp.name} as initial admin`);
   }
 }

@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -18,6 +19,8 @@ import GuidelinesPage from "@/pages/guidelines";
 import ClockRecordsPage from "@/pages/clock-records";
 import PortalPage from "@/pages/portal";
 import LiffClockInPage from "@/pages/liff-clock-in";
+import AdminLoginPage from "@/pages/admin-login";
+import { Loader2 } from "lucide-react";
 
 function AdminRouter() {
   return (
@@ -34,7 +37,7 @@ function AdminRouter() {
   );
 }
 
-function AdminLayout() {
+function AdminLayout({ adminName, onLogout }: { adminName: string; onLogout: () => void }) {
   const style = {
     "--sidebar-width": "15rem",
     "--sidebar-width-icon": "3.5rem",
@@ -44,7 +47,7 @@ function AdminLayout() {
     <RegionProvider>
       <SidebarProvider style={style as React.CSSProperties}>
         <div className="flex h-screen w-full">
-          <AppSidebar />
+          <AppSidebar adminName={adminName} onLogout={onLogout} />
           <div className="flex flex-col flex-1 min-w-0">
             <header className="flex items-center justify-between gap-2 p-2 border-b">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
@@ -60,10 +63,43 @@ function AdminLayout() {
   );
 }
 
+function AdminGuard() {
+  const [authKey, setAuthKey] = useState(0);
+  const { data, isLoading, error } = useQuery<{ id: number; name: string }>({
+    queryKey: ["/api/admin/me", authKey],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/me", { credentials: "include" });
+      if (!res.ok) throw new Error("未登入");
+      return res.json();
+    },
+    retry: false,
+  });
+
+  const handleLogout = async () => {
+    await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
+    setAuthKey((k) => k + 1);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!data?.id) {
+    return <AdminLoginPage onLoginSuccess={() => setAuthKey((k) => k + 1)} />;
+  }
+
+  return <AdminLayout adminName={data.name} onLogout={handleLogout} />;
+}
+
 function AppRouter() {
   const [location] = useLocation();
   const isPortal = location.startsWith("/portal");
   const isLiff = location.startsWith("/liff");
+  const isAdminCallback = location.startsWith("/admin/callback");
 
   if (isPortal) {
     return <PortalPage />;
@@ -73,7 +109,7 @@ function AppRouter() {
     return <LiffClockInPage />;
   }
 
-  return <AdminLayout />;
+  return <AdminGuard />;
 }
 
 function App() {

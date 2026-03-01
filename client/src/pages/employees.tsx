@@ -13,7 +13,7 @@ import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, UserPlus, Phone, Mail, Edit2, RefreshCw, Download, Trash2 } from "lucide-react";
+import { Plus, Search, UserPlus, Phone, Mail, Edit2, RefreshCw, Download, Trash2, ShieldCheck } from "lucide-react";
 import type { Employee } from "@shared/schema";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -121,6 +121,20 @@ export default function EmployeesPage() {
     },
     onError: (err: Error) => {
       toast({ title: "刪除失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleAdmin = useMutation({
+    mutationFn: async ({ id, isAdmin }: { id: number; isAdmin: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/employees/${id}`, { isAdmin });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      toast({ title: data.isAdmin ? "已設為管理員" : "已取消管理員" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "操作失敗", description: err.message, variant: "destructive" });
     },
   });
 
@@ -299,6 +313,16 @@ export default function EmployeesPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className={emp.isAdmin ? "text-blue-500 hover:text-blue-600 hover:bg-blue-500/10" : "text-muted-foreground hover:text-foreground"}
+                            onClick={() => toggleAdmin.mutate({ id: emp.id, isAdmin: !emp.isAdmin })}
+                            title={emp.isAdmin ? "取消管理員" : "設為管理員"}
+                            data-testid={`button-toggle-admin-${emp.id}`}
+                          >
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"
