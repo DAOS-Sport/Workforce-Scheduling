@@ -177,6 +177,7 @@ function JunsHeader({ employee, showBack, onBack }: { employee?: PortalEmployee;
 function LineLoginScreen({ onLogin }: { onLogin: (emp: PortalEmployee) => void }) {
   const { toast } = useToast();
   const [checking, setChecking] = useState(false);
+  const [notBoundInfo, setNotBoundInfo] = useState<{ lineUserId: string; displayName: string } | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -199,12 +200,27 @@ function LineLoginScreen({ onLogin }: { onLogin: (emp: PortalEmployee) => void }
       window.history.replaceState({}, "", "/portal");
       onLogin(data);
     } catch (err: any) {
+      window.history.replaceState({}, "", "/portal");
+      const msg = err.message || "";
+      const jsonStart = msg.indexOf("{");
+      if (jsonStart !== -1) {
+        try {
+          const errData = JSON.parse(msg.substring(jsonStart));
+          if (errData.notBound || errData.message?.includes("尚未完成系統綁定") || errData.message?.includes("找不到")) {
+            setNotBoundInfo({ lineUserId: errData.lineUserId || "", displayName: errData.displayName || "" });
+            return;
+          }
+        } catch {}
+      }
+      if (msg.includes("尚未完成系統綁定") || msg.includes("找不到")) {
+        setNotBoundInfo({ lineUserId: "", displayName: "" });
+        return;
+      }
       toast({
         title: "LINE 登入失敗",
-        description: err.message || "驗證失敗",
+        description: msg || "驗證失敗",
         variant: "destructive",
       });
-      window.history.replaceState({}, "", "/portal");
     } finally {
       setChecking(false);
     }
@@ -217,6 +233,10 @@ function LineLoginScreen({ onLogin }: { onLogin: (emp: PortalEmployee) => void }
       const data = await res.json();
       onLogin(data);
     } catch (err: any) {
+      if (err.message?.includes("尚未完成系統綁定") || err.message?.includes("找不到")) {
+        setNotBoundInfo({ lineUserId: lineId, displayName: "" });
+        return;
+      }
       toast({
         title: "驗證失敗",
         description: err.message || "找不到此 LINE 帳號對應的員工資料",
@@ -241,6 +261,48 @@ function LineLoginScreen({ onLogin }: { onLogin: (emp: PortalEmployee) => void }
     const state = Math.random().toString(36).substring(7);
     const lineAuthUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${channelId}&redirect_uri=${redirectUri}&state=${state}&scope=profile%20openid`;
     window.location.href = lineAuthUrl;
+  }
+
+  if (notBoundInfo) {
+    return (
+      <div className="min-h-screen bg-juns-surface flex flex-col">
+        <JunsHeader />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-sm">
+            <div className="border border-orange-300 rounded-xl bg-white p-6 text-center shadow-flat" data-testid="not-bound-screen">
+              <div className="mb-5">
+                <div className="w-16 h-16 rounded-xl bg-orange-100 flex items-center justify-center mx-auto mb-4">
+                  <AlertTriangle className="h-8 w-8 text-orange-500" />
+                </div>
+                <h1 className="text-lg font-semibold text-juns-navy mb-2">尚未綁定系統</h1>
+              </div>
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-5">
+                <p className="text-sm text-orange-800 font-medium leading-relaxed">
+                  您尚未完成系統綁定，<br />
+                  請「截圖」並洽<strong>400官方帳號</strong>。
+                </p>
+              </div>
+              {notBoundInfo.lineUserId && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-5 text-left">
+                  <p className="text-[11px] text-slate-400 mb-1">您的 LINE ID（供管理員綁定）</p>
+                  <p className="text-xs text-slate-700 font-mono break-all select-all" data-testid="text-line-user-id">{notBoundInfo.lineUserId}</p>
+                  {notBoundInfo.displayName && (
+                    <p className="text-xs text-slate-500 mt-1">LINE 名稱：{notBoundInfo.displayName}</p>
+                  )}
+                </div>
+              )}
+              <button
+                className="w-full h-11 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium text-sm active:scale-[0.98] transition-all"
+                onClick={() => setNotBoundInfo(null)}
+                data-testid="button-back-to-login"
+              >
+                返回登入頁
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

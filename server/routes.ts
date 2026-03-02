@@ -925,9 +925,10 @@ export async function registerRoutes(
       const employee = await storage.getEmployeeByLineId(lineUserId);
       if (!employee) {
         return res.status(404).json({
-          message: "找不到此 LINE 帳號對應的員工資料",
+          message: "您尚未完成系統綁定，請「截圖」並洽400官方帳號。",
           lineUserId,
           displayName: profile.displayName,
+          notBound: true,
         });
       }
 
