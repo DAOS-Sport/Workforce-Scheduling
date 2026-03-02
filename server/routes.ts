@@ -27,11 +27,17 @@ export async function registerRoutes(
       const allEmployees = await storage.getAllEmployees();
       const admin = allEmployees.find(e => e.isAdmin);
 
-      req.session.adminId = admin?.id || 0;
+      req.session.adminId = admin?.id || 1;
       req.session.adminName = admin?.name || "管理員";
       req.session.adminLineId = "";
 
-      res.json({ id: req.session.adminId, name: req.session.adminName });
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ message: "登入儲存失敗" });
+        }
+        res.json({ id: req.session.adminId, name: req.session.adminName });
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
