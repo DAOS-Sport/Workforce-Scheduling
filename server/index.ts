@@ -8,6 +8,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 
 const app = express();
+app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 declare module "http" {
