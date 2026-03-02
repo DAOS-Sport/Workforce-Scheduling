@@ -153,6 +153,28 @@ export default function SchedulePage() {
     queryKey: ["/api/shifts", activeRegion, dateRange.start, dateRange.end],
   });
 
+  useEffect(() => {
+    if (shifts.length === 0) return;
+    const shiftEmpIds = new Set(shifts.map(s => s.employeeId));
+    const regionEmpIds = new Set(employees.map(e => e.id));
+    const crossIds = new Set<number>();
+    shiftEmpIds.forEach(id => {
+      if (!regionEmpIds.has(id)) crossIds.add(id);
+    });
+    if (crossIds.size > 0) {
+      setCrossRegionEmployeeIds(prev => {
+        const next = new Set(prev);
+        crossIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+    setScheduleVisibleEmployeeIds(prev => {
+      const next = new Set(prev);
+      shiftEmpIds.forEach(id => next.add(id));
+      return next;
+    });
+  }, [shifts, employees]);
+
   const empVenueMap = useMemo(() => {
     const map = new Map<number, Set<string>>();
     for (const s of shifts) {
