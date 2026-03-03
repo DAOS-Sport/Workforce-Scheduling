@@ -56,6 +56,7 @@ export default function EmployeesPage() {
     status: "active",
     role: "救生",
     employmentType: "full_time",
+    regionId: 0,
   });
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number; skipped: number; deactivated: number; errors: string[] } | null>(null);
 
@@ -157,7 +158,7 @@ export default function EmployeesPage() {
   });
 
   const resetForm = () => {
-    setForm({ name: "", employeeCode: "", phone: "", email: "", lineId: "", status: "active", role: "救生", employmentType: "full_time" });
+    setForm({ name: "", employeeCode: "", phone: "", email: "", lineId: "", status: "active", role: "救生", employmentType: "full_time", regionId: regionId });
     setEditingEmployee(null);
   };
 
@@ -177,13 +178,14 @@ export default function EmployeesPage() {
       status: emp.status,
       role: emp.role,
       employmentType: emp.employmentType || "full_time",
+      regionId: emp.regionId,
     });
     setDialogOpen(true);
   };
 
   const handleSave = () => {
     if (!form.name || !form.employeeCode) return;
-    const payload = { ...form, regionId };
+    const payload = { ...form, regionId: form.regionId || regionId };
     if (editingEmployee) {
       updateEmployee.mutate({ id: editingEmployee.id, ...payload });
     } else {
@@ -409,6 +411,19 @@ export default function EmployeesPage() {
                 placeholder="LINE 用戶 ID（用於員工入口登入）"
                 data-testid="input-employee-line-id"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>所屬區域</Label>
+              <Select value={String(form.regionId || regionId)} onValueChange={(v) => setForm({ ...form, regionId: Number(v) })}>
+                <SelectTrigger data-testid="select-employee-region">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {regionsData.map((r) => (
+                    <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
