@@ -1641,24 +1641,13 @@ export async function registerRoutes(
   });
 
   const anomalyUpload = multer({
-    storage: multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, "uploads/anomaly-reports"),
-      filename: (_req, file, cb) => {
-        const ext = file.originalname.split(".").pop() || "jpg";
-        cb(null, `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`);
-      },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       if (file.mimetype.startsWith("image/")) cb(null, true);
       else cb(new Error("僅支援圖片檔案"));
     },
   });
-
-  app.use("/uploads/anomaly-reports", (req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    next();
-  }, express.static("uploads/anomaly-reports"));
 
   app.post("/api/anomaly-report", anomalyUpload.array("images", 5), async (req, res) => {
     try {
@@ -1667,7 +1656,7 @@ export async function registerRoutes(
       if (!context) return res.status(400).json({ message: "缺少異常類型 (context)" });
 
       const files = (req.files as Express.Multer.File[]) || [];
-      const imageUrls = files.map(f => `/uploads/anomaly-reports/${f.filename}`);
+      const imageUrls = files.map(f => `data:${f.mimetype};base64,${f.buffer.toString("base64")}`);
 
       const now = new Date();
       const pad = (n: number) => n.toString().padStart(2, "0");
