@@ -293,6 +293,7 @@ function LineLoginScreen({ onLogin }: { onLogin: (emp: PortalEmployee) => void }
   const { toast } = useToast();
   const [checking, setChecking] = useState(false);
   const [notBoundInfo, setNotBoundInfo] = useState<{ lineUserId: string; displayName: string } | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -456,6 +457,7 @@ function LineLoginScreen({ onLogin }: { onLogin: (emp: PortalEmployee) => void }
 
             <div className="mt-5 pt-4 border-t border-juns-border">
               <p className="text-[11px] text-slate-400">首次登入請確認您的 LINE 帳號已由管理員綁定</p>
+              <AnomalyReportButton context="登入異常" errorMsg="無法登入系統" />
             </div>
 
             <DevModeLogin onLogin={onLogin} />
