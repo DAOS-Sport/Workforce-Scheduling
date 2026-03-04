@@ -79,6 +79,7 @@ export default function SchedulePage() {
   const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
   const [scheduleVisibleEmployeeIds, setScheduleVisibleEmployeeIds] = useState<Set<number>>(new Set());
   const [empPickerOpen, setEmpPickerOpen] = useState(false);
+  const [empPickerSearch, setEmpPickerSearch] = useState("");
   const [crossRegionEmployeeIds, setCrossRegionEmployeeIds] = useState<Set<number>>(new Set());
   const [crossRegionDialogOpen, setCrossRegionDialogOpen] = useState(false);
   const [crossRegionSearch, setCrossRegionSearch] = useState("");
@@ -735,78 +736,129 @@ export default function SchedulePage() {
                   </button>
                 </div>
               </div>
+              <div className="px-2 py-1.5 border-b">
+                <input
+                  type="text"
+                  placeholder="輸入姓名搜尋..."
+                  value={empPickerSearch}
+                  onChange={(e) => setEmpPickerSearch(e.target.value)}
+                  className="w-full h-7 px-2 text-xs rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  autoFocus
+                  data-testid="input-employee-picker-search"
+                />
+              </div>
               <div className="max-h-[350px] overflow-auto p-1">
-                {[
-                  { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
-                  { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
-                  { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
-                  { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
-                  { key: "ft-manager", label: "正職主管職", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "主管職" },
-                  { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
-                  { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
-                  { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
-                  { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
-                  { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
-                ].map(group => {
-                  const groupEmps = pickerEmployees.filter(group.filter);
-                  if (groupEmps.length === 0) return null;
-                  const allSelected = groupEmps.every(e => scheduleVisibleEmployeeIds.has(e.id));
-                  const someSelected = groupEmps.some(e => scheduleVisibleEmployeeIds.has(e.id));
-                  return (
-                    <div key={group.key} className="mb-0.5">
-                      <button
-                        type="button"
-                        className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-sm"
-                        onClick={() => {
-                          const next = new Set(scheduleVisibleEmployeeIds);
-                          if (allSelected) {
-                            groupEmps.forEach(e => next.delete(e.id));
-                          } else {
-                            groupEmps.forEach(e => next.add(e.id));
-                          }
-                          setScheduleVisibleEmployeeIds(next);
-                        }}
-                        data-testid={`picker-group-${group.key}`}
-                      >
-                        <Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} className="h-3.5 w-3.5" />
-                        {group.label} ({groupEmps.length})
-                      </button>
-                      {groupEmps.map(emp => (
+                {(() => {
+                  const searchTerm = empPickerSearch.trim().toLowerCase();
+                  const filteredPickerEmployees = searchTerm
+                    ? pickerEmployees.filter(e => e.name.toLowerCase().includes(searchTerm))
+                    : pickerEmployees;
+
+                  if (searchTerm && filteredPickerEmployees.length === 0) {
+                    return <div className="px-3 py-4 text-xs text-muted-foreground text-center">找不到符合的人員</div>;
+                  }
+
+                  if (searchTerm) {
+                    return (
+                      <div>
+                        {filteredPickerEmployees.map(emp => (
+                          <button
+                            key={emp.id}
+                            type="button"
+                            className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-muted rounded-sm"
+                            onClick={() => {
+                              const next = new Set(scheduleVisibleEmployeeIds);
+                              if (next.has(emp.id)) next.delete(emp.id);
+                              else next.add(emp.id);
+                              setScheduleVisibleEmployeeIds(next);
+                            }}
+                            data-testid={`picker-emp-${emp.id}`}
+                          >
+                            <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
+                            <span className="text-foreground flex-1 text-left">{emp.name}</span>
+                            {crossRegionEmployeeIds.has(emp.id) && (
+                              <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4 shrink-0">支援</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  const groups = [
+                    { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
+                    { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
+                    { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
+                    { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
+                    { key: "ft-manager", label: "正職主管職", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "主管職" },
+                    { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                    { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
+                    { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
+                    { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
+                    { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
+                  ];
+                  return groups.map(group => {
+                    const groupEmps = pickerEmployees.filter(group.filter);
+                    if (groupEmps.length === 0) return null;
+                    const allSelected = groupEmps.every(e => scheduleVisibleEmployeeIds.has(e.id));
+                    const someSelected = groupEmps.some(e => scheduleVisibleEmployeeIds.has(e.id));
+                    return (
+                      <div key={group.key} className="mb-0.5">
                         <button
-                          key={emp.id}
                           type="button"
-                          className="w-full flex items-center gap-2 pl-6 pr-2 py-1 text-sm hover:bg-muted rounded-sm"
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-sm"
                           onClick={() => {
                             const next = new Set(scheduleVisibleEmployeeIds);
-                            if (next.has(emp.id)) next.delete(emp.id);
-                            else next.add(emp.id);
+                            if (allSelected) {
+                              groupEmps.forEach(e => next.delete(e.id));
+                            } else {
+                              groupEmps.forEach(e => next.add(e.id));
+                            }
                             setScheduleVisibleEmployeeIds(next);
                           }}
-                          data-testid={`picker-emp-${emp.id}`}
+                          data-testid={`picker-group-${group.key}`}
                         >
-                          <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
-                          <span className="text-foreground flex-1 text-left">{emp.name}</span>
-                          {crossRegionEmployeeIds.has(emp.id) && (
-                            <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4 shrink-0">支援</span>
-                          )}
-                          {empVenueMap.has(emp.id) && (
-                            <span className="flex gap-0.5 flex-wrap justify-end">
-                              {[...empVenueMap.get(emp.id)!].map(vn => (
-                                <span key={vn} className="text-[9px] px-1 py-0 rounded bg-primary/10 text-primary leading-4">{vn}</span>
-                              ))}
-                            </span>
-                          )}
+                          <Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} className="h-3.5 w-3.5" />
+                          {group.label} ({groupEmps.length})
                         </button>
-                      ))}
-                    </div>
-                  );
-                })}
+                        {groupEmps.map(emp => (
+                          <button
+                            key={emp.id}
+                            type="button"
+                            className="w-full flex items-center gap-2 pl-6 pr-2 py-1 text-sm hover:bg-muted rounded-sm"
+                            onClick={() => {
+                              const next = new Set(scheduleVisibleEmployeeIds);
+                              if (next.has(emp.id)) next.delete(emp.id);
+                              else next.add(emp.id);
+                              setScheduleVisibleEmployeeIds(next);
+                            }}
+                            data-testid={`picker-emp-${emp.id}`}
+                          >
+                            <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
+                            <span className="text-foreground flex-1 text-left">{emp.name}</span>
+                            {crossRegionEmployeeIds.has(emp.id) && (
+                              <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4 shrink-0">支援</span>
+                            )}
+                            {empVenueMap.has(emp.id) && (
+                              <span className="flex gap-0.5 flex-wrap justify-end">
+                                {[...empVenueMap.get(emp.id)!].map(vn => (
+                                  <span key={vn} className="text-[9px] px-1 py-0 rounded bg-primary/10 text-primary leading-4">{vn}</span>
+                                ))}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
               <div className="border-t px-3 py-2">
                 <button
                   className="w-full flex items-center justify-center gap-1.5 text-xs text-orange-500 hover:text-orange-400 py-1"
                   onClick={() => {
                     setEmpPickerOpen(false);
+                    setEmpPickerSearch("");
                     const otherRegions = regionsData.filter(r => r.code !== activeRegion);
                     setCrossRegionTab(otherRegions[0]?.code || "");
                     setCrossRegionSearch("");
