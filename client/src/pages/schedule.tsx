@@ -430,7 +430,7 @@ export default function SchedulePage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       toast({ title: "班次已新增" });
     },
     onError: (err: Error) => {
@@ -444,7 +444,7 @@ export default function SchedulePage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       toast({ title: "班次已更新" });
     },
     onError: (err: Error) => {
@@ -457,7 +457,7 @@ export default function SchedulePage() {
       await apiRequest("DELETE", `/api/shifts/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       toast({ title: "班次已刪除" });
     },
   });
@@ -468,7 +468,7 @@ export default function SchedulePage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts"] });
       toast({ title: "派遣班次已新增" });
       setDispatchDialogOpen(false);
     },
@@ -483,7 +483,7 @@ export default function SchedulePage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts"] });
       toast({ title: "派遣班次已更新" });
       setDispatchDialogOpen(false);
     },
@@ -497,7 +497,7 @@ export default function SchedulePage() {
       await apiRequest("DELETE", `/api/dispatch-shifts/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts"] });
       toast({ title: "派遣班次已刪除" });
       setDispatchDialogOpen(false);
     },
@@ -509,7 +509,7 @@ export default function SchedulePage() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       toast({ title: `已刪除 ${data.deletedCount} 筆班次` });
       setShiftBatchDates(new Set());
       setShiftBatchMode(false);
@@ -525,7 +525,7 @@ export default function SchedulePage() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       const msg = `已新增 ${data.created} 筆班次`;
       const errMsg = data.errors?.length > 0 ? `（${data.errors.length} 筆因勞基法限制略過）` : "";
       toast({ title: msg + errMsg });
@@ -543,7 +543,7 @@ export default function SchedulePage() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       toast({ title: data.message || `已複製 ${data.created} 筆班表` });
     },
     onError: (err: Error) => {

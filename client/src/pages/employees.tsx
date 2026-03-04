@@ -145,7 +145,7 @@ export default function EmployeesPage() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       setSyncResult(data);
       toast({
         title: "Ragic 同步完成",
