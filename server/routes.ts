@@ -1841,6 +1841,21 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/anomaly-reports/batch/delete", async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "缺少 ids" });
+      let deleted = 0;
+      for (const id of ids) {
+        await storage.deleteAnomalyReport(Number(id));
+        deleted++;
+      }
+      res.json({ success: true, deleted });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.delete("/api/anomaly-reports/:id", async (req, res) => {
     try {
       await storage.deleteAnomalyReport(Number(req.params.id));

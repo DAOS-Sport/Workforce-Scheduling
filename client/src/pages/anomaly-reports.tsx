@@ -5,7 +5,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -14,13 +13,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   ShieldAlert,
   FileWarning,
   CheckCircle2,
   RefreshCw,
   Search,
   X,
-  ChevronRight,
+  ChevronDown,
   AlertTriangle,
   Clock,
   MapPin,
@@ -38,6 +43,7 @@ import {
   Send,
   Image as ImageIcon,
   MessageSquare,
+  ZoomIn,
 } from "lucide-react";
 
 interface AnomalyReport {
@@ -91,30 +97,25 @@ function relativeTime(dateStr: string | null) {
   return `${Math.floor(diff / 86400)} 天前`;
 }
 
+function getImageSrc(url: string): string {
+  if (url.startsWith("data:")) return url;
+  if (url.startsWith("http")) return url;
+  return `${window.location.origin}${url}`;
+}
+
 function KpiCard({ title, value, icon: Icon, color }: { title: string; value: string | number; icon: any; color: string }) {
   return (
     <div
-      className={`flex items-center gap-3 rounded-xl border bg-card p-4 min-w-[150px] transition-transform hover:-translate-y-0.5`}
+      className={`flex items-center gap-3 rounded-xl border bg-card p-4 min-w-[140px] flex-1`}
       data-testid={`text-kpi-${title}`}
     >
-      <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${color}`}>
-        <Icon className="h-5 w-5 text-white" />
+      <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${color}`}>
+        <Icon className="h-4 w-4 text-white" />
       </div>
       <div>
-        <p className="text-xs text-muted-foreground font-medium">{title}</p>
-        <p className="text-xl font-bold">{value}</p>
+        <p className="text-[11px] text-muted-foreground font-medium leading-tight">{title}</p>
+        <p className="text-lg font-bold leading-tight mt-0.5">{value}</p>
       </div>
-    </div>
-  );
-}
-
-function DetailRow({ icon: Icon, label, value }: { icon: any; label: string; value: string | null | undefined }) {
-  if (!value) return null;
-  return (
-    <div className="flex items-start gap-2 text-sm">
-      <Icon className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-      <span className="text-muted-foreground min-w-[60px]">{label}</span>
-      <span className="font-medium break-all">{value}</span>
     </div>
   );
 }
@@ -123,14 +124,17 @@ function AnomalyCard({
   report,
   isSelected,
   onSelect,
+  onDelete,
 }: {
   report: AnomalyReport;
   isSelected: boolean;
   onSelect: (id: number) => void;
+  onDelete: (id: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [noteInput, setNoteInput] = useState(report.resolvedNote || "");
   const [showReport, setShowReport] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const { toast } = useToast();
 
   const resolutionMutation = useMutation({
@@ -146,187 +150,258 @@ function AnomalyCard({
 
   const isResolved = report.resolution === "resolved";
   const isFail = report.clockStatus === "fail";
-
-  const borderColor = isSelected
-    ? "ring-2 ring-blue-400"
-    : isResolved
-    ? "border-green-200 dark:border-green-800"
-    : "border-orange-200 dark:border-orange-800";
-
-  const bgColor = isResolved ? "bg-green-50/30 dark:bg-green-950/20" : "";
-
-  const StatusIcon = isResolved ? CheckCircle2 : isFail ? ShieldAlert : FileWarning;
-  const statusColor = isResolved ? "text-green-600" : isFail ? "text-red-500" : "text-orange-500";
+  const hasImages = report.imageUrls && report.imageUrls.length > 0;
 
   return (
-    <div
-      className={`rounded-xl border ${borderColor} ${bgColor} overflow-hidden transition-all`}
-      data-testid={`card-anomaly-${report.id}`}
-    >
+    <>
       <div
-        className="flex items-center gap-3 p-4 cursor-pointer select-none"
-        onClick={() => setExpanded(!expanded)}
+        className={`rounded-xl border overflow-hidden transition-all ${
+          isSelected
+            ? "ring-2 ring-blue-400 border-blue-300 dark:border-blue-600"
+            : isResolved
+            ? "border-border/60"
+            : "border-orange-200/80 dark:border-orange-800/50"
+        } ${isResolved ? "opacity-70" : ""}`}
+        data-testid={`card-anomaly-${report.id}`}
       >
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={(e) => {
-            e.stopPropagation();
-            onSelect(report.id);
-          }}
-          onClick={(e) => e.stopPropagation()}
-          className="h-4 w-4 rounded border-gray-300"
-          data-testid={`checkbox-${report.id}`}
-        />
-        <StatusIcon className={`h-5 w-5 ${statusColor} shrink-0`} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm" data-testid={`text-anomaly-employee-${report.id}`}>
-              {report.employeeName || "未知員工"}
-            </span>
-            <Badge
-              variant={isResolved ? "default" : "secondary"}
-              className={isResolved ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"}
-              data-testid={`badge-resolution-${report.id}`}
-            >
-              {isResolved ? "已處理" : "待解決"}
-            </Badge>
-            {report.clockType && (
-              <Badge variant="outline" className="text-xs">
-                {report.clockType === "in" ? "上班" : "下班"}
+        <div
+          className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none hover:bg-muted/30 transition-colors"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => { e.stopPropagation(); onSelect(report.id); }}
+            onClick={(e) => e.stopPropagation()}
+            className="h-4 w-4 rounded border-gray-300 shrink-0"
+            data-testid={`checkbox-${report.id}`}
+          />
+
+          <div className={`flex h-8 w-8 items-center justify-center rounded-full shrink-0 ${
+            isResolved ? "bg-green-100 dark:bg-green-900/40" : isFail ? "bg-red-100 dark:bg-red-900/40" : "bg-orange-100 dark:bg-orange-900/40"
+          }`}>
+            {isResolved ? (
+              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+            ) : isFail ? (
+              <ShieldAlert className="h-4 w-4 text-red-500" />
+            ) : (
+              <FileWarning className="h-4 w-4 text-orange-500" />
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-sm" data-testid={`text-anomaly-employee-${report.id}`}>
+                {report.employeeName || "未知員工"}
+              </span>
+              <Badge
+                variant="secondary"
+                className={`text-[10px] px-1.5 py-0 h-5 ${
+                  isResolved
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300"
+                    : "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"
+                }`}
+                data-testid={`badge-resolution-${report.id}`}
+              >
+                {isResolved ? "已處理" : "待解決"}
               </Badge>
-            )}
-            {report.venueName && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Building2 className="h-3 w-3" /> {report.venueName}
-              </span>
-            )}
-            {report.failReason && (
-              <span className="text-xs text-red-500">{report.failReason}</span>
-            )}
-            {report.imageUrls && report.imageUrls.length > 0 && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <ImageIcon className="h-3 w-3" /> {report.imageUrls.length}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs text-muted-foreground" data-testid={`text-anomaly-time-${report.id}`}>
-              {formatDate(report.createdAt)}
-            </span>
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              ({relativeTime(report.createdAt)})
-            </span>
-          </div>
-        </div>
-        <ChevronRight
-          className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
-          data-testid={`button-expand-${report.id}`}
-        />
-      </div>
-
-      {expanded && (
-        <div className="px-4 pb-4 space-y-4 border-t" data-testid={`detail-anomaly-${report.id}`}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-3">
-            <DetailRow icon={User} label="姓名" value={report.employeeName} />
-            <DetailRow icon={Hash} label="編號" value={report.employeeCode} />
-            <DetailRow icon={Briefcase} label="職位" value={report.role} />
-            <DetailRow icon={Clock} label="時間" value={report.clockTime} />
-            <DetailRow icon={Building2} label="場館" value={report.venueName} />
-            <DetailRow icon={Ruler} label="距離" value={report.distance} />
-            <DetailRow icon={AlertTriangle} label="原因" value={report.failReason} />
-            <DetailRow icon={FileText} label="類型" value={report.clockType === "in" ? "上班打卡" : report.clockType === "out" ? "下班打卡" : null} />
-            <DetailRow icon={FileWarning} label="異常" value={report.context} />
-          </div>
-
-          {report.errorMsg && (
-            <div className="rounded-lg bg-red-50/60 dark:bg-red-950/30 border border-red-200/60 dark:border-red-800/60 p-3">
-              <p className="text-sm text-red-700 dark:text-red-300"><b>錯誤訊息：</b>{report.errorMsg}</p>
-            </div>
-          )}
-
-          {report.userNote && (
-            <div className="rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/60 p-3">
-              <p className="text-sm text-blue-700 dark:text-blue-300"><b>使用者備註：</b>{report.userNote}</p>
-            </div>
-          )}
-
-          {report.imageUrls && report.imageUrls.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {report.imageUrls.map((url, i) => {
-                const fullUrl = url.startsWith("http") ? url : `${window.location.origin}${url}`;
-                return (
-                  <a
-                    key={i}
-                    href={fullUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid={`img-anomaly-${report.id}-${i}`}
-                  >
-                    <img
-                      src={fullUrl}
-                      alt={`附件 ${i + 1}`}
-                      className="h-20 w-20 rounded-lg object-cover border hover:opacity-80 transition-opacity"
-                      loading="lazy"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                      }}
-                    />
-                  </a>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="rounded-lg bg-gray-50/80 dark:bg-zinc-900/50 border border-gray-200/60 dark:border-zinc-700/60 p-3 space-y-2">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-              <Input
-                placeholder="處理備註..."
-                value={noteInput}
-                onChange={(e) => setNoteInput(e.target.value)}
-                className="flex-1 h-8 text-sm"
-                data-testid={`input-note-${report.id}`}
-              />
-              {isResolved ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => resolutionMutation.mutate({ resolution: "pending", resolvedNote: noteInput })}
-                  disabled={resolutionMutation.isPending}
-                  data-testid={`button-unresolve-${report.id}`}
-                >
-                  改為待解決
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={() => resolutionMutation.mutate({ resolution: "resolved", resolvedNote: noteInput })}
-                  disabled={resolutionMutation.isPending}
-                  className="bg-green-600 hover:bg-green-700"
-                  data-testid={`button-resolve-${report.id}`}
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-1" /> 標記已處理
-                </Button>
+              {report.clockType && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                  {report.clockType === "in" ? "上班" : "下班"}
+                </Badge>
               )}
             </div>
-            {report.resolvedNote && (
-              <p className="text-xs text-muted-foreground"><b>處理備註：</b>{report.resolvedNote}</p>
-            )}
+            <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+              {report.venueName && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3 w-3" /> {report.venueName}
+                </span>
+              )}
+              {report.failReason && (
+                <span className="text-red-500 dark:text-red-400">{report.failReason}</span>
+              )}
+              {hasImages && (
+                <span className="flex items-center gap-0.5">
+                  <ImageIcon className="h-3 w-3" /> {report.imageUrls!.length}
+                </span>
+              )}
+            </div>
           </div>
 
-          {report.reportText && (
-            <details data-testid={`toggle-report-text-${report.id}`}>
-              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                查看完整報告文字
-              </summary>
-              <pre className="mt-2 text-xs bg-muted/50 rounded-lg p-3 whitespace-pre-wrap overflow-x-auto">
-                {report.reportText}
-              </pre>
-            </details>
-          )}
+          <div className="text-right shrink-0 hidden sm:block">
+            <p className="text-xs text-muted-foreground" data-testid={`text-anomaly-time-${report.id}`}>
+              {formatDate(report.createdAt)}
+            </p>
+            <p className="text-[10px] text-muted-foreground/70">
+              {relativeTime(report.createdAt)}
+            </p>
+          </div>
+
+          <ChevronDown
+            className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+            data-testid={`button-expand-${report.id}`}
+          />
         </div>
-      )}
-    </div>
+
+        {expanded && (
+          <div className="border-t bg-muted/20" data-testid={`detail-anomaly-${report.id}`}>
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+                <div>
+                  <span className="text-[11px] text-muted-foreground block">姓名</span>
+                  <span className="font-medium text-sm">{report.employeeName || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-muted-foreground block">編號</span>
+                  <span className="font-medium text-sm">{report.employeeCode || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-muted-foreground block">職位</span>
+                  <span className="font-medium text-sm">{report.role || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-muted-foreground block">打卡時間</span>
+                  <span className="font-medium text-sm">{report.clockTime || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-muted-foreground block">場館</span>
+                  <span className="font-medium text-sm">{report.venueName || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-muted-foreground block">距離</span>
+                  <span className="font-medium text-sm">{report.distance || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-muted-foreground block">類型</span>
+                  <span className="font-medium text-sm">{report.clockType === "in" ? "上班打卡" : report.clockType === "out" ? "下班打卡" : "—"}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-muted-foreground block">異常原因</span>
+                  <span className="font-medium text-sm text-red-600 dark:text-red-400">{report.failReason || report.context || "—"}</span>
+                </div>
+              </div>
+
+              {report.errorMsg && (
+                <div className="rounded-lg bg-red-50/80 dark:bg-red-950/30 border border-red-200/60 dark:border-red-800/40 px-3 py-2">
+                  <p className="text-xs text-red-700 dark:text-red-300"><span className="font-semibold">錯誤訊息：</span>{report.errorMsg}</p>
+                </div>
+              )}
+
+              {report.userNote && (
+                <div className="rounded-lg bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/40 px-3 py-2">
+                  <p className="text-xs text-blue-700 dark:text-blue-300"><span className="font-semibold">使用者備註：</span>{report.userNote}</p>
+                </div>
+              )}
+
+              {hasImages && (
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-1.5 font-medium">附件圖片</p>
+                  <div className="flex flex-wrap gap-2">
+                    {report.imageUrls!.map((url, i) => {
+                      const src = getImageSrc(url);
+                      return (
+                        <div
+                          key={i}
+                          className="relative group cursor-pointer"
+                          onClick={() => setPreviewImage(src)}
+                          data-testid={`img-anomaly-${report.id}-${i}`}
+                        >
+                          <img
+                            src={src}
+                            alt={`附件 ${i + 1}`}
+                            className="h-24 w-24 rounded-lg object-cover border border-border/60 group-hover:border-blue-400 transition-all"
+                            loading="lazy"
+                            onError={(e) => {
+                              const el = e.target as HTMLImageElement;
+                              el.parentElement!.innerHTML = `<div class="h-24 w-24 rounded-lg border border-dashed border-muted-foreground/30 flex items-center justify-center text-muted-foreground/50"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>`;
+                            }}
+                          />
+                          <div className="absolute inset-0 rounded-lg bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                            <ZoomIn className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                <Input
+                  placeholder="處理備註..."
+                  value={noteInput}
+                  onChange={(e) => setNoteInput(e.target.value)}
+                  className="flex-1 h-8 text-sm"
+                  data-testid={`input-note-${report.id}`}
+                />
+                <div className="flex gap-2">
+                  {isResolved ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      onClick={() => resolutionMutation.mutate({ resolution: "pending", resolvedNote: noteInput })}
+                      disabled={resolutionMutation.isPending}
+                      data-testid={`button-unresolve-${report.id}`}
+                    >
+                      改為待解決
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs bg-green-600 hover:bg-green-700"
+                      onClick={() => resolutionMutation.mutate({ resolution: "resolved", resolvedNote: noteInput })}
+                      disabled={resolutionMutation.isPending}
+                      data-testid={`button-resolve-${report.id}`}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> 標記已處理
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                    onClick={(e) => { e.stopPropagation(); onDelete(report.id); }}
+                    data-testid={`button-delete-${report.id}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+              {report.resolvedNote && (
+                <p className="text-xs text-muted-foreground"><span className="font-semibold">處理備註：</span>{report.resolvedNote}</p>
+              )}
+
+              {report.reportText && (
+                <details data-testid={`toggle-report-text-${report.id}`}>
+                  <summary className="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground select-none">
+                    查看完整報告文字
+                  </summary>
+                  <pre className="mt-2 text-[11px] bg-muted/50 rounded-lg p-3 whitespace-pre-wrap overflow-x-auto leading-relaxed">
+                    {report.reportText}
+                  </pre>
+                </details>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
+        <DialogContent className="max-w-3xl p-2">
+          <DialogHeader className="sr-only">
+            <DialogTitle>圖片預覽</DialogTitle>
+          </DialogHeader>
+          {previewImage && (
+            <img
+              src={previewImage}
+              alt="預覽"
+              className="w-full rounded-lg object-contain max-h-[80vh]"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -533,11 +608,31 @@ export default function AnomalyReportsPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/anomaly-reports/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/anomaly-reports"] });
+      toast({ title: "已刪除" });
+    },
+  });
+
+  const batchDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await apiRequest("POST", "/api/anomaly-reports/batch/delete", { ids });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/anomaly-reports"] });
+      setSelectedIds(new Set());
+      toast({ title: `已刪除 ${data.deleted} 筆` });
+    },
+  });
+
   const venues = useMemo(() => {
     const v = new Set<string>();
-    reports.forEach((r) => {
-      if (r.venueName) v.add(r.venueName);
-    });
+    reports.forEach((r) => { if (r.venueName) v.add(r.venueName); });
     return Array.from(v).sort();
   }, [reports]);
 
@@ -562,27 +657,12 @@ export default function AnomalyReportsPage() {
   const pendingCount = reports.filter((r) => r.resolution !== "resolved").length;
   const todayCount = reports.filter((r) => {
     if (!r.createdAt) return false;
-    const d = new Date(r.createdAt);
-    const now = new Date();
-    return d.toDateString() === now.toDateString();
+    return new Date(r.createdAt).toDateString() === new Date().toDateString();
   }).length;
 
   const topVenue = useMemo(() => {
     const counts: Record<string, number> = {};
-    reports.forEach((r) => {
-      if (r.venueName) counts[r.venueName] = (counts[r.venueName] || 0) + 1;
-    });
-    const entries = Object.entries(counts);
-    if (entries.length === 0) return "—";
-    entries.sort((a, b) => b[1] - a[1]);
-    return entries[0][0];
-  }, [reports]);
-
-  const topReason = useMemo(() => {
-    const counts: Record<string, number> = {};
-    reports.forEach((r) => {
-      if (r.failReason) counts[r.failReason] = (counts[r.failReason] || 0) + 1;
-    });
+    reports.forEach((r) => { if (r.venueName) counts[r.venueName] = (counts[r.venueName] || 0) + 1; });
     const entries = Object.entries(counts);
     if (entries.length === 0) return "—";
     entries.sort((a, b) => b[1] - a[1]);
@@ -606,6 +686,18 @@ export default function AnomalyReportsPage() {
     }
   };
 
+  const handleDelete = (id: number) => {
+    if (confirm("確定要刪除此異常報告？")) {
+      deleteMutation.mutate(id);
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (confirm(`確定要刪除選取的 ${selectedIds.size} 筆異常報告？此操作無法復原。`)) {
+      batchDeleteMutation.mutate(Array.from(selectedIds));
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -615,7 +707,7 @@ export default function AnomalyReportsPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto p-4 md:p-6 space-y-6" data-testid="page-anomaly-reports">
+    <div className="h-full overflow-y-auto p-4 md:p-6 space-y-5" data-testid="page-anomaly-reports">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-red-500 shadow-lg">
@@ -637,12 +729,11 @@ export default function AnomalyReportsPage() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <KpiCard title="總異常數" value={totalReports} icon={FileWarning} color="bg-blue-500" />
         <KpiCard title="待解決" value={pendingCount} icon={AlertTriangle} color="bg-orange-500" />
         <KpiCard title="今日異常" value={todayCount} icon={Clock} color="bg-red-500" />
         <KpiCard title="最常見場館" value={topVenue} icon={Building2} color="bg-purple-500" />
-        <KpiCard title="最常見原因" value={topReason} icon={MessageSquare} color="bg-teal-500" />
       </div>
 
       <NotificationSettingsPanel />
@@ -659,7 +750,7 @@ export default function AnomalyReportsPage() {
           />
         </div>
         <Select value={venueFilter} onValueChange={setVenueFilter}>
-          <SelectTrigger className="w-[150px] h-9" data-testid="select-venue">
+          <SelectTrigger className="w-[140px] h-9" data-testid="select-venue">
             <SelectValue placeholder="場館" />
           </SelectTrigger>
           <SelectContent>
@@ -670,7 +761,7 @@ export default function AnomalyReportsPage() {
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[120px] h-9" data-testid="select-status">
+          <SelectTrigger className="w-[110px] h-9" data-testid="select-status">
             <SelectValue placeholder="狀態" />
           </SelectTrigger>
           <SelectContent>
@@ -692,7 +783,7 @@ export default function AnomalyReportsPage() {
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-blue-50/50 dark:bg-blue-950/20 p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 p-3">
           <span className="text-sm font-medium">已選 {selectedIds.size} 筆</span>
           <Input
             placeholder="批量備註..."
@@ -702,23 +793,34 @@ export default function AnomalyReportsPage() {
           />
           <Button
             size="sm"
-            className="bg-green-600 hover:bg-green-700 gap-1"
+            className="bg-green-600 hover:bg-green-700 gap-1 h-8 text-xs"
             onClick={() => batchMutation.mutate({ ids: Array.from(selectedIds), resolution: "resolved", resolvedNote: batchNote })}
             disabled={batchMutation.isPending}
             data-testid="button-batch-resolve"
           >
-            <CheckCircle2 className="h-4 w-4" /> 批量已處理
+            <CheckCircle2 className="h-3.5 w-3.5" /> 批量已處理
           </Button>
           <Button
             size="sm"
             variant="outline"
+            className="h-8 text-xs"
             onClick={() => batchMutation.mutate({ ids: Array.from(selectedIds), resolution: "pending", resolvedNote: batchNote })}
             disabled={batchMutation.isPending}
             data-testid="button-batch-pending"
           >
             批量待解決
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs text-red-500 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950/30"
+            onClick={handleBatchDelete}
+            disabled={batchDeleteMutation.isPending}
+            data-testid="button-batch-delete"
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1" /> 批量刪除
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setSelectedIds(new Set())}>
             取消
           </Button>
         </div>
@@ -738,11 +840,11 @@ export default function AnomalyReportsPage() {
         </Button>
       </div>
 
-      <div className="space-y-3" data-testid="list-anomaly-reports">
+      <div className="space-y-2" data-testid="list-anomaly-reports">
         {filteredReports.length === 0 ? (
-          <div className="text-center py-12" data-testid="text-empty-state">
-            <ShieldAlert className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground">
+          <div className="text-center py-16" data-testid="text-empty-state">
+            <ShieldAlert className="h-12 w-12 mx-auto text-muted-foreground/20 mb-3" />
+            <p className="text-muted-foreground text-sm">
               {totalReports === 0 ? "目前沒有異常報告" : "無符合篩選條件的異常報告"}
             </p>
           </div>
@@ -753,6 +855,7 @@ export default function AnomalyReportsPage() {
               report={report}
               isSelected={selectedIds.has(report.id)}
               onSelect={toggleSelect}
+              onDelete={handleDelete}
             />
           ))
         )}
