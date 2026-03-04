@@ -6,7 +6,7 @@ import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假"];
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
 import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders } from "./line-webhook";
 import multer from "multer";
 import * as XLSX from "xlsx";

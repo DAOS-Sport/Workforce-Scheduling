@@ -441,7 +441,7 @@ export async function handleLineWebhook(body: any): Promise<void> {
   }
 }
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假"];
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
 
 export async function sendShiftReminders(): Promise<{ sent: number; skipped: number; noLineId: number }> {
   const taipeiNow = getTaiwanNow();

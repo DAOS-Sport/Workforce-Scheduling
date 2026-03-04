@@ -43,6 +43,7 @@ const ROLE_SHORT: Record<string, string> = {
   "事假": "事",
   "喪假": "喪",
   "公假": "公",
+  "生理假": "生",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -51,7 +52,7 @@ const ROLE_LABELS: Record<string, string> = {
   "櫃台": "櫃台",
 };
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假"];
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
 
 const LEAVE_COLORS: Record<string, string> = {
   "休假": "bg-slate-100 dark:bg-slate-800/40 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400",
@@ -60,6 +61,7 @@ const LEAVE_COLORS: Record<string, string> = {
   "事假": "bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400",
   "喪假": "bg-gray-100 dark:bg-gray-800/40 border border-gray-400 dark:border-gray-600 text-gray-600 dark:text-gray-400",
   "公假": "bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800 text-cyan-600 dark:text-cyan-400",
+  "生理假": "bg-pink-50 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-800 text-pink-500 dark:text-pink-400",
 };
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
