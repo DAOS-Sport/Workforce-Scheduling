@@ -37,12 +37,29 @@ const ROLE_SHORT: Record<string, string> = {
   "櫃檯": "櫃",
   "清潔": "潔",
   "管理": "管",
+  "休假": "休",
+  "特休": "特",
+  "病假": "病",
+  "事假": "事",
+  "喪假": "喪",
+  "公假": "公",
 };
 
 const ROLE_LABELS: Record<string, string> = {
   "救生": "救生",
   "守望": "守望",
   "櫃台": "櫃台",
+};
+
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假"];
+
+const LEAVE_COLORS: Record<string, string> = {
+  "休假": "bg-slate-100 dark:bg-slate-800/40 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400",
+  "特休": "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400",
+  "病假": "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-500 dark:text-red-400",
+  "事假": "bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400",
+  "喪假": "bg-gray-100 dark:bg-gray-800/40 border border-gray-400 dark:border-gray-600 text-gray-600 dark:text-gray-400",
+  "公假": "bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800 text-cyan-600 dark:text-cyan-400",
 };
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
@@ -482,17 +499,24 @@ export default function SchedulePage() {
   };
 
   const handleSaveShift = () => {
-    if (!shiftDate || !shiftVenueId || !shiftStartTime || !shiftEndTime) return;
+    const isLeave = LEAVE_TYPES.includes(shiftRole);
+    const effectiveVenueId = isLeave ? (shiftVenueId || "1") : shiftVenueId;
+    const effectiveStart = isLeave ? "00:00" : shiftStartTime;
+    const effectiveEnd = isLeave ? "00:00" : shiftEndTime;
+
+    if (!shiftDate) return;
+    if (!isLeave && (!effectiveVenueId || !shiftStartTime || !shiftEndTime)) return;
+
     if (editingShift) {
       updateShift.mutate({
         id: editingShift.id,
         employeeId: shiftEmployeeId!,
-        venueId: parseInt(shiftVenueId),
+        venueId: parseInt(effectiveVenueId),
         date: shiftDate,
-        startTime: shiftStartTime,
-        endTime: shiftEndTime,
+        startTime: effectiveStart,
+        endTime: effectiveEnd,
         role: shiftRole,
-        isDispatch: shiftIsDispatch,
+        isDispatch: isLeave ? false : shiftIsDispatch,
       });
       setShiftDialogOpen(false);
     } else {
@@ -507,13 +531,13 @@ export default function SchedulePage() {
 
       for (const empId of targetEmployeeIds) {
         const isCrossRegion = crossRegionEmployeeIds.has(empId);
-        const dispatch = shiftIsDispatch || isCrossRegion;
+        const dispatch = isLeave ? false : (shiftIsDispatch || isCrossRegion);
         if (allDates.length > 1) {
           batchCreateShifts.mutate({
             employeeId: empId,
-            venueId: shiftVenueId,
-            startTime: shiftStartTime,
-            endTime: shiftEndTime,
+            venueId: effectiveVenueId,
+            startTime: effectiveStart,
+            endTime: effectiveEnd,
             role: shiftRole,
             isDispatch: dispatch,
             targetDates: allDates,
@@ -521,10 +545,10 @@ export default function SchedulePage() {
         } else {
           createShift.mutate({
             employeeId: empId,
-            venueId: parseInt(shiftVenueId),
+            venueId: parseInt(effectiveVenueId),
             date: shiftDate,
-            startTime: shiftStartTime,
-            endTime: shiftEndTime,
+            startTime: effectiveStart,
+            endTime: effectiveEnd,
             role: shiftRole,
             isDispatch: dispatch,
           });
@@ -1101,16 +1125,35 @@ export default function SchedulePage() {
                                 const slots = slotsByVenueDate.get(`${shift.venueId}-${shiftDateStr}`) || [];
                                 const sStart = shift.startTime.substring(0, 5);
                                 const sEnd = shift.endTime.substring(0, 5);
+                                const isLeave = LEAVE_TYPES.includes(shift.role);
                                 const matchedSlot = slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sl.endTime.substring(0, 5) >= sEnd) 
                                   || slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
-                                const shiftRole = matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role;
+                                const shiftRole = isLeave ? shift.role : (matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role);
                                 const roleShort = ROLE_SHORT[shiftRole] || shiftRole.slice(0, 1);
                                 const isCounter = shiftRole === "櫃台" || shiftRole === "櫃檯";
-                                const cardColor = shift.isDispatch
-                                  ? "bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800"
-                                  : isCounter
-                                    ? "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800"
-                                    : "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800";
+                                const cardColor = isLeave
+                                  ? (LEAVE_COLORS[shift.role] || LEAVE_COLORS["休假"])
+                                  : shift.isDispatch
+                                    ? "bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800"
+                                    : isCounter
+                                      ? "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800"
+                                      : "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800";
+
+                                if (isLeave) {
+                                  return (
+                                    <div
+                                      key={shift.id}
+                                      className={`rounded px-1 py-0.5 text-xs cursor-pointer transition-colors ${cardColor}`}
+                                      onClick={() => openEditShiftDialog(shift)}
+                                      data-testid={`shift-${shift.id}`}
+                                    >
+                                      <div className="flex items-center justify-center gap-1">
+                                        <span className="font-medium leading-tight text-[11px]">{shift.role}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
                                 return (
                                   <div
                                     key={shift.id}
@@ -1281,79 +1324,93 @@ export default function SchedulePage() {
 
               <div className="flex-1 space-y-2">
                 <Label>班別</Label>
-                <Select value={shiftRole} onValueChange={(v) => { setShiftRole(v); setShiftTemplateId("custom"); }}>
+                <Select value={shiftRole} onValueChange={(v) => { setShiftRole(v); setShiftTemplateId("custom"); if (LEAVE_TYPES.includes(v)) { setShiftStartTime("00:00"); setShiftEndTime("00:00"); setShiftVenueId(""); } }}>
                   <SelectTrigger data-testid="select-shift-role">
                     <SelectValue placeholder="選擇班別" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="救生">救生</SelectItem>
                     <SelectItem value="櫃台">櫃台</SelectItem>
+                    <SelectItem value="---leave-separator" disabled><span className="text-xs text-muted-foreground">── 假別 ──</span></SelectItem>
+                    {LEAVE_TYPES.map(lt => (
+                      <SelectItem key={lt} value={lt}>{lt}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>排班範本</Label>
-              <Select
-                value={shiftTemplateId}
-                onValueChange={(val) => {
-                  setShiftTemplateId(val);
-                  if (val !== "custom") {
-                    const tpl = filteredTemplates.find(t => t.id.toString() === val);
-                    if (tpl) {
-                      setShiftStartTime(tpl.startTime);
-                      setShiftEndTime(tpl.endTime);
-                    }
-                  }
-                }}
-              >
-                <SelectTrigger data-testid="select-shift-template">
-                  <SelectValue placeholder="選擇排班範本" />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredTemplates.map((t) => (
-                    <SelectItem key={t.id} value={t.id.toString()}>
-                      {t.shiftLabel} ({t.startTime}-{t.endTime})
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">自訂時間</SelectItem>
-                </SelectContent>
-              </Select>
-              {filteredTemplates.length === 0 && (
-                <p className="text-[10px] text-muted-foreground italic">此場館尚未設定{shiftRole}的排班範本</p>
-              )}
-            </div>
+            {!LEAVE_TYPES.includes(shiftRole) && (
+              <>
+                <div className="space-y-2">
+                  <Label>排班範本</Label>
+                  <Select
+                    value={shiftTemplateId}
+                    onValueChange={(val) => {
+                      setShiftTemplateId(val);
+                      if (val !== "custom") {
+                        const tpl = filteredTemplates.find(t => t.id.toString() === val);
+                        if (tpl) {
+                          setShiftStartTime(tpl.startTime);
+                          setShiftEndTime(tpl.endTime);
+                        }
+                      }
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-shift-template">
+                      <SelectValue placeholder="選擇排班範本" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredTemplates.map((t) => (
+                        <SelectItem key={t.id} value={t.id.toString()}>
+                          {t.shiftLabel} ({t.startTime}-{t.endTime})
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="custom">自訂時間</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {filteredTemplates.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground italic">此場館尚未設定{shiftRole}的排班範本</p>
+                  )}
+                </div>
 
-            <div className="flex gap-3">
-              <div className="flex-1 space-y-2">
-                <Label>開始時間</Label>
-                <Input
-                  type="time"
-                  value={shiftStartTime}
-                  onChange={(e) => { setShiftStartTime(e.target.value); setShiftTemplateId("custom"); }}
-                  data-testid="input-shift-start-time"
-                />
-              </div>
-              <div className="flex-1 space-y-2">
-                <Label>結束時間</Label>
-                <Input
-                  type="time"
-                  value={shiftEndTime}
-                  onChange={(e) => { setShiftEndTime(e.target.value); setShiftTemplateId("custom"); }}
-                  data-testid="input-shift-end-time"
-                />
-              </div>
-            </div>
+                <div className="flex gap-3">
+                  <div className="flex-1 space-y-2">
+                    <Label>開始時間</Label>
+                    <Input
+                      type="time"
+                      value={shiftStartTime}
+                      onChange={(e) => { setShiftStartTime(e.target.value); setShiftTemplateId("custom"); }}
+                      data-testid="input-shift-start-time"
+                    />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <Label>結束時間</Label>
+                    <Input
+                      type="time"
+                      value={shiftEndTime}
+                      onChange={(e) => { setShiftEndTime(e.target.value); setShiftTemplateId("custom"); }}
+                      data-testid="input-shift-end-time"
+                    />
+                  </div>
+                </div>
 
-            <div className="flex items-center gap-3">
-              <Switch
-                checked={shiftIsDispatch}
-                onCheckedChange={setShiftIsDispatch}
-                data-testid="switch-shift-dispatch"
-              />
-              <Label>派遣人員</Label>
-            </div>
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={shiftIsDispatch}
+                    onCheckedChange={setShiftIsDispatch}
+                    data-testid="switch-shift-dispatch"
+                  />
+                  <Label>派遣人員</Label>
+                </div>
+              </>
+            )}
+
+            {LEAVE_TYPES.includes(shiftRole) && (
+              <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-3 text-center">
+                <p className="text-sm text-muted-foreground">{shiftRole}不需要設定時間與場館</p>
+              </div>
+            )}
 
             <div className="rounded-md bg-muted/30 p-3 text-xs text-muted-foreground">
               預覽：{venues.find((v) => v.id.toString() === shiftVenueId)?.shortName || "—"} {shiftStartTime}-{shiftEndTime} [{shiftRole}]
