@@ -209,19 +209,33 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
     setCopied(true);
 
     try {
-      const canvas = await html2canvas(document.body, {
+      const clockCard = document.querySelector('[data-testid="card-gps-clock-in"]') as HTMLElement | null;
+      const target = clockCard || document.body;
+      const canvas = await html2canvas(target, {
         useCORS: true,
         allowTaint: true,
         scale: 2,
+        backgroundColor: "#ffffff",
       });
-      const dataUrl = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.href = dataUrl;
-      link.download = `異常報告_${format(now, "yyyyMMdd_HHmmss")}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      toast({ title: "已複製異常報告並截圖", description: "截圖已儲存，請將文字與截圖一併傳送至 LINE 400 帳號" });
+      const blob = await new Promise<Blob>((resolve) =>
+        canvas.toBlob((b) => resolve(b!), "image/png")
+      );
+      const fileName = `異常報告_${format(now, "yyyyMMdd_HHmmss")}.png`;
+      const file = new File([blob], fileName, { type: "image/png" });
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+      toast({ title: "已複製異常報告並截圖", description: "請將文字與圖片一併傳送至 LINE 400 帳號" });
     } catch {
       toast({ title: "已複製異常報告", description: "截圖失敗，請手動截圖後傳送至 LINE 400 帳號" });
     }
