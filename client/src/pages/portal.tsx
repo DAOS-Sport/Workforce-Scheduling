@@ -159,7 +159,7 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
     const now = new Date();
     const timestamp = format(now, "yyyy/MM/dd HH:mm:ss");
     const lines: string[] = [
-      "【打卡異常報告】",
+      "!!!打卡異常報告!!!",
       `報告時間：${timestamp}`,
       `異常類型：${context}`,
       "──────────────",
@@ -183,23 +183,11 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
       lines.push(`打卡時間：${clockResult.date} ${clockResult.time}`);
       if (clockResult.venueName) lines.push(`場館名稱：${clockResult.venueName}`);
       if (clockResult.distance !== null) lines.push(`距離場館：${clockResult.distance}m${clockResult.radius ? ` (需在${clockResult.radius}m內)` : ""}`);
-      if (clockResult.shiftInfo) lines.push(`班別資訊：${clockResult.shiftInfo}`);
       if (clockResult.failReason) lines.push(`異常原因：${clockResult.failReason}`);
-      if (clockResult.earlyArrival) lines.push(`提早到：${clockResult.earlyMinutes} 分鐘`);
-      if (clockResult.lateDeparture) lines.push(`晚下班：${clockResult.lateMinutes} 分鐘`);
-      if (clockResult.userLat !== null && clockResult.userLng !== null) {
-        lines.push(`GPS 座標：${clockResult.userLat.toFixed(6)}, ${clockResult.userLng.toFixed(6)}`);
-      }
-      if (clockResult.nearbyVenues && clockResult.nearbyVenues.length > 0) {
-        lines.push("附近場館：" + clockResult.nearbyVenues.map(v => `${v.shortName}(${v.distance}m)`).join("、"));
-      }
     }
 
     if (errorMsg) lines.push(`錯誤訊息：${errorMsg}`);
-    if (accuracy !== null && accuracy !== undefined) lines.push(`GPS 精度：±${accuracy}m`);
 
-    lines.push("──────────────");
-    lines.push(`裝置資訊：${navigator.userAgent}`);
     lines.push("──────────────");
     lines.push("※ 此為系統自動產生之異常報告，請勿修改內容。");
 
