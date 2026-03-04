@@ -274,6 +274,29 @@ export const insertDispatchShiftSchema = createInsertSchema(dispatchShifts).omit
 export type InsertDispatchShift = z.infer<typeof insertDispatchShiftSchema>;
 export type DispatchShift = typeof dispatchShifts.$inferSelect;
 
+export const anomalyReports = pgTable("anomaly_reports", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id"),
+  employeeName: text("employee_name"),
+  employeeCode: text("employee_code"),
+  role: text("role"),
+  lineUserId: text("line_user_id"),
+  context: text("context").notNull(),
+  clockStatus: text("clock_status"),
+  clockType: text("clock_type"),
+  clockTime: text("clock_time"),
+  venueName: text("venue_name"),
+  distance: text("distance"),
+  failReason: text("fail_reason"),
+  errorMsg: text("error_msg"),
+  reportText: text("report_text").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAnomalyReportSchema = createInsertSchema(anomalyReports).omit({ id: true, createdAt: true });
+export type InsertAnomalyReport = z.infer<typeof insertAnomalyReportSchema>;
+export type AnomalyReport = typeof anomalyReports.$inferSelect;
+
 export type RegionCode = "D" | "A" | "B" | "C";
 
 export interface ShiftValidationError {

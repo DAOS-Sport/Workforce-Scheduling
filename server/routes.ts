@@ -71,6 +71,7 @@ export async function registerRoutes(
       "/api/portal/",
       "/api/liff/",
       "/api/line/",
+      "/api/anomaly-report",
     ];
     if (openPrefixes.some(p => req.path.startsWith(p))) return next();
     requireAdmin(req, res, next);
@@ -1604,6 +1605,98 @@ export async function registerRoutes(
       const adminName = req.session.adminName || "管理員";
       const updated = await storage.updateOvertimeRequestStatus(id, status, adminId, adminName, reviewNote);
       res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/anomaly-report", async (req, res) => {
+    try {
+      const { employee, clockResult, errorMsg, context } = req.body;
+      if (!context) return res.status(400).json({ message: "缺少異常類型 (context)" });
+
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, "0");
+      const timestamp = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+      const lines: string[] = [
+        "!!!打卡異常報告!!!",
+        `報告時間：${timestamp}`,
+        `異常類型：${context}`,
+        "──────────────",
+      ];
+
+      if (employee) {
+        if (employee.name) lines.push(`員工姓名：${employee.name}`);
+        if (employee.employeeCode) lines.push(`員工編號：${employee.employeeCode}`);
+        if (employee.role) lines.push(`職務角色：${employee.role}`);
+        if (employee.lineUserId) lines.push(`LINE User ID：${employee.lineUserId}`);
+      } else {
+        lines.push("員工資訊：尚未登入 / 無法取得");
+      }
+      lines.push("──────────────");
+
+      if (clockResult) {
+        lines.push(`打卡狀態：${clockResult.status === "success" ? "成功" : clockResult.status === "warning" ? "警告（無排班）" : "失敗"}`);
+        if (clockResult.clockType) lines.push(`打卡類型：${clockResult.clockType === "in" ? "上班" : "下班"}`);
+        if (clockResult.time) lines.push(`打卡時間：${clockResult.date || ""} ${clockResult.time}`);
+        if (clockResult.venueName) lines.push(`場館名稱：${clockResult.venueName}`);
+        if (clockResult.distance !== null && clockResult.distance !== undefined) {
+          lines.push(`距離場館：${clockResult.distance}m${clockResult.radius ? ` (需在${clockResult.radius}m內)` : ""}`);
+        }
+        if (clockResult.failReason) lines.push(`異常原因：${clockResult.failReason}`);
+      }
+
+      if (errorMsg) lines.push(`錯誤訊息：${errorMsg}`);
+
+      lines.push("──────────────");
+      lines.push("※ 此為系統自動產生之異常報告，請勿修改內容，將此文字訊息以及異常畫面圖片傳送至400感謝配合。");
+
+      const reportText = lines.join("\n");
+
+      const record = await storage.createAnomalyReport({
+        employeeId: employee?.id || null,
+        employeeName: employee?.name || null,
+        employeeCode: employee?.employeeCode || null,
+        role: employee?.role || null,
+        lineUserId: employee?.lineUserId || null,
+        context,
+        clockStatus: clockResult?.status || null,
+        clockType: clockResult?.clockType || null,
+        clockTime: clockResult?.time ? `${clockResult.date || ""} ${clockResult.time}` : null,
+        venueName: clockResult?.venueName || null,
+        distance: clockResult?.distance !== null && clockResult?.distance !== undefined ? `${clockResult.distance}m` : null,
+        failReason: clockResult?.failReason || null,
+        errorMsg: errorMsg || null,
+        reportText,
+      });
+
+      res.json({
+        id: record.id,
+        reportText,
+        createdAt: record.createdAt,
+        lineUrl: "https://lin.ee/TupPc0V",
+      });
+    } catch (err: any) {
+      console.error("Anomaly report error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/anomaly-reports", async (req, res) => {
+    try {
+      const reports = await storage.getAnomalyReports();
+      res.json(reports);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/anomaly-reports/:id", async (req, res) => {
+    try {
+      const report = await storage.getAnomalyReport(Number(req.params.id));
+      if (!report) return res.status(404).json({ message: "找不到此異常報告" });
+      res.json(report);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

@@ -9,6 +9,7 @@ import {
   clockAmendments,
   overtimeRequests,
   dispatchShifts,
+  anomalyReports,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -24,6 +25,7 @@ import {
   type ClockAmendment, type InsertClockAmendment,
   type OvertimeRequest, type InsertOvertimeRequest,
   type DispatchShift, type InsertDispatchShift,
+  type AnomalyReport, type InsertAnomalyReport,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -115,6 +117,10 @@ export interface IStorage {
   getOvertimeRequestsByEmployee(employeeId: number): Promise<OvertimeRequest[]>;
   getOvertimeRequest(id: number): Promise<OvertimeRequest | undefined>;
   updateOvertimeRequestStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<OvertimeRequest | undefined>;
+
+  createAnomalyReport(data: InsertAnomalyReport): Promise<AnomalyReport>;
+  getAnomalyReports(): Promise<AnomalyReport[]>;
+  getAnomalyReport(id: number): Promise<AnomalyReport | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -560,6 +566,20 @@ export class DatabaseStorage implements IStorage {
       reviewedAt: new Date(),
       reviewNote: reviewNote || null,
     }).where(eq(overtimeRequests.id, id)).returning();
+    return record;
+  }
+
+  async createAnomalyReport(data: InsertAnomalyReport): Promise<AnomalyReport> {
+    const [record] = await db.insert(anomalyReports).values(data).returning();
+    return record;
+  }
+
+  async getAnomalyReports(): Promise<AnomalyReport[]> {
+    return db.select().from(anomalyReports).orderBy(desc(anomalyReports.createdAt));
+  }
+
+  async getAnomalyReport(id: number): Promise<AnomalyReport | undefined> {
+    const [record] = await db.select().from(anomalyReports).where(eq(anomalyReports.id, id));
     return record;
   }
 }
