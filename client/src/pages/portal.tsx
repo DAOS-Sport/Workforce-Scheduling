@@ -190,7 +190,7 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
     if (errorMsg) lines.push(`錯誤訊息：${errorMsg}`);
 
     lines.push("──────────────");
-    lines.push("※ 此為系統自動產生之異常報告，請勿修改內容，將此文字訊息以及異常畫面截圖傳送至400感謝配合。");
+    lines.push("※ 此為系統自動產生之異常報告，請勿修改內容，將此文字訊息以及異常畫面圖片傳送至400感謝配合。");
 
     const reportText = lines.join("\n");
 
