@@ -10,6 +10,7 @@ import {
   overtimeRequests,
   dispatchShifts,
   anomalyReports,
+  notificationRecipients,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -26,6 +27,7 @@ import {
   type OvertimeRequest, type InsertOvertimeRequest,
   type DispatchShift, type InsertDispatchShift,
   type AnomalyReport, type InsertAnomalyReport,
+  type NotificationRecipient, type InsertNotificationRecipient,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -121,6 +123,13 @@ export interface IStorage {
   createAnomalyReport(data: InsertAnomalyReport): Promise<AnomalyReport>;
   getAnomalyReports(): Promise<AnomalyReport[]>;
   getAnomalyReport(id: number): Promise<AnomalyReport | undefined>;
+  updateAnomalyResolution(id: number, resolution: string, resolvedNote?: string): Promise<AnomalyReport | undefined>;
+  deleteAnomalyReport(id: number): Promise<void>;
+
+  getNotificationRecipients(): Promise<NotificationRecipient[]>;
+  createNotificationRecipient(data: InsertNotificationRecipient): Promise<NotificationRecipient>;
+  updateNotificationRecipient(id: number, data: Partial<InsertNotificationRecipient>): Promise<NotificationRecipient | undefined>;
+  deleteNotificationRecipient(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -581,6 +590,36 @@ export class DatabaseStorage implements IStorage {
   async getAnomalyReport(id: number): Promise<AnomalyReport | undefined> {
     const [record] = await db.select().from(anomalyReports).where(eq(anomalyReports.id, id));
     return record;
+  }
+
+  async updateAnomalyResolution(id: number, resolution: string, resolvedNote?: string): Promise<AnomalyReport | undefined> {
+    const [record] = await db.update(anomalyReports).set({
+      resolution,
+      resolvedNote: resolvedNote || null,
+    }).where(eq(anomalyReports.id, id)).returning();
+    return record;
+  }
+
+  async deleteAnomalyReport(id: number): Promise<void> {
+    await db.delete(anomalyReports).where(eq(anomalyReports.id, id));
+  }
+
+  async getNotificationRecipients(): Promise<NotificationRecipient[]> {
+    return db.select().from(notificationRecipients).orderBy(desc(notificationRecipients.createdAt));
+  }
+
+  async createNotificationRecipient(data: InsertNotificationRecipient): Promise<NotificationRecipient> {
+    const [record] = await db.insert(notificationRecipients).values(data).returning();
+    return record;
+  }
+
+  async updateNotificationRecipient(id: number, data: Partial<InsertNotificationRecipient>): Promise<NotificationRecipient | undefined> {
+    const [record] = await db.update(notificationRecipients).set(data).where(eq(notificationRecipients.id, id)).returning();
+    return record;
+  }
+
+  async deleteNotificationRecipient(id: number): Promise<void> {
+    await db.delete(notificationRecipients).where(eq(notificationRecipients.id, id));
   }
 }
 

@@ -10,6 +10,7 @@ const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假",
 import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders } from "./line-webhook";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import nodemailer from "nodemailer";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -25,7 +26,21 @@ export async function registerRoutes(
   });
   app.use("/api/anomaly-reports", (req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.header("Access-Control-Allow-Methods", "GET, PATCH, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    if (req.method === "OPTIONS") return res.sendStatus(204);
+    next();
+  });
+  app.use("/api/notification-recipients", (req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    if (req.method === "OPTIONS") return res.sendStatus(204);
+    next();
+  });
+  app.use("/api/test-email", (req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     if (req.method === "OPTIONS") return res.sendStatus(204);
     next();
@@ -1714,6 +1729,28 @@ export async function registerRoutes(
         reportText,
       });
 
+      try {
+        const recipients = await storage.getNotificationRecipients();
+        const targets = recipients.filter(r => r.enabled && r.notifyNewReport);
+        if (targets.length > 0) {
+          await sendAnomalyEmail(
+            targets.map(r => r.email),
+            `🚨 員工打卡異常 — ${employee?.name || "未知"}（${clockResult?.venueName || "未知場館"}）`,
+            `<h2>員工打卡異常</h2>
+            <p><b>姓名：</b>${employee?.name || "未知"}</p>
+            <p><b>員工編號：</b>${employee?.employeeCode || "未知"}</p>
+            <p><b>職位：</b>${employee?.role || "未知"}</p>
+            <p><b>場館：</b>${clockResult?.venueName || "未知"}</p>
+            <p><b>時間：</b>${clockResult?.time ? `${clockResult.date || ""} ${clockResult.time}` : "未知"}</p>
+            <p><b>原因：</b>${clockResult?.failReason || errorMsg || "未知"}</p>
+            ${userNote ? `<p><b>員工備註：</b>${userNote}</p>` : ""}
+            ${imageUrls.length > 0 ? `<p><b>附件圖片：</b>${imageUrls.length} 張</p>` : ""}`
+          );
+        }
+      } catch (emailErr) {
+        console.error("[EMAIL] New anomaly notification failed:", emailErr);
+      }
+
       res.json({
         id: record.id,
         reportText,
@@ -1746,5 +1783,167 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/anomaly-reports/batch/resolution", async (req, res) => {
+    try {
+      const { ids, resolution, resolvedNote } = req.body;
+      if (!ids || !Array.isArray(ids) || !resolution) {
+        return res.status(400).json({ message: "缺少 ids 或 resolution" });
+      }
+      const results = [];
+      for (const id of ids) {
+        const record = await storage.updateAnomalyResolution(Number(id), resolution, resolvedNote);
+        if (record) results.push(record);
+      }
+
+      try {
+        const recipients = await storage.getNotificationRecipients();
+        const targets = recipients.filter(r => r.enabled && r.notifyResolution);
+        if (targets.length > 0 && results.length > 0) {
+          const names = results.map(r => r.employeeName || "未知").join("、");
+          await sendAnomalyEmail(
+            targets.map(r => r.email),
+            `批量處理更新 — ${results.length} 筆異常報告`,
+            `<h2>批量處理更新</h2>
+            <p><b>數量：</b>${results.length} 筆</p>
+            <p><b>員工：</b>${names}</p>
+            <p><b>狀態：</b>${resolution === "resolved" ? "已處理" : "待解決"}</p>
+            <p><b>備註：</b>${resolvedNote || "無"}</p>`
+          );
+        }
+      } catch (emailErr) {
+        console.error("[EMAIL] Batch resolution notification failed:", emailErr);
+      }
+
+      res.json({ updated: results.length, results });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/anomaly-reports/:id/resolution", async (req, res) => {
+    try {
+      const { resolution, resolvedNote } = req.body;
+      if (!resolution) return res.status(400).json({ message: "缺少 resolution" });
+      const record = await storage.updateAnomalyResolution(Number(req.params.id), resolution, resolvedNote);
+      if (!record) return res.status(404).json({ message: "找不到此異常報告" });
+
+      try {
+        const recipients = await storage.getNotificationRecipients();
+        const targets = recipients.filter(r => r.enabled && r.notifyResolution);
+        if (targets.length > 0) {
+          await sendAnomalyEmail(
+            targets.map(r => r.email),
+            `打卡異常處理更新 — ${record.employeeName || "未知"}（${record.venueName || "未知場館"}）`,
+            `<h2>打卡異常處理更新</h2>
+            <p><b>姓名：</b>${record.employeeName || "未知"}</p>
+            <p><b>場館：</b>${record.venueName || "未知"}</p>
+            <p><b>狀態：</b>${resolution === "resolved" ? "已處理" : "待解決"}</p>
+            <p><b>備註：</b>${resolvedNote || "無"}</p>
+            <p><b>原始異常時間：</b>${record.clockTime || "未知"}</p>`
+          );
+        }
+      } catch (emailErr) {
+        console.error("[EMAIL] Resolution notification failed:", emailErr);
+      }
+
+      res.json(record);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/anomaly-reports/:id", async (req, res) => {
+    try {
+      await storage.deleteAnomalyReport(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/notification-recipients", async (_req, res) => {
+    try {
+      const recipients = await storage.getNotificationRecipients();
+      res.json(recipients);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/notification-recipients", async (req, res) => {
+    try {
+      const { email, label, enabled, notifyNewReport, notifyResolution } = req.body;
+      if (!email) return res.status(400).json({ message: "缺少 email" });
+      const record = await storage.createNotificationRecipient({
+        email,
+        label: label || null,
+        enabled: enabled !== false,
+        notifyNewReport: notifyNewReport !== false,
+        notifyResolution: notifyResolution !== false,
+      });
+      res.json(record);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/notification-recipients/:id", async (req, res) => {
+    try {
+      const record = await storage.updateNotificationRecipient(Number(req.params.id), req.body);
+      if (!record) return res.status(404).json({ message: "找不到此收件者" });
+      res.json(record);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/notification-recipients/:id", async (req, res) => {
+    try {
+      await storage.deleteNotificationRecipient(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/test-email", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ message: "缺少 email" });
+      await sendAnomalyEmail(
+        [email],
+        "測試郵件 — DAOS 打卡異常通知系統",
+        `<h2>測試郵件</h2><p>此為 DAOS 打卡異常通知系統的測試郵件。</p><p>如果您收到此郵件，表示郵件通知功能運作正常。</p><p>發送時間：${new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}</p>`
+      );
+      res.json({ success: true, message: "測試郵件已發送" });
+    } catch (err: any) {
+      console.error("[EMAIL] Test email failed:", err);
+      res.status(500).json({ message: `郵件發送失敗: ${err.message}` });
+    }
+  });
+
   return httpServer;
+}
+
+async function sendAnomalyEmail(to: string[], subject: string, html: string) {
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.GMAIL_USER || "daos.ragic.system@gmail.com",
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+
+  await transporter.sendMail({
+    from: `"DAOS 打卡異常通知" <${process.env.GMAIL_USER || "daos.ragic.system@gmail.com"}>`,
+    to: to.join(", "),
+    subject,
+    html: `<div style="font-family: 'Microsoft JhengHei', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      ${html}
+      <hr style="margin-top: 20px; border: none; border-top: 1px solid #e5e7eb;" />
+      <p style="color: #9ca3af; font-size: 12px;">此為系統自動發送的通知郵件，請勿直接回覆。</p>
+    </div>`,
+  });
 }

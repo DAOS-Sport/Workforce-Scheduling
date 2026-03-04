@@ -292,12 +292,28 @@ export const anomalyReports = pgTable("anomaly_reports", {
   userNote: text("user_note"),
   imageUrls: text("image_urls").array(),
   reportText: text("report_text").notNull(),
+  resolution: text("resolution").default("pending"),
+  resolvedNote: text("resolved_note"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const insertAnomalyReportSchema = createInsertSchema(anomalyReports).omit({ id: true, createdAt: true });
 export type InsertAnomalyReport = z.infer<typeof insertAnomalyReportSchema>;
 export type AnomalyReport = typeof anomalyReports.$inferSelect;
+
+export const notificationRecipients = pgTable("notification_recipients", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  label: text("label"),
+  enabled: boolean("enabled").default(true),
+  notifyNewReport: boolean("notify_new_report").default(true),
+  notifyResolution: boolean("notify_resolution").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNotificationRecipientSchema = createInsertSchema(notificationRecipients).omit({ id: true, createdAt: true });
+export type InsertNotificationRecipient = z.infer<typeof insertNotificationRecipientSchema>;
+export type NotificationRecipient = typeof notificationRecipients.$inferSelect;
 
 export type RegionCode = "D" | "A" | "B" | "C";
 
