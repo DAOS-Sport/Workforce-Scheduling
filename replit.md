@@ -17,6 +17,7 @@ The system is built with a modern web stack:
     - **Employee Portal**: A dedicated portal accessible via LINE Login, offering personal schedules, mandatory guideline acknowledgments, and a directory of today's coworkers. Includes a full-page transparent watermark for security.
     - **Attendance System**: Supports GPS-based clock-in/out via LINE (webhook and LIFF app), with early arrival/late departure detection and reason selection. Includes features for clock amendment requests and overtime requests, with an admin review process and audit trails. Allows for attendance data import via XLSX files from external systems.
     - **Venue and Employee Management**: CRUD operations for employees and venues, with features like cross-region employee dispatching and Ragic database synchronization for employee data.
+    - **Dispatch Personnel**: Separate `dispatch_shifts` table for non-database personnel. Rendered in a purple-themed collapsible section at the bottom of the schedule grid, with add/edit/delete dialog supporting name, venue, time, company, phone, role, and notes.
     - **Shift Reminders**: Automated LINE push notifications for upcoming shifts.
 - **UI/UX Decisions**: The design prioritizes clarity and efficiency, using Shadcn UI components for consistency. Color-coding is used for shift types (e.g., orange for dispatched staff, distinct colors for leave types) and status indicators (e.g., blue/orange badges for early/late clock-ins). Employee pickers persist selections per region for improved user experience.
 

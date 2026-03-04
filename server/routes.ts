@@ -414,6 +414,77 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/dispatch-shifts/:regionCode/:startDate/:endDate", async (req, res) => {
+    try {
+      const { regionCode, startDate, endDate } = req.params;
+      const region = await storage.getRegionByCode(regionCode);
+      if (!region) return res.json([]);
+      const records = await storage.getDispatchShifts(region.id, startDate, endDate);
+      res.json(records);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/dispatch-shifts", async (req, res) => {
+    try {
+      const { regionCode, venueId, date, startTime, endTime, dispatchName, dispatchCompany, dispatchPhone, role, notes } = req.body;
+      if (!regionCode || !date || !startTime || !endTime || !dispatchName) {
+        return res.status(400).json({ message: "缺少必要欄位（區域、日期、時間、派遣人員姓名）" });
+      }
+      const region = await storage.getRegionByCode(regionCode);
+      if (!region) return res.status(404).json({ message: "找不到區域" });
+      const record = await storage.createDispatchShift({
+        regionId: region.id,
+        venueId: venueId || null,
+        date,
+        startTime,
+        endTime,
+        dispatchName,
+        dispatchCompany: dispatchCompany || null,
+        dispatchPhone: dispatchPhone || null,
+        role: role || "救生",
+        notes: notes || null,
+      });
+      res.json(record);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/dispatch-shifts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const existing = await storage.getDispatchShift(id);
+      if (!existing) return res.status(404).json({ message: "找不到派遣班次" });
+      const { regionCode, ...rest } = req.body;
+      const updateData: Record<string, any> = {};
+      if (regionCode) {
+        const region = await storage.getRegionByCode(regionCode);
+        if (!region) return res.status(404).json({ message: "找不到區域" });
+        updateData.regionId = region.id;
+      }
+      const allowedFields = ["venueId", "date", "startTime", "endTime", "dispatchName", "dispatchCompany", "dispatchPhone", "role", "notes"];
+      for (const field of allowedFields) {
+        if (rest[field] !== undefined) updateData[field] = rest[field];
+      }
+      const updated = await storage.updateDispatchShift(id, updateData);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/dispatch-shifts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteDispatchShift(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/schedule-slots/:regionCode/:startDate/:endDate", async (req, res) => {
     const { regionCode, startDate, endDate } = req.params;
     const region = await storage.getRegionByCode(regionCode);

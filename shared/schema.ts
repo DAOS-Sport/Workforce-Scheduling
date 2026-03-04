@@ -256,6 +256,24 @@ export const insertOvertimeRequestSchema = createInsertSchema(overtimeRequests).
 export type InsertOvertimeRequest = z.infer<typeof insertOvertimeRequestSchema>;
 export type OvertimeRequest = typeof overtimeRequests.$inferSelect;
 
+export const dispatchShifts = pgTable("dispatch_shifts", {
+  id: serial("id").primaryKey(),
+  regionId: integer("region_id").notNull(),
+  venueId: integer("venue_id"),
+  date: date("date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  dispatchName: text("dispatch_name").notNull(),
+  dispatchCompany: text("dispatch_company"),
+  dispatchPhone: text("dispatch_phone"),
+  role: text("role").notNull().default("救生"),
+  notes: text("notes"),
+});
+
+export const insertDispatchShiftSchema = createInsertSchema(dispatchShifts).omit({ id: true });
+export type InsertDispatchShift = z.infer<typeof insertDispatchShiftSchema>;
+export type DispatchShift = typeof dispatchShifts.$inferSelect;
+
 export type RegionCode = "D" | "A" | "B" | "C";
 
 export interface ShiftValidationError {

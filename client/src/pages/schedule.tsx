@@ -21,7 +21,7 @@ import {
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
   Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft
 } from "lucide-react";
-import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region } from "@shared/schema";
+import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
 
 const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
   "救生": LifeBuoy,
@@ -120,6 +120,19 @@ export default function SchedulePage() {
   const [batchTargetDates, setBatchTargetDates] = useState<Set<string>>(new Set());
   const [batchTargetVenues, setBatchTargetVenues] = useState<Set<number>>(new Set());
 
+  const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
+  const [editingDispatch, setEditingDispatch] = useState<DispatchShift | null>(null);
+  const [dispatchName, setDispatchName] = useState("");
+  const [dispatchDate, setDispatchDate] = useState("");
+  const [dispatchVenueId, setDispatchVenueId] = useState<string>("");
+  const [dispatchStartTime, setDispatchStartTime] = useState("06:30");
+  const [dispatchEndTime, setDispatchEndTime] = useState("16:00");
+  const [dispatchCompany, setDispatchCompany] = useState("");
+  const [dispatchPhone, setDispatchPhone] = useState("");
+  const [dispatchRole, setDispatchRole] = useState("救生");
+  const [dispatchNotes, setDispatchNotes] = useState("");
+  const [dispatchSectionCollapsed, setDispatchSectionCollapsed] = useState(false);
+
 
   const monthDates = useMemo(
     () => eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) }),
@@ -195,6 +208,26 @@ export default function SchedulePage() {
   const { data: shifts = [], isLoading: shiftsLoading } = useQuery<Shift[]>({
     queryKey: ["/api/shifts", activeRegion, dateRange.start, dateRange.end],
   });
+
+  const { data: dispatchShiftsData = [] } = useQuery<DispatchShift[]>({
+    queryKey: ["/api/dispatch-shifts", activeRegion, dateRange.start, dateRange.end],
+  });
+
+  const dispatchShiftsByDate = useMemo(() => {
+    const map = new Map<string, DispatchShift[]>();
+    dispatchShiftsData.forEach((ds) => {
+      const key = ds.date;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(ds);
+    });
+    return map;
+  }, [dispatchShiftsData]);
+
+  const dispatchNames = useMemo(() => {
+    const names = new Set<string>();
+    dispatchShiftsData.forEach(ds => names.add(ds.dispatchName));
+    return Array.from(names).sort();
+  }, [dispatchShiftsData]);
 
   useEffect(() => {
     if (shifts.length === 0) return;
@@ -427,6 +460,47 @@ export default function SchedulePage() {
     },
   });
 
+  const createDispatchShift = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/dispatch-shifts", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      toast({ title: "派遣班次已新增" });
+      setDispatchDialogOpen(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "新增失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateDispatchShift = useMutation({
+    mutationFn: async ({ id, ...data }: any) => {
+      const res = await apiRequest("PATCH", `/api/dispatch-shifts/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      toast({ title: "派遣班次已更新" });
+      setDispatchDialogOpen(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "更新失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteDispatchShift = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/dispatch-shifts/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      toast({ title: "派遣班次已刪除" });
+      setDispatchDialogOpen(false);
+    },
+  });
+
   const batchDeleteShifts = useMutation({
     mutationFn: async (data: { employeeId: number; venueId?: number; startTime?: string; endTime?: string; role?: string; targetDates: string[] }) => {
       const res = await apiRequest("POST", "/api/shifts/batch-delete", data);
@@ -491,6 +565,55 @@ export default function SchedulePage() {
       toast({ title: "批次套用失敗", description: err.message, variant: "destructive" });
     },
   });
+
+  const openNewDispatchDialog = (dateStr: string, prefillName?: string) => {
+    setEditingDispatch(null);
+    setDispatchDate(dateStr);
+    setDispatchName(prefillName || "");
+    setDispatchVenueId(venues.length > 0 ? venues[0].id.toString() : "");
+    setDispatchStartTime("06:30");
+    setDispatchEndTime("16:00");
+    setDispatchCompany("");
+    setDispatchPhone("");
+    setDispatchRole("救生");
+    setDispatchNotes("");
+    setDispatchDialogOpen(true);
+  };
+
+  const openEditDispatchDialog = (ds: DispatchShift) => {
+    setEditingDispatch(ds);
+    setDispatchDate(ds.date);
+    setDispatchName(ds.dispatchName);
+    setDispatchVenueId(ds.venueId?.toString() || "");
+    setDispatchStartTime(ds.startTime.substring(0, 5));
+    setDispatchEndTime(ds.endTime.substring(0, 5));
+    setDispatchCompany(ds.dispatchCompany || "");
+    setDispatchPhone(ds.dispatchPhone || "");
+    setDispatchRole(ds.role || "救生");
+    setDispatchNotes(ds.notes || "");
+    setDispatchDialogOpen(true);
+  };
+
+  const handleSaveDispatch = () => {
+    if (!dispatchName || !dispatchDate || !dispatchStartTime || !dispatchEndTime) return;
+    const payload = {
+      regionCode: activeRegion,
+      venueId: dispatchVenueId ? parseInt(dispatchVenueId) : null,
+      date: dispatchDate,
+      startTime: dispatchStartTime,
+      endTime: dispatchEndTime,
+      dispatchName: dispatchName,
+      dispatchCompany: dispatchCompany || null,
+      dispatchPhone: dispatchPhone || null,
+      role: dispatchRole,
+      notes: dispatchNotes || null,
+    };
+    if (editingDispatch) {
+      updateDispatchShift.mutate({ id: editingDispatch.id, ...payload });
+    } else {
+      createDispatchShift.mutate(payload);
+    }
+  };
 
   const openNewShiftDialog = (employeeId: number, dateStr: string) => {
     const emp = employees.find((e) => e.id === employeeId);
@@ -1230,11 +1353,259 @@ export default function SchedulePage() {
                   ];
                 })()
               )}
+              <tr data-testid="dispatch-section-header">
+                <td
+                  className="px-2 py-1.5 border-b border-r sticky left-0 bg-purple-50 dark:bg-purple-950/30 z-[5] cursor-pointer select-none"
+                  style={{ minWidth: COL_LEFT_WIDTH }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => setDispatchSectionCollapsed(!dispatchSectionCollapsed)} className="flex items-center gap-1">
+                      {dispatchSectionCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-purple-600" /> : <ChevronDown className="h-3.5 w-3.5 text-purple-600" />}
+                      <span className="text-xs font-bold text-purple-700 dark:text-purple-400 tracking-wide">派遣人員 ({dispatchNames.length})</span>
+                    </button>
+                    <button
+                      className="ml-auto text-purple-500 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
+                      onClick={() => openNewDispatchDialog(format(new Date(), "yyyy-MM-dd"))}
+                      data-testid="button-add-dispatch-new"
+                      title="新增派遣人員"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </td>
+                {monthDates.map((d, di) => {
+                  const dateStr = format(d, "yyyy-MM-dd");
+                  const dayDispatches = dispatchShiftsByDate.get(dateStr) || [];
+                  return (
+                    <td key={di} className="border-b border-r bg-purple-50/50 dark:bg-purple-950/20 text-center" style={{ minWidth: COL_DATE_WIDTH }}>
+                      {dispatchSectionCollapsed && dayDispatches.length > 0 && (
+                        <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">{dayDispatches.length}人</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+              {!dispatchSectionCollapsed && (() => {
+                const allNames = dispatchNames.length > 0 ? dispatchNames : ["__add_new__"];
+                return allNames.map((name) => (
+                  <tr key={`dispatch-${name}`} className="group" data-testid={`row-dispatch-${name}`}>
+                    <td
+                      className="p-2 border-b border-r sticky left-0 bg-background z-[5]"
+                      style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
+                    >
+                      {name !== "__add_new__" ? (
+                        <div className="flex items-center gap-1.5">
+                          <ArrowRightLeft className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+                          <span className="font-medium text-sm whitespace-nowrap text-purple-700 dark:text-purple-400" data-testid={`text-dispatch-name-${name}`}>
+                            {name}
+                          </span>
+                          <span className="text-[9px] px-1 py-0 rounded bg-purple-500/15 text-purple-500 leading-4 shrink-0">派遣</span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground/50 italic">點擊日期格新增派遣</div>
+                      )}
+                    </td>
+                    {monthDates.map((d, di) => {
+                      const dateStr = format(d, "yyyy-MM-dd");
+                      const cellDispatches = name === "__add_new__"
+                        ? []
+                        : (dispatchShiftsByDate.get(dateStr) || []).filter(ds => ds.dispatchName === name);
+                      const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
+                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                      return (
+                        <td
+                          key={di}
+                          className={`p-0.5 border-b border-r relative align-top ${isToday ? "bg-primary/5" : isWeekend ? "bg-muted/20" : ""}`}
+                          style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }}
+                          data-testid={`cell-dispatch-${name}-${dateStr}`}
+                        >
+                          {cellDispatches.length > 0 ? (
+                            <div className="space-y-0.5">
+                              {cellDispatches.map((ds) => {
+                                const venue = ds.venueId ? venueMap.get(ds.venueId) : null;
+                                const sStart = ds.startTime.substring(0, 5);
+                                const sEnd = ds.endTime.substring(0, 5);
+                                const roleShort = ROLE_SHORT[ds.role] || ds.role.slice(0, 1);
+                                return (
+                                  <div
+                                    key={ds.id}
+                                    className="rounded px-1 py-0.5 text-xs cursor-pointer transition-colors bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800"
+                                    onClick={() => openEditDispatchDialog(ds)}
+                                    data-testid={`dispatch-shift-${ds.id}`}
+                                    title={`${ds.dispatchCompany ? ds.dispatchCompany + " | " : ""}${ds.dispatchPhone || ""}`}
+                                  >
+                                    <div className="flex items-center justify-between gap-1">
+                                      <div className="font-medium leading-tight text-[11px] truncate text-purple-700 dark:text-purple-300">
+                                        {venue?.shortName || "未指定"}
+                                      </div>
+                                      <span className="text-[9px] px-0.5 rounded bg-background/50 border border-purple-300 dark:border-purple-700 opacity-70 shrink-0 text-purple-600 dark:text-purple-400">
+                                        {roleShort}
+                                      </span>
+                                    </div>
+                                    <div className="leading-tight text-[11px] text-muted-foreground">
+                                      {sStart}-{sEnd}
+                                    </div>
+                                    {ds.dispatchCompany && (
+                                      <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium truncate">{ds.dispatchCompany}</div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              <button
+                                className="w-full flex items-center justify-center py-0.5 text-purple-400/40 hover:text-purple-500/70 transition-colors"
+                                onClick={() => openNewDispatchDialog(dateStr, name)}
+                                data-testid={`button-add-dispatch-${name}-${dateStr}`}
+                              >
+                                <Plus className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className="flex items-center justify-center w-full h-[40px] text-purple-300/30 hover:text-purple-400/60 hover:bg-purple-50/30 dark:hover:bg-purple-950/20 transition-colors rounded cursor-pointer"
+                              onClick={() => openNewDispatchDialog(dateStr, name !== "__add_new__" ? name : undefined)}
+                              data-testid={`button-add-dispatch-${name}-${dateStr}`}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ));
+              })()}
             </tbody>
           </table>
         </div>
 
       </div>
+
+      <Dialog open={dispatchDialogOpen} onOpenChange={setDispatchDialogOpen}>
+        <DialogContent className="sm:max-w-md" data-testid="dispatch-shift-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-purple-700 dark:text-purple-400">
+              {editingDispatch ? "編輯派遣班次" : "新增派遣班次"}
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                — {dispatchDate ? format(new Date(dispatchDate), "M月d日 (E)", { locale: zhTW }) : ""}
+              </span>
+            </DialogTitle>
+            <DialogDescription>
+              派遣人員不需在員工資料庫中建立，直接輸入姓名即可排班。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>派遣人員姓名 *</Label>
+              <Input
+                value={dispatchName}
+                onChange={(e) => setDispatchName(e.target.value)}
+                placeholder="輸入派遣人員姓名"
+                data-testid="input-dispatch-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>場館</Label>
+              <Select value={dispatchVenueId} onValueChange={setDispatchVenueId}>
+                <SelectTrigger data-testid="select-dispatch-venue">
+                  <SelectValue placeholder="選擇場館" />
+                </SelectTrigger>
+                <SelectContent>
+                  {venues.map((v) => (
+                    <SelectItem key={v.id} value={v.id.toString()} data-testid={`select-dispatch-venue-${v.id}`}>
+                      {v.shortName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>開始時間 *</Label>
+                <Input
+                  type="time"
+                  value={dispatchStartTime}
+                  onChange={(e) => setDispatchStartTime(e.target.value)}
+                  data-testid="input-dispatch-start-time"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>結束時間 *</Label>
+                <Input
+                  type="time"
+                  value={dispatchEndTime}
+                  onChange={(e) => setDispatchEndTime(e.target.value)}
+                  data-testid="input-dispatch-end-time"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>職務</Label>
+              <Select value={dispatchRole} onValueChange={setDispatchRole}>
+                <SelectTrigger data-testid="select-dispatch-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>派遣公司</Label>
+                <Input
+                  value={dispatchCompany}
+                  onChange={(e) => setDispatchCompany(e.target.value)}
+                  placeholder="公司名稱"
+                  data-testid="input-dispatch-company"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>聯絡電話</Label>
+                <Input
+                  value={dispatchPhone}
+                  onChange={(e) => setDispatchPhone(e.target.value)}
+                  placeholder="電話號碼"
+                  data-testid="input-dispatch-phone"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>備註</Label>
+              <Input
+                value={dispatchNotes}
+                onChange={(e) => setDispatchNotes(e.target.value)}
+                placeholder="其他備註"
+                data-testid="input-dispatch-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex justify-between">
+            <div>
+              {editingDispatch && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => deleteDispatchShift.mutate(editingDispatch.id)}
+                  disabled={deleteDispatchShift.isPending}
+                  data-testid="button-delete-dispatch"
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  刪除
+                </Button>
+              )}
+            </div>
+            <Button
+              onClick={handleSaveDispatch}
+              disabled={!dispatchName || !dispatchStartTime || !dispatchEndTime || createDispatchShift.isPending || updateDispatchShift.isPending}
+              data-testid="button-save-dispatch"
+            >
+              {editingDispatch ? "更新" : "新增"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={shiftDialogOpen} onOpenChange={setShiftDialogOpen}>
         <DialogContent className="sm:max-w-md">

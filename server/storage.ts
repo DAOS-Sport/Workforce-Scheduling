@@ -8,6 +8,7 @@ import {
   clockRecords,
   clockAmendments,
   overtimeRequests,
+  dispatchShifts,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -22,6 +23,7 @@ import {
   type ClockRecord, type InsertClockRecord,
   type ClockAmendment, type InsertClockAmendment,
   type OvertimeRequest, type InsertOvertimeRequest,
+  type DispatchShift, type InsertDispatchShift,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -101,6 +103,12 @@ export interface IStorage {
   updateClockAmendmentStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<ClockAmendment | undefined>;
 
   updateClockRecordReason(id: number, earlyArrivalReason?: string, lateDepartureReason?: string): Promise<ClockRecord | undefined>;
+
+  createDispatchShift(data: InsertDispatchShift): Promise<DispatchShift>;
+  getDispatchShifts(regionId: number, startDate: string, endDate: string): Promise<DispatchShift[]>;
+  getDispatchShift(id: number): Promise<DispatchShift | undefined>;
+  updateDispatchShift(id: number, data: Partial<InsertDispatchShift>): Promise<DispatchShift | undefined>;
+  deleteDispatchShift(id: number): Promise<void>;
 
   createOvertimeRequest(data: InsertOvertimeRequest): Promise<OvertimeRequest>;
   getOvertimeRequests(status?: string): Promise<OvertimeRequest[]>;
@@ -480,6 +488,34 @@ export class DatabaseStorage implements IStorage {
       reviewNote: reviewNote || null,
     }).where(eq(clockAmendments.id, id)).returning();
     return record;
+  }
+
+  async createDispatchShift(data: InsertDispatchShift): Promise<DispatchShift> {
+    const [record] = await db.insert(dispatchShifts).values(data).returning();
+    return record;
+  }
+
+  async getDispatchShifts(regionId: number, startDate: string, endDate: string): Promise<DispatchShift[]> {
+    return db.select().from(dispatchShifts)
+      .where(and(
+        eq(dispatchShifts.regionId, regionId),
+        gte(dispatchShifts.date, startDate),
+        lte(dispatchShifts.date, endDate),
+      ));
+  }
+
+  async getDispatchShift(id: number): Promise<DispatchShift | undefined> {
+    const [record] = await db.select().from(dispatchShifts).where(eq(dispatchShifts.id, id));
+    return record;
+  }
+
+  async updateDispatchShift(id: number, data: Partial<InsertDispatchShift>): Promise<DispatchShift | undefined> {
+    const [record] = await db.update(dispatchShifts).set(data).where(eq(dispatchShifts.id, id)).returning();
+    return record;
+  }
+
+  async deleteDispatchShift(id: number): Promise<void> {
+    await db.delete(dispatchShifts).where(eq(dispatchShifts.id, id));
   }
 
   async updateClockRecordReason(id: number, earlyArrivalReason?: string, lateDepartureReason?: string): Promise<ClockRecord | undefined> {
