@@ -16,6 +16,21 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  app.use("/api/anomaly-report", (req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    if (req.method === "OPTIONS") return res.sendStatus(204);
+    next();
+  });
+  app.use("/api/anomaly-reports", (req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    if (req.method === "OPTIONS") return res.sendStatus(204);
+    next();
+  });
+
   app.post("/api/admin/login", async (req, res) => {
     try {
       const { password } = req.body;
@@ -1625,7 +1640,10 @@ export async function registerRoutes(
     },
   });
 
-  app.use("/uploads/anomaly-reports", express.static("uploads/anomaly-reports"));
+  app.use("/uploads/anomaly-reports", (req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    next();
+  }, express.static("uploads/anomaly-reports"));
 
   app.post("/api/anomaly-report", anomalyUpload.array("images", 5), async (req, res) => {
     try {
