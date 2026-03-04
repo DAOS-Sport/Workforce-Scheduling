@@ -953,6 +953,170 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
   );
 }
 
+interface ClockAmendmentRecord {
+  id: number;
+  employeeId: number;
+  clockType: string;
+  requestedTime: string;
+  reason: string;
+  status: string;
+  reviewNote: string | null;
+  createdAt: string;
+}
+
+function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
+  const [expanded, setExpanded] = useState(false);
+  const [clockType, setClockType] = useState<"in" | "out">("in");
+  const [requestedDate, setRequestedDate] = useState(() => {
+    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [requestedTime, setRequestedTime] = useState("09:00");
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const { data: amendments = [], refetch: refetchAmendments } = useQuery<ClockAmendmentRecord[]>({
+    queryKey: ["/api/portal/clock-amendments", employee.id],
+    enabled: expanded,
+  });
+
+  const handleSubmit = async () => {
+    if (!reason.trim()) {
+      toast({ title: "請輸入補打卡原因", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const fullTime = `${requestedDate}T${requestedTime}:00+08:00`;
+      await apiRequest("POST", "/api/portal/clock-amendment", {
+        employeeId: employee.id,
+        clockType,
+        requestedTime: fullTime,
+        reason: reason.trim(),
+      });
+      toast({ title: "補打卡申請已送出" });
+      setReason("");
+      refetchAmendments();
+    } catch (err: any) {
+      toast({ title: err.message || "送出失敗", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const statusLabel = (s: string) => {
+    if (s === "pending") return "待審核";
+    if (s === "approved") return "已批准";
+    if (s === "rejected") return "已駁回";
+    return s;
+  };
+
+  const statusColor = (s: string) => {
+    if (s === "pending") return "bg-orange-500/10 text-orange-600 border-orange-500/20";
+    if (s === "approved") return "bg-green-500/10 text-green-600 border-green-500/20";
+    if (s === "rejected") return "bg-red-500/10 text-red-600 border-red-500/20";
+    return "";
+  };
+
+  return (
+    <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-clock-amendment">
+      <button
+        className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+        data-testid="button-toggle-amendment"
+      >
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-juns-teal" />
+          <span className="text-sm font-semibold text-juns-navy">補打卡申請</span>
+        </div>
+        <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+      </button>
+      {expanded && (
+        <div className="border-t border-juns-border p-4 space-y-4">
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <button
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${clockType === "in" ? "bg-juns-teal text-white" : "bg-slate-100 text-slate-600"}`}
+                onClick={() => setClockType("in")}
+                data-testid="button-amendment-type-in"
+              >
+                上班
+              </button>
+              <button
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${clockType === "out" ? "bg-juns-teal text-white" : "bg-slate-100 text-slate-600"}`}
+                onClick={() => setClockType("out")}
+                data-testid="button-amendment-type-out"
+              >
+                下班
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={requestedDate}
+                onChange={(e) => setRequestedDate(e.target.value)}
+                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                data-testid="input-amendment-date"
+              />
+              <input
+                type="time"
+                value={requestedTime}
+                onChange={(e) => setRequestedTime(e.target.value)}
+                className="w-28 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                data-testid="input-amendment-time"
+              />
+            </div>
+            <textarea
+              placeholder="請輸入補打卡原因（例：忘記打卡）"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white resize-none"
+              rows={2}
+              data-testid="input-amendment-reason"
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="w-full py-2.5 bg-juns-navy text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-juns-navy/90 transition-colors"
+              data-testid="button-submit-amendment"
+            >
+              {submitting ? "送出中..." : "送出申請"}
+            </button>
+          </div>
+
+          {amendments.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-slate-500">申請記錄</p>
+              {amendments.map((a) => (
+                <div key={a.id} className="flex items-start gap-3 p-3 rounded-lg bg-slate-50" data-testid={`row-amendment-${a.id}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge className={statusColor(a.status)} data-testid={`badge-status-${a.id}`}>
+                        {statusLabel(a.status)}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {a.clockType === "in" ? "上班" : "下班"}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-juns-navy">
+                      {new Date(a.requestedTime).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">{a.reason}</p>
+                    {a.reviewNote && (
+                      <p className="text-xs text-slate-400 mt-0.5">審核備註：{a.reviewNote}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -1036,6 +1200,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
             <ChevronRight className="h-4 w-4 text-slate-400" />
           </button>
         </div>
+
+        <ClockAmendmentSection employee={employee} />
 
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
           <div className="px-4 py-3 border-b border-juns-border flex items-center justify-between">

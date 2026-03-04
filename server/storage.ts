@@ -6,6 +6,7 @@ import {
   attendanceUploads, attendanceRecords,
   guidelines, guidelineAcknowledgments,
   clockRecords,
+  clockAmendments,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -18,6 +19,7 @@ import {
   type Guideline, type InsertGuideline,
   type GuidelineAck, type InsertGuidelineAck,
   type ClockRecord, type InsertClockRecord,
+  type ClockAmendment, type InsertClockAmendment,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -89,6 +91,12 @@ export interface IStorage {
   createClockRecord(data: InsertClockRecord): Promise<ClockRecord>;
   getClockRecordsByDateRange(startDate: string, endDate: string): Promise<ClockRecord[]>;
   getClockRecordsByEmployee(employeeId: number, startDate: string, endDate: string): Promise<ClockRecord[]>;
+
+  createClockAmendment(data: InsertClockAmendment): Promise<ClockAmendment>;
+  getClockAmendments(status?: string): Promise<ClockAmendment[]>;
+  getClockAmendmentsByEmployee(employeeId: number): Promise<ClockAmendment[]>;
+  getClockAmendment(id: number): Promise<ClockAmendment | undefined>;
+  updateClockAmendmentStatus(id: number, status: string, reviewedBy: number, reviewNote?: string): Promise<ClockAmendment | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -426,6 +434,41 @@ export class DatabaseStorage implements IStorage {
         lte(clockRecords.clockTime, new Date(endDate + "T23:59:59+08:00"))
       )
     ).orderBy(desc(clockRecords.clockTime));
+  }
+
+  async createClockAmendment(data: InsertClockAmendment): Promise<ClockAmendment> {
+    const [record] = await db.insert(clockAmendments).values(data).returning();
+    return record;
+  }
+
+  async getClockAmendments(status?: string): Promise<ClockAmendment[]> {
+    if (status) {
+      return db.select().from(clockAmendments)
+        .where(eq(clockAmendments.status, status))
+        .orderBy(desc(clockAmendments.createdAt));
+    }
+    return db.select().from(clockAmendments).orderBy(desc(clockAmendments.createdAt));
+  }
+
+  async getClockAmendmentsByEmployee(employeeId: number): Promise<ClockAmendment[]> {
+    return db.select().from(clockAmendments)
+      .where(eq(clockAmendments.employeeId, employeeId))
+      .orderBy(desc(clockAmendments.createdAt));
+  }
+
+  async getClockAmendment(id: number): Promise<ClockAmendment | undefined> {
+    const [record] = await db.select().from(clockAmendments).where(eq(clockAmendments.id, id));
+    return record;
+  }
+
+  async updateClockAmendmentStatus(id: number, status: string, reviewedBy: number, reviewNote?: string): Promise<ClockAmendment | undefined> {
+    const [record] = await db.update(clockAmendments).set({
+      status,
+      reviewedBy,
+      reviewedAt: new Date(),
+      reviewNote: reviewNote || null,
+    }).where(eq(clockAmendments.id, id)).returning();
+    return record;
   }
 }
 

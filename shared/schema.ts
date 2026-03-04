@@ -211,9 +211,28 @@ export const clockRecords = pgTable("clock_records", {
   matchedVenueName: text("matched_venue_name"),
 });
 
-export const insertClockRecordSchema = createInsertSchema(clockRecords).omit({ id: true, clockTime: true });
+export const insertClockRecordSchema = createInsertSchema(clockRecords).omit({ id: true });
 export type InsertClockRecord = z.infer<typeof insertClockRecordSchema>;
 export type ClockRecord = typeof clockRecords.$inferSelect;
+
+export const clockAmendments = pgTable("clock_amendments", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  shiftId: integer("shift_id"),
+  venueId: integer("venue_id"),
+  clockType: text("clock_type").notNull(),
+  requestedTime: timestamp("requested_time").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"),
+  reviewedBy: integer("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertClockAmendmentSchema = createInsertSchema(clockAmendments).omit({ id: true, createdAt: true, reviewedAt: true });
+export type InsertClockAmendment = z.infer<typeof insertClockAmendmentSchema>;
+export type ClockAmendment = typeof clockAmendments.$inferSelect;
 
 export type RegionCode = "D" | "A" | "B" | "C";
 

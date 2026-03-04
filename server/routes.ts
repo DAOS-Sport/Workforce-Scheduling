@@ -1335,5 +1335,109 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/portal/clock-amendment", async (req, res) => {
+    try {
+      const { employeeId, clockType, requestedTime, reason, venueId, shiftId } = req.body;
+      if (!employeeId || !clockType || !requestedTime || !reason) {
+        return res.status(400).json({ message: "缺少必要欄位" });
+      }
+      const emp = await storage.getEmployee(employeeId);
+      if (!emp) return res.status(404).json({ message: "找不到員工" });
+
+      const record = await storage.createClockAmendment({
+        employeeId,
+        clockType,
+        requestedTime: new Date(requestedTime),
+        reason,
+        venueId: venueId || null,
+        shiftId: shiftId || null,
+        status: "pending",
+        reviewedBy: null,
+        reviewNote: null,
+      });
+      res.json(record);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/portal/clock-amendments/:employeeId", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.employeeId);
+      const records = await storage.getClockAmendmentsByEmployee(employeeId);
+      res.json(records);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/clock-amendments", async (req, res) => {
+    try {
+      const { status } = req.query;
+      const records = await storage.getClockAmendments(status as string | undefined);
+
+      const employeeIds = [...new Set(records.map(r => r.employeeId))];
+      const employeeMap = new Map<number, any>();
+      for (const id of employeeIds) {
+        const emp = await storage.getEmployee(id);
+        if (emp) employeeMap.set(id, emp);
+      }
+
+      const enriched = records.map(r => ({
+        ...r,
+        employeeName: employeeMap.get(r.employeeId)?.name || "未知",
+        employeeCode: employeeMap.get(r.employeeId)?.employeeCode || "",
+      }));
+
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/clock-amendments/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status, reviewNote } = req.body;
+      if (!status || !["approved", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "status 必須為 approved 或 rejected" });
+      }
+
+      const amendment = await storage.getClockAmendment(id);
+      if (!amendment) return res.status(404).json({ message: "找不到補打卡申請" });
+      if (amendment.status !== "pending") {
+        return res.status(400).json({ message: "此申請已審核完畢" });
+      }
+
+      const adminId = (req.session as any)?.adminId || 0;
+      const updated = await storage.updateClockAmendmentStatus(id, status, adminId, reviewNote);
+
+      if (status === "approved" && updated) {
+        try {
+          await storage.createClockRecord({
+            employeeId: updated.employeeId,
+            venueId: updated.venueId,
+            shiftId: updated.shiftId,
+            clockType: updated.clockType,
+            latitude: 0,
+            longitude: 0,
+            distance: 0,
+            status: "success",
+            failReason: "補打卡",
+            matchedVenueName: null,
+            clockTime: updated.requestedTime,
+          });
+        } catch (recordErr: any) {
+          await storage.updateClockAmendmentStatus(id, "pending", 0, "系統錯誤：打卡紀錄建立失敗，請重新審核");
+          return res.status(500).json({ message: "打卡紀錄建立失敗: " + recordErr.message });
+        }
+      }
+
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }
