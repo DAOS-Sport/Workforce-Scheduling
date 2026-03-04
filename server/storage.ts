@@ -38,6 +38,7 @@ export interface IStorage {
   updateEmployee(id: number, data: Partial<InsertEmployee>): Promise<Employee | undefined>;
 
   getShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<Shift[]>;
+  getShiftsByDate(date: string): Promise<Shift[]>;
   getShiftsByEmployee(employeeId: number): Promise<Shift[]>;
   getShift(id: number): Promise<Shift | undefined>;
   createShift(data: InsertShift): Promise<Shift>;
@@ -159,6 +160,10 @@ export class DatabaseStorage implements IStorage {
         lte(shifts.date, endDate)
       )
     );
+  }
+
+  async getShiftsByDate(date: string): Promise<Shift[]> {
+    return db.select().from(shifts).where(eq(shifts.date, date));
   }
 
   async getShiftsByEmployee(employeeId: number): Promise<Shift[]> {

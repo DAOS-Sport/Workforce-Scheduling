@@ -5,7 +5,7 @@ import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, ins
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
-import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn } from "./line-webhook";
+import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders } from "./line-webhook";
 import multer from "multer";
 import * as XLSX from "xlsx";
 
@@ -1222,6 +1222,15 @@ export async function registerRoutes(
   app.post("/api/ragic-sync", async (_req, res) => {
     try {
       const result = await syncFromRagic();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/send-shift-reminders", async (_req, res) => {
+    try {
+      const result = await sendShiftReminders();
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

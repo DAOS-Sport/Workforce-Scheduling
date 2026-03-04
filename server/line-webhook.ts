@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { storage } from "./storage";
-import type { Venue, Shift } from "@shared/schema";
+import type { Venue, Shift, Employee } from "@shared/schema";
 
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET || "";
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
@@ -414,4 +414,79 @@ export async function handleLineWebhook(body: any): Promise<void> {
       await pushToLine(lineUserId, "❌ 系統處理打卡時發生錯誤，請稍後再試或聯繫管理員。");
     }
   }
+}
+
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假"];
+
+export async function sendShiftReminders(): Promise<{ sent: number; skipped: number; noLineId: number }> {
+  const taipeiNow = getTaiwanNow();
+  const tomorrow = new Date(taipeiNow);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = formatTaiwanDate(tomorrow);
+
+  const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
+  const tomorrowDay = dayNames[tomorrow.getDay()];
+  const displayDate = `${tomorrow.getMonth() + 1}/${tomorrow.getDate()}（${tomorrowDay}）`;
+
+  const allShifts = await storage.getShiftsByDate(tomorrowStr);
+  const workShifts = allShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+
+  if (workShifts.length === 0) {
+    console.log(`[推撥] ${tomorrowStr} 無上班班次，跳過推撥`);
+    return { sent: 0, skipped: 0, noLineId: 0 };
+  }
+
+  const shiftsByEmployee = new Map<number, Shift[]>();
+  for (const s of workShifts) {
+    const arr = shiftsByEmployee.get(s.employeeId) || [];
+    arr.push(s);
+    shiftsByEmployee.set(s.employeeId, arr);
+  }
+
+  const allVenues = await storage.getAllVenues();
+  const venueMap = new Map<number, Venue>();
+  for (const v of allVenues) venueMap.set(v.id, v);
+
+  let sent = 0;
+  let skipped = 0;
+  let noLineId = 0;
+
+  for (const [empId, empShifts] of shiftsByEmployee) {
+    const emp = await storage.getEmployee(empId);
+    if (!emp) { skipped++; continue; }
+    if (!emp.lineId) { noLineId++; continue; }
+
+    const sortedShifts = empShifts.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const lines: string[] = [];
+    lines.push(`📋 明日班表通知`);
+    lines.push(`📅 ${displayDate}`);
+    lines.push("");
+
+    for (const shift of sortedShifts) {
+      const venue = venueMap.get(shift.venueId);
+      const venueName = venue?.shortName || venue?.name || "未知場館";
+      const start = shift.startTime.substring(0, 5);
+      const end = shift.endTime.substring(0, 5);
+      lines.push(`🏢 ${venueName}`);
+      lines.push(`⏰ ${start} - ${end}`);
+      lines.push(`👤 ${shift.role}`);
+      if (shift.isDispatch) lines.push(`🔸 派遣`);
+      lines.push("");
+    }
+
+    lines.push("請準時出勤，如需請假請提前告知主管 🙏");
+
+    const message = lines.join("\n").trim();
+
+    try {
+      await pushToLine(emp.lineId, message);
+      sent++;
+    } catch (err) {
+      console.error(`[推撥] 發送失敗 empId=${empId}:`, err);
+      skipped++;
+    }
+  }
+
+  console.log(`[推撥] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
+  return { sent, skipped, noLineId };
 }

@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import cron from "node-cron";
 import { syncFromRagic } from "./ragic";
+import { sendShiftReminders } from "./line-webhook";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 
@@ -151,6 +152,17 @@ app.use((req, res, next) => {
         }
       }, { timezone: "Asia/Taipei" });
       log("已排程每日凌晨 3:00 (台灣時間) 自動執行 Ragic 同步", "cron");
+
+      cron.schedule("0 19 * * *", async () => {
+        log("開始執行明日班表推撥通知...", "cron");
+        try {
+          const result = await sendShiftReminders();
+          log(`班表推撥完成: 發送 ${result.sent}, 跳過 ${result.skipped}, 無LINE ${result.noLineId}`, "cron");
+        } catch (err: any) {
+          log(`班表推撥失敗: ${err.message}`, "cron");
+        }
+      }, { timezone: "Asia/Taipei" });
+      log("已排程每日 19:00 (台灣時間) 自動推撥明日班表", "cron");
     },
   );
 })();
