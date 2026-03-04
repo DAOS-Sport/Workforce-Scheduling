@@ -17,6 +17,7 @@ import {
   AlertTriangle, ClipboardCheck, BookOpen, Navigation, Loader2, XCircle,
   Wifi, Signal, Copy, MessageSquareWarning
 } from "lucide-react";
+import html2canvas from "html2canvas";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
 
 interface PortalEmployee {
@@ -189,7 +190,7 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
     if (errorMsg) lines.push(`錯誤訊息：${errorMsg}`);
 
     lines.push("──────────────");
-    lines.push("※ 此為系統自動產生之異常報告，請勿修改內容。");
+    lines.push("※ 此為系統自動產生之異常報告，請勿修改內容，將此文字訊息以及異常畫面截圖傳送至400感謝配合。");
 
     const reportText = lines.join("\n");
 
@@ -206,10 +207,28 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
       document.body.removeChild(textArea);
     }
     setCopied(true);
-    toast({ title: "已複製異常報告", description: "請在 LINE 400 帳號聊天室中貼上傳送" });
+
+    try {
+      const canvas = await html2canvas(document.body, {
+        useCORS: true,
+        allowTaint: true,
+        scale: 2,
+      });
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `異常報告_${format(now, "yyyyMMdd_HHmmss")}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "已複製異常報告並截圖", description: "截圖已儲存，請將文字與截圖一併傳送至 LINE 400 帳號" });
+    } catch {
+      toast({ title: "已複製異常報告", description: "截圖失敗，請手動截圖後傳送至 LINE 400 帳號" });
+    }
+
     setTimeout(() => {
       window.open("https://lin.ee/TupPc0V", "_blank");
-    }, 500);
+    }, 1000);
   };
 
   return (
@@ -238,7 +257,7 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
       {copied && (
         <div className="p-3 rounded-lg bg-amber-50 border border-amber-200" data-testid="card-report-warning">
           <p className="text-xs text-amber-700 leading-relaxed">
-            ⚠️ 異常報告已複製到剪貼簿，LINE 聊天室將自動開啟。請在聊天室中<span className="font-bold">長按貼上</span>並傳送，切勿修改報告內容。
+            ⚠️ 異常報告已複製到剪貼簿，截圖已儲存至裝置。LINE 聊天室將自動開啟，請在聊天室中<span className="font-bold">長按貼上文字</span>並<span className="font-bold">附上截圖</span>一併傳送，切勿修改報告內容。
           </p>
         </div>
       )}
