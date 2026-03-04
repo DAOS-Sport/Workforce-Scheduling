@@ -17,7 +17,6 @@ import {
   AlertTriangle, ClipboardCheck, BookOpen, Navigation, Loader2, XCircle,
   Wifi, Signal, Copy, MessageSquareWarning
 } from "lucide-react";
-import html2canvas from "html2canvas";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
 
 interface PortalEmployee {
@@ -153,128 +152,65 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
   accuracy?: number | null;
   context: string;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
   const handleReport = async () => {
-    const now = new Date();
-    const timestamp = format(now, "yyyy/MM/dd HH:mm:ss");
-    const lines: string[] = [
-      "!!!打卡異常報告!!!",
-      `報告時間：${timestamp}`,
-      `異常類型：${context}`,
-      "──────────────",
-    ];
-
-    if (employee) {
-      lines.push(`員工姓名：${employee.name}`);
-      lines.push(`員工編號：${employee.employeeCode}`);
-      lines.push(`職務角色：${employee.role}`);
-      if (employee.lineUserId) lines.push(`LINE User ID：${employee.lineUserId}`);
-    } else {
-      const storedLineUserId = localStorage.getItem("portal_line_user_id");
-      lines.push("員工資訊：尚未登入 / 無法取得");
-      if (storedLineUserId) lines.push(`LINE User ID：${storedLineUserId}`);
-    }
-    lines.push("──────────────");
-
-    if (clockResult) {
-      lines.push(`打卡狀態：${clockResult.status === "success" ? "成功" : clockResult.status === "warning" ? "警告（無排班）" : "失敗"}`);
-      lines.push(`打卡類型：${clockResult.clockType === "in" ? "上班" : "下班"}`);
-      lines.push(`打卡時間：${clockResult.date} ${clockResult.time}`);
-      if (clockResult.venueName) lines.push(`場館名稱：${clockResult.venueName}`);
-      if (clockResult.distance !== null) lines.push(`距離場館：${clockResult.distance}m${clockResult.radius ? ` (需在${clockResult.radius}m內)` : ""}`);
-      if (clockResult.failReason) lines.push(`異常原因：${clockResult.failReason}`);
-    }
-
-    if (errorMsg) lines.push(`錯誤訊息：${errorMsg}`);
-
-    lines.push("──────────────");
-    lines.push("※ 此為系統自動產生之異常報告，請勿修改內容，將此文字訊息以及異常畫面圖片傳送至400感謝配合。");
-
-    const reportText = lines.join("\n");
-
+    setSubmitting(true);
     try {
-      await navigator.clipboard.writeText(reportText);
-    } catch {
-      const textArea = document.createElement("textarea");
-      textArea.value = reportText;
-      textArea.style.position = "fixed";
-      textArea.style.left = "-9999px";
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textArea);
-    }
-    setCopied(true);
-
-    try {
-      const clockCard = document.querySelector('[data-testid="card-gps-clock-in"]') as HTMLElement | null;
-      const target = clockCard || document.body;
-      const canvas = await html2canvas(target, {
-        useCORS: true,
-        allowTaint: true,
-        scale: 2,
-        backgroundColor: "#ffffff",
-      });
-      const blob = await new Promise<Blob>((resolve) =>
-        canvas.toBlob((b) => resolve(b!), "image/png")
-      );
-      const fileName = `異常報告_${format(now, "yyyyMMdd_HHmmss")}.png`;
-      const file = new File([blob], fileName, { type: "image/png" });
-
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file] });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+      const body: any = { context };
+      if (employee) {
+        body.employee = {
+          id: employee.id,
+          name: employee.name,
+          employeeCode: employee.employeeCode,
+          role: employee.role,
+          lineUserId: employee.lineUserId || localStorage.getItem("portal_line_user_id") || undefined,
+        };
       }
-      toast({ title: "已複製異常報告並截圖", description: "請將文字與圖片一併傳送至 LINE 400 帳號" });
-    } catch {
-      toast({ title: "已複製異常報告", description: "截圖失敗，請手動截圖後傳送至 LINE 400 帳號" });
-    }
+      if (clockResult) body.clockResult = clockResult;
+      if (errorMsg) body.errorMsg = errorMsg;
 
-    setTimeout(() => {
-      window.open("https://lin.ee/TupPc0V", "_blank");
-    }, 1000);
+      await apiRequest("POST", "/api/anomaly-report", body);
+      setSubmitted(true);
+      toast({ title: "異常報告已送出", description: "管理員將會收到通知並處理" });
+    } catch {
+      toast({ title: "送出失敗", description: "請稍後再試或手動截圖回報", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <div className="space-y-2 mt-3">
+    <div className="mt-3">
       <button
         className={`w-full h-10 rounded-lg border text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
-          copied
+          submitted
             ? "border-green-300 bg-green-50 text-green-700"
             : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
         }`}
         onClick={handleReport}
+        disabled={submitted || submitting}
         data-testid="button-anomaly-report"
       >
-        {copied ? (
+        {submitting ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            傳送中...
+          </>
+        ) : submitted ? (
           <>
             <CheckCircle2 className="h-4 w-4" />
-            已複製，請至 LINE 400 帳號貼上傳送
+            異常報告已送出
           </>
         ) : (
           <>
             <MessageSquareWarning className="h-4 w-4" />
-            提交異常報告予 400 帳號
+            傳送異常報告
           </>
         )}
       </button>
-      {copied && (
-        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200" data-testid="card-report-warning">
-          <p className="text-xs text-amber-700 leading-relaxed">
-            ⚠️ 異常報告已複製到剪貼簿，截圖已儲存至裝置。LINE 聊天室將自動開啟，請在聊天室中<span className="font-bold">長按貼上文字</span>並<span className="font-bold">附上截圖</span>一併傳送，切勿修改報告內容。
-          </p>
-        </div>
-      )}
     </div>
   );
 }
