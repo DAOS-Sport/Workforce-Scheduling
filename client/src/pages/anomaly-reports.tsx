@@ -618,17 +618,6 @@ export default function AnomalyReportsPage() {
     },
   });
 
-  const batchDeleteMutation = useMutation({
-    mutationFn: async (ids: number[]) => {
-      const res = await apiRequest("POST", "/api/anomaly-reports/batch/delete", { ids });
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/anomaly-reports"] });
-      setSelectedIds(new Set());
-      toast({ title: `已刪除 ${data.deleted} 筆` });
-    },
-  });
 
   const venues = useMemo(() => {
     const v = new Set<string>();
@@ -692,11 +681,6 @@ export default function AnomalyReportsPage() {
     }
   };
 
-  const handleBatchDelete = () => {
-    if (confirm(`確定要刪除選取的 ${selectedIds.size} 筆異常報告？此操作無法復原。`)) {
-      batchDeleteMutation.mutate(Array.from(selectedIds));
-    }
-  };
 
   if (isLoading) {
     return (
@@ -809,16 +793,6 @@ export default function AnomalyReportsPage() {
             data-testid="button-batch-pending"
           >
             批量待解決
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs text-red-500 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950/30"
-            onClick={handleBatchDelete}
-            disabled={batchDeleteMutation.isPending}
-            data-testid="button-batch-delete"
-          >
-            <Trash2 className="h-3.5 w-3.5 mr-1" /> 批量刪除
           </Button>
           <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setSelectedIds(new Set())}>
             取消
