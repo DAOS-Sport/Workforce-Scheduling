@@ -262,6 +262,10 @@ export async function processClockIn(
   const shiftInfo = matchingShift || venueShifts[0];
 
   let lateReason: string | null = null;
+  let earlyArrival = false;
+  let earlyMinutes = 0;
+  let lateDeparture = false;
+  let lateMinutes = 0;
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   if (clockType === "in") {
@@ -274,6 +278,14 @@ export async function processClockIn(
       lateReason = hours > 0
         ? `遲到 ${hours} 小時 ${mins} 分鐘`
         : `遲到 ${mins} 分鐘`;
+    } else if (diff <= -15) {
+      earlyMinutes = Math.abs(diff);
+      earlyArrival = true;
+      const hours = Math.floor(earlyMinutes / 60);
+      const mins = earlyMinutes % 60;
+      lateReason = hours > 0
+        ? `提早 ${hours} 小時 ${mins} 分鐘到`
+        : `提早 ${mins} 分鐘到`;
     }
   } else if (clockType === "out") {
     const [eh, em] = shiftInfo.endTime.split(":").map(Number);
@@ -285,10 +297,18 @@ export async function processClockIn(
       lateReason = hours > 0
         ? `早退 ${hours} 小時 ${mins} 分鐘`
         : `早退 ${mins} 分鐘`;
+    } else if (diff <= -15) {
+      lateMinutes = Math.abs(diff);
+      lateDeparture = true;
+      const hours = Math.floor(lateMinutes / 60);
+      const mins = lateMinutes % 60;
+      lateReason = hours > 0
+        ? `晚下班 ${hours} 小時 ${mins} 分鐘`
+        : `晚下班 ${mins} 分鐘`;
     }
   }
 
-  await storage.createClockRecord({
+  const clockRecord = await storage.createClockRecord({
     employeeId: employee.id,
     venueId: closestVenue.id,
     shiftId: matchingShift?.id || venueShifts[0].id,
@@ -315,6 +335,11 @@ export async function processClockIn(
     nearbyVenues,
     userLat: lat,
     userLng: lng,
+    recordId: clockRecord.id,
+    earlyArrival,
+    earlyMinutes,
+    lateDeparture,
+    lateMinutes,
   };
 }
 

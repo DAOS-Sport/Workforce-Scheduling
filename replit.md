@@ -1,151 +1,28 @@
 # PT 排班管理系統 (PT Scheduling System)
 
 ## Overview
-A workforce scheduling management system for PT (personal training) staff across multiple venues and regions. Features smart spreadsheet-like scheduling, Taiwan labor law compliance engine, employee/venue management, and attendance tracking.
+This project is a comprehensive workforce scheduling management system designed for Personal Training (PT) staff operating across multiple venues and regions. Its primary purpose is to streamline the scheduling process, ensure compliance with Taiwan labor laws, and provide robust tools for employee and venue management, alongside attendance tracking. The system aims to enhance operational efficiency, reduce administrative overhead, and ensure legal adherence in staff deployment.
 
-## Recent Changes
-- 2026-03-01: Added admin LINE Login protection: isAdmin field on employees, express-session with PostgreSQL store, LINE Login auth guard on all admin pages, admin toggle button (shield icon) in employee list, logout in sidebar footer
-- 2026-03-01: Admin auth flow: GET /api/admin/me checks session, POST /api/admin/line-callback exchanges LINE code for profile and verifies isAdmin, POST /api/admin/logout destroys session
-- 2026-03-01: All /api/ routes (except /api/admin/, /api/portal/, /api/liff/, /api/line/) require admin session
-- 2026-03-01: LINE Login redirect URI for admin: {origin}/admin/callback (must be added to LINE Developers Console)
-- 2026-03-01: GPS clock-in now detects late/early: compares clock-in time vs shift start (遲到), clock-out time vs shift end (早退); written to failReason field; shown in LINE reply, LIFF page (orange alert), clock-records page (orange text + separate stats card)
-- 2026-03-04: Added clock amendment (補打卡) feature: employees submit requests via Portal (date, time, in/out, reason); admins review in clock-records page "補打卡審核" tab; approval auto-creates clockRecord with status="success", failReason="補打卡"; DB table: clockAmendments; API: POST /api/portal/clock-amendment, GET /api/portal/clock-amendments/:employeeId, GET /api/clock-amendments, PATCH /api/clock-amendments/:id
-- 2026-03-04: Added daily shift reminder push notifications: cron at 19:00 (Asia/Taipei) sends LINE Push Messages to employees with shifts tomorrow; includes venue, time, role; leave shifts excluded; manual trigger via POST /api/send-shift-reminders
-- 2026-03-04: Added leave types (休假/特休/病假/事假/喪假/公假) to schedule: stored in shift.role field, distinct color-coded cards, no venue/time required; leave shifts skip labor law validation
-- 2026-03-04: Employee picker selection persisted to localStorage per region: switching regions and coming back preserves previously selected employees
-- 2026-03-04: Leave types (休假/特休/病假/事假/喪假/公假) skip labor law validation: no more "超過12小時" errors when creating leave shifts
-- 2026-03-02: Schedule editor auto-includes employees who have shifts: opens with shift employees already visible in the grid, cross-region employees also auto-detected and added
-- 2026-02-24: Portal top modules added: LiveClock (real-time date/time display), Google Maps embed (shows user position after GPS clock-in), VenueShiftInfo (venue name + shift times), 上班/下班 split buttons with explicit clockType, 外出/簽到 card
-- 2026-02-24: processClockIn now accepts optional forcedClockType parameter; POST /api/liff/clock-in accepts clockType field ("in"|"out") to override auto-detection
-- 2026-02-23: Added LIFF GPS 打卡網頁 (/liff/clock-in): uses browser navigator.geolocation for tamper-proof GPS, LIFF SDK for LINE auth, displays result directly on page. Refactored processClockIn() as shared core function used by both LIFF and webhook.
-- 2026-02-23: Added LINE GPS clock-in module: LINE webhook receives location messages, Haversine formula compares with venue GPS/radius, auto-determines clock-in/out, replies result in LINE chat. Admin page at /clock-records shows records with status/distance/venue.
-- 2026-02-23: Added clockRecords table (employeeId, venueId, shiftId, clockType, lat/lng, distance, status, failReason, clockTime, matchedVenueName)
-- 2026-02-26: Added cross-region support (跨區支援): employee picker shows "跨區支援" button opening dialog to select employees from other regions; cross-region employees marked with orange "支援" badge in picker, shift dialog, and schedule grid; shifts auto-set isDispatch=true for cross-region employees
-- 2026-02-26: Employee picker now filtered by active region with venue tags showing assigned venues from current shifts
-- 2026-02-26: Renamed region "台北區" → "松山國小" (code "B" unchanged)
-- 2026-02-23: Created 內勤 region (code "D") for 5 internal departments; default tab is now 內勤; region tabs order: 內勤→三蘆戰區→松山國小→新竹區
-- 2026-02-23: Fixed regionId lookup: venues/employees pages now use /api/regions API instead of fragile index-based calculation
-- 2026-02-23: Added operationType field to venues (OT/勞務採購/內勤單位), reads from Ragic field 1002826; replaces isInternal checkbox with dropdown; badge shows on all venue cards
-- 2026-02-23: Venues schema expanded: added taxId, isInternal, operationType fields; all 28 departments from Ragic imported (23 場館 + 5 內勤部門), each with address, GPS, 統編
-- 2026-02-23: VENUE_DATA now contains all 28 entries including 勞務 venues and internal departments (人力資源處/數位轉型發展處/營運管理處/行銷事業處/駿斯本部)
-- 2026-02-23: Venue cards show operationType badge (OT/勞務採購/內勤單位), 統編, and dashed border for 內勤單位
-- 2026-02-23: Added 教練 as independent role (not mapped to 救生); 教練 employees exist in system but don't appear in shift scheduling grid
-- 2026-02-23: Ragic sync rewritten: role priority (救生>教練>櫃台), 聘雇類別 only accepts 正職/兼職 (約聘/永久/空白 skipped for new), blank fields don't overwrite existing data, unmapped departments skip creation
-- 2026-02-23: Ragic sync restructured: existing employees always get status/name/phone/email/empType updated regardless of role; mapStatus uses whitelist for precision
-- 2026-02-21: Ragic sync now strictly filters: only imports employees with status "在職" AND role "行政櫃台" or "救生員"; other roles are skipped with error message
-- 2026-02-21: Shift dialog now includes "排班範本" dropdown between role and time inputs; loads venue shift templates filtered by dayType (weekday/weekend) and role, auto-fills start/end time on selection; "自訂時間" option for manual input
-- 2026-02-21: Added batch shift creation (POST /api/shifts/batch) with labor law validation; shift dialog now has batch mode toggle with date grid picker and quick-select buttons (same weekday, all, clear)
-- 2026-02-21: Venue summary rows moved to regular tbody rows (not sticky), background #1d283a80
-- 2026-02-21: Added Ragic employee sync (server/ragic.ts) - pulls from ap7.ragic.com, auto-maps department→region (新北高中/三民高中/三重商工→三蘆戰區), sets role (救生/櫃台) and employmentType (full_time/part_time)
-- 2026-02-21: Added employmentType field to employees table for full-time/part-time classification
-- 2026-02-21: Schedule editor now groups employees by employment type × role (正職救生→正職櫃台→兼職救生→兼職櫃台), full-time on top
-- 2026-02-21: Employee management page shows Ragic sync button, employment type badge, sync result summary
-- 2026-02-20: Venue shift templates now auto-populate as virtual schedule slots in schedule editor; templates show with "範本" badge and can be edited/deleted (materializes to real slots)
-- 2026-02-20: Added POST /api/schedule-slots/materialize endpoint for atomic template-to-slot conversion
-- 2026-02-20: Portal enhancements: removed calendar download buttons, enlarged calendar cells with time+venue, attendance summary card, collapsible guidelines review
-- 2026-02-18: Added Employee Portal (/portal) with LINE Login, mandatory guidelines confirmation, personal schedule calendar, today's coworkers with one-click dial, watermark security
-- 2026-02-18: Added venue-specific fixed guidelines (固定守則 bound to venues), venue badge display, filtered acknowledgment by scheduled employees
-- 2026-02-18: Added lineId field to employees for LINE Login integration
-- 2026-02-18: Added 守則管理 (Guidelines Management) page with 3 categories (固定守則/每月說明/保密同意書), CRUD, preview, employee acknowledgment tracking
-- 2026-02-18: Added venue shift templates (venueShiftTemplates table) for weekday/weekend role-based staffing requirements per venue
-- 2026-02-18: Updated venue edit dialog with weekday/weekend tabs for managing shift templates with role/count
-- 2026-02-18: Added role-based shortage summary in schedule editor (per-venue role icons + shortage counts)
-- 2026-02-18: Rebuilt schedule editor: venue-centric grid (venue rows × date columns), input time slot requirements per venue per date
-- 2026-02-18: Added scheduleSlots table for per-date venue requirements
-- 2026-02-18: Added attendance xlsx upload & audit feature
-- 2026-02-18: Initial MVP build with regional grouping, smart scheduler, labor law validation, employee/venue CRUD, seed data
+## User Preferences
+I prefer that you communicate in a clear and concise manner, focusing on the most impactful changes or information. When working on the codebase, I appreciate an iterative approach, with major architectural decisions or significant feature implementations discussed and approved before proceeding. Please ensure that all changes align with the existing architectural patterns and maintain high code quality. I prefer detailed explanations for complex features or decisions.
 
-## Architecture
-- **Frontend**: React + Vite + TypeScript + Tailwind CSS + Shadcn UI
-- **Backend**: Express.js + PostgreSQL + Drizzle ORM
-- **Routing**: wouter (frontend), Express (backend API)
-- **State**: TanStack React Query for server state
+## System Architecture
+The system is built with a modern web stack:
+- **Frontend**: React, Vite, TypeScript, Tailwind CSS, and Shadcn UI provide a responsive and intuitive user interface. `wouter` is used for client-side routing, and `TanStack React Query` manages server state efficiently.
+- **Backend**: Express.js handles API requests, integrated with PostgreSQL for data storage and Drizzle ORM for database interactions.
+- **Core Features**:
+    - **Regional Management**: Organizes operations across four distinct regions (三蘆戰區, 松山國小, 新竹區, 內勤) using tab-based navigation.
+    - **Smart Scheduler**: Features a spreadsheet-like weekly grid for intuitive shift planning and editing. Includes functionality for batch shift creation and template-based scheduling.
+    - **Labor Law Compliance**: Incorporates a sophisticated HR Eye engine to validate schedules against Taiwan labor laws (e.g., 7-day rest, 12-hour daily limit, 11-hour rest gap). Leave types (休假/特休/病假/事假/喪假/公假) are recognized and appropriately bypass certain labor law validations.
+    - **Employee Portal**: A dedicated portal accessible via LINE Login, offering personal schedules, mandatory guideline acknowledgments, and a directory of today's coworkers. Includes a full-page transparent watermark for security.
+    - **Attendance System**: Supports GPS-based clock-in/out via LINE (webhook and LIFF app), with early arrival/late departure detection and reason selection. Includes features for clock amendment requests and overtime requests, with an admin review process and audit trails. Allows for attendance data import via XLSX files from external systems.
+    - **Venue and Employee Management**: CRUD operations for employees and venues, with features like cross-region employee dispatching and Ragic database synchronization for employee data.
+    - **Shift Reminders**: Automated LINE push notifications for upcoming shifts.
+- **UI/UX Decisions**: The design prioritizes clarity and efficiency, using Shadcn UI components for consistency. Color-coding is used for shift types (e.g., orange for dispatched staff, distinct colors for leave types) and status indicators (e.g., blue/orange badges for early/late clock-ins). Employee pickers persist selections per region for improved user experience.
 
-## Project Structure
-```
-client/src/
-  pages/          - Dashboard, Schedule, Employees, Venues, Attendance, Guidelines, Portal
-  components/     - AppSidebar, RegionTabs, ShiftCellEditor, VacancyFooter, ThemeToggle
-  lib/            - queryClient, theme-provider, region-context, labor-law
-server/
-  index.ts        - Express server entry
-  routes.ts       - API endpoints
-  storage.ts      - Database storage layer (IStorage interface)
-  db.ts           - Database connection
-  seed.ts         - Seed data
-  labor-validation.ts - Server-side labor law validation
-shared/
-  schema.ts       - Drizzle schema definitions
-```
-
-## Key Features
-- **Regional Tabs**: 4 regions (三蘆戰區/松山國小/新竹區/內勤) with tab-based switching
-- **Smart Scheduler**: Spreadsheet-like weekly grid with cell editing
-- **Labor Law Engine (HR Eye)**: 7-day rest, 12h daily limit, 11h rest gap
-- **Dispatch Mode**: Orange-highlighted cells for outsourced staff
-- **Vacancy Footer**: Real-time shortage monitoring
-- **Attendance Import**: Upload xlsx from 駿斯 attendance system
-- **Employee Portal** (/portal): LINE Login, mandatory guideline confirmation, personal schedule, today's coworkers with one-click phone call, name+code watermark security
-
-## Employee Portal (/portal)
-- **Authentication**: LINE Login OAuth 2.1 flow, verifies employee by LINE user ID in database
-- **Guidelines Check**: Full-screen mandatory confirmation before accessing schedule. Includes venue-specific rules, monthly announcements, confidentiality agreements. Monthly acknowledgment cycle.
-- **Personal Schedule**: Calendar or list view of employee's own shifts. Export to iOS (.ics) or Google Calendar.
-- **Today's Coworkers**: Shows same-venue coworkers for today with one-click phone dial (tel: link). Only shows name, role, phone - no salary/address.
-- **Watermark**: Full-page transparent watermark with employee name + code for screenshot deterrence.
-- **Required env vars**: LINE_CHANNEL_ID, LINE_CHANNEL_SECRET (server), VITE_LINE_CHANNEL_ID (client)
-
-## Attendance Upload Format
-- Source: 駿斯運動事業股份有限公司 attendance system xlsx export
-- Required sheet: 「打卡紀錄」(daily attendance records)
-- Required columns: 員工編號, 姓名, 打卡日期
-- Optional columns: 部門, 表定上班/下班時間, 上班/下班打卡時間, 遲到, 早退, 出勤異常, 請假, 加班, GPS打卡地點
-- Period auto-detected from sheet name pattern: YYYY.MM.DD-YYYY.MM.DD
-- Records matched to system employees via employeeCode
-
-## API Routes
-- GET /api/employees/:regionCode
-- POST /api/employees
-- PATCH /api/employees/:id
-- GET /api/venues/:regionCode
-- POST /api/venues
-- PATCH /api/venues/:id
-- GET /api/shifts/:regionCode/:startDate/:endDate
-- POST /api/shifts (with labor law validation)
-- PATCH /api/shifts/:id
-- DELETE /api/shifts/:id
-- GET /api/venue-requirements/:regionCode
-- GET /api/schedule-slots/:regionCode/:startDate/:endDate
-- POST /api/schedule-slots
-- PATCH /api/schedule-slots/:id
-- DELETE /api/schedule-slots/:id
-- GET /api/venue-shift-templates/:venueId
-- POST /api/venue-shift-templates
-- POST /api/venue-shift-templates/batch/:venueId
-- DELETE /api/venue-shift-templates/:id
-- POST /api/attendance-upload (multipart file upload, parses xlsx)
-- GET /api/attendance-uploads
-- GET /api/attendance-records/:uploadId
-- GET /api/attendance-records?startDate=&endDate=&employeeCodes=
-- DELETE /api/attendance-upload/:id
-- GET /api/guidelines?category=fixed|monthly|confidentiality
-- GET /api/guidelines/:id
-- POST /api/guidelines
-- PATCH /api/guidelines/:id
-- DELETE /api/guidelines/:id
-- GET /api/guidelines/:id/acknowledgments
-- POST /api/guideline-ack
-- POST /api/portal/line-callback (LINE OAuth token exchange)
-- POST /api/portal/verify (verify employee by LINE ID)
-- GET /api/portal/my-shifts/:employeeId/:startDate/:endDate
-- GET /api/portal/today-coworkers/:employeeId
-- GET /api/portal/guidelines-check/:employeeId
-- POST /api/portal/acknowledge-all
-- POST /api/ragic-sync (sync employees from Ragic database)
-- POST /api/send-shift-reminders (manually trigger next-day shift LINE push notifications)
-- POST /api/line/webhook (LINE Messaging API webhook for GPS clock-in)
-- GET /api/clock-records?startDate=&endDate=&employeeId= (clock-in records query)
-- POST /api/portal/clock-amendment (employee submit clock amendment request)
-- GET /api/portal/clock-amendments/:employeeId (employee's own amendment history)
-- GET /api/clock-amendments?status= (admin: all amendments, optional status filter)
-- PATCH /api/clock-amendments/:id (admin: approve/reject amendment)
+## External Dependencies
+- **PostgreSQL**: Primary database for all system data.
+- **LINE Messaging API**: Used for LINE Login authentication, GPS clock-in/out via webhooks and LIFF app, and push notifications for shift reminders.
+- **Ragic**: External database used for synchronizing employee information.
+- **Google Maps**: Integrated for displaying user position during GPS clock-in.
+- **駿斯運動事業股份有限公司 Attendance System**: Source of attendance data for XLSX imports.

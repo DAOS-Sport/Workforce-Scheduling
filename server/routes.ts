@@ -1409,8 +1409,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: "此申請已審核完畢" });
       }
 
-      const adminId = (req.session as any)?.adminId || 0;
-      const updated = await storage.updateClockAmendmentStatus(id, status, adminId, reviewNote);
+      const adminId = req.session.adminId || 0;
+      const adminName = req.session.adminName || "管理員";
+      const updated = await storage.updateClockAmendmentStatus(id, status, adminId, adminName, reviewNote);
 
       if (status === "approved" && updated) {
         try {
@@ -1428,11 +1429,109 @@ export async function registerRoutes(
             clockTime: updated.requestedTime,
           });
         } catch (recordErr: any) {
-          await storage.updateClockAmendmentStatus(id, "pending", 0, "系統錯誤：打卡紀錄建立失敗，請重新審核");
+          await storage.updateClockAmendmentStatus(id, "pending", 0, "系統", "系統錯誤：打卡紀錄建立失敗，請重新審核");
           return res.status(500).json({ message: "打卡紀錄建立失敗: " + recordErr.message });
         }
       }
 
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/portal/clock-records/:id/reason", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { earlyArrivalReason, lateDepartureReason } = req.body;
+      if (!earlyArrivalReason && !lateDepartureReason) {
+        return res.status(400).json({ message: "請提供原因" });
+      }
+      const updated = await storage.updateClockRecordReason(id, earlyArrivalReason, lateDepartureReason);
+      if (!updated) return res.status(404).json({ message: "找不到打卡紀錄" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/portal/overtime-request", async (req, res) => {
+    try {
+      const { employeeId, date, startTime, endTime, reason } = req.body;
+      if (!employeeId || !date || !startTime || !endTime || !reason) {
+        return res.status(400).json({ message: "缺少必要欄位" });
+      }
+      const emp = await storage.getEmployee(employeeId);
+      if (!emp) return res.status(404).json({ message: "找不到員工" });
+
+      const record = await storage.createOvertimeRequest({
+        employeeId,
+        date,
+        startTime,
+        endTime,
+        reason,
+        status: "pending",
+        reviewedBy: null,
+        reviewedByName: null,
+        reviewNote: null,
+      });
+      res.json(record);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/portal/overtime-requests/:employeeId", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.employeeId);
+      const records = await storage.getOvertimeRequestsByEmployee(employeeId);
+      res.json(records);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/overtime-requests", async (req, res) => {
+    try {
+      const { status } = req.query;
+      const records = await storage.getOvertimeRequests(status as string | undefined);
+
+      const employeeIds = [...new Set(records.map(r => r.employeeId))];
+      const employeeMap = new Map<number, any>();
+      for (const id of employeeIds) {
+        const emp = await storage.getEmployee(id);
+        if (emp) employeeMap.set(id, emp);
+      }
+
+      const enriched = records.map(r => ({
+        ...r,
+        employeeName: employeeMap.get(r.employeeId)?.name || "未知",
+        employeeCode: employeeMap.get(r.employeeId)?.employeeCode || "",
+      }));
+
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/overtime-requests/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status, reviewNote } = req.body;
+      if (!status || !["approved", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "status 必須為 approved 或 rejected" });
+      }
+
+      const request = await storage.getOvertimeRequest(id);
+      if (!request) return res.status(404).json({ message: "找不到加班申請" });
+      if (request.status !== "pending") {
+        return res.status(400).json({ message: "此申請已審核完畢" });
+      }
+
+      const adminId = req.session.adminId || 0;
+      const adminName = req.session.adminName || "管理員";
+      const updated = await storage.updateOvertimeRequestStatus(id, status, adminId, adminName, reviewNote);
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

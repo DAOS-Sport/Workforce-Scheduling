@@ -95,6 +95,11 @@ interface ClockInResult {
   nearbyVenues: NearbyVenue[];
   userLat: number | null;
   userLng: number | null;
+  recordId?: number;
+  earlyArrival?: boolean;
+  earlyMinutes?: number;
+  lateDeparture?: boolean;
+  lateMinutes?: number;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -706,13 +711,43 @@ function VenueShiftInfo({ employee, result }: { employee: PortalEmployee; result
   );
 }
 
+const EARLY_ARRIVAL_REASONS = [
+  "提早到，先休息等上班",
+  "提早到，先吃早餐等上班",
+];
+const LATE_DEPARTURE_REASONS = [
+  "在跟同事聊天，晚下班打卡",
+  "在整理個人物品，晚下班打卡",
+];
+
 function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: PortalEmployee; onPositionUpdate?: (lat: number, lng: number) => void; onResult?: (r: ClockInResult) => void }) {
   const [stage, setStage] = useState<"idle" | "scanning" | "submitting" | "done" | "error">("idle");
   const [result, setResult] = useState<ClockInResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [scanAngle, setScanAngle] = useState(0);
+  const [reasonSubmitted, setReasonSubmitted] = useState(false);
+  const [reasonSubmitting, setReasonSubmitting] = useState(false);
   const { toast } = useToast();
+
+  const needsReasonSelection = result && (result.earlyArrival || result.lateDeparture) && !reasonSubmitted;
+
+  const handleReasonSelect = async (reason: string) => {
+    if (!result?.recordId) return;
+    setReasonSubmitting(true);
+    try {
+      const body = result.earlyArrival
+        ? { earlyArrivalReason: reason }
+        : { lateDepartureReason: reason };
+      await apiRequest("PATCH", `/api/portal/clock-records/${result.recordId}/reason`, body);
+      setReasonSubmitted(true);
+      toast({ title: "已記錄原因" });
+    } catch (err: any) {
+      toast({ title: err.message || "記錄原因失敗", variant: "destructive" });
+    } finally {
+      setReasonSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (stage === "scanning" || stage === "submitting") {
@@ -727,6 +762,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
     setStage("scanning");
     setResult(null);
     setScanAngle(0);
+    setReasonSubmitted(false);
 
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
@@ -923,13 +959,51 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
               </div>
             )}
 
-            <button
-              className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all"
-              onClick={() => { setStage("idle"); setResult(null); }}
-              data-testid="button-clock-again"
-            >
-              再次打卡
-            </button>
+            {needsReasonSelection && (
+              <div className={`p-3 rounded-lg mb-3 border ${result.earlyArrival ? "bg-blue-50 border-blue-200" : "bg-orange-50 border-orange-200"}`} data-testid="card-reason-selection">
+                <p className={`text-sm font-medium mb-3 ${result.earlyArrival ? "text-blue-700" : "text-orange-700"}`}>
+                  {result.earlyArrival
+                    ? `您提早 ${result.earlyMinutes} 分鐘到，請選擇原因：`
+                    : `您晚於班表時間 ${result.lateMinutes} 分鐘下班，請選擇原因：`
+                  }
+                </p>
+                <div className="space-y-2">
+                  {(result.earlyArrival ? EARLY_ARRIVAL_REASONS : LATE_DEPARTURE_REASONS).map((r, i) => (
+                    <button
+                      key={i}
+                      disabled={reasonSubmitting}
+                      onClick={() => handleReasonSelect(r)}
+                      className={`w-full py-2.5 px-3 rounded-lg text-sm font-medium text-left transition-colors disabled:opacity-50 ${
+                        result.earlyArrival
+                          ? "bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300"
+                          : "bg-orange-100 hover:bg-orange-200 text-orange-800 border border-orange-300"
+                      }`}
+                      data-testid={`button-reason-${i}`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reasonSubmitted && (
+              <div className="p-3 rounded-lg mb-3 bg-green-50 border border-green-200" data-testid="card-reason-confirmed">
+                <p className="text-sm text-green-700 font-medium">
+                  {result.earlyArrival ? "已記錄，請於班表時間開始後正式上班" : "原因已記錄"}
+                </p>
+              </div>
+            )}
+
+            {!needsReasonSelection && (
+              <button
+                className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all"
+                onClick={() => { setStage("idle"); setResult(null); setReasonSubmitted(false); }}
+                data-testid="button-clock-again"
+              >
+                再次打卡
+              </button>
+            )}
           </div>
         )}
 
@@ -960,6 +1034,8 @@ interface ClockAmendmentRecord {
   requestedTime: string;
   reason: string;
   status: string;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
   reviewNote: string | null;
   createdAt: string;
 }
@@ -1103,8 +1179,183 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
                       {new Date(a.requestedTime).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">{a.reason}</p>
+                    {a.reviewedByName && a.reviewedAt && (
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        審核主管：{a.reviewedByName} | {new Date(a.reviewedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    )}
                     {a.reviewNote && (
                       <p className="text-xs text-slate-400 mt-0.5">審核備註：{a.reviewNote}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface OvertimeRequestRecord {
+  id: number;
+  employeeId: number;
+  date: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+  status: string;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+}
+
+function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
+  const [expanded, setExpanded] = useState(false);
+  const [date, setDate] = useState(() => {
+    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [startTime, setStartTime] = useState("18:00");
+  const [endTime, setEndTime] = useState("19:00");
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const { data: requests = [], refetch } = useQuery<OvertimeRequestRecord[]>({
+    queryKey: ["/api/portal/overtime-requests", employee.id],
+    enabled: expanded,
+  });
+
+  const handleSubmit = async () => {
+    if (!reason.trim()) {
+      toast({ title: "請輸入加班原因", variant: "destructive" });
+      return;
+    }
+    if (startTime >= endTime) {
+      toast({ title: "結束時間必須晚於開始時間", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await apiRequest("POST", "/api/portal/overtime-request", {
+        employeeId: employee.id,
+        date,
+        startTime,
+        endTime,
+        reason: reason.trim(),
+      });
+      toast({ title: "加班申請已送出" });
+      setReason("");
+      refetch();
+    } catch (err: any) {
+      toast({ title: err.message || "送出失敗", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const statusLabel = (s: string) => {
+    if (s === "pending") return "待審核";
+    if (s === "approved") return "已批准";
+    if (s === "rejected") return "已駁回";
+    return s;
+  };
+
+  const statusColor = (s: string) => {
+    if (s === "pending") return "bg-orange-500/10 text-orange-600 border-orange-500/20";
+    if (s === "approved") return "bg-green-500/10 text-green-600 border-green-500/20";
+    if (s === "rejected") return "bg-red-500/10 text-red-600 border-red-500/20";
+    return "";
+  };
+
+  return (
+    <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-overtime-request">
+      <button
+        className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+        data-testid="button-toggle-overtime"
+      >
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-amber-500" />
+          <span className="text-sm font-semibold text-juns-navy">加班申請</span>
+        </div>
+        <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+      </button>
+      {expanded && (
+        <div className="border-t border-juns-border p-4 space-y-4">
+          <div className="space-y-3">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+              data-testid="input-overtime-date"
+            />
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-xs text-slate-500 mb-1 block">開始時間</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                  data-testid="input-overtime-start"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-slate-500 mb-1 block">結束時間</label>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                  data-testid="input-overtime-end"
+                />
+              </div>
+            </div>
+            <textarea
+              placeholder="請輸入加班原因"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white resize-none"
+              rows={2}
+              data-testid="input-overtime-reason"
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="w-full py-2.5 bg-amber-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-amber-600 transition-colors"
+              data-testid="button-submit-overtime"
+            >
+              {submitting ? "送出中..." : "送出加班申請"}
+            </button>
+          </div>
+
+          {requests.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-slate-500">申請記錄</p>
+              {requests.map((r) => (
+                <div key={r.id} className="flex items-start gap-3 p-3 rounded-lg bg-slate-50" data-testid={`row-overtime-${r.id}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge className={statusColor(r.status)} data-testid={`badge-overtime-status-${r.id}`}>
+                        {statusLabel(r.status)}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-juns-navy">
+                      {r.date} {r.startTime}~{r.endTime}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">{r.reason}</p>
+                    {r.reviewedByName && r.reviewedAt && (
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        審核主管：{r.reviewedByName} | {new Date(r.reviewedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    )}
+                    {r.reviewNote && (
+                      <p className="text-xs text-slate-400 mt-0.5">審核備註：{r.reviewNote}</p>
                     )}
                   </div>
                 </div>
@@ -1202,6 +1453,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
         </div>
 
         <ClockAmendmentSection employee={employee} />
+        <OvertimeRequestSection employee={employee} />
 
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
           <div className="px-4 py-3 border-b border-juns-border flex items-center justify-between">

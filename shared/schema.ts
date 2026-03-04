@@ -209,6 +209,8 @@ export const clockRecords = pgTable("clock_records", {
   failReason: text("fail_reason"),
   clockTime: timestamp("clock_time").defaultNow(),
   matchedVenueName: text("matched_venue_name"),
+  earlyArrivalReason: text("early_arrival_reason"),
+  lateDepartureReason: text("late_departure_reason"),
 });
 
 export const insertClockRecordSchema = createInsertSchema(clockRecords).omit({ id: true });
@@ -225,6 +227,7 @@ export const clockAmendments = pgTable("clock_amendments", {
   reason: text("reason").notNull(),
   status: text("status").notNull().default("pending"),
   reviewedBy: integer("reviewed_by"),
+  reviewedByName: text("reviewed_by_name"),
   reviewedAt: timestamp("reviewed_at"),
   reviewNote: text("review_note"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -233,6 +236,25 @@ export const clockAmendments = pgTable("clock_amendments", {
 export const insertClockAmendmentSchema = createInsertSchema(clockAmendments).omit({ id: true, createdAt: true, reviewedAt: true });
 export type InsertClockAmendment = z.infer<typeof insertClockAmendmentSchema>;
 export type ClockAmendment = typeof clockAmendments.$inferSelect;
+
+export const overtimeRequests = pgTable("overtime_requests", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  date: text("date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"),
+  reviewedBy: integer("reviewed_by"),
+  reviewedByName: text("reviewed_by_name"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertOvertimeRequestSchema = createInsertSchema(overtimeRequests).omit({ id: true, createdAt: true, reviewedAt: true });
+export type InsertOvertimeRequest = z.infer<typeof insertOvertimeRequestSchema>;
+export type OvertimeRequest = typeof overtimeRequests.$inferSelect;
 
 export type RegionCode = "D" | "A" | "B" | "C";
 
