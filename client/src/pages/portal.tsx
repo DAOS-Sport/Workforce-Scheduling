@@ -15,7 +15,7 @@ import {
   ChevronLeft, ChevronRight, Calendar, List,
   Video, FileText, CheckCircle2, Lock, UserCheck,
   AlertTriangle, ClipboardCheck, BookOpen, Navigation, Loader2, XCircle,
-  Wifi, Signal
+  Wifi, Signal, Copy, MessageSquareWarning
 } from "lucide-react";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
 
@@ -728,9 +728,73 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
   const [scanAngle, setScanAngle] = useState(0);
   const [reasonSubmitted, setReasonSubmitted] = useState(false);
   const [reasonSubmitting, setReasonSubmitting] = useState(false);
+  const [reportCopied, setReportCopied] = useState(false);
   const { toast } = useToast();
 
   const needsReasonSelection = result && (result.earlyArrival || result.lateDeparture) && !reasonSubmitted;
+
+  const handleAnomalyReport = async () => {
+    const now = new Date();
+    const timestamp = format(now, "yyyy/MM/dd HH:mm:ss");
+    const lines: string[] = [
+      "【打卡異常報告】",
+      `報告時間：${timestamp}`,
+      "──────────────",
+      `員工姓名：${employee.name}`,
+      `員工編號：${employee.employeeCode}`,
+      `職務角色：${employee.role}`,
+      "──────────────",
+    ];
+
+    if (result) {
+      lines.push(`打卡狀態：${result.status === "success" ? "成功" : result.status === "warning" ? "警告（無排班）" : "失敗"}`);
+      lines.push(`打卡類型：${result.clockType === "in" ? "上班" : "下班"}`);
+      lines.push(`打卡時間：${result.date} ${result.time}`);
+      if (result.venueName) lines.push(`場館名稱：${result.venueName}`);
+      if (result.distance !== null) lines.push(`距離場館：${result.distance}m${result.radius ? ` (需在${result.radius}m內)` : ""}`);
+      if (result.shiftInfo) lines.push(`班別資訊：${result.shiftInfo}`);
+      if (result.failReason) lines.push(`異常原因：${result.failReason}`);
+      if (result.earlyArrival) lines.push(`提早到：${result.earlyMinutes} 分鐘`);
+      if (result.lateDeparture) lines.push(`晚下班：${result.lateMinutes} 分鐘`);
+      if (result.userLat !== null && result.userLng !== null) {
+        lines.push(`GPS 座標：${result.userLat.toFixed(6)}, ${result.userLng.toFixed(6)}`);
+      }
+      if (result.nearbyVenues && result.nearbyVenues.length > 0) {
+        lines.push("附近場館：" + result.nearbyVenues.map(v => `${v.shortName}(${v.distance}m)`).join("、"));
+      }
+    } else {
+      lines.push("打卡狀態：尚未打卡 / 系統異常");
+    }
+
+    if (accuracy !== null) lines.push(`GPS 精度：±${accuracy}m`);
+    lines.push("──────────────");
+    lines.push("※ 此為系統自動產生之異常報告，請勿修改內容。");
+
+    const reportText = lines.join("\n");
+
+    try {
+      await navigator.clipboard.writeText(reportText);
+      setReportCopied(true);
+      toast({ title: "已複製異常報告", description: "請在 LINE 400 帳號聊天室中貼上傳送" });
+      setTimeout(() => {
+        window.open("https://lin.ee/TupPc0V", "_blank");
+      }, 500);
+    } catch {
+      const textArea = document.createElement("textarea");
+      textArea.value = reportText;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setReportCopied(true);
+      toast({ title: "已複製異常報告", description: "請在 LINE 400 帳號聊天室中貼上傳送" });
+      setTimeout(() => {
+        window.open("https://lin.ee/TupPc0V", "_blank");
+      }, 500);
+    }
+  };
 
   const handleReasonSelect = async (reason: string) => {
     if (!result?.recordId) return;
@@ -995,10 +1059,40 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
               </div>
             )}
 
+            <button
+              className={`w-full h-10 rounded-lg border text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
+                reportCopied
+                  ? "border-green-300 bg-green-50 text-green-700"
+                  : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+              }`}
+              onClick={handleAnomalyReport}
+              data-testid="button-anomaly-report"
+            >
+              {reportCopied ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  已複製，請至 LINE 400 帳號貼上傳送
+                </>
+              ) : (
+                <>
+                  <MessageSquareWarning className="h-4 w-4" />
+                  提交異常報告予 400 帳號
+                </>
+              )}
+            </button>
+
+            {reportCopied && (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200" data-testid="card-report-warning">
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  ⚠️ 異常報告已複製到剪貼簿，LINE 聊天室將自動開啟。請在聊天室中<span className="font-bold">長按貼上</span>並傳送，切勿修改報告內容。
+                </p>
+              </div>
+            )}
+
             {!needsReasonSelection && (
               <button
                 className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all"
-                onClick={() => { setStage("idle"); setResult(null); setReasonSubmitted(false); }}
+                onClick={() => { setStage("idle"); setResult(null); setReasonSubmitted(false); setReportCopied(false); }}
                 data-testid="button-clock-again"
               >
                 再次打卡
@@ -1014,8 +1108,38 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
               <span className="font-medium text-sm text-red-500">{errorMsg}</span>
             </div>
             <button
+              className={`w-full h-10 rounded-lg border text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
+                reportCopied
+                  ? "border-green-300 bg-green-50 text-green-700"
+                  : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+              }`}
+              onClick={handleAnomalyReport}
+              data-testid="button-anomaly-report-error"
+            >
+              {reportCopied ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  已複製，請至 LINE 400 帳號貼上傳送
+                </>
+              ) : (
+                <>
+                  <MessageSquareWarning className="h-4 w-4" />
+                  提交異常報告予 400 帳號
+                </>
+              )}
+            </button>
+
+            {reportCopied && (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  ⚠️ 異常報告已複製到剪貼簿，LINE 聊天室將自動開啟。請在聊天室中<span className="font-bold">長按貼上</span>並傳送，切勿修改報告內容。
+                </p>
+              </div>
+            )}
+
+            <button
               className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all"
-              onClick={() => { setStage("idle"); setErrorMsg(""); }}
+              onClick={() => { setStage("idle"); setErrorMsg(""); setReportCopied(false); }}
               data-testid="button-retry-clock"
             >
               重試
