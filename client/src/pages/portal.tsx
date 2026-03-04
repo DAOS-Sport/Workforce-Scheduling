@@ -15,7 +15,7 @@ import {
   ChevronLeft, ChevronRight, Calendar, List,
   Video, FileText, CheckCircle2, Lock, UserCheck,
   AlertTriangle, ClipboardCheck, BookOpen, Navigation, Loader2, XCircle,
-  Wifi, Signal, Copy, MessageSquareWarning
+  Wifi, Signal, Copy, MessageSquareWarning, Camera, X, ImagePlus, Send
 } from "lucide-react";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
 
@@ -154,14 +154,35 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
 }) {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [userNote, setUserNote] = useState("");
+  const [images, setImages] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const { toast } = useToast();
 
-  const handleReport = async () => {
+  const handleAddImages = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const remaining = 5 - images.length;
+    const newFiles = files.slice(0, remaining);
+    setImages(prev => [...prev, ...newFiles]);
+    const newPreviews = newFiles.map(f => URL.createObjectURL(f));
+    setPreviews(prev => [...prev, ...newPreviews]);
+    e.target.value = "";
+  };
+
+  const handleRemoveImage = (index: number) => {
+    URL.revokeObjectURL(previews[index]);
+    setImages(prev => prev.filter((_, i) => i !== index));
+    setPreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const body: any = { context };
+      const formData = new FormData();
+      const payload: any = { context };
       if (employee) {
-        body.employee = {
+        payload.employee = {
           id: employee.id,
           name: employee.name,
           employeeCode: employee.employeeCode,
@@ -169,10 +190,15 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
           lineUserId: employee.lineUserId || localStorage.getItem("portal_line_user_id") || undefined,
         };
       }
-      if (clockResult) body.clockResult = clockResult;
-      if (errorMsg) body.errorMsg = errorMsg;
+      if (clockResult) payload.clockResult = clockResult;
+      if (errorMsg) payload.errorMsg = errorMsg;
+      if (userNote.trim()) payload.userNote = userNote.trim();
 
-      await apiRequest("POST", "/api/anomaly-report", body);
+      formData.append("data", JSON.stringify(payload));
+      images.forEach(img => formData.append("images", img));
+
+      const res = await fetch("/api/anomaly-report", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("送出失敗");
       setSubmitted(true);
       toast({ title: "異常報告已送出", description: "管理員將會收到通知並處理" });
     } catch {
@@ -182,32 +208,101 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
     }
   };
 
+  if (submitted) {
+    return (
+      <div className="mt-3">
+        <div className="w-full h-10 rounded-lg border border-green-300 bg-green-50 text-green-700 text-sm font-medium flex items-center justify-center gap-2">
+          <CheckCircle2 className="h-4 w-4" />
+          異常報告已送出
+        </div>
+      </div>
+    );
+  }
+
+  if (!expanded) {
+    return (
+      <div className="mt-3">
+        <button
+          className="w-full h-10 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          onClick={() => setExpanded(true)}
+          data-testid="button-anomaly-report"
+        >
+          <MessageSquareWarning className="h-4 w-4" />
+          回報異常問題
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-3">
+    <div className="mt-3 border border-red-200 rounded-xl bg-red-50/50 p-3 space-y-3" data-testid="card-anomaly-form">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-red-600 text-sm font-medium">
+          <MessageSquareWarning className="h-4 w-4" />
+          回報異常問題
+        </div>
+        <button onClick={() => setExpanded(false)} className="text-slate-400 hover:text-slate-600 p-1">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <textarea
+        className="w-full rounded-lg border border-red-200 bg-white p-2.5 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-300 resize-none"
+        rows={3}
+        placeholder="請詳細描述異常狀況，例如：打卡時 GPS 定位不準、畫面顯示錯誤、無法正常打卡等..."
+        value={userNote}
+        onChange={e => setUserNote(e.target.value)}
+        data-testid="input-anomaly-note"
+      />
+
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-white text-xs text-red-600 hover:bg-red-50 cursor-pointer active:scale-[0.98] transition-all">
+            <Camera className="h-3.5 w-3.5" />
+            拍照
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleAddImages} data-testid="input-anomaly-camera" />
+          </label>
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-white text-xs text-red-600 hover:bg-red-50 cursor-pointer active:scale-[0.98] transition-all">
+            <ImagePlus className="h-3.5 w-3.5" />
+            選擇圖片
+            <input type="file" accept="image/*" multiple className="hidden" onChange={handleAddImages} data-testid="input-anomaly-images" />
+          </label>
+          <span className="text-[10px] text-slate-400">{images.length}/5</span>
+        </div>
+
+        {previews.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {previews.map((src, i) => (
+              <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-red-200">
+                <img src={src} className="w-full h-full object-cover" />
+                <button
+                  className="absolute top-0 right-0 bg-red-500 text-white rounded-bl-lg p-0.5"
+                  onClick={() => handleRemoveImage(i)}
+                  data-testid={`button-remove-image-${i}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <button
-        className={`w-full h-10 rounded-lg border text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
-          submitted
-            ? "border-green-300 bg-green-50 text-green-700"
-            : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
-        }`}
-        onClick={handleReport}
-        disabled={submitted || submitting}
-        data-testid="button-anomaly-report"
+        className="w-full h-10 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+        onClick={handleSubmit}
+        disabled={submitting}
+        data-testid="button-submit-anomaly"
       >
         {submitting ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
             傳送中...
           </>
-        ) : submitted ? (
-          <>
-            <CheckCircle2 className="h-4 w-4" />
-            異常報告已送出
-          </>
         ) : (
           <>
-            <MessageSquareWarning className="h-4 w-4" />
-            傳送異常報告
+            <Send className="h-4 w-4" />
+            送出異常報告
           </>
         )}
       </button>

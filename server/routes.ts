@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, insertShiftSchema, insertScheduleSlotSchema, insertVenueShiftTemplateSchema, insertGuidelineSchema, insertGuidelineAckSchema, type InsertAttendanceRecord, type ShiftValidationError } from "@shared/schema";
@@ -1610,10 +1610,31 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/anomaly-report", async (req, res) => {
+  const anomalyUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, "uploads/anomaly-reports"),
+      filename: (_req, file, cb) => {
+        const ext = file.originalname.split(".").pop() || "jpg";
+        cb(null, `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`);
+      },
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype.startsWith("image/")) cb(null, true);
+      else cb(new Error("僅支援圖片檔案"));
+    },
+  });
+
+  app.use("/uploads/anomaly-reports", express.static("uploads/anomaly-reports"));
+
+  app.post("/api/anomaly-report", anomalyUpload.array("images", 5), async (req, res) => {
     try {
-      const { employee, clockResult, errorMsg, context } = req.body;
+      const body = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body;
+      const { employee, clockResult, errorMsg, context, userNote } = body;
       if (!context) return res.status(400).json({ message: "缺少異常類型 (context)" });
+
+      const files = (req.files as Express.Multer.File[]) || [];
+      const imageUrls = files.map(f => `/uploads/anomaly-reports/${f.filename}`);
 
       const now = new Date();
       const pad = (n: number) => n.toString().padStart(2, "0");
@@ -1648,6 +1669,8 @@ export async function registerRoutes(
       }
 
       if (errorMsg) lines.push(`錯誤訊息：${errorMsg}`);
+      if (userNote) lines.push(`使用者備註：${userNote}`);
+      if (imageUrls.length > 0) lines.push(`附件圖片：${imageUrls.length} 張`);
 
       lines.push("──────────────");
       lines.push("※ 此為系統自動產生之異常報告，請勿修改內容，將此文字訊息以及異常畫面圖片傳送至400感謝配合。");
@@ -1668,12 +1691,15 @@ export async function registerRoutes(
         distance: clockResult?.distance !== null && clockResult?.distance !== undefined ? `${clockResult.distance}m` : null,
         failReason: clockResult?.failReason || null,
         errorMsg: errorMsg || null,
+        userNote: userNote || null,
+        imageUrls: imageUrls.length > 0 ? imageUrls : null,
         reportText,
       });
 
       res.json({
         id: record.id,
         reportText,
+        imageUrls,
         createdAt: record.createdAt,
         lineUrl: "https://lin.ee/TupPc0V",
       });

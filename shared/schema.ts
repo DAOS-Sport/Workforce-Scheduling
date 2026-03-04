@@ -289,6 +289,8 @@ export const anomalyReports = pgTable("anomaly_reports", {
   distance: text("distance"),
   failReason: text("fail_reason"),
   errorMsg: text("error_msg"),
+  userNote: text("user_note"),
+  imageUrls: text("image_urls").array(),
   reportText: text("report_text").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
