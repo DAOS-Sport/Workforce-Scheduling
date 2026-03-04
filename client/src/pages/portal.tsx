@@ -24,6 +24,7 @@ interface PortalEmployee {
   name: string;
   employeeCode: string;
   role: string;
+  lineUserId?: string;
 }
 
 interface PortalShift {
@@ -168,8 +169,11 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
       lines.push(`員工姓名：${employee.name}`);
       lines.push(`員工編號：${employee.employeeCode}`);
       lines.push(`職務角色：${employee.role}`);
+      if (employee.lineUserId) lines.push(`LINE User ID：${employee.lineUserId}`);
     } else {
+      const storedLineUserId = localStorage.getItem("portal_line_user_id");
       lines.push("員工資訊：尚未登入 / 無法取得");
+      if (storedLineUserId) lines.push(`LINE User ID：${storedLineUserId}`);
     }
     lines.push("──────────────");
 
