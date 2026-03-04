@@ -11,6 +11,8 @@ A workforce scheduling management system for PT (personal training) staff across
 - 2026-03-01: GPS clock-in now detects late/early: compares clock-in time vs shift start (遲到), clock-out time vs shift end (早退); written to failReason field; shown in LINE reply, LIFF page (orange alert), clock-records page (orange text + separate stats card)
 - 2026-03-04: Added daily shift reminder push notifications: cron at 19:00 (Asia/Taipei) sends LINE Push Messages to employees with shifts tomorrow; includes venue, time, role; leave shifts excluded; manual trigger via POST /api/send-shift-reminders
 - 2026-03-04: Added leave types (休假/特休/病假/事假/喪假/公假) to schedule: stored in shift.role field, distinct color-coded cards, no venue/time required; leave shifts skip labor law validation
+- 2026-03-04: Employee picker selection persisted to localStorage per region: switching regions and coming back preserves previously selected employees
+- 2026-03-04: Leave types (休假/特休/病假/事假/喪假/公假) skip labor law validation: no more "超過12小時" errors when creating leave shifts
 - 2026-03-02: Schedule editor auto-includes employees who have shifts: opens with shift employees already visible in the grid, cross-region employees also auto-detected and added
 - 2026-02-24: Portal top modules added: LiveClock (real-time date/time display), Google Maps embed (shows user position after GPS clock-in), VenueShiftInfo (venue name + shift times), 上班/下班 split buttons with explicit clockType, 外出/簽到 card
 - 2026-02-24: processClockIn now accepts optional forcedClockType parameter; POST /api/liff/clock-in accepts clockType field ("in"|"out") to override auto-detection

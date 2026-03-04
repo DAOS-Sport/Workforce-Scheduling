@@ -5,6 +5,8 @@ import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, ins
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
+
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假"];
 import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders } from "./line-webhook";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -196,23 +198,27 @@ export async function registerRoutes(
         return res.status(400).json({ message: "派遣模式須填寫派遣公司" });
       }
 
-      const existingShifts = await storage.getShiftsByEmployee(parsed.employeeId);
-      const errors = validateAllRules(
-        parsed.employeeId,
-        parsed.date,
-        parsed.startTime,
-        parsed.endTime,
-        existingShifts
-      );
+      const isLeave = LEAVE_TYPES.includes(parsed.role);
+      let warnings: ShiftValidationError[] = [];
 
-      const blocking = errors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h");
-      if (blocking.length > 0) {
-        return res.status(400).json({ message: blocking[0].message });
+      if (!isLeave) {
+        const existingShifts = await storage.getShiftsByEmployee(parsed.employeeId);
+        const errors = validateAllRules(
+          parsed.employeeId,
+          parsed.date,
+          parsed.startTime,
+          parsed.endTime,
+          existingShifts
+        );
+
+        const blocking = errors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h");
+        if (blocking.length > 0) {
+          return res.status(400).json({ message: blocking[0].message });
+        }
+        warnings = errors.filter((e: ShiftValidationError) => e.type === "rest_11h");
       }
 
       const shift = await storage.createShift(parsed);
-
-      const warnings = errors.filter((e: ShiftValidationError) => e.type === "rest_11h");
       res.json({ ...shift, warnings });
     } catch (err: any) {
       if (err.name === "ZodError") {
@@ -239,15 +245,21 @@ export async function registerRoutes(
         return res.status(400).json({ message: "該員工非在職狀態，無法排班" });
       }
 
-      const existingShifts = await storage.getShiftsByEmployee(employeeId);
-      const errors = validateAllRules(employeeId, date, startTime, endTime, existingShifts, id);
-      const blocking = errors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h");
-      if (blocking.length > 0) {
-        return res.status(400).json({ message: blocking[0].message });
+      const role = partial.role || existing.role;
+      const isLeave = LEAVE_TYPES.includes(role);
+      let warnings: ShiftValidationError[] = [];
+
+      if (!isLeave) {
+        const existingShifts = await storage.getShiftsByEmployee(employeeId);
+        const errors = validateAllRules(employeeId, date, startTime, endTime, existingShifts, id);
+        const blocking = errors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h");
+        if (blocking.length > 0) {
+          return res.status(400).json({ message: blocking[0].message });
+        }
+        warnings = errors.filter((e: ShiftValidationError) => e.type === "rest_11h");
       }
 
       const shift = await storage.updateShift(id, partial);
-      const warnings = errors.filter((e: ShiftValidationError) => e.type === "rest_11h");
       res.json({ ...shift, warnings });
     } catch (err: any) {
       if (err.name === "ZodError") {
@@ -303,16 +315,19 @@ export async function registerRoutes(
         return res.status(400).json({ message: "該員工非在職狀態，無法排班" });
       }
 
-      const existingShifts = await storage.getShiftsByEmployee(employeeId);
+      const isLeave = LEAVE_TYPES.includes(role);
+      const existingShifts = isLeave ? [] : await storage.getShiftsByEmployee(employeeId);
       const results: any[] = [];
       const errors: string[] = [];
 
       for (const date of targetDates) {
-        const dayErrors = validateAllRules(employeeId, date, startTime, endTime, existingShifts);
-        const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h");
-        if (blocking.length > 0) {
-          errors.push(`${date}: ${blocking[0].message}`);
-          continue;
+        if (!isLeave) {
+          const dayErrors = validateAllRules(employeeId, date, startTime, endTime, existingShifts);
+          const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h");
+          if (blocking.length > 0) {
+            errors.push(`${date}: ${blocking[0].message}`);
+            continue;
+          }
         }
         const shift = await storage.createShift({
           employeeId,
@@ -323,7 +338,7 @@ export async function registerRoutes(
           role,
           isDispatch: isDispatch || false,
         });
-        existingShifts.push(shift as any);
+        if (!isLeave) existingShifts.push(shift as any);
         results.push(shift);
       }
 

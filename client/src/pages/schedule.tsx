@@ -94,10 +94,20 @@ export default function SchedulePage() {
   const [shiftTemplateId, setShiftTemplateId] = useState<string>("custom");
   const [shiftSelectedEmployeeIds, setShiftSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
-  const [scheduleVisibleEmployeeIds, setScheduleVisibleEmployeeIds] = useState<Set<number>>(new Set());
+  const [scheduleVisibleEmployeeIds, setScheduleVisibleEmployeeIds] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem(`schedule_visible_${activeRegion}`);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
   const [empPickerOpen, setEmpPickerOpen] = useState(false);
   const [empPickerSearch, setEmpPickerSearch] = useState("");
-  const [crossRegionEmployeeIds, setCrossRegionEmployeeIds] = useState<Set<number>>(new Set());
+  const [crossRegionEmployeeIds, setCrossRegionEmployeeIds] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem(`schedule_cross_${activeRegion}`);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
   const [crossRegionDialogOpen, setCrossRegionDialogOpen] = useState(false);
   const [crossRegionSearch, setCrossRegionSearch] = useState("");
   const [crossRegionTab, setCrossRegionTab] = useState("");
@@ -159,9 +169,24 @@ export default function SchedulePage() {
   }, [employees, crossRegionEmployees]);
 
   useEffect(() => {
-    setScheduleVisibleEmployeeIds(new Set());
-    setCrossRegionEmployeeIds(new Set());
+    try {
+      const savedVisible = localStorage.getItem(`schedule_visible_${activeRegion}`);
+      setScheduleVisibleEmployeeIds(savedVisible ? new Set(JSON.parse(savedVisible)) : new Set());
+      const savedCross = localStorage.getItem(`schedule_cross_${activeRegion}`);
+      setCrossRegionEmployeeIds(savedCross ? new Set(JSON.parse(savedCross)) : new Set());
+    } catch {
+      setScheduleVisibleEmployeeIds(new Set());
+      setCrossRegionEmployeeIds(new Set());
+    }
   }, [activeRegion]);
+
+  useEffect(() => {
+    localStorage.setItem(`schedule_visible_${activeRegion}`, JSON.stringify([...scheduleVisibleEmployeeIds]));
+  }, [scheduleVisibleEmployeeIds, activeRegion]);
+
+  useEffect(() => {
+    localStorage.setItem(`schedule_cross_${activeRegion}`, JSON.stringify([...crossRegionEmployeeIds]));
+  }, [crossRegionEmployeeIds, activeRegion]);
 
   const { data: scheduleSlots = [], isLoading: slotsLoading } = useQuery<ScheduleSlot[]>({
     queryKey: ["/api/schedule-slots", activeRegion, dateRange.start, dateRange.end],
