@@ -285,11 +285,16 @@ export default function SchedulePage() {
     });
   }, [shiftVenueTemplates, shiftDate, shiftRole]);
 
+  const { data: allVenues = [] } = useQuery<Venue[]>({
+    queryKey: ["/api/venues-all"],
+  });
+
   const venueMap = useMemo(() => {
     const map = new Map<number, Venue>();
+    allVenues.forEach((v) => map.set(v.id, v));
     venues.forEach((v) => map.set(v.id, v));
     return map;
-  }, [venues]);
+  }, [venues, allVenues]);
 
   const shiftsByEmployeeDate = useMemo(() => {
     const map = new Map<string, Shift[]>();

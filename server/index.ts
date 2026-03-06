@@ -4,7 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import cron from "node-cron";
 import { syncFromRagic } from "./ragic";
-import { sendShiftReminders } from "./line-webhook";
+import { sendShiftReminders, checkMissingClockIn, resetMissingClockInTracker } from "./line-webhook";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 
@@ -163,6 +163,22 @@ app.use((req, res, next) => {
         }
       }, { timezone: "Asia/Taipei" });
       log("已排程每日 19:00 (台灣時間) 自動推撥明日班表", "cron");
+
+      cron.schedule("*/30 6-21 * * *", async () => {
+        log("開始檢查未打卡員工...", "cron");
+        try {
+          const result = await checkMissingClockIn();
+          log(`未打卡檢查完成: 通知 ${result.notified}, 跳過 ${result.skipped}`, "cron");
+        } catch (err: any) {
+          log(`未打卡檢查失敗: ${err.message}`, "cron");
+        }
+      }, { timezone: "Asia/Taipei" });
+      log("已排程每 30 分鐘（06:00-21:30）檢查未打卡員工", "cron");
+
+      cron.schedule("0 0 * * *", () => {
+        resetMissingClockInTracker();
+      }, { timezone: "Asia/Taipei" });
+      log("已排程每日午夜重置未打卡追蹤記錄", "cron");
     },
   );
 })();

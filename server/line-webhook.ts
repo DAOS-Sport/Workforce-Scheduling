@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import nodemailer from "nodemailer";
 import { storage } from "./storage";
 import type { Venue, Shift, Employee } from "@shared/schema";
 
@@ -544,3 +545,170 @@ export async function sendShiftReminders(): Promise<{ sent: number; skipped: num
   console.log(`[推撥] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
   return { sent, skipped, noLineId };
 }
+
+const missingClockInNotified = new Set<string>();
+
+function resetMissingClockInTracker() {
+  missingClockInNotified.clear();
+  console.log("[未打卡提醒] 已重置每日追蹤記錄");
+}
+
+async function sendMissingClockInEmail(to: string[], subject: string, html: string) {
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.GMAIL_USER || "daos.ragic.system@gmail.com",
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+
+  await transporter.sendMail({
+    from: `"DAOS 打卡提醒系統" <${process.env.GMAIL_USER || "daos.ragic.system@gmail.com"}>`,
+    to: to.join(", "),
+    subject,
+    html: `<div style="font-family: 'Microsoft JhengHei', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      ${html}
+      <hr style="margin-top: 20px; border: none; border-top: 1px solid #e5e7eb;" />
+      <p style="color: #9ca3af; font-size: 12px;">此為系統自動發送的通知郵件，請勿直接回覆。</p>
+    </div>`,
+  });
+}
+
+export async function checkMissingClockIn(): Promise<{ notified: number; skipped: number }> {
+  const taipeiNow = getTaiwanNow();
+  const todayStr = formatTaiwanDate(taipeiNow);
+  const currentHour = taipeiNow.getHours();
+  const currentMinute = taipeiNow.getMinutes();
+  const currentTimeStr = `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
+
+  const allShifts = await storage.getShiftsByDate(todayStr);
+  const workShifts = allShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+
+  if (workShifts.length === 0) {
+    console.log(`[未打卡提醒] ${todayStr} 無上班班次`);
+    return { notified: 0, skipped: 0 };
+  }
+
+  const clockRecords = await storage.getClockRecordsByDateRange(todayStr, todayStr);
+  const clockedInEmployees = new Set<number>();
+  for (const cr of clockRecords) {
+    if (cr.clockType === "in" && (cr.status === "success" || cr.status === "warning")) {
+      clockedInEmployees.add(cr.employeeId);
+    }
+  }
+
+  const allVenues = await storage.getAllVenues();
+  const venueMap = new Map<number, Venue>();
+  for (const v of allVenues) venueMap.set(v.id, v);
+
+  const missingEmployees: Array<{ emp: Employee; shift: Shift; venueName: string }> = [];
+
+  for (const shift of workShifts) {
+    const shiftStart = shift.startTime.substring(0, 5);
+    const [shiftH, shiftM] = shiftStart.split(":").map(Number);
+    const lateThresholdMin = (shiftH * 60 + shiftM) + 15;
+    const currentMin = currentHour * 60 + currentMinute;
+
+    if (currentMin < lateThresholdMin) continue;
+
+    if (clockedInEmployees.has(shift.employeeId)) continue;
+
+    const notifyKey = `${todayStr}-${shift.employeeId}-${shift.id}`;
+    if (missingClockInNotified.has(notifyKey)) continue;
+
+    const emp = await storage.getEmployee(shift.employeeId);
+    if (!emp || emp.status !== "active") continue;
+
+    const venue = venueMap.get(shift.venueId);
+    const venueName = venue?.shortName || venue?.name || "未知場館";
+
+    missingEmployees.push({ emp, shift, venueName });
+    missingClockInNotified.add(notifyKey);
+  }
+
+  if (missingEmployees.length === 0) {
+    return { notified: 0, skipped: 0 };
+  }
+
+  let notified = 0;
+  let skipped = 0;
+
+  for (const { emp, shift, venueName } of missingEmployees) {
+    const shiftStart = shift.startTime.substring(0, 5);
+    const shiftEnd = shift.endTime.substring(0, 5);
+
+    if (emp.lineId) {
+      const lineMsg = [
+        `⚠️ 打卡提醒`,
+        ``,
+        `${emp.name} 您好，`,
+        `您今日 ${venueName} 的班次（${shiftStart}-${shiftEnd}）已超過上班時間，但系統尚未收到您的打卡紀錄。`,
+        ``,
+        `如果您已到達現場，請盡快透過選單中的「打卡」按鈕進行打卡。`,
+        `如需請假或有其他狀況，請聯繫您的主管。`,
+      ].join("\n");
+
+      try {
+        await pushToLine(emp.lineId, lineMsg);
+      } catch (err) {
+        console.error(`[未打卡提醒] LINE推播失敗 ${emp.name}:`, err);
+      }
+    }
+    notified++;
+  }
+
+  try {
+    const recipients = await storage.getNotificationRecipients();
+    const targets = recipients.filter(r => r.enabled && r.notifyNewReport);
+    if (targets.length > 0) {
+      const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
+      const dayName = dayNames[taipeiNow.getDay()];
+      const displayDate = `${taipeiNow.getMonth() + 1}/${taipeiNow.getDate()}（${dayName}）`;
+
+      const tableRows = missingEmployees.map(({ emp, shift, venueName }) => {
+        const shiftStart = shift.startTime.substring(0, 5);
+        const shiftEnd = shift.endTime.substring(0, 5);
+        return `<tr>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${emp.name}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${emp.employeeCode}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${venueName}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${shiftStart}-${shiftEnd}</td>
+        </tr>`;
+      }).join("");
+
+      const emailHtml = `
+        <h2 style="color: #dc2626;">⚠️ 員工未打卡提醒</h2>
+        <p>以下員工今日（${displayDate}）已超過上班時間 15 分鐘，但尚未進行打卡：</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <thead>
+            <tr style="background: #f3f4f6;">
+              <th style="padding: 8px; border: 1px solid #e5e7eb; text-align: left;">姓名</th>
+              <th style="padding: 8px; border: 1px solid #e5e7eb; text-align: left;">員工編號</th>
+              <th style="padding: 8px; border: 1px solid #e5e7eb; text-align: left;">場館</th>
+              <th style="padding: 8px; border: 1px solid #e5e7eb; text-align: left;">班次時間</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+        <p>請確認是否忘記打卡或有其他異常狀況。</p>
+        <p style="color: #6b7280; font-size: 13px;">檢查時間：${currentTimeStr}</p>
+      `;
+
+      await sendMissingClockInEmail(
+        targets.map(r => r.email),
+        `⚠️ 員工未打卡提醒 — ${displayDate}（${missingEmployees.length} 位）`,
+        emailHtml
+      );
+      console.log(`[未打卡提醒] 已發送 email 給 ${targets.length} 位管理員`);
+    }
+  } catch (err) {
+    console.error("[未打卡提醒] Email發送失敗:", err);
+  }
+
+  console.log(`[未打卡提醒] 完成: 通知 ${notified}, 跳過 ${skipped}`);
+  return { notified, skipped };
+}
+
+export { resetMissingClockInTracker };

@@ -36,6 +36,7 @@ export interface IStorage {
   createRegion(data: InsertRegion): Promise<Region>;
 
   getVenuesByRegion(regionId: number): Promise<Venue[]>;
+  getAllVenues(): Promise<Venue[]>;
   getVenue(id: number): Promise<Venue | undefined>;
   createVenue(data: InsertVenue): Promise<Venue>;
   updateVenue(id: number, data: Partial<InsertVenue>): Promise<Venue | undefined>;
@@ -48,6 +49,7 @@ export interface IStorage {
   updateEmployee(id: number, data: Partial<InsertEmployee>): Promise<Employee | undefined>;
 
   getShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<Shift[]>;
+  getDispatchedShiftsToRegion(regionId: number, startDate: string, endDate: string): Promise<Shift[]>;
   getShiftsByDate(date: string): Promise<Shift[]>;
   getShiftsByEmployee(employeeId: number): Promise<Shift[]>;
   getShift(id: number): Promise<Shift | undefined>;
@@ -151,6 +153,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(venues).where(eq(venues.regionId, regionId));
   }
 
+  async getAllVenues(): Promise<Venue[]> {
+    return db.select().from(venues);
+  }
+
   async getVenue(id: number): Promise<Venue | undefined> {
     const [venue] = await db.select().from(venues).where(eq(venues.id, id));
     return venue;
@@ -197,6 +203,21 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(shifts).where(
       and(
         inArray(shifts.employeeId, empIds),
+        gte(shifts.date, startDate),
+        lte(shifts.date, endDate)
+      )
+    );
+  }
+
+  async getDispatchedShiftsToRegion(regionId: number, startDate: string, endDate: string): Promise<Shift[]> {
+    const regionVenues = await this.getVenuesByRegion(regionId);
+    const venueIds = regionVenues.map(v => v.id);
+    if (venueIds.length === 0) return [];
+
+    return db.select().from(shifts).where(
+      and(
+        inArray(shifts.venueId, venueIds),
+        eq(shifts.isDispatch, true),
         gte(shifts.date, startDate),
         lte(shifts.date, endDate)
       )

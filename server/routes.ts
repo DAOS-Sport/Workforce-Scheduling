@@ -172,6 +172,11 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/venues-all", async (_req, res) => {
+    const allVenues = await storage.getAllVenues();
+    res.json(allVenues);
+  });
+
   app.get("/api/venues/:regionCode", async (req, res) => {
     const { regionCode } = req.params;
     const region = await storage.getRegionByCode(regionCode);
@@ -212,8 +217,14 @@ export async function registerRoutes(
     const { regionCode, startDate, endDate } = req.params;
     const region = await storage.getRegionByCode(regionCode);
     if (!region) return res.json([]);
-    const shifts = await storage.getShiftsByRegionAndDateRange(region.id, startDate, endDate);
-    res.json(shifts);
+    const regionShifts = await storage.getShiftsByRegionAndDateRange(region.id, startDate, endDate);
+    const dispatchedInShifts = await storage.getDispatchedShiftsToRegion(region.id, startDate, endDate);
+    const seenIds = new Set(regionShifts.map(s => s.id));
+    const merged = [...regionShifts];
+    for (const s of dispatchedInShifts) {
+      if (!seenIds.has(s.id)) merged.push(s);
+    }
+    res.json(merged);
   });
 
   app.post("/api/shifts", async (req, res) => {
