@@ -7,7 +7,7 @@ import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
 
 const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
-import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders } from "./line-webhook";
+import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine } from "./line-webhook";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import nodemailer from "nodemailer";
@@ -1934,6 +1934,268 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[EMAIL] Test email failed:", err);
       res.status(500).json({ message: `郵件發送失敗: ${err.message}` });
+    }
+  });
+
+  app.get("/api/weekly-attendance/:weekStart", async (req, res) => {
+    try {
+      const { weekStart } = req.params;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || isNaN(new Date(weekStart + "T00:00:00Z").getTime())) {
+        return res.status(400).json({ message: "weekStart 格式不正確 (YYYY-MM-DD)" });
+      }
+      const weekEnd = (() => {
+        const d = new Date(weekStart + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + 6);
+        return d.toISOString().split("T")[0];
+      })();
+
+      const allShifts = await storage.getAllShiftsByDateRange(weekStart, weekEnd);
+      const clockRecords = await storage.getClockRecordsByDateRange(weekStart, weekEnd);
+      const allEmployees = await storage.getAllEmployees();
+      const allVenues = await storage.getAllVenues();
+
+      const empMap = new Map(allEmployees.map(e => [e.id, e]));
+      const venueMap = new Map(allVenues.map(v => [v.id, v]));
+
+      const employeeIds = new Set(allShifts.map(s => s.employeeId));
+      const dates: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(weekStart + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + i);
+        dates.push(d.toISOString().split("T")[0]);
+      }
+
+      const clockByEmpDate = new Map<string, typeof clockRecords>();
+      for (const cr of clockRecords) {
+        const crDate = new Date(cr.clockTime).toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+        const key = `${cr.employeeId}-${crDate}`;
+        if (!clockByEmpDate.has(key)) clockByEmpDate.set(key, []);
+        clockByEmpDate.get(key)!.push(cr);
+      }
+
+      const result = Array.from(employeeIds).map(empId => {
+        const emp = empMap.get(empId);
+        if (!emp || emp.status === "inactive") return null;
+
+        const days = dates.map(date => {
+          const dayShifts = allShifts.filter(s => s.employeeId === empId && s.date === date);
+          const dayClock = clockByEmpDate.get(`${empId}-${date}`) || [];
+          const clockIns = dayClock.filter(c => c.clockType === "in");
+          const clockOuts = dayClock.filter(c => c.clockType === "out");
+
+          if (dayShifts.length === 0) {
+            return { date, status: "no_shift" as const, shifts: [], clockIns: [], clockOuts: [] };
+          }
+
+          const isLeave = dayShifts.every(s => LEAVE_TYPES.includes(s.role));
+          if (isLeave) {
+            return { date, status: "leave" as const, leaveType: dayShifts[0].role, shifts: dayShifts.map(s => ({ startTime: s.startTime, endTime: s.endTime, role: s.role, venueId: s.venueId, venueName: venueMap.get(s.venueId)?.shortName || "未知" })), clockIns: [], clockOuts: [] };
+          }
+
+          const shiftData = dayShifts.map(s => ({
+            startTime: s.startTime,
+            endTime: s.endTime,
+            role: s.role,
+            venueId: s.venueId,
+            venueName: venueMap.get(s.venueId)?.shortName || "未知",
+          }));
+
+          const clockInData = clockIns.map(c => ({
+            time: new Date(c.clockTime).toLocaleTimeString("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit" }),
+            status: c.status,
+            venue: c.matchedVenueName || "",
+            failReason: c.failReason || "",
+          }));
+          const clockOutData = clockOuts.map(c => ({
+            time: new Date(c.clockTime).toLocaleTimeString("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit" }),
+            status: c.status,
+            venue: c.matchedVenueName || "",
+          }));
+
+          const hasSuccessClockIn = clockIns.some(c => c.status === "success" || c.status === "warning");
+          const hasLateReason = clockIns.some(c => c.failReason?.includes("遲到"));
+          const hasEarlyLeave = clockOuts.some(c => c.failReason?.includes("早退"));
+
+          let status: "on_time" | "late" | "early_leave" | "missing_clock" | "anomaly" = "on_time";
+          if (!hasSuccessClockIn && clockIns.length === 0) {
+            status = "missing_clock";
+          } else if (hasLateReason) {
+            status = "late";
+          } else if (hasEarlyLeave) {
+            status = "early_leave";
+          } else if (clockIns.some(c => c.status === "fail")) {
+            status = "anomaly";
+          }
+
+          return { date, status, shifts: shiftData, clockIns: clockInData, clockOuts: clockOutData };
+        });
+
+        return {
+          id: empId,
+          name: emp.name,
+          employeeCode: emp.employeeCode,
+          lineId: emp.lineId,
+          regionId: emp.regionId,
+          days,
+        };
+      }).filter(Boolean);
+
+      res.json({ weekStart, weekEnd, dates, employees: result });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/weekly-attendance/notify", async (req, res) => {
+    try {
+      const { weekStart } = req.body;
+      if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || isNaN(new Date(weekStart + "T00:00:00Z").getTime())) {
+        return res.status(400).json({ message: "缺少或格式不正確的 weekStart (YYYY-MM-DD)" });
+      }
+
+      const weekEnd = (() => {
+        const d = new Date(weekStart + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + 6);
+        return d.toISOString().split("T")[0];
+      })();
+
+      const allShifts = await storage.getAllShiftsByDateRange(weekStart, weekEnd);
+      const clockRecords = await storage.getClockRecordsByDateRange(weekStart, weekEnd);
+      const allEmployees = await storage.getAllEmployees();
+      const allVenues = await storage.getAllVenues();
+      const empMap = new Map(allEmployees.map(e => [e.id, e]));
+      const venueMap = new Map(allVenues.map(v => [v.id, v]));
+
+      const employeeIds = new Set(allShifts.map(s => s.employeeId));
+      const dates: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(weekStart + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + i);
+        dates.push(d.toISOString().split("T")[0]);
+      }
+
+      const clockByEmpDate = new Map<string, typeof clockRecords>();
+      for (const cr of clockRecords) {
+        const crDate = new Date(cr.clockTime).toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+        const key = `${cr.employeeId}-${crDate}`;
+        if (!clockByEmpDate.has(key)) clockByEmpDate.set(key, []);
+        clockByEmpDate.get(key)!.push(cr);
+      }
+
+      const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
+      const wsDate = new Date(weekStart + "T00:00:00Z");
+      const weDate = new Date(weekEnd + "T00:00:00Z");
+      const displayRange = `${wsDate.getUTCMonth() + 1}/${wsDate.getUTCDate()} ~ ${weDate.getUTCMonth() + 1}/${weDate.getUTCDate()}`;
+
+      let lineSent = 0;
+      let lineSkipped = 0;
+      const summaryRows: string[] = [];
+
+      for (const empId of employeeIds) {
+        const emp = empMap.get(empId);
+        if (!emp || emp.status === "inactive") continue;
+
+        const dayResults: { date: string; status: string; detail: string }[] = [];
+        let hasAnomaly = false;
+
+        for (const date of dates) {
+          const dayShifts = allShifts.filter(s => s.employeeId === empId && s.date === date);
+          const dayClock = clockByEmpDate.get(`${empId}-${date}`) || [];
+          const clockIns = dayClock.filter(c => c.clockType === "in");
+
+          if (dayShifts.length === 0) {
+            dayResults.push({ date, status: "➖", detail: "無班" });
+            continue;
+          }
+
+          const isLeave = dayShifts.every(s => LEAVE_TYPES.includes(s.role));
+          if (isLeave) {
+            dayResults.push({ date, status: "🟡", detail: dayShifts[0].role });
+            continue;
+          }
+
+          const venue = venueMap.get(dayShifts[0].venueId);
+          const vName = venue?.shortName || "未知";
+          const shiftTime = `${dayShifts[0].startTime.substring(0, 5)}-${dayShifts[0].endTime.substring(0, 5)}`;
+
+          const hasSuccessIn = clockIns.some(c => c.status === "success" || c.status === "warning");
+          if (!hasSuccessIn) {
+            dayResults.push({ date, status: "🔴", detail: `${vName} ${shiftTime} 未打卡` });
+            hasAnomaly = true;
+          } else if (clockIns.some(c => c.failReason?.includes("遲到"))) {
+            dayResults.push({ date, status: "⚠️", detail: `${vName} ${shiftTime} 遲到` });
+            hasAnomaly = true;
+          } else {
+            dayResults.push({ date, status: "✅", detail: `${vName} ${shiftTime}` });
+          }
+        }
+
+        const summaryLine = dayResults.map(d => d.status).join(" ");
+        summaryRows.push(`${emp.name}(${emp.employeeCode}): ${summaryLine}${hasAnomaly ? " ⚠" : ""}`);
+
+        if (emp.lineId) {
+          const lines: string[] = [];
+          lines.push(`📊 上週打卡狀況報告`);
+          lines.push(`📅 ${displayRange}`);
+          lines.push("");
+
+          for (const dr of dayResults) {
+            const dd = new Date(dr.date + "T00:00:00Z");
+            const dayLabel = `${dd.getUTCMonth() + 1}/${dd.getUTCDate()}(${dayNames[dd.getUTCDay()]})`;
+            lines.push(`${dr.status} ${dayLabel} ${dr.detail}`);
+          }
+
+          if (hasAnomaly) {
+            lines.push("");
+            lines.push("如有上述異常狀況，請盡速向主管回報說明，謝謝 🙏");
+          } else {
+            lines.push("");
+            lines.push("本週出勤正常，辛苦了 👍");
+          }
+
+          const ok = await pushToLine(emp.lineId, lines.join("\n").trim());
+          if (ok) { lineSent++; } else { lineSkipped++; }
+        } else {
+          lineSkipped++;
+        }
+      }
+
+      let emailSent = false;
+      try {
+        const recipients = await storage.getNotificationRecipients();
+        const targets = recipients.filter(r => r.enabled && r.notifyNewReport);
+        if (targets.length > 0) {
+          const tableRows = summaryRows.map(row => `<tr><td style="padding: 6px 12px; border: 1px solid #e5e7eb; font-size: 13px; white-space: nowrap;">${row}</td></tr>`).join("");
+          const emailHtml = `
+            <h2>📊 週報打卡狀況 — ${displayRange}</h2>
+            <p>以下為上週所有排班人員的打卡狀況摘要：</p>
+            <p style="font-size: 12px; color: #6b7280;">✅準時 ⚠️遲到 🔴未打卡 🟡休假 ➖無班</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+              <tbody>${tableRows}</tbody>
+            </table>
+            <p>共 ${employeeIds.size} 位員工，LINE 推播 ${lineSent} 位，跳過 ${lineSkipped} 位。</p>
+          `;
+          await sendAnomalyEmail(
+            targets.map(r => r.email),
+            `📊 週報打卡狀況 — ${displayRange}（${employeeIds.size} 位員工）`,
+            emailHtml
+          );
+          emailSent = true;
+        }
+      } catch (err: any) {
+        console.error("[週報] Email 發送失敗:", err);
+      }
+
+      res.json({
+        success: true,
+        lineSent,
+        lineSkipped,
+        emailSent,
+        totalEmployees: employeeIds.size,
+        message: `已發送 LINE 推播 ${lineSent} 位，${emailSent ? "管理員 Email 已發送" : "Email 未發送"}`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
     }
   });
 

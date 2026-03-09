@@ -373,7 +373,7 @@ export async function processClockIn(
   };
 }
 
-async function pushToLine(userId: string, text: string): Promise<void> {
+export async function pushToLine(userId: string, text: string): Promise<boolean> {
   try {
     const resp = await fetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
@@ -388,9 +388,12 @@ async function pushToLine(userId: string, text: string): Promise<void> {
     });
     if (!resp.ok) {
       console.error("[LINE] Push failed:", resp.status, await resp.text());
+      return false;
     }
+    return true;
   } catch (err) {
     console.error("[LINE] Push failed:", err);
+    return false;
   }
 }
 

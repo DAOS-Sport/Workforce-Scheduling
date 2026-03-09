@@ -51,6 +51,7 @@ export interface IStorage {
   getShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<Shift[]>;
   getDispatchedShiftsToRegion(regionId: number, startDate: string, endDate: string): Promise<Shift[]>;
   getShiftsByDate(date: string): Promise<Shift[]>;
+  getAllShiftsByDateRange(startDate: string, endDate: string): Promise<Shift[]>;
   getShiftsByEmployee(employeeId: number): Promise<Shift[]>;
   getShift(id: number): Promise<Shift | undefined>;
   createShift(data: InsertShift): Promise<Shift>;
@@ -226,6 +227,15 @@ export class DatabaseStorage implements IStorage {
 
   async getShiftsByDate(date: string): Promise<Shift[]> {
     return db.select().from(shifts).where(eq(shifts.date, date));
+  }
+
+  async getAllShiftsByDateRange(startDate: string, endDate: string): Promise<Shift[]> {
+    return db.select().from(shifts).where(
+      and(
+        gte(shifts.date, startDate),
+        lte(shifts.date, endDate)
+      )
+    );
   }
 
   async getShiftsByEmployee(employeeId: number): Promise<Shift[]> {
