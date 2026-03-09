@@ -1,5 +1,7 @@
 import type { Shift, ShiftValidationError } from "@shared/schema";
 
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
+
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
@@ -23,7 +25,9 @@ function validateSevenDayRest(
   date: string,
   existingShifts: Shift[]
 ): ShiftValidationError | null {
-  const employeeShifts = existingShifts.filter((s) => s.employeeId === employeeId);
+  const employeeShifts = existingShifts.filter(
+    (s) => s.employeeId === employeeId && !LEAVE_TYPES.includes(s.role)
+  );
   let consecutiveDays = 0;
   for (let i = 1; i <= 6; i++) {
     const checkDate = addDaysToDate(date, -i);
@@ -78,7 +82,7 @@ function validateRestGap(
 ): ShiftValidationError | null {
   const prevDate = addDaysToDate(date, -1);
   const prevDayShifts = existingShifts.filter(
-    (s) => s.employeeId === employeeId && s.date === prevDate
+    (s) => s.employeeId === employeeId && s.date === prevDate && !LEAVE_TYPES.includes(s.role)
   );
   if (prevDayShifts.length === 0) return null;
 
