@@ -202,7 +202,14 @@ export async function syncFromRagic(): Promise<{
         updateData.status = parsed.status;
         if (parsed.phone) updateData.phone = parsed.phone;
         if (parsed.email) updateData.email = parsed.email;
-        if (parsed.lineId) updateData.lineId = parsed.lineId;
+        if (parsed.lineId) {
+          const { isValidLineUserId } = await import("./line-webhook");
+          const incomingValid = isValidLineUserId(parsed.lineId);
+          const existingValid = existing.lineId && isValidLineUserId(existing.lineId);
+          if (incomingValid || !existingValid) {
+            updateData.lineId = parsed.lineId;
+          }
+        }
         if (parsed.employmentType) updateData.employmentType = parsed.employmentType;
         if (parsed.role) updateData.role = parsed.role;
         if (regionId) updateData.regionId = regionId;

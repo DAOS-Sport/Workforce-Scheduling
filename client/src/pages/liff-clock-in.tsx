@@ -215,6 +215,7 @@ function ResultCard({ result, accuracy, onRetry }: { result: ClockInResult; accu
   const Icon = isSuccess ? CheckCircle2 : isWarning ? AlertTriangle : XCircle;
 
   const clockLabel = result.clockType === "in" ? "上班打卡" : "下班打卡";
+  const isNotBound = isFail && (result.failReason?.includes("尚未綁定") || result.failReason?.includes("找不到員工"));
   const statusText = isSuccess
     ? `${clockLabel}成功！`
     : isWarning
@@ -229,6 +230,19 @@ function ResultCard({ result, accuracy, onRetry }: { result: ClockInResult; accu
         </div>
         <p className={`text-lg font-semibold ${iconColor}`}>{statusText}</p>
       </div>
+
+      {isNotBound && (
+        <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4 mb-4" data-testid="card-not-bound-guide">
+          <p className="text-orange-300 font-semibold text-sm mb-2">帳號綁定步驟：</p>
+          <ol className="text-orange-200/80 text-xs leading-relaxed space-y-1.5 list-decimal list-inside">
+            <li>回到 LINE 官方帳號對話</li>
+            <li>傳送您的<strong>「員工編號」</strong>（純數字）</li>
+            <li>系統自動完成綁定</li>
+            <li>綁定成功後即可打卡</li>
+          </ol>
+          <p className="text-orange-400/60 text-[11px] mt-2">如不確定員工編號，請洽詢主管或 HR。</p>
+        </div>
+      )}
 
       <div className="space-y-2 text-sm">
         {result.employeeName && (

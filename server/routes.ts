@@ -7,7 +7,7 @@ import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
 
 const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
-import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine } from "./line-webhook";
+import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId } from "./line-webhook";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import nodemailer from "nodemailer";
@@ -1050,10 +1050,21 @@ export async function registerRoutes(
       const profile = await profileRes.json();
       const lineUserId = profile.userId;
 
-      const employee = await storage.getEmployeeByLineId(lineUserId);
+      let employee = await storage.getEmployeeByLineId(lineUserId);
+
+      if (!employee) {
+        const allEmps = await storage.getAllEmployees();
+        const matchByInvalidId = allEmps.find(e =>
+          e.lineId && !isValidLineUserId(e.lineId) && e.lineId === lineUserId
+        );
+        if (matchByInvalidId) {
+          employee = matchByInvalidId;
+        }
+      }
+
       if (!employee) {
         return res.status(404).json({
-          message: "您尚未完成系統綁定，請「截圖」並洽400官方帳號。",
+          message: "您的帳號尚未綁定。\n\n請回到 LINE 官方帳號，傳送您的「員工編號」即可自動綁定。\n綁定完成後再重新登入此頁面。",
           lineUserId,
           displayName: profile.displayName,
           notBound: true,
@@ -1062,6 +1073,11 @@ export async function registerRoutes(
 
       if (employee.status !== "active") {
         return res.status(403).json({ message: "此帳號已停用" });
+      }
+
+      if (!employee.lineId || !isValidLineUserId(employee.lineId)) {
+        await storage.updateEmployee(employee.id, { lineId: lineUserId });
+        console.log(`[Portal] 自動回寫 LINE ID: ${employee.name}(${employee.employeeCode}) → ${lineUserId}`);
       }
 
       res.json({
@@ -1399,6 +1415,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "lineUserId or employeeId, latitude, longitude are required" });
       }
       console.log(`[Clock-in] User: ${lineUserId || `emp#${employeeId}`}, Lat: ${latitude}, Lng: ${longitude}, Accuracy: ${accuracy}m, Type: ${clockType || "auto"}`);
+
+      if (lineUserId && isValidLineUserId(lineUserId)) {
+        const emp = await storage.getEmployeeByLineId(lineUserId);
+        if (emp && (!emp.lineId || !isValidLineUserId(emp.lineId))) {
+          await storage.updateEmployee(emp.id, { lineId: lineUserId });
+          console.log(`[LIFF] 自動回寫 LINE ID: ${emp.name}(${emp.employeeCode}) → ${lineUserId}`);
+        }
+      }
+
       const params = employeeId ? { employeeId: Number(employeeId) } : { lineUserId };
       const forcedType = clockType === "in" || clockType === "out" ? clockType : undefined;
       const result = await processClockIn(params, latitude, longitude, forcedType);

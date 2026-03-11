@@ -448,15 +448,19 @@ function LineLoginScreen({ onLogin }: { onLogin: (emp: PortalEmployee) => void }
                 </div>
                 <h1 className="text-lg font-semibold text-juns-navy mb-2">尚未綁定系統</h1>
               </div>
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-5">
-                <p className="text-sm text-orange-800 font-medium leading-relaxed">
-                  您尚未完成系統綁定，<br />
-                  請「截圖」並洽<strong>400官方帳號</strong>。
-                </p>
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-5 text-left">
+                <p className="text-sm text-orange-800 font-semibold mb-3">綁定步驟：</p>
+                <ol className="text-sm text-orange-800 leading-relaxed space-y-2 list-decimal list-inside">
+                  <li>回到 LINE 官方帳號對話</li>
+                  <li>傳送您的<strong>「員工編號」</strong>（純數字）</li>
+                  <li>系統會自動完成綁定</li>
+                  <li>綁定成功後，回到此頁面重新登入</li>
+                </ol>
+                <p className="text-xs text-orange-600 mt-3">如不確定員工編號，請洽詢主管或 HR。</p>
               </div>
               {notBoundInfo.lineUserId && (
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-5 text-left">
-                  <p className="text-[11px] text-slate-400 mb-1">您的 LINE ID（供管理員綁定）</p>
+                  <p className="text-[11px] text-slate-400 mb-1">您的 LINE ID（供技術支援參考）</p>
                   <p className="text-xs text-slate-700 font-mono break-all select-all" data-testid="text-line-user-id">{notBoundInfo.lineUserId}</p>
                   {notBoundInfo.displayName && (
                     <p className="text-xs text-slate-500 mt-1">LINE 名稱：{notBoundInfo.displayName}</p>
