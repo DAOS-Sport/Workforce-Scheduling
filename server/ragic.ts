@@ -186,11 +186,6 @@ export async function syncFromRagic(): Promise<{
         continue;
       }
 
-      if (!ACTIVE_STATUSES.includes(parsed.rawStatus)) {
-        result.skipped++;
-        continue;
-      }
-
       const regionCode = mapDepartmentToRegionCode(parsed.department);
       const regionId = regionCode ? regionMap.get(regionCode) : null;
 
@@ -199,7 +194,6 @@ export async function syncFromRagic(): Promise<{
       if (existing) {
         const updateData: Record<string, any> = {};
         if (parsed.name) updateData.name = parsed.name;
-        updateData.status = parsed.status;
         if (parsed.phone) updateData.phone = parsed.phone;
         if (parsed.email) updateData.email = parsed.email;
         if (parsed.lineId) {
@@ -213,9 +207,20 @@ export async function syncFromRagic(): Promise<{
         if (parsed.employmentType) updateData.employmentType = parsed.employmentType;
         if (parsed.role) updateData.role = parsed.role;
         if (regionId) updateData.regionId = regionId;
+
+        if (parsed.status) {
+          updateData.status = parsed.status;
+        } else if (parsed.rawStatus && INACTIVE_STATUSES.includes(parsed.rawStatus)) {
+          updateData.status = "inactive";
+        }
+
         await storage.updateEmployee(existing.id, updateData);
         result.updated++;
       } else {
+        if (!ACTIVE_STATUSES.includes(parsed.rawStatus)) {
+          result.skipped++;
+          continue;
+        }
         if (!regionId) {
           result.errors.push(`${parsed.name}(${parsed.employeeCode}): 部門「${parsed.department}」無對應區域，跳過新增`);
           result.skipped++;
