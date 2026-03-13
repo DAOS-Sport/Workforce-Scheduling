@@ -1,11 +1,15 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Download, ChevronLeft, ChevronRight, Clock, Users, TrendingUp, FileText } from "lucide-react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { Download, ChevronLeft, ChevronRight, Clock, Users, TrendingUp, FileText, Save, Pencil, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const REGION_OPTIONS = [
   { value: "all", label: "全部地區" },
@@ -44,28 +48,54 @@ type SalaryReport = {
   employees: EmpStats[];
 };
 
-function exportCSV(report: SalaryReport, regionLabel: string) {
+type SalaryRateConfig = {
+  id: number;
+  role: string;
+  ratePerHour: number;
+  label: string | null;
+};
+
+function calcSalary(emp: EmpStats, rates: Record<string, number>, workRoles: string[]): number {
+  return workRoles.reduce((sum, role) => {
+    const hrs = emp.hours[role] || 0;
+    const rate = rates[role] || 0;
+    return sum + hrs * rate;
+  }, 0);
+}
+
+function exportCSV(report: SalaryReport, rates: Record<string, number>, regionLabel: string) {
   const { year, month, workRoles, leaveTypes, employees } = report;
 
   const headers = [
     "員工代號", "姓名", "地區",
     ...workRoles.map(r => `${r}(時數)`),
     "總工時",
+    ...workRoles.filter(r => rates[r] > 0).map(r => `${r}(${rates[r]}元/時)`),
+    "薪資小計",
     ...leaveTypes.map(l => `${l}(天)`),
     "假日合計",
     "排班次數",
   ];
 
-  const rows = employees.map(e => [
-    e.employeeCode,
-    e.name,
-    e.region,
-    ...workRoles.map(r => (e.hours[r] || 0).toFixed(1)),
-    e.totalWorkHours.toFixed(1),
-    ...leaveTypes.map(l => e.leaves[l] || 0),
-    e.totalLeaveDays,
-    e.shiftCount,
-  ]);
+  const rows = employees.map(e => {
+    const salary = calcSalary(e, rates, workRoles);
+    return [
+      e.employeeCode,
+      e.name,
+      e.region,
+      ...workRoles.map(r => (e.hours[r] || 0).toFixed(1)),
+      e.totalWorkHours.toFixed(1),
+      ...workRoles.filter(r => rates[r] > 0).map(r => {
+        const hrs = e.hours[r] || 0;
+        const rate = rates[r];
+        return (hrs * rate).toFixed(0);
+      }),
+      salary.toFixed(0),
+      ...leaveTypes.map(l => e.leaves[l] || 0),
+      e.totalLeaveDays,
+      e.shiftCount,
+    ];
+  });
 
   const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
   const bom = "\uFEFF";
@@ -83,7 +113,11 @@ export default function SalaryReportPage() {
   const [year, setYear] = useState(now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() === 0 ? 12 : now.getMonth());
   const [regionCode, setRegionCode] = useState("all");
-  const [sortKey, setSortKey] = useState<"name" | "hours" | "region">("region");
+  const [sortKey, setSortKey] = useState<"name" | "hours" | "region" | "salary">("region");
+  const [localRates, setLocalRates] = useState<Record<string, string>>({});
+  const [editingRates, setEditingRates] = useState(false);
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const { toast } = useToast();
 
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear(y => y - 1); }
@@ -106,22 +140,95 @@ export default function SalaryReportPage() {
     },
   });
 
+  const { data: savedRates } = useQuery<SalaryRateConfig[]>({
+    queryKey: ["/api/salary-rates"],
+    queryFn: async () => {
+      const res = await fetch("/api/salary-rates", { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    if (!savedRates) return;
+    const map: Record<string, string> = {};
+    savedRates.forEach(r => { map[r.role] = String(r.ratePerHour); });
+    setLocalRates(prev => {
+      const next = { ...map };
+      Object.keys(prev).forEach(k => {
+        if (prev[k] !== "") next[k] = prev[k];
+      });
+      return next;
+    });
+  }, [savedRates]);
+
+  const upsertRate = useMutation({
+    mutationFn: async ({ role, ratePerHour }: { role: string; ratePerHour: number }) => {
+      const res = await apiRequest("POST", "/api/salary-rates", { role, ratePerHour });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/salary-rates"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "儲存費率失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const effectiveRates = useMemo((): Record<string, number> => {
+    const map: Record<string, number> = {};
+    (savedRates || []).forEach(r => { map[r.role] = r.ratePerHour; });
+    Object.entries(localRates).forEach(([role, val]) => {
+      const n = parseFloat(val);
+      if (!isNaN(n)) map[role] = n;
+    });
+    return map;
+  }, [savedRates, localRates]);
+
+  const handleRateChange = useCallback((role: string, value: string) => {
+    setLocalRates(prev => ({ ...prev, [role]: value }));
+    clearTimeout(debounceTimers.current[role]);
+    debounceTimers.current[role] = setTimeout(() => {
+      const n = parseFloat(value);
+      if (!isNaN(n) && n >= 0) {
+        upsertRate.mutate({ role, ratePerHour: n });
+      }
+    }, 800);
+  }, [upsertRate]);
+
+  const hasAnyRate = Object.values(effectiveRates).some(v => v > 0);
+
   const sortedEmployees = useMemo(() => {
     if (!data) return [];
     return [...data.employees].sort((a, b) => {
       if (sortKey === "hours") return b.totalWorkHours - a.totalWorkHours;
+      if (sortKey === "salary") return calcSalary(b, effectiveRates, data.workRoles) - calcSalary(a, effectiveRates, data.workRoles);
       if (sortKey === "name") return a.name.localeCompare(b.name, "zh-Hant");
       return a.region.localeCompare(b.region) || a.name.localeCompare(b.name, "zh-Hant");
     });
-  }, [data, sortKey]);
+  }, [data, sortKey, effectiveRates]);
 
   const totalHours = useMemo(() => data?.employees.reduce((s, e) => s + e.totalWorkHours, 0) || 0, [data]);
   const totalPersons = data?.employees.length || 0;
   const avgHours = totalPersons > 0 ? Math.round(totalHours / totalPersons * 10) / 10 : 0;
   const totalShifts = useMemo(() => data?.employees.reduce((s, e) => s + e.shiftCount, 0) || 0, [data]);
+  const totalSalary = useMemo(() => {
+    if (!data) return 0;
+    return data.employees.reduce((sum, e) => sum + calcSalary(e, effectiveRates, data.workRoles), 0);
+  }, [data, effectiveRates]);
 
   const regionLabel = REGION_OPTIONS.find(r => r.value === regionCode)?.label || "全部";
   const monthLabel = `${year}年${month}月`;
+
+  const saveAllRates = () => {
+    if (!data) return;
+    data.workRoles.forEach(role => {
+      const val = localRates[role];
+      const n = parseFloat(val || "0");
+      if (!isNaN(n)) upsertRate.mutate({ role, ratePerHour: n });
+    });
+    toast({ title: "費率已儲存" });
+  };
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -129,7 +236,7 @@ export default function SalaryReportPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-xl font-bold">薪資時數報表</h1>
-            <p className="text-sm text-muted-foreground">統計當月各員工班別工時，供薪資計算參考</p>
+            <p className="text-sm text-muted-foreground">統計當月各員工班別工時，填入各班別時薪後自動計算薪資</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1 border rounded-lg overflow-hidden">
@@ -158,15 +265,26 @@ export default function SalaryReportPage() {
               <SelectContent>
                 <SelectItem value="region">依地區</SelectItem>
                 <SelectItem value="hours">依工時</SelectItem>
+                <SelectItem value="salary">依薪資</SelectItem>
                 <SelectItem value="name">依姓名</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              variant={editingRates ? "default" : "outline"}
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={() => setEditingRates(e => !e)}
+              data-testid="button-toggle-rate-edit"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              {editingRates ? "完成編輯" : "設定時薪"}
+            </Button>
             {data && (
               <Button
                 variant="outline"
                 size="sm"
                 className="h-8 gap-1.5"
-                onClick={() => exportCSV(data, regionLabel)}
+                onClick={() => exportCSV(data, effectiveRates, regionLabel)}
                 data-testid="button-export-csv"
               >
                 <Download className="h-3.5 w-3.5" />
@@ -184,7 +302,7 @@ export default function SalaryReportPage() {
             <div>
               <p className="text-xs text-muted-foreground">排班人數</p>
               <p className="text-xl font-bold text-blue-600 dark:text-blue-400" data-testid="stat-total-persons">
-                {isLoading ? <Skeleton className="h-5 w-10" /> : totalPersons}
+                {isLoading ? <Skeleton className="h-5 w-10 inline-block" /> : totalPersons}
               </p>
             </div>
           </CardContent>
@@ -195,7 +313,7 @@ export default function SalaryReportPage() {
             <div>
               <p className="text-xs text-muted-foreground">總工時</p>
               <p className="text-xl font-bold text-green-600 dark:text-green-400" data-testid="stat-total-hours">
-                {isLoading ? <Skeleton className="h-5 w-16" /> : `${totalHours.toFixed(1)}h`}
+                {isLoading ? <Skeleton className="h-5 w-16 inline-block" /> : `${totalHours.toFixed(1)}h`}
               </p>
             </div>
           </CardContent>
@@ -206,23 +324,69 @@ export default function SalaryReportPage() {
             <div>
               <p className="text-xs text-muted-foreground">人均工時</p>
               <p className="text-xl font-bold text-purple-600 dark:text-purple-400" data-testid="stat-avg-hours">
-                {isLoading ? <Skeleton className="h-5 w-16" /> : `${avgHours}h`}
+                {isLoading ? <Skeleton className="h-5 w-16 inline-block" /> : `${avgHours}h`}
               </p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-0 bg-orange-50 dark:bg-orange-950/30">
+        <Card className={`border-0 ${hasAnyRate ? "bg-emerald-50 dark:bg-emerald-950/30" : "bg-orange-50 dark:bg-orange-950/30"}`}>
           <CardContent className="p-3 flex items-center gap-3">
-            <FileText className="h-5 w-5 text-orange-500 shrink-0" />
+            <FileText className={`h-5 w-5 shrink-0 ${hasAnyRate ? "text-emerald-500" : "text-orange-500"}`} />
             <div>
-              <p className="text-xs text-muted-foreground">排班次數</p>
-              <p className="text-xl font-bold text-orange-600 dark:text-orange-400" data-testid="stat-total-shifts">
-                {isLoading ? <Skeleton className="h-5 w-10" /> : totalShifts}
+              <p className="text-xs text-muted-foreground">{hasAnyRate ? "薪資總計" : "排班次數"}</p>
+              <p className={`text-xl font-bold ${hasAnyRate ? "text-emerald-600 dark:text-emerald-400" : "text-orange-600 dark:text-orange-400"}`} data-testid="stat-total-salary">
+                {isLoading ? <Skeleton className="h-5 w-16 inline-block" /> :
+                  hasAnyRate ? `$${totalSalary.toLocaleString()}` : totalShifts
+                }
               </p>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {editingRates && data && data.workRoles.length > 0 && (
+        <div className="flex-none mx-4 mb-3 p-3 rounded-xl border border-dashed border-primary/40 bg-primary/5">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Pencil className="h-3.5 w-3.5 text-primary" />
+            <span className="text-sm font-semibold text-primary">設定各班別時薪</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p className="text-xs">填入時薪後系統自動計算：工時 × 時薪 = 薪資小計<br />設定值會自動儲存至資料庫</p>
+              </TooltipContent>
+            </Tooltip>
+            <Button size="sm" variant="outline" className="ml-auto h-7 gap-1 text-xs" onClick={saveAllRates} data-testid="button-save-all-rates">
+              <Save className="h-3 w-3" />
+              全部儲存
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {data.workRoles.map(role => {
+              const colorClass = ROLE_COLORS[role] || "bg-gray-100 text-gray-800";
+              return (
+                <div key={role} className="flex items-center gap-2">
+                  <Badge variant="secondary" className={`text-xs ${colorClass} border-0 whitespace-nowrap`}>{role}</Badge>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={localRates[role] ?? (effectiveRates[role] || "")}
+                      onChange={e => handleRateChange(role, e.target.value)}
+                      placeholder="時薪"
+                      className="h-7 w-24 text-sm font-mono"
+                      data-testid={`input-rate-${role}`}
+                    />
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">元/時</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto px-4 pb-4">
         {isLoading ? (
@@ -247,14 +411,25 @@ export default function SalaryReportPage() {
                 <tr className="bg-muted/50 border-b">
                   <th className="text-left px-3 py-2.5 font-semibold text-xs text-muted-foreground sticky left-0 bg-muted/50 min-w-[110px]">員工</th>
                   <th className="text-left px-3 py-2.5 font-semibold text-xs text-muted-foreground min-w-[80px]">地區</th>
-                  {data.workRoles.map(r => (
-                    <th key={r} className="text-right px-3 py-2.5 font-semibold text-xs text-muted-foreground min-w-[72px]">
-                      {r}<br /><span className="font-normal opacity-70">(時數)</span>
-                    </th>
-                  ))}
+                  {data.workRoles.map(r => {
+                    const rate = effectiveRates[r] || 0;
+                    return (
+                      <th key={r} className="text-right px-3 py-2.5 font-semibold text-xs text-muted-foreground min-w-[80px]">
+                        <div>{r}</div>
+                        <div className="font-normal text-[10px] opacity-70">
+                          {rate > 0 ? `${rate}元/時` : "(時數)"}
+                        </div>
+                      </th>
+                    );
+                  })}
                   <th className="text-right px-3 py-2.5 font-semibold text-xs text-blue-600 dark:text-blue-400 min-w-[72px] bg-blue-50/50 dark:bg-blue-950/20">
                     總工時
                   </th>
+                  {hasAnyRate && (
+                    <th className="text-right px-3 py-2.5 font-semibold text-xs text-emerald-600 dark:text-emerald-400 min-w-[90px] bg-emerald-50/50 dark:bg-emerald-950/20">
+                      薪資小計
+                    </th>
+                  )}
                   {data.leaveTypes.map(l => (
                     <th key={l} className="text-right px-3 py-2.5 font-semibold text-xs text-muted-foreground min-w-[64px]">
                       {l}<br /><span className="font-normal opacity-70">(天)</span>
@@ -269,62 +444,80 @@ export default function SalaryReportPage() {
                 </tr>
               </thead>
               <tbody>
-                {sortedEmployees.map((emp, idx) => (
-                  <tr
-                    key={emp.id}
-                    className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${idx % 2 === 0 ? "" : "bg-muted/10"}`}
-                    data-testid={`row-employee-${emp.id}`}
-                  >
-                    <td className="px-3 py-2 sticky left-0 bg-background">
-                      <div className="font-medium truncate max-w-[100px]" title={emp.name}>{emp.name}</div>
-                      <div className="text-[10px] text-muted-foreground">{emp.employeeCode}</div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="text-xs text-muted-foreground">{emp.region}</span>
-                    </td>
-                    {data.workRoles.map(r => {
-                      const hrs = emp.hours[r] || 0;
-                      const colorClass = ROLE_COLORS[r] || "bg-gray-100 text-gray-800";
-                      return (
-                        <td key={r} className="px-3 py-2 text-right" data-testid={`cell-hours-${emp.id}-${r}`}>
-                          {hrs > 0 ? (
-                            <Badge variant="secondary" className={`text-xs font-mono ${colorClass} border-0`}>
-                              {hrs.toFixed(1)}h
-                            </Badge>
+                {sortedEmployees.map((emp, idx) => {
+                  const salary = calcSalary(emp, effectiveRates, data.workRoles);
+                  return (
+                    <tr
+                      key={emp.id}
+                      className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${idx % 2 === 0 ? "" : "bg-muted/10"}`}
+                      data-testid={`row-employee-${emp.id}`}
+                    >
+                      <td className="px-3 py-2 sticky left-0 bg-background">
+                        <div className="font-medium truncate max-w-[100px]" title={emp.name}>{emp.name}</div>
+                        <div className="text-[10px] text-muted-foreground">{emp.employeeCode}</div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="text-xs text-muted-foreground">{emp.region}</span>
+                      </td>
+                      {data.workRoles.map(r => {
+                        const hrs = emp.hours[r] || 0;
+                        const rate = effectiveRates[r] || 0;
+                        const colorClass = ROLE_COLORS[r] || "bg-gray-100 text-gray-800";
+                        return (
+                          <td key={r} className="px-3 py-2 text-right" data-testid={`cell-hours-${emp.id}-${r}`}>
+                            {hrs > 0 ? (
+                              <div className="flex flex-col items-end gap-0.5">
+                                <Badge variant="secondary" className={`text-xs font-mono ${colorClass} border-0`}>
+                                  {hrs.toFixed(1)}h
+                                </Badge>
+                                {rate > 0 && (
+                                  <span className="text-[10px] text-muted-foreground font-mono">
+                                    ${(hrs * rate).toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground/40 text-xs">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-right bg-blue-50/30 dark:bg-blue-950/10">
+                        <span className="font-bold text-blue-600 dark:text-blue-400 font-mono text-sm" data-testid={`cell-total-hours-${emp.id}`}>
+                          {emp.totalWorkHours.toFixed(1)}h
+                        </span>
+                      </td>
+                      {hasAnyRate && (
+                        <td className="px-3 py-2 text-right bg-emerald-50/30 dark:bg-emerald-950/10">
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono text-sm" data-testid={`cell-salary-${emp.id}`}>
+                            ${salary.toLocaleString()}
+                          </span>
+                        </td>
+                      )}
+                      {data.leaveTypes.map(l => (
+                        <td key={l} className="px-3 py-2 text-right">
+                          {(emp.leaves[l] || 0) > 0 ? (
+                            <span className="text-xs font-medium text-amber-600 dark:text-amber-400">{emp.leaves[l]}天</span>
                           ) : (
                             <span className="text-muted-foreground/40 text-xs">—</span>
                           )}
                         </td>
-                      );
-                    })}
-                    <td className="px-3 py-2 text-right bg-blue-50/30 dark:bg-blue-950/10">
-                      <span className="font-bold text-blue-600 dark:text-blue-400 font-mono text-sm" data-testid={`cell-total-hours-${emp.id}`}>
-                        {emp.totalWorkHours.toFixed(1)}h
-                      </span>
-                    </td>
-                    {data.leaveTypes.map(l => (
-                      <td key={l} className="px-3 py-2 text-right">
-                        {(emp.leaves[l] || 0) > 0 ? (
-                          <span className="text-xs font-medium text-amber-600 dark:text-amber-400">{emp.leaves[l]}天</span>
-                        ) : (
-                          <span className="text-muted-foreground/40 text-xs">—</span>
-                        )}
+                      ))}
+                      {data.leaveTypes.length > 0 && (
+                        <td className="px-3 py-2 text-right bg-orange-50/30 dark:bg-orange-950/10">
+                          {emp.totalLeaveDays > 0 ? (
+                            <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{emp.totalLeaveDays}天</span>
+                          ) : (
+                            <span className="text-muted-foreground/40 text-xs">—</span>
+                          )}
+                        </td>
+                      )}
+                      <td className="px-3 py-2 text-right text-muted-foreground text-xs">
+                        {emp.shiftCount}
                       </td>
-                    ))}
-                    {data.leaveTypes.length > 0 && (
-                      <td className="px-3 py-2 text-right bg-orange-50/30 dark:bg-orange-950/10">
-                        {emp.totalLeaveDays > 0 ? (
-                          <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{emp.totalLeaveDays}天</span>
-                        ) : (
-                          <span className="text-muted-foreground/40 text-xs">—</span>
-                        )}
-                      </td>
-                    )}
-                    <td className="px-3 py-2 text-right text-muted-foreground text-xs">
-                      {emp.shiftCount}
-                    </td>
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="bg-muted/60 border-t-2 font-semibold">
@@ -332,15 +525,25 @@ export default function SalaryReportPage() {
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">{totalPersons} 人</td>
                   {data.workRoles.map(r => {
                     const total = data.employees.reduce((s, e) => s + (e.hours[r] || 0), 0);
+                    const rate = effectiveRates[r] || 0;
+                    const totalPay = total * rate;
                     return (
-                      <td key={r} className="px-3 py-2.5 text-right text-sm font-mono">
-                        {total > 0 ? `${total.toFixed(1)}h` : "—"}
+                      <td key={r} className="px-3 py-2.5 text-right">
+                        <div className="text-sm font-mono">{total > 0 ? `${total.toFixed(1)}h` : "—"}</div>
+                        {rate > 0 && total > 0 && (
+                          <div className="text-[10px] text-muted-foreground font-mono">${totalPay.toLocaleString()}</div>
+                        )}
                       </td>
                     );
                   })}
                   <td className="px-3 py-2.5 text-right text-blue-600 dark:text-blue-400 font-bold font-mono text-sm bg-blue-50/30 dark:bg-blue-950/10">
                     {totalHours.toFixed(1)}h
                   </td>
+                  {hasAnyRate && (
+                    <td className="px-3 py-2.5 text-right text-emerald-600 dark:text-emerald-400 font-bold font-mono text-sm bg-emerald-50/30 dark:bg-emerald-950/10">
+                      ${totalSalary.toLocaleString()}
+                    </td>
+                  )}
                   {data.leaveTypes.map(l => {
                     const total = data.employees.reduce((s, e) => s + (e.leaves[l] || 0), 0);
                     return (

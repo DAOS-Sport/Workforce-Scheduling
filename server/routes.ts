@@ -2040,6 +2040,28 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/salary-rates", async (req, res) => {
+    try {
+      const rates = await storage.getSalaryRates();
+      res.json(rates);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/salary-rates", async (req, res) => {
+    try {
+      const { role, ratePerHour, label } = req.body;
+      if (!role || ratePerHour === undefined) {
+        return res.status(400).json({ message: "需提供 role 和 ratePerHour" });
+      }
+      const rate = await storage.upsertSalaryRate(role, Number(ratePerHour), label);
+      res.json(rate);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/salary-report", async (req, res) => {
     try {
       const year = parseInt(req.query.year as string);

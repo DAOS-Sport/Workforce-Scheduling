@@ -11,6 +11,7 @@ import {
   dispatchShifts,
   anomalyReports,
   notificationRecipients,
+  salaryRateConfigs,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -28,6 +29,7 @@ import {
   type DispatchShift, type InsertDispatchShift,
   type AnomalyReport, type InsertAnomalyReport,
   type NotificationRecipient, type InsertNotificationRecipient,
+  type SalaryRateConfig,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -133,6 +135,9 @@ export interface IStorage {
   createNotificationRecipient(data: InsertNotificationRecipient): Promise<NotificationRecipient>;
   updateNotificationRecipient(id: number, data: Partial<InsertNotificationRecipient>): Promise<NotificationRecipient | undefined>;
   deleteNotificationRecipient(id: number): Promise<void>;
+
+  getSalaryRates(): Promise<SalaryRateConfig[]>;
+  upsertSalaryRate(role: string, ratePerHour: number, label?: string): Promise<SalaryRateConfig>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -651,6 +656,26 @@ export class DatabaseStorage implements IStorage {
 
   async deleteNotificationRecipient(id: number): Promise<void> {
     await db.delete(notificationRecipients).where(eq(notificationRecipients.id, id));
+  }
+
+  async getSalaryRates(): Promise<SalaryRateConfig[]> {
+    return db.select().from(salaryRateConfigs).orderBy(salaryRateConfigs.role);
+  }
+
+  async upsertSalaryRate(role: string, ratePerHour: number, label?: string): Promise<SalaryRateConfig> {
+    const existing = await db.select().from(salaryRateConfigs).where(eq(salaryRateConfigs.role, role));
+    if (existing.length > 0) {
+      const [updated] = await db.update(salaryRateConfigs)
+        .set({ ratePerHour, label, updatedAt: new Date() })
+        .where(eq(salaryRateConfigs.role, role))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(salaryRateConfigs)
+        .values({ role, ratePerHour, label })
+        .returning();
+      return created;
+    }
   }
 }
 

@@ -301,6 +301,18 @@ export const insertAnomalyReportSchema = createInsertSchema(anomalyReports).omit
 export type InsertAnomalyReport = z.infer<typeof insertAnomalyReportSchema>;
 export type AnomalyReport = typeof anomalyReports.$inferSelect;
 
+export const salaryRateConfigs = pgTable("salary_rate_configs", {
+  id: serial("id").primaryKey(),
+  role: text("role").notNull().unique(),
+  ratePerHour: real("rate_per_hour").notNull().default(0),
+  label: text("label"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSalaryRateConfigSchema = createInsertSchema(salaryRateConfigs).omit({ id: true, updatedAt: true });
+export type InsertSalaryRateConfig = z.infer<typeof insertSalaryRateConfigSchema>;
+export type SalaryRateConfig = typeof salaryRateConfigs.$inferSelect;
+
 export const notificationRecipients = pgTable("notification_recipients", {
   id: serial("id").primaryKey(),
   email: text("email").notNull(),
