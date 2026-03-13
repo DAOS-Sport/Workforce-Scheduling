@@ -390,6 +390,75 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/shifts/batch-update", async (req, res) => {
+    try {
+      const {
+        currentShiftId,
+        employeeId,
+        targetDates,
+        venueId,
+        startTime,
+        endTime,
+        role,
+        isDispatch,
+        matchVenueId,
+        matchStartTime,
+        matchEndTime,
+        matchRole,
+      } = req.body;
+
+      if (!currentShiftId || !employeeId || !Array.isArray(targetDates)) {
+        return res.status(400).json({ message: "缺少必要欄位" });
+      }
+
+      const empId = Number(employeeId);
+      const isLeave = LEAVE_TYPES.includes(role);
+      const effectiveVenueId = isLeave ? (venueId || 1) : parseInt(venueId);
+      const effectiveStart = isLeave ? "00:00" : startTime;
+      const effectiveEnd = isLeave ? "00:00" : endTime;
+
+      const updated: any[] = [];
+      const errors: string[] = [];
+
+      const currentUpdated = await storage.updateShift(Number(currentShiftId), {
+        venueId: effectiveVenueId,
+        startTime: effectiveStart,
+        endTime: effectiveEnd,
+        role,
+        isDispatch: isLeave ? false : (isDispatch || false),
+      });
+      if (currentUpdated) updated.push(currentUpdated);
+
+      for (const date of targetDates) {
+        const dayShifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
+        const matching = dayShifts.filter(s =>
+          (!matchVenueId || s.venueId === Number(matchVenueId)) &&
+          (!matchStartTime || s.startTime === matchStartTime) &&
+          (!matchEndTime || s.endTime === matchEndTime) &&
+          (!matchRole || s.role === matchRole)
+        );
+        if (matching.length === 0) {
+          errors.push(`${date}: 找不到符合的班次，略過`);
+          continue;
+        }
+        for (const s of matching) {
+          const result = await storage.updateShift(s.id, {
+            venueId: effectiveVenueId,
+            startTime: effectiveStart,
+            endTime: effectiveEnd,
+            role,
+            isDispatch: isLeave ? false : (isDispatch || false),
+          });
+          if (result) updated.push(result);
+        }
+      }
+
+      res.json({ updated: updated.length, errors, shifts: updated });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/shifts/copy-from-previous", async (req, res) => {
     try {
       const { regionCode, targetYear, targetMonth } = req.body;

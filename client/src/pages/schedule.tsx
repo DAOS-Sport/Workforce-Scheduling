@@ -542,6 +542,36 @@ export default function SchedulePage() {
     },
   });
 
+  const batchUpdateShifts = useMutation({
+    mutationFn: async (data: {
+      currentShiftId: number;
+      employeeId: number;
+      targetDates: string[];
+      venueId: string;
+      startTime: string;
+      endTime: string;
+      role: string;
+      isDispatch: boolean;
+      matchVenueId: number;
+      matchStartTime: string;
+      matchEndTime: string;
+      matchRole: string;
+    }) => {
+      const res = await apiRequest("POST", "/api/shifts/batch-update", data);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      const errMsg = data.errors?.length > 0 ? `（${data.errors.length} 天找不到符合班次）` : "";
+      toast({ title: `已更新 ${data.updated} 筆班次` + errMsg });
+      setShiftBatchDates(new Set());
+      setShiftBatchMode(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "批次更新失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
   const copyFromPrevious = useMutation({
     mutationFn: async (data: { regionCode: string; targetYear: number; targetMonth: number }) => {
       const res = await apiRequest("POST", "/api/shifts/copy-from-previous", data);
@@ -663,16 +693,33 @@ export default function SchedulePage() {
     if (!isLeave && (!effectiveVenueId || !shiftStartTime || !shiftEndTime)) return;
 
     if (editingShift) {
-      updateShift.mutate({
-        id: editingShift.id,
-        employeeId: shiftEmployeeId!,
-        venueId: parseInt(effectiveVenueId),
-        date: shiftDate,
-        startTime: effectiveStart,
-        endTime: effectiveEnd,
-        role: shiftRole,
-        isDispatch: isLeave ? false : shiftIsDispatch,
-      });
+      if (shiftBatchMode && shiftBatchDates.size > 0) {
+        batchUpdateShifts.mutate({
+          currentShiftId: editingShift.id,
+          employeeId: shiftEmployeeId!,
+          targetDates: Array.from(shiftBatchDates),
+          venueId: effectiveVenueId,
+          startTime: effectiveStart,
+          endTime: effectiveEnd,
+          role: shiftRole,
+          isDispatch: isLeave ? false : shiftIsDispatch,
+          matchVenueId: editingShift.venueId,
+          matchStartTime: editingShift.startTime.substring(0, 5),
+          matchEndTime: editingShift.endTime.substring(0, 5),
+          matchRole: editingShift.role,
+        });
+      } else {
+        updateShift.mutate({
+          id: editingShift.id,
+          employeeId: shiftEmployeeId!,
+          venueId: parseInt(effectiveVenueId),
+          date: shiftDate,
+          startTime: effectiveStart,
+          endTime: effectiveEnd,
+          role: shiftRole,
+          isDispatch: isLeave ? false : shiftIsDispatch,
+        });
+      }
       setShiftDialogOpen(false);
     } else {
       const targetEmployeeIds = shiftSelectedEmployeeIds.size > 0
@@ -1990,12 +2037,14 @@ export default function SchedulePage() {
               </Button>
               <Button
                 onClick={handleSaveShift}
-                disabled={!shiftVenueId || !shiftStartTime || !shiftEndTime || batchCreateShifts.isPending}
+                disabled={!shiftVenueId || !shiftStartTime || !shiftEndTime || batchCreateShifts.isPending || batchUpdateShifts.isPending || updateShift.isPending}
                 data-testid="button-save-shift"
               >
                 {shiftBatchMode && shiftBatchDates.size > 0
-                  ? batchCreateShifts.isPending ? "調整中..." : `批次調整 (${shiftBatchDates.size + 1}天)`
-                  : "儲存"}
+                  ? (batchCreateShifts.isPending || batchUpdateShifts.isPending)
+                    ? "更新中..."
+                    : `批次${editingShift ? "更新" : "調整"} (${shiftBatchDates.size + 1}天)`
+                  : updateShift.isPending ? "儲存中..." : "儲存"}
               </Button>
             </div>
           </DialogFooter>
