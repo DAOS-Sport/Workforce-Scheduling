@@ -19,22 +19,35 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronLeft, ChevronRight, CalendarDays, Plus, Minus, ChevronUp, ChevronDown,
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
-  Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft
+  Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft,
+  GraduationCap, Award, Briefcase, Monitor, Eye
 } from "lucide-react";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
 
 const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
   "救生": LifeBuoy,
+  "教練": GraduationCap,
+  "指導員": Award,
+  "PT": Dumbbell,
+  "行政": Briefcase,
   "櫃台": UserRound,
   "櫃檯": UserRound,
+  "資訊班": Monitor,
+  "守望": Eye,
   "清潔": Sparkles,
   "管理": ShieldCheck,
 };
 
 const ROLE_SHORT: Record<string, string> = {
   "救生": "救",
+  "教練": "教",
+  "指導員": "指",
+  "PT": "PT",
+  "行政": "行",
   "櫃台": "櫃",
   "櫃檯": "櫃",
+  "資訊班": "資",
+  "守望": "望",
   "清潔": "潔",
   "管理": "管",
   "休假": "休",
@@ -48,8 +61,13 @@ const ROLE_SHORT: Record<string, string> = {
 
 const ROLE_LABELS: Record<string, string> = {
   "救生": "救生",
-  "守望": "守望",
+  "教練": "教練",
+  "指導員": "指導員",
+  "PT": "PT",
+  "行政": "行政",
   "櫃台": "櫃台",
+  "資訊班": "資訊班",
+  "守望": "守望",
 };
 
 const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
@@ -65,7 +83,7 @@ const LEAVE_COLORS: Record<string, string> = {
 };
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
-const ROLE_OPTIONS = ["救生", "守望", "櫃台"];
+const ROLE_OPTIONS = ["救生", "教練", "指導員", "PT", "行政", "櫃台", "資訊班", "守望"];
 
 export default function SchedulePage() {
   const { activeRegion } = useRegion();
@@ -661,7 +679,7 @@ export default function SchedulePage() {
     setShiftStartTime("06:30");
     setShiftEndTime("16:00");
     setShiftIsDispatch(false);
-    setShiftRole(emp?.role === "櫃台" ? "櫃台" : emp?.role === "守望" ? "守望" : "救生");
+    setShiftRole(emp?.role && ROLE_OPTIONS.includes(emp.role) ? emp.role : "救生");
     setShiftBatchMode(false);
     setShiftBatchDates(new Set());
     setShiftTemplateId("custom");
@@ -1779,8 +1797,10 @@ export default function SchedulePage() {
                     <SelectValue placeholder="選擇班別" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="救生">救生</SelectItem>
-                    <SelectItem value="櫃台">櫃台</SelectItem>
+                    <SelectItem value="---work-separator" disabled><span className="text-xs text-muted-foreground">── 工作班別 ──</span></SelectItem>
+                    {ROLE_OPTIONS.map(r => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
                     <SelectItem value="---leave-separator" disabled><span className="text-xs text-muted-foreground">── 假別 ──</span></SelectItem>
                     {LEAVE_TYPES.map(lt => (
                       <SelectItem key={lt} value={lt}>{lt}</SelectItem>
@@ -2087,34 +2107,24 @@ export default function SchedulePage() {
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">職位</Label>
-              <div className="flex bg-muted rounded-lg p-1" data-testid="toggle-slot-role">
-                <button
-                  type="button"
-                  className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
-                    slotRole === "救生"
-                      ? "bg-red-500 text-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => setSlotRole("救生")}
-                  data-testid="toggle-role-rescue"
-                >
-                  <LifeBuoy className="h-3.5 w-3.5 inline mr-1" />
-                  救生
-                </button>
-                <button
-                  type="button"
-                  className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
-                    slotRole === "櫃台" || slotRole === "櫃檯"
-                      ? "bg-blue-500 text-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => setSlotRole("櫃台")}
-                  data-testid="toggle-role-counter"
-                >
-                  <UserRound className="h-3.5 w-3.5 inline mr-1" />
-                  櫃台
-                </button>
-              </div>
+              <Select value={slotRole} onValueChange={setSlotRole}>
+                <SelectTrigger data-testid="toggle-slot-role">
+                  <SelectValue placeholder="選擇職位" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.map(r => {
+                    const Icon = ROLE_ICON_MAP[r] || UserRound;
+                    return (
+                      <SelectItem key={r} value={r}>
+                        <span className="flex items-center gap-1.5">
+                          <Icon className="h-3.5 w-3.5" />
+                          {r}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
