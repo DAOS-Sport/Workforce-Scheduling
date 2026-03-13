@@ -433,11 +433,12 @@ export async function registerRoutes(
         const dayShifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
         const matching = dayShifts.filter(s =>
           (!matchVenueId || s.venueId === Number(matchVenueId)) &&
-          (!matchStartTime || s.startTime === matchStartTime) &&
-          (!matchEndTime || s.endTime === matchEndTime) &&
+          (!matchStartTime || s.startTime.substring(0, 5) === matchStartTime) &&
+          (!matchEndTime || s.endTime.substring(0, 5) === matchEndTime) &&
           (!matchRole || s.role === matchRole)
         );
-        if (matching.length === 0) {
+        const targets = matching.length > 0 ? matching : dayShifts;
+        if (targets.length === 0) {
           const created = await storage.createShift({
             employeeId: empId,
             venueId: effectiveVenueId,
@@ -449,7 +450,7 @@ export async function registerRoutes(
           });
           updated.push(created);
         } else {
-          for (const s of matching) {
+          for (const s of targets) {
             const result = await storage.updateShift(s.id, {
               venueId: effectiveVenueId,
               startTime: effectiveStart,
