@@ -2071,18 +2071,56 @@ export async function registerRoutes(
       const allShifts = await storage.getAllShiftsByDateRange(startDate, endDate);
       const allEmployees = await storage.getAllEmployees();
       const allRegions = await storage.getRegions();
-
       const regionMap = new Map(allRegions.map(r => [r.id, r]));
       const regionFilter = regionCode
         ? allRegions.find(r => r.code === regionCode)
         : null;
 
-      const calcHours = (start: string, end: string): number => {
+      // 適用扣時規則的場館 ID（三蘆戰區：新北高中館=2, 三重商工館=1, 三民高中館=3）
+      const VENUE_XINBEI = 2;   // 新北高中館
+      const VENUE_SHANGONG = 1; // 三重商工館
+      const VENUE_SANMIN = 3;   // 三民高中館
+      const DEDUCT_VENUES = new Set([VENUE_XINBEI, VENUE_SHANGONG, VENUE_SANMIN]);
+
+      // 判斷是否為假日（六=6, 日=0）
+      const isWeekend = (dateStr: string): boolean => {
+        const d = new Date(dateStr + "T00:00:00");
+        const day = d.getDay();
+        return day === 0 || day === 6;
+      };
+
+      // 計算原始時數
+      const rawHours = (start: string, end: string): number => {
         const [sh, sm] = start.split(":").map(Number);
         const [eh, em] = end.split(":").map(Number);
         let mins = (eh * 60 + em) - (sh * 60 + sm);
         if (mins < 0) mins += 24 * 60;
         return Math.round(mins / 60 * 10) / 10;
+      };
+
+      // 計算扣除後的實際計薪時數
+      const calcHours = (start: string, end: string, venueId: number | null | undefined, date: string): number => {
+        const raw = rawHours(start, end);
+        if (!venueId || !DEDUCT_VENUES.has(venueId)) return raw;
+
+        const [sh, sm] = start.split(":").map(Number);
+        const startMins = sh * 60 + sm;
+        const IS_1600 = startMins === 16 * 60; // 16:00 整不扣
+        const isEvening = startMins >= 16 * 60; // 16:00 含以後為晚班
+
+        if (isWeekend(date)) {
+          // 假日：新北、三民 扣 0.5；商工不扣
+          if (venueId === VENUE_SHANGONG) return raw;
+          if (!IS_1600 && (venueId === VENUE_XINBEI || venueId === VENUE_SANMIN)) {
+            return Math.max(0, Math.round((raw - 0.5) * 10) / 10);
+          }
+          return raw;
+        } else {
+          // 平日：16:00 整不扣；晚班（16:00後）扣 0.5；其餘扣 1
+          if (IS_1600) return raw;
+          if (isEvening) return Math.max(0, Math.round((raw - 0.5) * 10) / 10);
+          return Math.max(0, Math.round((raw - 1) * 10) / 10);
+        }
       };
 
       const empMap = new Map<number, typeof allEmployees[0]>();
@@ -2135,7 +2173,7 @@ export async function registerRoutes(
           entry.leaves[s.role] = (entry.leaves[s.role] || 0) + 1;
           entry.totalLeaveDays++;
         } else {
-          const hrs = calcHours(s.startTime, s.endTime);
+          const hrs = calcHours(s.startTime, s.endTime, s.venueId, s.date);
           entry.hours[s.role] = (entry.hours[s.role] || 0) + hrs;
           entry.totalWorkHours = Math.round((entry.totalWorkHours + hrs) * 10) / 10;
           workRolesSet.add(s.role);
