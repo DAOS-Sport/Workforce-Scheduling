@@ -19,6 +19,7 @@ import GuidelinesPage from "@/pages/guidelines";
 import ClockRecordsPage from "@/pages/clock-records";
 import AnomalyReportsPage from "@/pages/anomaly-reports";
 import WeeklyAttendancePage from "@/pages/weekly-attendance";
+import SalaryReportPage from "@/pages/salary-report";
 import PortalPage from "@/pages/portal";
 import LiffClockInPage from "@/pages/liff-clock-in";
 import AdminLoginPage from "@/pages/admin-login";
@@ -36,6 +37,7 @@ function AdminRouter() {
       <Route path="/clock-records" component={ClockRecordsPage} />
       <Route path="/anomaly-reports" component={AnomalyReportsPage} />
       <Route path="/weekly-attendance" component={WeeklyAttendancePage} />
+      <Route path="/salary-report" component={SalaryReportPage} />
       <Route component={NotFound} />
     </Switch>
   );

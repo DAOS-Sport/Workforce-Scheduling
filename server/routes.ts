@@ -438,18 +438,27 @@ export async function registerRoutes(
           (!matchRole || s.role === matchRole)
         );
         if (matching.length === 0) {
-          errors.push(`${date}: 找不到符合的班次，略過`);
-          continue;
-        }
-        for (const s of matching) {
-          const result = await storage.updateShift(s.id, {
+          const created = await storage.createShift({
+            employeeId: empId,
             venueId: effectiveVenueId,
+            date,
             startTime: effectiveStart,
             endTime: effectiveEnd,
             role,
             isDispatch: isLeave ? false : (isDispatch || false),
           });
-          if (result) updated.push(result);
+          updated.push(created);
+        } else {
+          for (const s of matching) {
+            const result = await storage.updateShift(s.id, {
+              venueId: effectiveVenueId,
+              startTime: effectiveStart,
+              endTime: effectiveEnd,
+              role,
+              isDispatch: isLeave ? false : (isDispatch || false),
+            });
+            if (result) updated.push(result);
+          }
         }
       }
 
@@ -2028,6 +2037,109 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[EMAIL] Test email failed:", err);
       res.status(500).json({ message: `郵件發送失敗: ${err.message}` });
+    }
+  });
+
+  app.get("/api/salary-report", async (req, res) => {
+    try {
+      const year = parseInt(req.query.year as string);
+      const month = parseInt(req.query.month as string);
+      const regionCode = req.query.regionCode as string | undefined;
+
+      if (!year || !month || month < 1 || month > 12) {
+        return res.status(400).json({ message: "需提供正確的 year 和 month" });
+      }
+
+      const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+      const allShifts = await storage.getAllShiftsByDateRange(startDate, endDate);
+      const allEmployees = await storage.getAllEmployees();
+      const allRegions = await storage.getRegions();
+
+      const regionMap = new Map(allRegions.map(r => [r.id, r]));
+      const regionFilter = regionCode
+        ? allRegions.find(r => r.code === regionCode)
+        : null;
+
+      const calcHours = (start: string, end: string): number => {
+        const [sh, sm] = start.split(":").map(Number);
+        const [eh, em] = end.split(":").map(Number);
+        let mins = (eh * 60 + em) - (sh * 60 + sm);
+        if (mins < 0) mins += 24 * 60;
+        return Math.round(mins / 60 * 10) / 10;
+      };
+
+      const empMap = new Map<number, typeof allEmployees[0]>();
+      for (const e of allEmployees) {
+        if (e.status !== "active") continue;
+        if (regionFilter && e.regionId !== regionFilter.id) continue;
+        empMap.set(e.id, e);
+      }
+
+      const workRolesSet = new Set<string>();
+      const leaveSet = new Set<string>(LEAVE_TYPES);
+
+      type EmpStats = {
+        id: number;
+        name: string;
+        employeeCode: string;
+        region: string;
+        hours: Record<string, number>;
+        leaves: Record<string, number>;
+        totalWorkHours: number;
+        totalLeaveDays: number;
+        shiftCount: number;
+      };
+
+      const stats = new Map<number, EmpStats>();
+
+      for (const s of allShifts) {
+        const emp = empMap.get(s.employeeId);
+        if (!emp) continue;
+
+        if (!stats.has(s.employeeId)) {
+          const region = regionMap.get(emp.regionId);
+          stats.set(s.employeeId, {
+            id: emp.id,
+            name: emp.name,
+            employeeCode: emp.employeeCode,
+            region: region?.name || "",
+            hours: {},
+            leaves: {},
+            totalWorkHours: 0,
+            totalLeaveDays: 0,
+            shiftCount: 0,
+          });
+        }
+
+        const entry = stats.get(s.employeeId)!;
+        entry.shiftCount++;
+
+        if (leaveSet.has(s.role)) {
+          entry.leaves[s.role] = (entry.leaves[s.role] || 0) + 1;
+          entry.totalLeaveDays++;
+        } else {
+          const hrs = calcHours(s.startTime, s.endTime);
+          entry.hours[s.role] = (entry.hours[s.role] || 0) + hrs;
+          entry.totalWorkHours = Math.round((entry.totalWorkHours + hrs) * 10) / 10;
+          workRolesSet.add(s.role);
+        }
+      }
+
+      const workRoles = Array.from(workRolesSet).sort();
+      const leaveTypes = LEAVE_TYPES.filter(l =>
+        Array.from(stats.values()).some(e => e.leaves[l])
+      );
+
+      const employees = Array.from(stats.values()).sort((a, b) =>
+        a.region.localeCompare(b.region) || a.name.localeCompare(b.name, "zh-Hant")
+      );
+
+      res.json({ year, month, workRoles, leaveTypes, employees });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
     }
   });
 
