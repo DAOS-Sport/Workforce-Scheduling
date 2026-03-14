@@ -236,10 +236,6 @@ export async function registerRoutes(
         return res.status(400).json({ message: "該員工非在職狀態，無法排班" });
       }
 
-      if (parsed.isDispatch && !parsed.dispatchCompany) {
-        return res.status(400).json({ message: "派遣模式須填寫派遣公司" });
-      }
-
       const isLeave = LEAVE_TYPES.includes(parsed.role);
       let warnings: ShiftValidationError[] = [];
 
