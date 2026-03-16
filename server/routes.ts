@@ -227,6 +227,35 @@ export async function registerRoutes(
     res.json(merged);
   });
 
+  app.post("/api/shifts/four-week-precheck", async (req, res) => {
+    try {
+      const { employeeId, date, startTime, endTime, shiftIdToExclude } = req.body;
+      if (!employeeId || !date || !startTime || !endTime) {
+        return res.status(400).json({ message: "缺少必要欄位" });
+      }
+
+      const refConfig = await storage.getSystemConfig("four_week_reference_date");
+      const fourWeekRef = refConfig?.value || "2025-01-06";
+      const existingShifts = await storage.getShiftsByEmployee(employeeId);
+      const period = getFourWeekPeriod(date, fourWeekRef);
+      const approvedOT = await storage.getApprovedOvertimeByDateRange(period.start, period.end);
+      const otRecords = approvedOT.map(ot => ({ employeeId: ot.employeeId, date: ot.date, startTime: ot.startTime, endTime: ot.endTime }));
+
+      const errors = validateAllRules(
+        employeeId, date, startTime, endTime,
+        existingShifts,
+        shiftIdToExclude || undefined,
+        fourWeekRef,
+        otRecords
+      );
+
+      const fourWeekErrors = errors.filter(e => e.type === "four_week_160h" || e.type === "four_week_176h");
+      res.json({ warnings: fourWeekErrors });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/shifts", async (req, res) => {
     try {
       const parsed = insertShiftSchema.parse(req.body);
@@ -243,6 +272,8 @@ export async function registerRoutes(
         const refConfig = await storage.getSystemConfig("four_week_reference_date");
         const fourWeekRef = refConfig?.value || "2025-01-06";
         const existingShifts = await storage.getShiftsByEmployee(parsed.employeeId);
+        const period = getFourWeekPeriod(parsed.date, fourWeekRef);
+        const approvedOT = await storage.getApprovedOvertimeByDateRange(period.start, period.end);
         const errors = validateAllRules(
           parsed.employeeId,
           parsed.date,
@@ -250,7 +281,8 @@ export async function registerRoutes(
           parsed.endTime,
           existingShifts,
           undefined,
-          fourWeekRef
+          fourWeekRef,
+          approvedOT.map(ot => ({ employeeId: ot.employeeId, date: ot.date, startTime: ot.startTime, endTime: ot.endTime }))
         );
 
         const blocking = errors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
@@ -295,7 +327,10 @@ export async function registerRoutes(
         const refConfig = await storage.getSystemConfig("four_week_reference_date");
         const fourWeekRef = refConfig?.value || "2025-01-06";
         const existingShifts = await storage.getShiftsByEmployee(employeeId);
-        const errors = validateAllRules(employeeId, date, startTime, endTime, existingShifts, id, fourWeekRef);
+        const period = getFourWeekPeriod(date, fourWeekRef);
+        const approvedOT = await storage.getApprovedOvertimeByDateRange(period.start, period.end);
+        const otRecords = approvedOT.map(ot => ({ employeeId: ot.employeeId, date: ot.date, startTime: ot.startTime, endTime: ot.endTime }));
+        const errors = validateAllRules(employeeId, date, startTime, endTime, existingShifts, id, fourWeekRef, otRecords);
         const blocking = errors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
         if (blocking.length > 0) {
           return res.status(400).json({ message: blocking[0].message });
@@ -363,13 +398,21 @@ export async function registerRoutes(
       const existingShifts = isLeave ? [] : await storage.getShiftsByEmployee(employeeId);
       const refConfig = isLeave ? null : await storage.getSystemConfig("four_week_reference_date");
       const fourWeekRef = refConfig?.value || "2025-01-06";
+      let otRecords: { employeeId: number; date: string; startTime: string; endTime: string }[] = [];
+      if (!isLeave) {
+        const allDates = [...targetDates].sort();
+        const pStart = getFourWeekPeriod(allDates[0], fourWeekRef);
+        const pEnd = getFourWeekPeriod(allDates[allDates.length - 1], fourWeekRef);
+        const approvedOT = await storage.getApprovedOvertimeByDateRange(pStart.start, pEnd.end);
+        otRecords = approvedOT.map(ot => ({ employeeId: ot.employeeId, date: ot.date, startTime: ot.startTime, endTime: ot.endTime }));
+      }
       const results: any[] = [];
       const errors: string[] = [];
       const warnings: string[] = [];
 
       for (const date of targetDates) {
         if (!isLeave) {
-          const dayErrors = validateAllRules(employeeId, date, startTime, endTime, existingShifts, undefined, fourWeekRef);
+          const dayErrors = validateAllRules(employeeId, date, startTime, endTime, existingShifts, undefined, fourWeekRef, otRecords);
           const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
           if (blocking.length > 0) {
             errors.push(`${date}: ${blocking[0].message}`);
@@ -431,11 +474,22 @@ export async function registerRoutes(
       const existingShifts = isLeave ? [] : await storage.getShiftsByEmployee(empId);
       const refConfig = isLeave ? null : await storage.getSystemConfig("four_week_reference_date");
       const fourWeekRef = refConfig?.value || "2025-01-06";
+      let otRecords: { employeeId: number; date: string; startTime: string; endTime: string }[] = [];
+      if (!isLeave) {
+        const currentShiftData = existingShifts.find((s: any) => s.id === Number(currentShiftId));
+        const allDatesForOT = [currentShiftData?.date, ...targetDates].filter(Boolean).sort() as string[];
+        if (allDatesForOT.length > 0) {
+          const pStart = getFourWeekPeriod(allDatesForOT[0], fourWeekRef);
+          const pEnd = getFourWeekPeriod(allDatesForOT[allDatesForOT.length - 1], fourWeekRef);
+          const approvedOT = await storage.getApprovedOvertimeByDateRange(pStart.start, pEnd.end);
+          otRecords = approvedOT.map(ot => ({ employeeId: ot.employeeId, date: ot.date, startTime: ot.startTime, endTime: ot.endTime }));
+        }
+      }
 
       const currentShift = existingShifts.find((s: any) => s.id === Number(currentShiftId));
       const currentDate = currentShift?.date;
       if (!isLeave && currentDate) {
-        const dayErrors = validateAllRules(empId, currentDate, effectiveStart, effectiveEnd, existingShifts, Number(currentShiftId), fourWeekRef);
+        const dayErrors = validateAllRules(empId, currentDate, effectiveStart, effectiveEnd, existingShifts, Number(currentShiftId), fourWeekRef, otRecords);
         const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
         for (const w of warnItems) warnings.push(`${currentDate}: ${w.message}`);
       }
@@ -455,7 +509,7 @@ export async function registerRoutes(
 
       for (const date of targetDates) {
         if (!isLeave) {
-          const dayErrors = validateAllRules(empId, date, effectiveStart, effectiveEnd, existingShifts, undefined, fourWeekRef);
+          const dayErrors = validateAllRules(empId, date, effectiveStart, effectiveEnd, existingShifts, undefined, fourWeekRef, otRecords);
           const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
           if (blocking.length > 0) {
             errors.push(`${date}: ${blocking[0].message}`);

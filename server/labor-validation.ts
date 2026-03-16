@@ -112,7 +112,8 @@ function validateFourWeekLimit(
   startTime: string,
   endTime: string,
   existingShifts: Shift[],
-  referenceDate: string
+  referenceDate: string,
+  approvedOvertimeRecords?: { employeeId: number; date: string; startTime: string; endTime: string }[]
 ): ShiftValidationError[] {
   const errors: ShiftValidationError[] = [];
   const period = getFourWeekPeriod(date, referenceDate);
@@ -125,19 +126,28 @@ function validateFourWeekLimit(
   for (const s of periodShifts) {
     totalHours += calcShiftHours(s.startTime, s.endTime);
   }
+
+  if (approvedOvertimeRecords) {
+    for (const ot of approvedOvertimeRecords) {
+      if (ot.employeeId !== employeeId) continue;
+      if (ot.date < period.start || ot.date > period.end) continue;
+      totalHours += calcShiftHours(ot.startTime, ot.endTime);
+    }
+  }
+
   const rounded = Math.round(totalHours * 10) / 10;
 
   if (rounded > 176) {
     errors.push({
       type: "four_week_176h",
-      message: `違反四週加班上限：該員工在 ${period.start} ~ ${period.end} 期間總工時 ${rounded} 小時，超過 176 小時上限`,
+      message: `違反四週加班上限：該員工在 ${period.start} ~ ${period.end} 期間總工時 ${rounded} 小時（含加班），超過 176 小時上限`,
       employeeId,
       date,
     });
   } else if (rounded > 160) {
     errors.push({
       type: "four_week_160h",
-      message: `四週正常工時警告：該員工在 ${period.start} ~ ${period.end} 期間總工時 ${rounded} 小時，超過 160 小時正常上限（加班上限 176h）`,
+      message: `四週正常工時警告：該員工在 ${period.start} ~ ${period.end} 期間總工時 ${rounded} 小時（含加班），超過 160 小時正常上限（加班上限 176h）`,
       employeeId,
       date,
     });
@@ -153,7 +163,8 @@ export function validateAllRules(
   endTime: string,
   existingShifts: Shift[],
   shiftIdToExclude?: number,
-  fourWeekReferenceDate?: string
+  fourWeekReferenceDate?: string,
+  approvedOvertimeRecords?: { employeeId: number; date: string; startTime: string; endTime: string }[]
 ): ShiftValidationError[] {
   const filtered = shiftIdToExclude
     ? existingShifts.filter((s) => s.id !== shiftIdToExclude)
@@ -171,7 +182,7 @@ export function validateAllRules(
   if (rest) errors.push(rest);
 
   if (fourWeekReferenceDate) {
-    const fourWeekErrors = validateFourWeekLimit(employeeId, date, startTime, endTime, filtered, fourWeekReferenceDate);
+    const fourWeekErrors = validateFourWeekLimit(employeeId, date, startTime, endTime, filtered, fourWeekReferenceDate, approvedOvertimeRecords);
     errors.push(...fourWeekErrors);
   }
 

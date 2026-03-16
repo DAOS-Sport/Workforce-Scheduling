@@ -23,7 +23,6 @@ import {
   GraduationCap, Award, Briefcase, Monitor, Eye
 } from "lucide-react";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
-import { validateFourWeekLimit } from "@/lib/labor-law";
 
 const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
   "救生": LifeBuoy,
@@ -288,23 +287,23 @@ export default function SchedulePage() {
     enabled: !!shiftVenueId && shiftDialogOpen,
   });
 
-  const { data: fourWeekRefConfig } = useQuery<{ key: string; value: string | null }>({
-    queryKey: ["/api/system-config", "four_week_reference_date"],
+  const precheckParams = useMemo(() => {
+    if (!shiftDialogOpen || !shiftDate || !shiftStartTime || !shiftEndTime || !shiftEmployeeId) return null;
+    const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
+    if (LEAVE_TYPES.includes(shiftRole)) return null;
+    return { employeeId: shiftEmployeeId, date: shiftDate, startTime: shiftStartTime, endTime: shiftEndTime, shiftIdToExclude: editingShift?.id || null };
+  }, [shiftDialogOpen, shiftDate, shiftStartTime, shiftEndTime, shiftEmployeeId, shiftRole, editingShift]);
+
+  const { data: fourWeekPrecheck } = useQuery<{ warnings: { type: string; message: string }[] }>({
+    queryKey: ["/api/shifts/four-week-precheck", precheckParams],
     queryFn: async () => {
-      const res = await fetch("/api/system-config/four_week_reference_date", { credentials: "include" });
-      if (!res.ok) return { key: "four_week_reference_date", value: null };
+      if (!precheckParams) return { warnings: [] };
+      const res = await apiRequest("POST", "/api/shifts/four-week-precheck", precheckParams);
       return res.json();
     },
+    enabled: !!precheckParams,
   });
-  const fourWeekRefDate = fourWeekRefConfig?.value || "2025-01-06";
-
-  const fourWeekDialogWarnings = useMemo(() => {
-    if (!shiftDialogOpen || !shiftDate || !shiftStartTime || !shiftEndTime || !shiftEmployeeId) return [];
-    const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
-    if (LEAVE_TYPES.includes(shiftRole)) return [];
-    const excludeId = editingShift?.id;
-    return validateFourWeekLimit(shiftEmployeeId, shiftDate, shiftStartTime, shiftEndTime, shifts.filter(s => s.id !== excludeId), fourWeekRefDate);
-  }, [shiftDialogOpen, shiftDate, shiftStartTime, shiftEndTime, shiftEmployeeId, shiftRole, shifts, fourWeekRefDate, editingShift]);
+  const fourWeekDialogWarnings = fourWeekPrecheck?.warnings || [];
 
   const filteredTemplates = useMemo(() => {
     if (!shiftDate || shiftVenueTemplates.length === 0) return [];
