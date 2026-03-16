@@ -185,7 +185,6 @@ export default function SalaryReportPage() {
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    enabled: complianceOpen,
   });
 
   const { data: refDateConfig } = useQuery<{ key: string; value: string | null }>({
@@ -195,7 +194,6 @@ export default function SalaryReportPage() {
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    enabled: complianceOpen,
   });
 
   const saveRefDate = useMutation({
