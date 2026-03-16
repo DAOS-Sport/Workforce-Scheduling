@@ -23,6 +23,7 @@ import {
   GraduationCap, Award, Briefcase, Monitor, Eye
 } from "lucide-react";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
+import { validateFourWeekLimit } from "@/lib/labor-law";
 
 const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
   "救生": LifeBuoy,
@@ -286,6 +287,24 @@ export default function SchedulePage() {
     queryKey: ["/api/venue-shift-templates", shiftVenueId ? parseInt(shiftVenueId) : null],
     enabled: !!shiftVenueId && shiftDialogOpen,
   });
+
+  const { data: fourWeekRefConfig } = useQuery<{ key: string; value: string | null }>({
+    queryKey: ["/api/system-config", "four_week_reference_date"],
+    queryFn: async () => {
+      const res = await fetch("/api/system-config/four_week_reference_date", { credentials: "include" });
+      if (!res.ok) return { key: "four_week_reference_date", value: null };
+      return res.json();
+    },
+  });
+  const fourWeekRefDate = fourWeekRefConfig?.value || "2025-01-06";
+
+  const fourWeekDialogWarnings = useMemo(() => {
+    if (!shiftDialogOpen || !shiftDate || !shiftStartTime || !shiftEndTime || !shiftEmployeeId) return [];
+    const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
+    if (LEAVE_TYPES.includes(shiftRole)) return [];
+    const excludeId = editingShift?.id;
+    return validateFourWeekLimit(shiftEmployeeId, shiftDate, shiftStartTime, shiftEndTime, shifts.filter(s => s.id !== excludeId), fourWeekRefDate);
+  }, [shiftDialogOpen, shiftDate, shiftStartTime, shiftEndTime, shiftEmployeeId, shiftRole, shifts, fourWeekRefDate, editingShift]);
 
   const filteredTemplates = useMemo(() => {
     if (!shiftDate || shiftVenueTemplates.length === 0) return [];
@@ -2038,6 +2057,17 @@ export default function SchedulePage() {
               })()}
             </div>
           </div>
+
+          {fourWeekDialogWarnings.length > 0 && (
+            <div className="rounded-lg border p-3 space-y-1" data-testid="four-week-dialog-warnings">
+              {fourWeekDialogWarnings.map((w, i) => (
+                <div key={i} className={`flex items-start gap-2 text-xs ${w.type === "four_week_176h" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>{w.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <DialogFooter className="flex-row gap-2 justify-between sm:justify-between">
             <div className="flex gap-2">

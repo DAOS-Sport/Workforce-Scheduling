@@ -224,15 +224,21 @@ export default function SalaryReportPage() {
   }, [compliance]);
 
   const empComplianceMap = useMemo(() => {
-    if (!compliance) return new Map<number, "normal" | "warning" | "over">();
-    const map = new Map<number, "normal" | "warning" | "over">();
-    for (const period of compliance.periods) {
-      for (const emp of period.employees) {
-        const current = map.get(emp.employeeId) || "normal";
-        if (emp.status === "over" || current === "over") map.set(emp.employeeId, "over");
-        else if (emp.status === "warning" || current === "warning") map.set(emp.employeeId, "warning");
-        else map.set(emp.employeeId, "normal");
+    if (!compliance) return new Map<number, { statuses: ("normal" | "warning" | "over")[], worst: "normal" | "warning" | "over" }>();
+    const map = new Map<number, { statuses: ("normal" | "warning" | "over")[], worst: "normal" | "warning" | "over" }>();
+    const allEmpIds = new Set<number>();
+    compliance.periods.forEach(p => p.employees.forEach(e => allEmpIds.add(e.employeeId)));
+
+    for (const empId of allEmpIds) {
+      const statuses: ("normal" | "warning" | "over")[] = [];
+      for (const period of compliance.periods) {
+        const emp = period.employees.find(e => e.employeeId === empId);
+        statuses.push(emp?.status || "normal");
       }
+      let worst: "normal" | "warning" | "over" = "normal";
+      if (statuses.includes("over")) worst = "over";
+      else if (statuses.includes("warning")) worst = "warning";
+      map.set(empId, { statuses, worst });
     }
     return map;
   }, [compliance]);
@@ -397,11 +403,18 @@ export default function SalaryReportPage() {
                     <td className="px-3 py-2 sticky left-0 bg-background">
                       <div className="flex items-center gap-1">
                         <span className="font-medium truncate max-w-[100px]" title={emp.name}>{emp.name}</span>
-                        {empComplianceMap.get(emp.id) === "over" && (
-                          <XCircle className="h-3 w-3 text-red-500 shrink-0" title="四週工時超限" />
-                        )}
-                        {empComplianceMap.get(emp.id) === "warning" && (
-                          <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" title="四週工時警告" />
+                        {empComplianceMap.get(emp.id)?.statuses && (
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            {empComplianceMap.get(emp.id)!.statuses.map((s, si) => (
+                              <span
+                                key={si}
+                                className={`inline-block w-2 h-2 rounded-full ${
+                                  s === "over" ? "bg-red-500" : s === "warning" ? "bg-amber-400" : "bg-green-500"
+                                }`}
+                                title={`週期${si + 1}: ${s === "over" ? "超限" : s === "warning" ? "警告" : "合規"}`}
+                              />
+                            ))}
+                          </div>
                         )}
                       </div>
                       <div className="text-[10px] text-muted-foreground">{emp.employeeCode}</div>
