@@ -892,6 +892,7 @@ const EARLY_ARRIVAL_REASONS = [
 const LATE_DEPARTURE_REASONS = [
   "在跟同事聊天，晚下班打卡",
   "在整理個人物品，晚下班打卡",
+  "加班",
 ];
 
 function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: PortalEmployee; onPositionUpdate?: (lat: number, lng: number) => void; onResult?: (r: ClockInResult) => void }) {
@@ -913,9 +914,14 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
       const body = result.earlyArrival
         ? { earlyArrivalReason: reason }
         : { lateDepartureReason: reason };
-      await apiRequest("PATCH", `/api/portal/clock-records/${result.recordId}/reason`, body);
+      const res = await apiRequest("PATCH", `/api/portal/clock-records/${result.recordId}/reason`, body);
+      const data = await res.json();
       setReasonSubmitted(true);
-      toast({ title: "已記錄原因" });
+      if (data.overtimeRequest) {
+        toast({ title: "已記錄原因，並自動產生加班申請（待主管審核）" });
+      } else {
+        toast({ title: "已記錄原因" });
+      }
     } catch (err: any) {
       toast({ title: err.message || "記錄原因失敗", variant: "destructive" });
     } finally {

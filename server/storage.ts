@@ -102,6 +102,7 @@ export interface IStorage {
 
   getAllVenues(): Promise<Venue[]>;
   createClockRecord(data: InsertClockRecord): Promise<ClockRecord>;
+  getClockRecord(id: number): Promise<ClockRecord | undefined>;
   getClockRecordsByDateRange(startDate: string, endDate: string): Promise<ClockRecord[]>;
   getClockRecordsByEmployee(employeeId: number, startDate: string, endDate: string): Promise<ClockRecord[]>;
 
@@ -124,6 +125,8 @@ export interface IStorage {
   getOvertimeRequestsByEmployee(employeeId: number): Promise<OvertimeRequest[]>;
   getOvertimeRequest(id: number): Promise<OvertimeRequest | undefined>;
   updateOvertimeRequestStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<OvertimeRequest | undefined>;
+  getOvertimeRequestsByEmployeeAndDate(employeeId: number, date: string): Promise<OvertimeRequest[]>;
+  getApprovedOvertimeByDateRange(startDate: string, endDate: string): Promise<OvertimeRequest[]>;
 
   createAnomalyReport(data: InsertAnomalyReport): Promise<AnomalyReport>;
   getAnomalyReports(): Promise<AnomalyReport[]>;
@@ -486,6 +489,11 @@ export class DatabaseStorage implements IStorage {
     return record;
   }
 
+  async getClockRecord(id: number): Promise<ClockRecord | undefined> {
+    const [record] = await db.select().from(clockRecords).where(eq(clockRecords.id, id));
+    return record;
+  }
+
   async getClockRecordsByDateRange(startDate: string, endDate: string): Promise<ClockRecord[]> {
     return db.select().from(clockRecords).where(
       and(
@@ -612,6 +620,25 @@ export class DatabaseStorage implements IStorage {
       reviewNote: reviewNote || null,
     }).where(eq(overtimeRequests.id, id)).returning();
     return record;
+  }
+
+  async getOvertimeRequestsByEmployeeAndDate(employeeId: number, date: string): Promise<OvertimeRequest[]> {
+    return db.select().from(overtimeRequests).where(
+      and(
+        eq(overtimeRequests.employeeId, employeeId),
+        eq(overtimeRequests.date, date)
+      )
+    );
+  }
+
+  async getApprovedOvertimeByDateRange(startDate: string, endDate: string): Promise<OvertimeRequest[]> {
+    return db.select().from(overtimeRequests).where(
+      and(
+        eq(overtimeRequests.status, "approved"),
+        gte(overtimeRequests.date, startDate),
+        lte(overtimeRequests.date, endDate)
+      )
+    );
   }
 
   async createAnomalyReport(data: InsertAnomalyReport): Promise<AnomalyReport> {

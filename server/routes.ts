@@ -1654,7 +1654,55 @@ export async function registerRoutes(
       }
       const updated = await storage.updateClockRecordReason(id, earlyArrivalReason, lateDepartureReason);
       if (!updated) return res.status(404).json({ message: "找不到打卡紀錄" });
-      res.json(updated);
+
+      let overtimeRequest = null;
+      if (lateDepartureReason === "加班") {
+        const clockRecord = await storage.getClockRecord(id);
+        if (clockRecord && clockRecord.shiftId && clockRecord.clockTime) {
+          const existingOT = await storage.getOvertimeRequestsByEmployeeAndDate(
+            clockRecord.employeeId,
+            clockRecord.clockTime.toISOString().slice(0, 10)
+          );
+          const alreadyHasClockTriggered = existingOT.some(
+            ot => ot.source === "clock_triggered" && ot.clockRecordId === clockRecord.id
+          );
+
+          if (!alreadyHasClockTriggered) {
+            const allShifts = await storage.getAllShiftsByDateRange(
+              clockRecord.clockTime.toISOString().slice(0, 10),
+              clockRecord.clockTime.toISOString().slice(0, 10)
+            );
+            const shift = allShifts.find(s => s.id === clockRecord.shiftId);
+            if (shift) {
+              const clockTime = new Date(clockRecord.clockTime);
+              const clockHH = String(clockTime.getHours()).padStart(2, "0");
+              const clockMM = String(clockTime.getMinutes()).padStart(2, "0");
+              const actualClockOut = `${clockHH}:${clockMM}`;
+
+              const [seH, seM] = shift.endTime.split(":").map(Number);
+              const shiftEndMins = seH * 60 + seM;
+              const clockOutMins = parseInt(clockHH) * 60 + parseInt(clockMM);
+              if (clockOutMins > shiftEndMins) {
+                overtimeRequest = await storage.createOvertimeRequest({
+                  employeeId: clockRecord.employeeId,
+                  date: shift.date,
+                  startTime: shift.endTime,
+                  endTime: actualClockOut,
+                  reason: "加班（打卡自動產生）",
+                  status: "pending",
+                  source: "clock_triggered",
+                  clockRecordId: clockRecord.id,
+                  reviewedBy: null,
+                  reviewedByName: null,
+                  reviewNote: null,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      res.json({ ...updated, overtimeRequest });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -2066,6 +2114,7 @@ export async function registerRoutes(
       const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
       const allShifts = await storage.getAllShiftsByDateRange(startDate, endDate);
+      const approvedOT = await storage.getApprovedOvertimeByDateRange(startDate, endDate);
       const allEmployees = await storage.getAllEmployees();
       const allRegions = await storage.getRegions();
       const regionMap = new Map(allRegions.map(r => [r.id, r]));
@@ -2140,6 +2189,7 @@ export async function registerRoutes(
         totalWorkHours: number;
         totalLeaveDays: number;
         shiftCount: number;
+        overtimeHours: number;
       };
 
       const stats = new Map<number, EmpStats>();
@@ -2160,6 +2210,7 @@ export async function registerRoutes(
             totalWorkHours: 0,
             totalLeaveDays: 0,
             shiftCount: 0,
+            overtimeHours: 0,
           });
         }
 
@@ -2177,16 +2228,44 @@ export async function registerRoutes(
         }
       }
 
+      for (const ot of approvedOT) {
+        const emp = empMap.get(ot.employeeId);
+        if (!emp) continue;
+
+        if (!stats.has(ot.employeeId)) {
+          const region = regionMap.get(emp.regionId);
+          stats.set(ot.employeeId, {
+            id: emp.id,
+            name: emp.name,
+            employeeCode: emp.employeeCode,
+            region: region?.name || "",
+            hours: {},
+            leaves: {},
+            totalWorkHours: 0,
+            totalLeaveDays: 0,
+            shiftCount: 0,
+            overtimeHours: 0,
+          });
+        }
+
+        const entry = stats.get(ot.employeeId)!;
+        const otHrs = rawHours(ot.startTime, ot.endTime);
+        entry.overtimeHours = Math.round((entry.overtimeHours + otHrs) * 10) / 10;
+        entry.totalWorkHours = Math.round((entry.totalWorkHours + otHrs) * 10) / 10;
+      }
+
       const workRoles = Array.from(workRolesSet).sort();
       const leaveTypes = LEAVE_TYPES.filter(l =>
         Array.from(stats.values()).some(e => e.leaves[l])
       );
 
+      const hasOvertimeData = Array.from(stats.values()).some(e => e.overtimeHours > 0);
+
       const employees = Array.from(stats.values()).sort((a, b) =>
         a.region.localeCompare(b.region) || a.name.localeCompare(b.name, "zh-Hant")
       );
 
-      res.json({ year, month, workRoles, leaveTypes, employees });
+      res.json({ year, month, workRoles, leaveTypes, employees, hasOvertimeData });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

@@ -36,6 +36,7 @@ type EmpStats = {
   totalWorkHours: number;
   totalLeaveDays: number;
   shiftCount: number;
+  overtimeHours: number;
 };
 
 type HoursReport = {
@@ -44,14 +45,17 @@ type HoursReport = {
   workRoles: string[];
   leaveTypes: string[];
   employees: EmpStats[];
+  hasOvertimeData: boolean;
 };
 
 function exportCSV(report: HoursReport, regionLabel: string) {
   const { year, month, workRoles, leaveTypes, employees } = report;
 
+  const hasOT = report.hasOvertimeData;
   const headers = [
     "員工代號", "姓名", "地區",
     ...workRoles.map(r => `${r}(時數)`),
+    ...(hasOT ? ["加班(時數)"] : []),
     "總工時",
     ...leaveTypes.map(l => `${l}(天)`),
     "假別合計",
@@ -63,6 +67,7 @@ function exportCSV(report: HoursReport, regionLabel: string) {
     e.name,
     e.region,
     ...workRoles.map(r => (e.hours[r] || 0).toFixed(1)),
+    ...(hasOT ? [e.overtimeHours.toFixed(1)] : []),
     e.totalWorkHours.toFixed(1),
     ...leaveTypes.map(l => e.leaves[l] || 0),
     e.totalLeaveDays,
@@ -135,6 +140,8 @@ export default function SalaryReportPage() {
     }
     return totals;
   }, [data]);
+
+  const totalOvertimeHours = useMemo(() => data?.employees.reduce((s, e) => Math.round((s + e.overtimeHours) * 10) / 10, 0) || 0, [data]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -265,6 +272,11 @@ export default function SalaryReportPage() {
                       {r}
                     </th>
                   ))}
+                  {data.hasOvertimeData && (
+                    <th className="text-right px-3 py-2.5 font-semibold text-xs text-red-600 dark:text-red-400 min-w-[72px] bg-red-50/50 dark:bg-red-950/20">
+                      加班
+                    </th>
+                  )}
                   <th className="text-right px-3 py-2.5 font-semibold text-xs text-blue-600 dark:text-blue-400 min-w-[72px] bg-blue-50/50 dark:bg-blue-950/20">
                     總工時
                   </th>
@@ -310,6 +322,17 @@ export default function SalaryReportPage() {
                         </td>
                       );
                     })}
+                    {data.hasOvertimeData && (
+                      <td className="px-3 py-2 text-right bg-red-50/30 dark:bg-red-950/10" data-testid={`cell-overtime-${emp.id}`}>
+                        {emp.overtimeHours > 0 ? (
+                          <Badge variant="secondary" className="text-xs font-mono bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-0">
+                            {emp.overtimeHours.toFixed(1)}h
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground/30 text-xs">—</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-3 py-2 text-right bg-blue-50/30 dark:bg-blue-950/10">
                       <span className="font-bold text-blue-600 dark:text-blue-400 font-mono text-sm" data-testid={`cell-total-hours-${emp.id}`}>
                         {emp.totalWorkHours.toFixed(1)}h
@@ -345,6 +368,13 @@ export default function SalaryReportPage() {
                       {(roleColTotals[r] || 0).toFixed(1)}h
                     </td>
                   ))}
+                  {data.hasOvertimeData && (
+                    <td className="px-3 py-2.5 text-right bg-red-50/50 dark:bg-red-950/20">
+                      <span className="font-bold text-red-600 dark:text-red-400 font-mono text-xs">
+                        {totalOvertimeHours.toFixed(1)}h
+                      </span>
+                    </td>
+                  )}
                   <td className="px-3 py-2.5 text-right bg-blue-50/50 dark:bg-blue-950/20">
                     <span className="font-bold text-blue-600 dark:text-blue-400 font-mono text-sm">
                       {totalHours.toFixed(1)}h

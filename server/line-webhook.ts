@@ -332,13 +332,24 @@ export async function processClockIn(
         ? `早退 ${hours} 小時 ${mins} 分鐘`
         : `早退 ${mins} 分鐘`;
     } else if (diff <= -15) {
-      lateMinutes = Math.abs(diff);
-      lateDeparture = true;
-      const hours = Math.floor(lateMinutes / 60);
-      const mins = lateMinutes % 60;
-      lateReason = hours > 0
-        ? `晚下班 ${hours} 小時 ${mins} 分鐘`
-        : `晚下班 ${mins} 分鐘`;
+      const approvedOT = await storage.getOvertimeRequestsByEmployeeAndDate(employee.id, todayStr);
+      const hasApprovedCoverage = approvedOT.some(ot => {
+        if (ot.status !== "approved") return false;
+        const [otEh, otEm] = ot.endTime.split(":").map(Number);
+        const otEnd = otEh * 60 + otEm;
+        return nowMinutes <= otEnd + 15;
+      });
+      if (hasApprovedCoverage) {
+        lateReason = "加班打卡";
+      } else {
+        lateMinutes = Math.abs(diff);
+        lateDeparture = true;
+        const hours = Math.floor(lateMinutes / 60);
+        const mins = lateMinutes % 60;
+        lateReason = hours > 0
+          ? `晚下班 ${hours} 小時 ${mins} 分鐘`
+          : `晚下班 ${mins} 分鐘`;
+      }
     }
   }
 

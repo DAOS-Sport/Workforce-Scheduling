@@ -245,6 +245,8 @@ export const overtimeRequests = pgTable("overtime_requests", {
   endTime: text("end_time").notNull(),
   reason: text("reason").notNull(),
   status: text("status").notNull().default("pending"),
+  source: text("source").notNull().default("manual"),
+  clockRecordId: integer("clock_record_id"),
   reviewedBy: integer("reviewed_by"),
   reviewedByName: text("reviewed_by_name"),
   reviewedAt: timestamp("reviewed_at"),
