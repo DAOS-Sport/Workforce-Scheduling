@@ -1659,24 +1659,24 @@ export async function registerRoutes(
       if (lateDepartureReason === "加班") {
         const clockRecord = await storage.getClockRecord(id);
         if (clockRecord && clockRecord.shiftId && clockRecord.clockTime) {
+          const twCheckDate = new Date(clockRecord.clockTime.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+          const twCheckDateStr = `${twCheckDate.getFullYear()}-${String(twCheckDate.getMonth() + 1).padStart(2, "0")}-${String(twCheckDate.getDate()).padStart(2, "0")}`;
           const existingOT = await storage.getOvertimeRequestsByEmployeeAndDate(
             clockRecord.employeeId,
-            clockRecord.clockTime.toISOString().slice(0, 10)
+            twCheckDateStr
           );
           const alreadyHasClockTriggered = existingOT.some(
             ot => ot.source === "clock_triggered" && ot.clockRecordId === clockRecord.id
           );
 
           if (!alreadyHasClockTriggered) {
-            const allShifts = await storage.getAllShiftsByDateRange(
-              clockRecord.clockTime.toISOString().slice(0, 10),
-              clockRecord.clockTime.toISOString().slice(0, 10)
-            );
+            const twDate = new Date(clockRecord.clockTime.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+            const twDateStr = `${twDate.getFullYear()}-${String(twDate.getMonth() + 1).padStart(2, "0")}-${String(twDate.getDate()).padStart(2, "0")}`;
+            const allShifts = await storage.getAllShiftsByDateRange(twDateStr, twDateStr);
             const shift = allShifts.find(s => s.id === clockRecord.shiftId);
             if (shift) {
-              const clockTime = new Date(clockRecord.clockTime);
-              const clockHH = String(clockTime.getHours()).padStart(2, "0");
-              const clockMM = String(clockTime.getMinutes()).padStart(2, "0");
+              const clockHH = String(twDate.getHours()).padStart(2, "0");
+              const clockMM = String(twDate.getMinutes()).padStart(2, "0");
               const actualClockOut = `${clockHH}:${clockMM}`;
 
               const [seH, seM] = shift.endTime.split(":").map(Number);
