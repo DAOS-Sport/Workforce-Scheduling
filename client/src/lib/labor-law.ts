@@ -1,5 +1,8 @@
 import type { Shift, ShiftValidationError } from "@shared/schema";
+import { getFourWeekPeriod, calcShiftHours } from "@shared/schema";
 import { addDays, subDays, parseISO, differenceInMinutes, format } from "date-fns";
+
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
 
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(":").map(Number);
@@ -106,13 +109,54 @@ export function validateRestGap(
   return null;
 }
 
+export function validateFourWeekLimit(
+  employeeId: number,
+  date: string,
+  startTime: string,
+  endTime: string,
+  existingShifts: Shift[],
+  referenceDate: string
+): ShiftValidationError[] {
+  const errors: ShiftValidationError[] = [];
+  const period = getFourWeekPeriod(date, referenceDate);
+
+  const periodShifts = existingShifts.filter(
+    (s) => s.employeeId === employeeId && s.date >= period.start && s.date <= period.end && !LEAVE_TYPES.includes(s.role)
+  );
+
+  let totalHours = calcShiftHours(startTime, endTime);
+  for (const s of periodShifts) {
+    totalHours += calcShiftHours(s.startTime, s.endTime);
+  }
+  const rounded = Math.round(totalHours * 10) / 10;
+
+  if (rounded > 176) {
+    errors.push({
+      type: "four_week_176h",
+      message: `違反四週加班上限：該員工在 ${period.start} ~ ${period.end} 期間總工時 ${rounded} 小時，超過 176 小時上限`,
+      employeeId,
+      date,
+    });
+  } else if (rounded > 160) {
+    errors.push({
+      type: "four_week_160h",
+      message: `四週正常工時警告：該員工在 ${period.start} ~ ${period.end} 期間總工時 ${rounded} 小時，超過 160 小時正常上限（加班上限 176h）`,
+      employeeId,
+      date,
+    });
+  }
+
+  return errors;
+}
+
 export function validateAllRules(
   employeeId: number,
   date: string,
   startTime: string,
   endTime: string,
   existingShifts: Shift[],
-  shiftIdToExclude?: number
+  shiftIdToExclude?: number,
+  fourWeekReferenceDate?: string
 ): ShiftValidationError[] {
   const filteredShifts = shiftIdToExclude
     ? existingShifts.filter((s) => s.id !== shiftIdToExclude)
@@ -128,6 +172,11 @@ export function validateAllRules(
 
   const restError = validateRestGap(employeeId, date, startTime, filteredShifts);
   if (restError) errors.push(restError);
+
+  if (fourWeekReferenceDate) {
+    const fourWeekErrors = validateFourWeekLimit(employeeId, date, startTime, endTime, filteredShifts, fourWeekReferenceDate);
+    errors.push(...fourWeekErrors);
+  }
 
   return errors;
 }

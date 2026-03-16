@@ -329,13 +329,49 @@ export const insertNotificationRecipientSchema = createInsertSchema(notification
 export type InsertNotificationRecipient = z.infer<typeof insertNotificationRecipientSchema>;
 export type NotificationRecipient = typeof notificationRecipients.$inferSelect;
 
+export const systemConfigs = pgTable("system_configs", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSystemConfigSchema = createInsertSchema(systemConfigs).omit({ id: true, updatedAt: true });
+export type InsertSystemConfig = z.infer<typeof insertSystemConfigSchema>;
+export type SystemConfig = typeof systemConfigs.$inferSelect;
+
 export type RegionCode = "D" | "A" | "B" | "C";
 
 export interface ShiftValidationError {
-  type: "seven_day_rest" | "daily_12h" | "rest_11h" | "inactive_employee";
+  type: "seven_day_rest" | "daily_12h" | "rest_11h" | "inactive_employee" | "four_week_160h" | "four_week_176h";
   message: string;
   employeeId: number;
   date: string;
+}
+
+export function getFourWeekPeriod(dateStr: string, referenceDateStr: string): { start: string; end: string } {
+  const refDate = new Date(referenceDateStr + "T00:00:00Z");
+  const targetDate = new Date(dateStr + "T00:00:00Z");
+  const diffMs = targetDate.getTime() - refDate.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const periodLength = 28;
+  const periodIndex = diffDays >= 0
+    ? Math.floor(diffDays / periodLength)
+    : -Math.ceil((-diffDays) / periodLength);
+  const periodStartMs = refDate.getTime() + periodIndex * periodLength * 24 * 60 * 60 * 1000;
+  const periodStart = new Date(periodStartMs);
+  const periodEnd = new Date(periodStartMs + (periodLength - 1) * 24 * 60 * 60 * 1000);
+  const fmt = (d: Date) => d.toISOString().split("T")[0];
+  return { start: fmt(periodStart), end: fmt(periodEnd) };
+}
+
+export function calcShiftHours(startTime: string, endTime: string): number {
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  let startMin = sh * 60 + sm;
+  let endMin = eh * 60 + em;
+  if (endMin <= startMin) endMin += 24 * 60;
+  return (endMin - startMin) / 60;
 }
 
 export interface VacancyInfo {

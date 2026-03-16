@@ -12,6 +12,7 @@ import {
   anomalyReports,
   notificationRecipients,
   salaryRateConfigs,
+  systemConfigs,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -30,6 +31,7 @@ import {
   type AnomalyReport, type InsertAnomalyReport,
   type NotificationRecipient, type InsertNotificationRecipient,
   type SalaryRateConfig,
+  type SystemConfig,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -141,6 +143,9 @@ export interface IStorage {
 
   getSalaryRates(): Promise<SalaryRateConfig[]>;
   upsertSalaryRate(role: string, ratePerHour: number, label?: string): Promise<SalaryRateConfig>;
+
+  getSystemConfig(key: string): Promise<SystemConfig | undefined>;
+  upsertSystemConfig(key: string, value: string): Promise<SystemConfig>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -700,6 +705,26 @@ export class DatabaseStorage implements IStorage {
     } else {
       const [created] = await db.insert(salaryRateConfigs)
         .values({ role, ratePerHour, label })
+        .returning();
+      return created;
+    }
+  }
+  async getSystemConfig(key: string): Promise<SystemConfig | undefined> {
+    const [config] = await db.select().from(systemConfigs).where(eq(systemConfigs.key, key));
+    return config;
+  }
+
+  async upsertSystemConfig(key: string, value: string): Promise<SystemConfig> {
+    const existing = await db.select().from(systemConfigs).where(eq(systemConfigs.key, key));
+    if (existing.length > 0) {
+      const [updated] = await db.update(systemConfigs)
+        .set({ value, updatedAt: new Date() })
+        .where(eq(systemConfigs.key, key))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(systemConfigs)
+        .values({ key, value })
         .returning();
       return created;
     }

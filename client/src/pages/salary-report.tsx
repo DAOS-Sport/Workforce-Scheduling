@@ -1,11 +1,14 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Download, ChevronLeft, ChevronRight, Clock, Users, TrendingUp, FileText } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Download, ChevronLeft, ChevronRight, Clock, Users, TrendingUp, FileText, AlertTriangle, CheckCircle, XCircle, Settings2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const REGION_OPTIONS = [
   { value: "all", label: "全部地區" },
@@ -85,12 +88,34 @@ function exportCSV(report: HoursReport, regionLabel: string) {
   URL.revokeObjectURL(url);
 }
 
+type FourWeekEmployee = {
+  employeeId: number;
+  employeeName: string;
+  employeeCode: string;
+  region: string;
+  totalHours: number;
+  status: "normal" | "warning" | "over";
+};
+
+type FourWeekCompliance = {
+  periodStart: string;
+  periodEnd: string;
+  referenceDate: string;
+  normalLimit: number;
+  overtimeLimit: number;
+  employees: FourWeekEmployee[];
+};
+
 export default function SalaryReportPage() {
+  const { toast } = useToast();
   const now = new Date();
   const [year, setYear] = useState(now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() === 0 ? 12 : now.getMonth());
   const [regionCode, setRegionCode] = useState("all");
   const [sortKey, setSortKey] = useState<"name" | "hours" | "region">("region");
+  const [complianceOpen, setComplianceOpen] = useState(false);
+  const [refDateInput, setRefDateInput] = useState("");
+  const [showRefEditor, setShowRefEditor] = useState(false);
 
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear(y => y - 1); }
@@ -142,6 +167,43 @@ export default function SalaryReportPage() {
   }, [data]);
 
   const totalOvertimeHours = useMemo(() => data?.employees.reduce((s, e) => Math.round((s + e.overtimeHours) * 10) / 10, 0) || 0, [data]);
+
+  const complianceDate = `${year}-${String(month).padStart(2, "0")}-15`;
+  const { data: compliance, isLoading: compLoading } = useQuery<FourWeekCompliance>({
+    queryKey: ["/api/four-week-compliance", complianceDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/four-week-compliance?date=${complianceDate}`, { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: complianceOpen,
+  });
+
+  const { data: refDateConfig } = useQuery<{ key: string; value: string | null }>({
+    queryKey: ["/api/system-config", "four_week_reference_date"],
+    queryFn: async () => {
+      const res = await fetch("/api/system-config/four_week_reference_date", { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: complianceOpen,
+  });
+
+  const saveRefDate = useMutation({
+    mutationFn: async (value: string) => {
+      const res = await apiRequest("POST", "/api/system-config/four_week_reference_date", { value });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/system-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/four-week-compliance"] });
+      toast({ title: "基準日已更新" });
+      setShowRefEditor(false);
+    },
+  });
+
+  const compWarning = compliance?.employees.filter(e => e.status === "warning").length || 0;
+  const compOver = compliance?.employees.filter(e => e.status === "over").length || 0;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -398,6 +460,177 @@ export default function SalaryReportPage() {
             </table>
           </div>
         )}
+
+        <div className="mt-4 rounded-xl border overflow-hidden">
+          <button
+            className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+            onClick={() => setComplianceOpen(!complianceOpen)}
+            data-testid="button-toggle-compliance"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <span className="font-semibold text-sm">四週變形工時合規追蹤</span>
+              {complianceOpen && compliance && (
+                <div className="flex gap-1.5 ml-2">
+                  {compOver > 0 && (
+                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0" data-testid="badge-over-count">
+                      超限 {compOver}
+                    </Badge>
+                  )}
+                  {compWarning > 0 && (
+                    <Badge className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-0" data-testid="badge-warning-count">
+                      警告 {compWarning}
+                    </Badge>
+                  )}
+                  {compOver === 0 && compWarning === 0 && (
+                    <Badge className="text-[10px] px-1.5 py-0 bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border-0">
+                      全部合規
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+            {complianceOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+
+          {complianceOpen && (
+            <div className="p-4 border-t space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="text-xs text-muted-foreground">
+                  {compliance ? (
+                    <>
+                      週期：{compliance.periodStart} ~ {compliance.periodEnd}
+                      <span className="ml-3">正常上限 {compliance.normalLimit}h / 加班上限 {compliance.overtimeLimit}h</span>
+                    </>
+                  ) : compLoading ? (
+                    <Skeleton className="h-4 w-60 inline-block" />
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2">
+                  {showRefEditor ? (
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="date"
+                        className="h-7 w-36 text-xs"
+                        value={refDateInput}
+                        onChange={(e) => setRefDateInput(e.target.value)}
+                        data-testid="input-ref-date"
+                      />
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs px-2"
+                        onClick={() => { if (refDateInput) saveRefDate.mutate(refDateInput); }}
+                        disabled={!refDateInput || saveRefDate.isPending}
+                        data-testid="button-save-ref-date"
+                      >
+                        儲存
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs px-2"
+                        onClick={() => setShowRefEditor(false)}
+                      >
+                        取消
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => {
+                        setRefDateInput(refDateConfig?.value || compliance?.referenceDate || "2025-01-06");
+                        setShowRefEditor(true);
+                      }}
+                      data-testid="button-edit-ref-date"
+                    >
+                      <Settings2 className="h-3 w-3" />
+                      基準日：{compliance?.referenceDate || refDateConfig?.value || "2025-01-06"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {compLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-8 w-full" />
+                  ))}
+                </div>
+              ) : compliance && compliance.employees.length > 0 ? (
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/40 border-b">
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">員工</th>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">地區</th>
+                        <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">四週總工時</th>
+                        <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">狀態</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {compliance.employees.map((emp, idx) => (
+                        <tr
+                          key={emp.employeeId}
+                          className={`border-b last:border-0 ${
+                            emp.status === "over"
+                              ? "bg-red-50/50 dark:bg-red-950/20"
+                              : emp.status === "warning"
+                              ? "bg-amber-50/50 dark:bg-amber-950/20"
+                              : idx % 2 === 0
+                              ? ""
+                              : "bg-muted/10"
+                          }`}
+                          data-testid={`row-compliance-${emp.employeeId}`}
+                        >
+                          <td className="px-3 py-2">
+                            <div className="font-medium text-sm">{emp.employeeName}</div>
+                            <div className="text-[10px] text-muted-foreground">{emp.employeeCode}</div>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{emp.region}</td>
+                          <td className="px-3 py-2 text-right">
+                            <span className={`font-mono font-bold text-sm ${
+                              emp.status === "over"
+                                ? "text-red-600 dark:text-red-400"
+                                : emp.status === "warning"
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-green-600 dark:text-green-400"
+                            }`}>
+                              {emp.totalHours.toFixed(1)}h
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {emp.status === "over" ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                                <span className="text-xs text-red-600 dark:text-red-400 font-medium">超限</span>
+                              </div>
+                            ) : emp.status === "warning" ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                                <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">警告</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1">
+                                <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                                <span className="text-xs text-green-600 dark:text-green-400">合規</span>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : compliance && compliance.employees.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-6">
+                  此週期尚無排班資料
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
