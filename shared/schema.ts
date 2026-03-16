@@ -374,6 +374,53 @@ export function calcShiftHours(startTime: string, endTime: string): number {
   return (endMin - startMin) / 60;
 }
 
+export function sumScheduledHours(
+  shifts: { startTime: string; endTime: string; role: string; employeeId: number; date: string }[],
+  employeeId: number,
+  periodStart: string,
+  periodEnd: string,
+  leaveTypes: string[]
+): number {
+  let total = 0;
+  for (const s of shifts) {
+    if (s.employeeId !== employeeId) continue;
+    if (s.date < periodStart || s.date > periodEnd) continue;
+    if (leaveTypes.includes(s.role)) continue;
+    total += calcShiftHours(s.startTime, s.endTime);
+  }
+  return Math.round(total * 10) / 10;
+}
+
+export function getAllPeriodsForMonth(year: number, month: number, referenceDate: string): { start: string; end: string }[] {
+  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  const seen = new Set<string>();
+  const periods: { start: string; end: string }[] = [];
+
+  let current = monthStart;
+  while (current <= monthEnd) {
+    const period = getFourWeekPeriod(current, referenceDate);
+    const key = period.start;
+    if (!seen.has(key)) {
+      seen.add(key);
+      periods.push(period);
+    }
+    const d = new Date(current + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 1);
+    current = d.toISOString().split("T")[0];
+    if (seen.has(getFourWeekPeriod(current, referenceDate).start) && current <= monthEnd) {
+      const nextPeriod = getFourWeekPeriod(current, referenceDate);
+      const jumpTo = new Date(nextPeriod.end + "T00:00:00Z");
+      jumpTo.setUTCDate(jumpTo.getUTCDate() + 1);
+      current = jumpTo.toISOString().split("T")[0];
+    }
+  }
+
+  return periods;
+}
+
 export interface VacancyInfo {
   venueId: number;
   venueName: string;

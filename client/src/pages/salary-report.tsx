@@ -12,10 +12,10 @@ import { useToast } from "@/hooks/use-toast";
 
 const REGION_OPTIONS = [
   { value: "all", label: "全部地區" },
-  { value: "sanMi", label: "三蘆戰區" },
-  { value: "songShan", label: "松山國小" },
-  { value: "hsinChu", label: "新竹區" },
-  { value: "internal", label: "內勤" },
+  { value: "A", label: "三蘆戰區" },
+  { value: "B", label: "松山國小" },
+  { value: "C", label: "新竹區" },
+  { value: "D", label: "內勤" },
 ];
 
 const ROLE_COLORS: Record<string, string> = {
@@ -93,17 +93,24 @@ type FourWeekEmployee = {
   employeeName: string;
   employeeCode: string;
   region: string;
-  totalHours: number;
+  scheduledHours: number;
+  overtimeHours: number;
+  combinedTotal: number;
+  overtimeAbove160: number;
   status: "normal" | "warning" | "over";
 };
 
-type FourWeekCompliance = {
+type FourWeekPeriod = {
   periodStart: string;
   periodEnd: string;
+  employees: FourWeekEmployee[];
+};
+
+type FourWeekCompliance = {
   referenceDate: string;
   normalLimit: number;
   overtimeLimit: number;
-  employees: FourWeekEmployee[];
+  periods: FourWeekPeriod[];
 };
 
 export default function SalaryReportPage() {
@@ -168,11 +175,12 @@ export default function SalaryReportPage() {
 
   const totalOvertimeHours = useMemo(() => data?.employees.reduce((s, e) => Math.round((s + e.overtimeHours) * 10) / 10, 0) || 0, [data]);
 
-  const complianceDate = `${year}-${String(month).padStart(2, "0")}-15`;
+  const compParams = new URLSearchParams({ year: String(year), month: String(month) });
+  if (regionCode !== "all") compParams.set("regionCode", regionCode);
   const { data: compliance, isLoading: compLoading } = useQuery<FourWeekCompliance>({
-    queryKey: ["/api/four-week-compliance", complianceDate],
+    queryKey: ["/api/four-week-compliance", year, month, regionCode],
     queryFn: async () => {
-      const res = await fetch(`/api/four-week-compliance?date=${complianceDate}`, { credentials: "include" });
+      const res = await fetch(`/api/four-week-compliance?${compParams}`, { credentials: "include" });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -202,8 +210,32 @@ export default function SalaryReportPage() {
     },
   });
 
-  const compWarning = compliance?.employees.filter(e => e.status === "warning").length || 0;
-  const compOver = compliance?.employees.filter(e => e.status === "over").length || 0;
+  const compWarning = useMemo(() => {
+    if (!compliance) return 0;
+    const s = new Set<number>();
+    compliance.periods.forEach(p => p.employees.filter(e => e.status === "warning").forEach(e => s.add(e.employeeId)));
+    return s.size;
+  }, [compliance]);
+  const compOver = useMemo(() => {
+    if (!compliance) return 0;
+    const s = new Set<number>();
+    compliance.periods.forEach(p => p.employees.filter(e => e.status === "over").forEach(e => s.add(e.employeeId)));
+    return s.size;
+  }, [compliance]);
+
+  const empComplianceMap = useMemo(() => {
+    if (!compliance) return new Map<number, "normal" | "warning" | "over">();
+    const map = new Map<number, "normal" | "warning" | "over">();
+    for (const period of compliance.periods) {
+      for (const emp of period.employees) {
+        const current = map.get(emp.employeeId) || "normal";
+        if (emp.status === "over" || current === "over") map.set(emp.employeeId, "over");
+        else if (emp.status === "warning" || current === "warning") map.set(emp.employeeId, "warning");
+        else map.set(emp.employeeId, "normal");
+      }
+    }
+    return map;
+  }, [compliance]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -363,7 +395,15 @@ export default function SalaryReportPage() {
                     data-testid={`row-employee-${emp.id}`}
                   >
                     <td className="px-3 py-2 sticky left-0 bg-background">
-                      <div className="font-medium truncate max-w-[100px]" title={emp.name}>{emp.name}</div>
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium truncate max-w-[100px]" title={emp.name}>{emp.name}</span>
+                        {empComplianceMap.get(emp.id) === "over" && (
+                          <XCircle className="h-3 w-3 text-red-500 shrink-0" title="四週工時超限" />
+                        )}
+                        {empComplianceMap.get(emp.id) === "warning" && (
+                          <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" title="四週工時警告" />
+                        )}
+                      </div>
                       <div className="text-[10px] text-muted-foreground">{emp.employeeCode}</div>
                     </td>
                     <td className="px-3 py-2">
@@ -499,7 +539,7 @@ export default function SalaryReportPage() {
                 <div className="text-xs text-muted-foreground">
                   {compliance ? (
                     <>
-                      週期：{compliance.periodStart} ~ {compliance.periodEnd}
+                      共 {compliance.periods.length} 個四週週期
                       <span className="ml-3">正常上限 {compliance.normalLimit}h / 加班上限 {compliance.overtimeLimit}h</span>
                     </>
                   ) : compLoading ? (
@@ -558,74 +598,95 @@ export default function SalaryReportPage() {
                     <Skeleton key={i} className="h-8 w-full" />
                   ))}
                 </div>
-              ) : compliance && compliance.employees.length > 0 ? (
-                <div className="rounded-lg border overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-muted/40 border-b">
-                        <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">員工</th>
-                        <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">地區</th>
-                        <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">四週總工時</th>
-                        <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">狀態</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {compliance.employees.map((emp, idx) => (
-                        <tr
-                          key={emp.employeeId}
-                          className={`border-b last:border-0 ${
-                            emp.status === "over"
-                              ? "bg-red-50/50 dark:bg-red-950/20"
-                              : emp.status === "warning"
-                              ? "bg-amber-50/50 dark:bg-amber-950/20"
-                              : idx % 2 === 0
-                              ? ""
-                              : "bg-muted/10"
-                          }`}
-                          data-testid={`row-compliance-${emp.employeeId}`}
-                        >
-                          <td className="px-3 py-2">
-                            <div className="font-medium text-sm">{emp.employeeName}</div>
-                            <div className="text-[10px] text-muted-foreground">{emp.employeeCode}</div>
-                          </td>
-                          <td className="px-3 py-2 text-xs text-muted-foreground">{emp.region}</td>
-                          <td className="px-3 py-2 text-right">
-                            <span className={`font-mono font-bold text-sm ${
-                              emp.status === "over"
-                                ? "text-red-600 dark:text-red-400"
-                                : emp.status === "warning"
-                                ? "text-amber-600 dark:text-amber-400"
-                                : "text-green-600 dark:text-green-400"
-                            }`}>
-                              {emp.totalHours.toFixed(1)}h
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            {emp.status === "over" ? (
-                              <div className="flex items-center justify-center gap-1">
-                                <XCircle className="h-3.5 w-3.5 text-red-500" />
-                                <span className="text-xs text-red-600 dark:text-red-400 font-medium">超限</span>
-                              </div>
-                            ) : emp.status === "warning" ? (
-                              <div className="flex items-center justify-center gap-1">
-                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                                <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">警告</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-center gap-1">
-                                <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-                                <span className="text-xs text-green-600 dark:text-green-400">合規</span>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              ) : compliance && compliance.periods.length > 0 ? (
+                <div className="space-y-4">
+                  {compliance.periods.map((period, pIdx) => (
+                    <div key={period.periodStart} className="rounded-lg border overflow-hidden">
+                      <div className="bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground border-b">
+                        週期 {pIdx + 1}：{period.periodStart} ~ {period.periodEnd}
+                      </div>
+                      {period.employees.length > 0 ? (
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-muted/40 border-b">
+                              <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">員工</th>
+                              <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">地區</th>
+                              <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">排班工時</th>
+                              <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">加班工時</th>
+                              <th className="text-right px-3 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400">合計</th>
+                              <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">狀態</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {period.employees.map((emp, idx) => (
+                              <tr
+                                key={emp.employeeId}
+                                className={`border-b last:border-0 ${
+                                  emp.status === "over"
+                                    ? "bg-red-50/50 dark:bg-red-950/20"
+                                    : emp.status === "warning"
+                                    ? "bg-amber-50/50 dark:bg-amber-950/20"
+                                    : idx % 2 === 0
+                                    ? ""
+                                    : "bg-muted/10"
+                                }`}
+                                data-testid={`row-compliance-${period.periodStart}-${emp.employeeId}`}
+                              >
+                                <td className="px-3 py-2">
+                                  <div className="font-medium text-sm">{emp.employeeName}</div>
+                                  <div className="text-[10px] text-muted-foreground">{emp.employeeCode}</div>
+                                </td>
+                                <td className="px-3 py-2 text-xs text-muted-foreground">{emp.region}</td>
+                                <td className="px-3 py-2 text-right font-mono text-sm">{emp.scheduledHours.toFixed(1)}h</td>
+                                <td className="px-3 py-2 text-right font-mono text-sm">
+                                  {emp.overtimeHours > 0 ? (
+                                    <span className="text-red-600 dark:text-red-400">{emp.overtimeHours.toFixed(1)}h</span>
+                                  ) : (
+                                    <span className="text-muted-foreground/30">—</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <span className={`font-mono font-bold text-sm ${
+                                    emp.status === "over"
+                                      ? "text-red-600 dark:text-red-400"
+                                      : emp.status === "warning"
+                                      ? "text-amber-600 dark:text-amber-400"
+                                      : "text-green-600 dark:text-green-400"
+                                  }`}>
+                                    {emp.combinedTotal.toFixed(1)}h
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {emp.status === "over" ? (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <XCircle className="h-3.5 w-3.5 text-red-500" />
+                                      <span className="text-xs text-red-600 dark:text-red-400 font-medium">超限</span>
+                                    </div>
+                                  ) : emp.status === "warning" ? (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                                      <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">警告</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                                      <span className="text-xs text-green-600 dark:text-green-400">合規</span>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="text-center text-xs text-muted-foreground py-4">此週期尚無排班資料</div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ) : compliance && compliance.employees.length === 0 ? (
+              ) : compliance && compliance.periods.length === 0 ? (
                 <div className="text-center text-sm text-muted-foreground py-6">
-                  此週期尚無排班資料
+                  此月份尚無排班資料
                 </div>
               ) : null}
             </div>

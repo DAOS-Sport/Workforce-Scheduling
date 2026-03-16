@@ -1,7 +1,7 @@
 import express, { type Express, type Request, type Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, insertShiftSchema, insertScheduleSlotSchema, insertVenueShiftTemplateSchema, insertGuidelineSchema, insertGuidelineAckSchema, type InsertAttendanceRecord, type ShiftValidationError, getFourWeekPeriod, calcShiftHours } from "@shared/schema";
+import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, insertShiftSchema, insertScheduleSlotSchema, insertVenueShiftTemplateSchema, insertGuidelineSchema, insertGuidelineAckSchema, type InsertAttendanceRecord, type ShiftValidationError, getFourWeekPeriod, calcShiftHours, sumScheduledHours, getAllPeriodsForMonth } from "@shared/schema";
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
@@ -365,6 +365,7 @@ export async function registerRoutes(
       const fourWeekRef = refConfig?.value || "2025-01-06";
       const results: any[] = [];
       const errors: string[] = [];
+      const warnings: string[] = [];
 
       for (const date of targetDates) {
         if (!isLeave) {
@@ -374,6 +375,8 @@ export async function registerRoutes(
             errors.push(`${date}: ${blocking[0].message}`);
             continue;
           }
+          const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
+          for (const w of warnItems) warnings.push(`${date}: ${w.message}`);
         }
         const shift = await storage.createShift({
           employeeId,
@@ -388,7 +391,7 @@ export async function registerRoutes(
         results.push(shift);
       }
 
-      res.json({ created: results.length, errors, shifts: results });
+      res.json({ created: results.length, errors, warnings, shifts: results });
     } catch (err: any) {
       res.status(400).json({ message: err.message });
     }
@@ -423,6 +426,19 @@ export async function registerRoutes(
 
       const updated: any[] = [];
       const errors: string[] = [];
+      const warnings: string[] = [];
+
+      const existingShifts = isLeave ? [] : await storage.getShiftsByEmployee(empId);
+      const refConfig = isLeave ? null : await storage.getSystemConfig("four_week_reference_date");
+      const fourWeekRef = refConfig?.value || "2025-01-06";
+
+      const currentShift = existingShifts.find((s: any) => s.id === Number(currentShiftId));
+      const currentDate = currentShift?.date;
+      if (!isLeave && currentDate) {
+        const dayErrors = validateAllRules(empId, currentDate, effectiveStart, effectiveEnd, existingShifts, Number(currentShiftId), fourWeekRef);
+        const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
+        for (const w of warnItems) warnings.push(`${currentDate}: ${w.message}`);
+      }
 
       const currentUpdated = await storage.updateShift(Number(currentShiftId), {
         venueId: effectiveVenueId,
@@ -431,9 +447,24 @@ export async function registerRoutes(
         role,
         isDispatch: isLeave ? false : (isDispatch || false),
       });
-      if (currentUpdated) updated.push(currentUpdated);
+      if (currentUpdated) {
+        updated.push(currentUpdated);
+        const idx = existingShifts.findIndex((s: any) => s.id === Number(currentShiftId));
+        if (idx >= 0) Object.assign(existingShifts[idx], currentUpdated);
+      }
 
       for (const date of targetDates) {
+        if (!isLeave) {
+          const dayErrors = validateAllRules(empId, date, effectiveStart, effectiveEnd, existingShifts, undefined, fourWeekRef);
+          const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
+          if (blocking.length > 0) {
+            errors.push(`${date}: ${blocking[0].message}`);
+            continue;
+          }
+          const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
+          for (const w of warnItems) warnings.push(`${date}: ${w.message}`);
+        }
+
         const dayShifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
         if (dayShifts.length === 0) {
           const created = await storage.createShift({
@@ -446,6 +477,7 @@ export async function registerRoutes(
             isDispatch: isLeave ? false : (isDispatch || false),
           });
           updated.push(created);
+          existingShifts.push(created as any);
         } else {
           const result = await storage.updateShift(dayShifts[0].id, {
             venueId: effectiveVenueId,
@@ -458,7 +490,7 @@ export async function registerRoutes(
         }
       }
 
-      res.json({ updated: updated.length, errors, shifts: updated });
+      res.json({ updated: updated.length, errors, warnings, shifts: updated });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -2142,54 +2174,94 @@ export async function registerRoutes(
 
   app.get("/api/four-week-compliance", async (req, res) => {
     try {
-      const dateStr = req.query.date as string;
-      if (!dateStr) return res.status(400).json({ message: "需提供 date 參數" });
+      const year = parseInt(req.query.year as string);
+      const month = parseInt(req.query.month as string);
+      const regionCode = req.query.regionCode as string | undefined;
+
+      if (!year || !month || month < 1 || month > 12) {
+        return res.status(400).json({ message: "需提供正確的 year 和 month" });
+      }
 
       const refConfig = await storage.getSystemConfig("four_week_reference_date");
       const referenceDate = refConfig?.value || "2025-01-06";
 
-      const period = getFourWeekPeriod(dateStr, referenceDate);
+      const periods = getAllPeriodsForMonth(year, month, referenceDate);
 
-      const allShifts = await storage.getAllShiftsByDateRange(period.start, period.end);
+      const allStart = periods.reduce((min, p) => p.start < min ? p.start : min, periods[0].start);
+      const allEnd = periods.reduce((max, p) => p.end > max ? p.end : max, periods[0].end);
+
+      const allShifts = await storage.getAllShiftsByDateRange(allStart, allEnd);
+      const approvedOT = await storage.getApprovedOvertimeByDateRange(allStart, allEnd);
       const allEmployees = await storage.getAllEmployees();
       const allRegions = await storage.getRegions();
       const regionMap = new Map(allRegions.map(r => [r.id, r]));
 
-      const empHours = new Map<number, number>();
+      const regionFilter = regionCode
+        ? allRegions.find(r => r.code === regionCode)
+        : null;
+
+      const activeEmps = allEmployees.filter(e => {
+        if (e.status !== "active") return false;
+        if (regionFilter && e.regionId !== regionFilter.id) return false;
+        return true;
+      });
+
+      const empIdsWithShifts = new Set<number>();
       for (const s of allShifts) {
-        if (LEAVE_TYPES.includes(s.role)) continue;
-        const hrs = calcShiftHours(s.startTime, s.endTime);
-        empHours.set(s.employeeId, (empHours.get(s.employeeId) || 0) + hrs);
+        if (!LEAVE_TYPES.includes(s.role)) empIdsWithShifts.add(s.employeeId);
       }
+      for (const ot of approvedOT) empIdsWithShifts.add(ot.employeeId);
 
-      const results = [];
-      for (const [empId, totalHours] of empHours.entries()) {
-        const emp = allEmployees.find(e => e.id === empId);
-        if (!emp || emp.status !== "active") continue;
-        const region = regionMap.get(emp.regionId);
-        const rounded = Math.round(totalHours * 10) / 10;
-        let status: "normal" | "warning" | "over" = "normal";
-        if (rounded > 176) status = "over";
-        else if (rounded > 160) status = "warning";
-        results.push({
-          employeeId: empId,
-          employeeName: emp.name,
-          employeeCode: emp.employeeCode,
-          region: region?.name || "未知",
-          totalHours: rounded,
-          status,
-        });
-      }
+      const periodResults = periods.map(period => {
+        const employees = [];
+        for (const emp of activeEmps) {
+          if (!empIdsWithShifts.has(emp.id)) continue;
 
-      results.sort((a, b) => b.totalHours - a.totalHours);
+          const scheduledHours = sumScheduledHours(allShifts, emp.id, period.start, period.end, LEAVE_TYPES);
+
+          let overtimeHours = 0;
+          for (const ot of approvedOT) {
+            if (ot.employeeId !== emp.id) continue;
+            if (ot.date < period.start || ot.date > period.end) continue;
+            overtimeHours += calcShiftHours(ot.startTime, ot.endTime);
+          }
+          overtimeHours = Math.round(overtimeHours * 10) / 10;
+
+          const combinedTotal = Math.round((scheduledHours + overtimeHours) * 10) / 10;
+          const overtimeAbove160 = Math.max(0, Math.round((combinedTotal - 160) * 10) / 10);
+
+          let status: "normal" | "warning" | "over" = "normal";
+          if (combinedTotal > 176) status = "over";
+          else if (combinedTotal > 160) status = "warning";
+
+          const region = regionMap.get(emp.regionId);
+          employees.push({
+            employeeId: emp.id,
+            employeeName: emp.name,
+            employeeCode: emp.employeeCode,
+            region: region?.name || "未知",
+            scheduledHours,
+            overtimeHours,
+            combinedTotal,
+            overtimeAbove160,
+            status,
+          });
+        }
+
+        employees.sort((a, b) => b.combinedTotal - a.combinedTotal);
+
+        return {
+          periodStart: period.start,
+          periodEnd: period.end,
+          employees,
+        };
+      });
 
       res.json({
-        periodStart: period.start,
-        periodEnd: period.end,
         referenceDate,
         normalLimit: 160,
         overtimeLimit: 176,
-        employees: results,
+        periods: periodResults,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

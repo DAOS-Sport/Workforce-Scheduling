@@ -452,9 +452,14 @@ export default function SchedulePage() {
       const res = await apiRequest("POST", "/api/shifts", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
-      toast({ title: "班次已新增" });
+      if (result?.warnings && result.warnings.length > 0) {
+        const warnMsgs = result.warnings.map((w: any) => w.message).join("\n");
+        toast({ title: "班次已新增（有警告）", description: warnMsgs, variant: "destructive" });
+      } else {
+        toast({ title: "班次已新增" });
+      }
     },
     onError: (err: Error) => {
       toast({ title: "新增失敗", description: err.message, variant: "destructive" });
@@ -466,9 +471,14 @@ export default function SchedulePage() {
       const res = await apiRequest("PATCH", `/api/shifts/${id}`, data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
-      toast({ title: "班次已更新" });
+      if (result?.warnings && result.warnings.length > 0) {
+        const warnMsgs = result.warnings.map((w: any) => w.message).join("\n");
+        toast({ title: "班次已更新（有警告）", description: warnMsgs, variant: "destructive" });
+      } else {
+        toast({ title: "班次已更新" });
+      }
     },
     onError: (err: Error) => {
       toast({ title: "更新失敗", description: err.message, variant: "destructive" });
@@ -551,7 +561,11 @@ export default function SchedulePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       const msg = `已新增 ${data.created} 筆班次`;
       const errMsg = data.errors?.length > 0 ? `（${data.errors.length} 筆因勞基法限制略過）` : "";
-      toast({ title: msg + errMsg });
+      if (data.warnings?.length > 0) {
+        toast({ title: msg + errMsg + "（有警告）", description: data.warnings.join("\n"), variant: "destructive" });
+      } else {
+        toast({ title: msg + errMsg });
+      }
       setShiftBatchDates(new Set());
       setShiftBatchMode(false);
     },
@@ -581,7 +595,11 @@ export default function SchedulePage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       const errMsg = data.errors?.length > 0 ? `（${data.errors.length} 天找不到符合班次）` : "";
-      toast({ title: `已更新 ${data.updated} 筆班次` + errMsg });
+      if (data.warnings?.length > 0) {
+        toast({ title: `已更新 ${data.updated} 筆班次` + errMsg + "（有警告）", description: data.warnings.join("\n"), variant: "destructive" });
+      } else {
+        toast({ title: `已更新 ${data.updated} 筆班次` + errMsg });
+      }
       setShiftBatchDates(new Set());
       setShiftBatchMode(false);
     },
