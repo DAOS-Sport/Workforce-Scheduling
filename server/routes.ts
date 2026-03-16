@@ -1438,9 +1438,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/send-shift-reminders", async (_req, res) => {
+  app.post("/api/send-shift-reminders", async (req, res) => {
     try {
-      const result = await sendShiftReminders();
+      const force = req.body?.force === true;
+      const result = await sendShiftReminders(force);
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

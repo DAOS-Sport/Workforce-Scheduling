@@ -593,8 +593,17 @@ export async function handleLineWebhook(body: any): Promise<void> {
 
 const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
 
-export async function sendShiftReminders(): Promise<{ sent: number; skipped: number; noLineId: number }> {
+let lastReminderSentDate: string | null = null;
+
+export async function sendShiftReminders(force = false): Promise<{ sent: number; skipped: number; noLineId: number }> {
   const taipeiNow = getTaiwanNow();
+  const todayStr = formatTaiwanDate(taipeiNow);
+
+  if (!force && lastReminderSentDate === todayStr) {
+    console.log(`[推撥] 今日 ${todayStr} 班表提醒已發送過，跳過重複發送`);
+    return { sent: 0, skipped: 0, noLineId: 0 };
+  }
+
   const tomorrow = new Date(taipeiNow);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = formatTaiwanDate(tomorrow);
@@ -662,6 +671,7 @@ export async function sendShiftReminders(): Promise<{ sent: number; skipped: num
     }
   }
 
+  lastReminderSentDate = todayStr;
   console.log(`[推撥] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
   return { sent, skipped, noLineId };
 }
