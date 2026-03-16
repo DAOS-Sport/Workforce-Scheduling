@@ -61,6 +61,7 @@ interface OvertimeRequest {
   status: string;
   source: string;
   clockRecordId: number | null;
+  linkedClockTime: string | null;
   reviewedBy: number | null;
   reviewedByName: string | null;
   reviewedAt: string | null;
@@ -689,10 +690,17 @@ export default function ClockRecordsPage() {
                           </div>
                           <div className="text-sm text-muted-foreground mt-0.5">
                             原因：{o.reason}
-                            {o.source === "clock_triggered" && (
+                            {o.source === "clock_triggered" ? (
                               <Badge className="ml-2 bg-violet-500/10 text-violet-600 border-violet-500/20 text-[10px]" data-testid={`badge-ot-source-${o.id}`}>打卡觸發</Badge>
+                            ) : (
+                              <Badge className="ml-2 bg-gray-500/10 text-gray-600 border-gray-500/20 text-[10px]" data-testid={`badge-ot-source-${o.id}`}>手動申請</Badge>
                             )}
                           </div>
+                          {o.linkedClockTime && (
+                            <div className="text-xs text-muted-foreground mt-0.5" data-testid={`text-ot-clock-time-${o.id}`}>
+                              關聯打卡時間：{new Date(o.linkedClockTime).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                          )}
                           {formatReviewInfo(o.reviewedByName, o.reviewedAt) && (
                             <div className="text-xs text-muted-foreground mt-1">
                               {formatReviewInfo(o.reviewedByName, o.reviewedAt)}

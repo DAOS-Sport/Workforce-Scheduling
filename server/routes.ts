@@ -1756,10 +1756,20 @@ export async function registerRoutes(
         if (emp) employeeMap.set(id, emp);
       }
 
+      const clockRecordIds = records.filter(r => r.clockRecordId).map(r => r.clockRecordId!);
+      const clockRecordMap = new Map<number, any>();
+      for (const crId of clockRecordIds) {
+        const cr = await storage.getClockRecord(crId);
+        if (cr) clockRecordMap.set(crId, cr);
+      }
+
       const enriched = records.map(r => ({
         ...r,
         employeeName: employeeMap.get(r.employeeId)?.name || "未知",
         employeeCode: employeeMap.get(r.employeeId)?.employeeCode || "",
+        linkedClockTime: r.clockRecordId && clockRecordMap.has(r.clockRecordId)
+          ? clockRecordMap.get(r.clockRecordId).clockTime
+          : null,
       }));
 
       res.json(enriched);
