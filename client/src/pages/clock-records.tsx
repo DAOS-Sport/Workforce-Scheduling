@@ -59,6 +59,8 @@ interface OvertimeRequest {
   endTime: string;
   reason: string;
   status: string;
+  source: string;
+  clockRecordId: number | null;
   reviewedBy: number | null;
   reviewedByName: string | null;
   reviewedAt: string | null;
@@ -687,6 +689,9 @@ export default function ClockRecordsPage() {
                           </div>
                           <div className="text-sm text-muted-foreground mt-0.5">
                             原因：{o.reason}
+                            {o.source === "clock_triggered" && (
+                              <Badge className="ml-2 bg-violet-500/10 text-violet-600 border-violet-500/20 text-[10px]" data-testid={`badge-ot-source-${o.id}`}>打卡觸發</Badge>
+                            )}
                           </div>
                           {formatReviewInfo(o.reviewedByName, o.reviewedAt) && (
                             <div className="text-xs text-muted-foreground mt-1">

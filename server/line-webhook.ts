@@ -335,9 +335,11 @@ export async function processClockIn(
       const approvedOT = await storage.getOvertimeRequestsByEmployeeAndDate(employee.id, todayStr);
       const hasApprovedCoverage = approvedOT.some(ot => {
         if (ot.status !== "approved") return false;
+        const [otSh, otSm] = ot.startTime.split(":").map(Number);
         const [otEh, otEm] = ot.endTime.split(":").map(Number);
+        const otStart = otSh * 60 + otSm;
         const otEnd = otEh * 60 + otEm;
-        return nowMinutes <= otEnd + 15;
+        return nowMinutes >= otStart && nowMinutes <= otEnd + 15;
       });
       if (hasApprovedCoverage) {
         lateReason = "加班打卡";

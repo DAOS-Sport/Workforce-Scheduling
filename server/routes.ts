@@ -2228,6 +2228,19 @@ export async function registerRoutes(
         }
       }
 
+      const empShiftIntervals = new Map<number, Array<{ start: number; end: number; date: string }>>();
+      for (const s of allShifts) {
+        if (!empMap.has(s.employeeId) || leaveSet.has(s.role)) continue;
+        if (!empShiftIntervals.has(s.employeeId)) empShiftIntervals.set(s.employeeId, []);
+        const [sh2, sm2] = s.startTime.split(":").map(Number);
+        const [eh2, em2] = s.endTime.split(":").map(Number);
+        empShiftIntervals.get(s.employeeId)!.push({
+          start: sh2 * 60 + sm2,
+          end: eh2 * 60 + em2,
+          date: s.date,
+        });
+      }
+
       for (const ot of approvedOT) {
         const emp = empMap.get(ot.employeeId);
         if (!emp) continue;
@@ -2249,9 +2262,31 @@ export async function registerRoutes(
         }
 
         const entry = stats.get(ot.employeeId)!;
-        const otHrs = rawHours(ot.startTime, ot.endTime);
-        entry.overtimeHours = Math.round((entry.overtimeHours + otHrs) * 10) / 10;
-        entry.totalWorkHours = Math.round((entry.totalWorkHours + otHrs) * 10) / 10;
+        const [otSh, otSm] = ot.startTime.split(":").map(Number);
+        const [otEh, otEm] = ot.endTime.split(":").map(Number);
+        let otStartMins = otSh * 60 + otSm;
+        let otEndMins = otEh * 60 + otEm;
+        if (otEndMins <= otStartMins) otEndMins += 24 * 60;
+
+        const shifts = empShiftIntervals.get(ot.employeeId) || [];
+        const sameDayShifts = shifts.filter(si => si.date === ot.date);
+
+        let nonOverlapMins = otEndMins - otStartMins;
+        for (const si of sameDayShifts) {
+          let siEnd = si.end;
+          if (siEnd <= si.start) siEnd += 24 * 60;
+          const overlapStart = Math.max(otStartMins, si.start);
+          const overlapEnd = Math.min(otEndMins, siEnd);
+          if (overlapEnd > overlapStart) {
+            nonOverlapMins -= (overlapEnd - overlapStart);
+          }
+        }
+
+        if (nonOverlapMins > 0) {
+          const otHrs = Math.round(nonOverlapMins / 60 * 10) / 10;
+          entry.overtimeHours = Math.round((entry.overtimeHours + otHrs) * 10) / 10;
+          entry.totalWorkHours = Math.round((entry.totalWorkHours + otHrs) * 10) / 10;
+        }
       }
 
       const workRoles = Array.from(workRolesSet).sort();
