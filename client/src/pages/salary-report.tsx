@@ -123,6 +123,7 @@ export default function SalaryReportPage() {
   const [complianceOpen, setComplianceOpen] = useState(false);
   const [refDateInput, setRefDateInput] = useState("");
   const [showRefEditor, setShowRefEditor] = useState(false);
+  const [selectedPeriodIdx, setSelectedPeriodIdx] = useState<number | "all">("all");
 
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear(y => y - 1); }
@@ -612,8 +613,26 @@ export default function SalaryReportPage() {
                   ))}
                 </div>
               ) : compliance && compliance.periods.length > 0 ? (
-                <div className="space-y-4">
-                  {compliance.periods.map((period, pIdx) => (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">選擇週期：</span>
+                    <Select value={String(selectedPeriodIdx)} onValueChange={(v) => setSelectedPeriodIdx(v === "all" ? "all" : Number(v))}>
+                      <SelectTrigger className="h-7 w-auto text-xs" data-testid="select-compliance-period">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全部週期</SelectItem>
+                        {compliance.periods.map((p, i) => (
+                          <SelectItem key={i} value={String(i)}>週期 {i + 1}：{p.periodStart} ~ {p.periodEnd}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {compliance.periods
+                    .filter((_, pIdx) => selectedPeriodIdx === "all" || pIdx === selectedPeriodIdx)
+                    .map((period, _, arr) => {
+                    const pIdx = compliance.periods.indexOf(period);
+                    return (
                     <div key={period.periodStart} className="rounded-lg border overflow-hidden">
                       <div className="bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground border-b">
                         週期 {pIdx + 1}：{period.periodStart} ~ {period.periodEnd}
@@ -627,6 +646,7 @@ export default function SalaryReportPage() {
                               <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">排班工時</th>
                               <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">加班工時</th>
                               <th className="text-right px-3 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400">合計</th>
+                              <th className="text-right px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">超出160h</th>
                               <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">狀態</th>
                             </tr>
                           </thead>
@@ -669,6 +689,13 @@ export default function SalaryReportPage() {
                                     {emp.combinedTotal.toFixed(1)}h
                                   </span>
                                 </td>
+                                <td className="px-3 py-2 text-right font-mono text-sm">
+                                  {emp.overtimeAbove160 > 0 ? (
+                                    <span className="text-red-600 dark:text-red-400 font-bold">{emp.overtimeAbove160.toFixed(1)}h</span>
+                                  ) : (
+                                    <span className="text-muted-foreground/30">—</span>
+                                  )}
+                                </td>
                                 <td className="px-3 py-2 text-center">
                                   {emp.status === "over" ? (
                                     <div className="flex items-center justify-center gap-1">
@@ -695,7 +722,8 @@ export default function SalaryReportPage() {
                         <div className="text-center text-xs text-muted-foreground py-4">此週期尚無排班資料</div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : compliance && compliance.periods.length === 0 ? (
                 <div className="text-center text-sm text-muted-foreground py-6">
