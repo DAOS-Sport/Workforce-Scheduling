@@ -52,7 +52,7 @@ type HoursReport = {
 };
 
 function exportCSV(report: HoursReport, regionLabel: string) {
-  const { year, month, workRoles, leaveTypes, employees } = report;
+  const { year, month, workRoles, employees } = report;
 
   const hasOT = report.hasOvertimeData;
   const headers = [
@@ -60,9 +60,6 @@ function exportCSV(report: HoursReport, regionLabel: string) {
     ...workRoles.map(r => `${r}(時數)`),
     ...(hasOT ? ["加班(時數)"] : []),
     "總工時",
-    ...leaveTypes.map(l => `${l}(天)`),
-    "假別合計",
-    "排班次數",
   ];
 
   const rows = employees.map(e => [
@@ -72,9 +69,6 @@ function exportCSV(report: HoursReport, regionLabel: string) {
     ...workRoles.map(r => (e.hours[r] || 0).toFixed(1)),
     ...(hasOT ? [e.overtimeHours.toFixed(1)] : []),
     e.totalWorkHours.toFixed(1),
-    ...leaveTypes.map(l => e.leaves[l] || 0),
-    e.totalLeaveDays,
-    e.shiftCount,
   ]);
 
   const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
@@ -248,7 +242,7 @@ export default function SalaryReportPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-xl font-bold">工時總表</h1>
-            <p className="text-sm text-muted-foreground">統計當月各員工各班別實際計薪工時（已套用場館扣時規則）</p>
+            <p className="text-sm text-muted-foreground">統計當月各員工各班別工時與總工時</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1 border rounded-lg overflow-hidden">
@@ -379,17 +373,6 @@ export default function SalaryReportPage() {
                   <th className="text-right px-3 py-2.5 font-semibold text-xs text-blue-600 dark:text-blue-400 min-w-[72px] bg-blue-50/50 dark:bg-blue-950/20">
                     總工時
                   </th>
-                  {data.leaveTypes.map(l => (
-                    <th key={l} className="text-right px-3 py-2.5 font-semibold text-xs text-muted-foreground min-w-[56px]">
-                      {l}<br /><span className="font-normal opacity-70">(天)</span>
-                    </th>
-                  ))}
-                  {data.leaveTypes.length > 0 && (
-                    <th className="text-right px-3 py-2.5 font-semibold text-xs text-amber-600 dark:text-amber-400 min-w-[56px] bg-amber-50/50 dark:bg-amber-950/20">
-                      假別計
-                    </th>
-                  )}
-                  <th className="text-right px-3 py-2.5 font-semibold text-xs text-muted-foreground min-w-[52px]">次數</th>
                 </tr>
               </thead>
               <tbody>
@@ -452,25 +435,6 @@ export default function SalaryReportPage() {
                         {emp.totalWorkHours.toFixed(1)}h
                       </span>
                     </td>
-                    {data.leaveTypes.map(l => (
-                      <td key={l} className="px-3 py-2 text-right">
-                        {(emp.leaves[l] || 0) > 0 ? (
-                          <span className="text-xs font-medium text-amber-600 dark:text-amber-400">{emp.leaves[l]}天</span>
-                        ) : (
-                          <span className="text-muted-foreground/30 text-xs">—</span>
-                        )}
-                      </td>
-                    ))}
-                    {data.leaveTypes.length > 0 && (
-                      <td className="px-3 py-2 text-right bg-amber-50/30 dark:bg-amber-950/10">
-                        <span className="font-medium text-amber-600 dark:text-amber-400 text-xs">
-                          {emp.totalLeaveDays > 0 ? `${emp.totalLeaveDays}天` : "—"}
-                        </span>
-                      </td>
-                    )}
-                    <td className="px-3 py-2 text-right">
-                      <span className="text-xs text-muted-foreground">{emp.shiftCount}</span>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -494,19 +458,6 @@ export default function SalaryReportPage() {
                       {totalHours.toFixed(1)}h
                     </span>
                   </td>
-                  {data.leaveTypes.map(l => (
-                    <td key={l} className="px-3 py-2.5 text-right text-xs text-muted-foreground">
-                      {data.employees.reduce((s, e) => s + (e.leaves[l] || 0), 0)}天
-                    </td>
-                  ))}
-                  {data.leaveTypes.length > 0 && (
-                    <td className="px-3 py-2.5 text-right bg-amber-50/50 dark:bg-amber-950/20">
-                      <span className="font-medium text-amber-600 dark:text-amber-400 text-xs">
-                        {data.employees.reduce((s, e) => s + e.totalLeaveDays, 0)}天
-                      </span>
-                    </td>
-                  )}
-                  <td className="px-3 py-2.5 text-right text-xs text-muted-foreground">{totalShifts}</td>
                 </tr>
               </tfoot>
             </table>
