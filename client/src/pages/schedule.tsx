@@ -234,6 +234,11 @@ export default function SchedulePage() {
       if (e.regionId === nqRegionId && e.status !== "inactive") ids.add(e.id);
     });
     setNeiQinEmployeeIds(ids);
+    setScheduleVisibleEmployeeIds(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => next.add(id));
+      return next;
+    });
   }, [allSystemEmployees, activeRegion, regionsData, regionCodeToId]);
 
   const { data: scheduleSlots = [], isLoading: slotsLoading } = useQuery<ScheduleSlot[]>({
