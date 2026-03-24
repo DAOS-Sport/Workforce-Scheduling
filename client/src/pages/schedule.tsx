@@ -251,24 +251,25 @@ export default function SchedulePage() {
 
   useEffect(() => {
     if (empLoading) return;
-    if (shifts.length === 0) return;
-    const shiftEmpIds = new Set(shifts.map(s => s.employeeId));
     const regionEmpIds = new Set(employees.map(e => e.id));
+    const shiftEmpIds = new Set(shifts.map(s => s.employeeId));
     const crossIds = new Set<number>();
     shiftEmpIds.forEach(id => {
       if (!regionEmpIds.has(id)) crossIds.add(id);
     });
     setCrossRegionEmployeeIds(prev => {
       const next = new Set(prev);
-      crossIds.forEach(id => next.add(id));
       regionEmpIds.forEach(id => next.delete(id));
+      crossIds.forEach(id => next.add(id));
       return next;
     });
-    setScheduleVisibleEmployeeIds(prev => {
-      const next = new Set(prev);
-      shiftEmpIds.forEach(id => next.add(id));
-      return next;
-    });
+    if (shifts.length > 0) {
+      setScheduleVisibleEmployeeIds(prev => {
+        const next = new Set(prev);
+        shiftEmpIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
   }, [shifts, employees, empLoading]);
 
   const empVenueMap = useMemo(() => {
