@@ -260,9 +260,10 @@ export async function registerRoutes(
       }
 
       const isLeave = LEAVE_TYPES.includes(parsed.role);
+      const isDispatchShift = parsed.isDispatch || false;
       let warnings: ShiftValidationError[] = [];
 
-      if (!isLeave) {
+      if (!isLeave && !isDispatchShift) {
         const refConfig = await storage.getSystemConfig("four_week_reference_date");
         const fourWeekRef = refConfig?.value || "2025-01-06";
         const existingShifts = await storage.getShiftsByEmployee(parsed.employeeId);
@@ -315,9 +316,10 @@ export async function registerRoutes(
 
       const role = partial.role || existing.role;
       const isLeave = LEAVE_TYPES.includes(role);
+      const isDispatchShift = partial.isDispatch !== undefined ? partial.isDispatch : existing.isDispatch;
       let warnings: ShiftValidationError[] = [];
 
-      if (!isLeave) {
+      if (!isLeave && !isDispatchShift) {
         const refConfig = await storage.getSystemConfig("four_week_reference_date");
         const fourWeekRef = refConfig?.value || "2025-01-06";
         const existingShifts = await storage.getShiftsByEmployee(employeeId);
@@ -405,7 +407,7 @@ export async function registerRoutes(
       const warnings: string[] = [];
 
       for (const date of targetDates) {
-        if (!isLeave) {
+        if (!isLeave && !(isDispatch || false)) {
           const dayErrors = validateAllRules(employeeId, date, startTime, endTime, existingShifts, undefined, fourWeekRef, otRecords);
           const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
           if (blocking.length > 0) {
@@ -482,7 +484,7 @@ export async function registerRoutes(
 
       const currentShift = existingShifts.find((s: any) => s.id === Number(currentShiftId));
       const currentDate = currentShift?.date;
-      if (!isLeave && currentDate) {
+      if (!isLeave && !(isDispatch || false) && currentDate) {
         const dayErrors = validateAllRules(empId, currentDate, effectiveStart, effectiveEnd, existingShifts, Number(currentShiftId), fourWeekRef, otRecords);
         const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
         for (const w of warnItems) warnings.push(`${currentDate}: ${w.message}`);
@@ -502,7 +504,7 @@ export async function registerRoutes(
       }
 
       for (const date of targetDates) {
-        if (!isLeave) {
+        if (!isLeave && !(isDispatch || false)) {
           const dayErrors = validateAllRules(empId, date, effectiveStart, effectiveEnd, existingShifts, undefined, fourWeekRef, otRecords);
           const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
           if (blocking.length > 0) {
@@ -514,7 +516,19 @@ export async function registerRoutes(
         }
 
         const dayShifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
-        if (dayShifts.length === 0) {
+        const matchingShift = matchVenueId && matchStartTime
+          ? (dayShifts.find(s =>
+              s.venueId === Number(matchVenueId) &&
+              s.startTime.substring(0, 5) === matchStartTime &&
+              s.endTime.substring(0, 5) === matchEndTime &&
+              s.role === matchRole
+            ) || dayShifts.find(s =>
+              s.venueId === Number(matchVenueId) &&
+              s.startTime.substring(0, 5) === matchStartTime
+            ))
+          : null;
+
+        if (!matchingShift) {
           const created = await storage.createShift({
             employeeId: empId,
             venueId: effectiveVenueId,
@@ -527,14 +541,18 @@ export async function registerRoutes(
           updated.push(created);
           existingShifts.push(created as any);
         } else {
-          const result = await storage.updateShift(dayShifts[0].id, {
+          const result = await storage.updateShift(matchingShift.id, {
             venueId: effectiveVenueId,
             startTime: effectiveStart,
             endTime: effectiveEnd,
             role,
             isDispatch: isLeave ? false : (isDispatch || false),
           });
-          if (result) updated.push(result);
+          if (result) {
+            updated.push(result);
+            const idx = existingShifts.findIndex((s: any) => s.id === matchingShift.id);
+            if (idx >= 0) Object.assign(existingShifts[idx], result);
+          }
         }
       }
 
@@ -1319,7 +1337,8 @@ export async function registerRoutes(
   app.get("/api/portal/today-coworkers/:employeeId", async (req, res) => {
     try {
       const employeeId = parseInt(req.params.employeeId);
-      const today = new Date().toISOString().split("T")[0];
+      const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const today = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
 
       const empRoleMap: Record<string, string> = {
         lifeguard: "救生", counter: "櫃檯", cleaning: "清潔", manager: "管理",
@@ -1469,7 +1488,7 @@ export async function registerRoutes(
   app.get("/api/portal/my-attendance/:employeeId", async (req, res) => {
     try {
       const employeeId = parseInt(req.params.employeeId);
-      const regionIds = [1, 2, 3];
+      const regionIds = [1, 2, 3, 4];
       let employee: any = null;
       for (const rid of regionIds) {
         const emps = await storage.getEmployeesByRegion(rid);
@@ -1478,12 +1497,16 @@ export async function registerRoutes(
       }
       if (!employee) return res.status(404).json({ message: "找不到員工" });
 
-      const now = new Date();
-      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-      const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const monthStart = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-01`;
+      const lastDay = new Date(taiwanNow.getFullYear(), taiwanNow.getMonth() + 1, 0).getDate();
+      const monthEnd = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
       const records = await storage.getAttendanceRecordsByDateRange(monthStart, monthEnd, [employee.employeeCode]);
+
+      const clockRecords = await storage.getClockRecordsByEmployee(employeeId, monthStart, monthEnd);
+
+      const shifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
 
       const summary = {
         total: records.length,
@@ -1491,15 +1514,39 @@ export async function registerRoutes(
         earlyLeave: records.filter((r) => r.isEarlyLeave).length,
         anomaly: records.filter((r) => r.hasAnomaly).length,
         leave: records.filter((r) => r.leaveHours && r.leaveHours.trim() !== "").length,
-        records: records.map((r) => ({
-          date: r.date,
-          clockIn: r.clockIn,
-          clockOut: r.clockOut,
-          isLate: r.isLate,
-          isEarlyLeave: r.isEarlyLeave,
-          hasAnomaly: r.hasAnomaly,
-          leaveType: r.leaveType,
-        })),
+        records: records.map((r) => {
+          const dateShifts = shifts.filter((s) => s.date === r.date);
+          const shiftInfo = dateShifts.length > 0
+            ? dateShifts.map((s) => `${s.startTime.substring(0, 5)}-${s.endTime.substring(0, 5)}`).join(", ")
+            : r.scheduledStart && r.scheduledEnd
+              ? `${r.scheduledStart}-${r.scheduledEnd}`
+              : null;
+
+          const dateClockRecords = clockRecords.filter((cr) => {
+            if (!cr.clockTime) return false;
+            const crDate = new Date(cr.clockTime);
+            const crDateStr = `${crDate.getFullYear()}-${String(crDate.getMonth() + 1).padStart(2, "0")}-${String(crDate.getDate()).padStart(2, "0")}`;
+            return crDateStr === r.date;
+          });
+          const clockInRecord = dateClockRecords.find((cr) => cr.clockType === "in");
+          const clockOutRecord = [...dateClockRecords].reverse().find((cr) => cr.clockType === "out");
+
+          return {
+            date: r.date,
+            clockIn: clockInRecord && clockInRecord.clockTime
+              ? new Date(clockInRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
+              : r.clockIn || null,
+            clockOut: clockOutRecord && clockOutRecord.clockTime
+              ? new Date(clockOutRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
+              : r.clockOut || null,
+            isLate: r.isLate,
+            isEarlyLeave: r.isEarlyLeave,
+            hasAnomaly: r.hasAnomaly,
+            leaveType: r.leaveType,
+            shiftInfo,
+            shiftType: r.shiftType || null,
+          };
+        }),
       };
 
       res.json(summary);

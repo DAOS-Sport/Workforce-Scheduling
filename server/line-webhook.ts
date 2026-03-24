@@ -163,8 +163,8 @@ export async function processClockIn(
       const lastTime = new Date(lastRecord.clockTime).getTime();
       const nowTime = now.getTime();
       const diffMinutes = (nowTime - lastTime) / (1000 * 60);
-      if (diffMinutes < 50) {
-        const remaining = Math.ceil(50 - diffMinutes);
+      if (diffMinutes < 60) {
+        const remaining = Math.ceil(60 - diffMinutes);
         const lastType = lastRecord.clockType === "in" ? "上班" : "下班";
         return {
           status: "fail",
@@ -174,7 +174,7 @@ export async function processClockIn(
           time: timeStr,
           date: todayStr,
           shiftInfo: null,
-          failReason: `重複打卡：距上次${lastType}打卡不足 50 分鐘（還需等待 ${remaining} 分鐘）`,
+          failReason: `重複打卡：距上次${lastType}打卡不足 60 分鐘（還需等待 ${remaining} 分鐘）`,
           employeeName: employee.name,
           radius: null,
           nearbyVenues: [],

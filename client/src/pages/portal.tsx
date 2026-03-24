@@ -59,6 +59,8 @@ interface AttendanceSummary {
     isEarlyLeave: boolean | null;
     hasAnomaly: boolean | null;
     leaveType: string | null;
+    shiftInfo: string | null;
+    shiftType: string | null;
   }[];
 }
 
@@ -1869,32 +1871,37 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     </div>
                   ))}
                 </div>
-                {(attendance.late > 0 || attendance.earlyLeave > 0 || attendance.anomaly > 0) && (
-                  <div className="space-y-1.5">
-                    {attendance.records
-                      .filter((r) => r.isLate || r.isEarlyLeave || r.hasAnomaly)
-                      .map((r, idx) => {
-                        const d = parseISO(r.date);
-                        const tags: string[] = [];
-                        if (r.isLate) tags.push("遲到");
-                        if (r.isEarlyLeave) tags.push("早退");
-                        if (r.hasAnomaly) tags.push("異常");
-                        return (
-                          <div key={idx} className="flex items-center gap-2 text-xs py-1.5 border-b border-juns-border last:border-b-0">
-                            <span className="text-slate-400 min-w-[40px] font-mono">{format(d, "M/d")}</span>
-                            <span className="text-slate-400 font-mono">{r.clockIn || "--"} ~ {r.clockOut || "--"}</span>
-                            <div className="flex gap-1 ml-auto">
-                              {tags.map((t) => (
-                                <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">
-                                  {t}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
+                <div className="space-y-1.5">
+                  {attendance.records.map((r, idx) => {
+                    const d = parseISO(r.date);
+                    const tags: string[] = [];
+                    if (r.isLate) tags.push("遲到");
+                    if (r.isEarlyLeave) tags.push("早退");
+                    if (r.hasAnomaly) tags.push("異常");
+                    return (
+                      <div key={idx} className="flex items-center gap-2 text-xs py-1.5 border-b border-juns-border last:border-b-0">
+                        <span className="text-slate-400 min-w-[40px] font-mono">{format(d, "M/d")}</span>
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          {r.shiftInfo && (
+                            <span className="text-[10px] text-slate-400">班別：{r.shiftInfo}</span>
+                          )}
+                          <span className="text-slate-500 font-mono">
+                            簽到 {r.clockIn || "--"} ~ {r.clockOut || "--"}
+                          </span>
+                        </div>
+                        <div className="flex gap-1 ml-auto shrink-0">
+                          {tags.length > 0 ? tags.map((t) => (
+                            <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">
+                              {t}
+                            </span>
+                          )) : (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-600">正常</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
