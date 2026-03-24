@@ -128,6 +128,7 @@ export default function SchedulePage() {
       return saved ? new Set(JSON.parse(saved)) : new Set();
     } catch { return new Set(); }
   });
+  const [neiQinEmployeeIds, setNeiQinEmployeeIds] = useState<Set<number>>(new Set());
   const [crossRegionDialogOpen, setCrossRegionDialogOpen] = useState(false);
   const [crossRegionSearch, setCrossRegionSearch] = useState("");
   const [crossRegionTab, setCrossRegionTab] = useState("");
@@ -191,8 +192,8 @@ export default function SchedulePage() {
   }, [regionsData]);
 
   const crossRegionEmployees = useMemo(() =>
-    allSystemEmployees.filter(e => crossRegionEmployeeIds.has(e.id) && e.status !== "inactive"),
-    [allSystemEmployees, crossRegionEmployeeIds]
+    allSystemEmployees.filter(e => (crossRegionEmployeeIds.has(e.id) || neiQinEmployeeIds.has(e.id)) && e.status !== "inactive"),
+    [allSystemEmployees, crossRegionEmployeeIds, neiQinEmployeeIds]
   );
 
   const pickerEmployees = useMemo(() => {
@@ -220,6 +221,20 @@ export default function SchedulePage() {
   useEffect(() => {
     localStorage.setItem(`schedule_cross_${activeRegion}`, JSON.stringify([...crossRegionEmployeeIds]));
   }, [crossRegionEmployeeIds, activeRegion]);
+
+  useEffect(() => {
+    if (activeRegion === "D" || allSystemEmployees.length === 0 || regionsData.length === 0) {
+      setNeiQinEmployeeIds(new Set());
+      return;
+    }
+    const nqRegionId = regionCodeToId.get("D");
+    if (!nqRegionId) return;
+    const ids = new Set<number>();
+    allSystemEmployees.forEach(e => {
+      if (e.regionId === nqRegionId && e.status !== "inactive") ids.add(e.id);
+    });
+    setNeiQinEmployeeIds(ids);
+  }, [allSystemEmployees, activeRegion, regionsData, regionCodeToId]);
 
   const { data: scheduleSlots = [], isLoading: slotsLoading } = useQuery<ScheduleSlot[]>({
     queryKey: ["/api/schedule-slots", activeRegion, dateRange.start, dateRange.end],
@@ -1057,7 +1072,9 @@ export default function SchedulePage() {
                           >
                             <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
                             <span className="text-foreground flex-1 text-left">{emp.name}</span>
-                            {crossRegionEmployeeIds.has(emp.id) && (
+                            {neiQinEmployeeIds.has(emp.id) ? (
+                              <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4 shrink-0">內勤</span>
+                            ) : crossRegionEmployeeIds.has(emp.id) && (
                               <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4 shrink-0">支援</span>
                             )}
                           </button>
@@ -1079,7 +1096,7 @@ export default function SchedulePage() {
                     { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
                   ];
                   return groups.map(group => {
-                    const groupEmps = pickerEmployees.filter(group.filter);
+                    const groupEmps = pickerEmployees.filter(e => group.filter(e) && !neiQinEmployeeIds.has(e.id));
                     if (groupEmps.length === 0) return null;
                     const allSelected = groupEmps.every(e => scheduleVisibleEmployeeIds.has(e.id));
                     const someSelected = groupEmps.some(e => scheduleVisibleEmployeeIds.has(e.id));
@@ -1117,7 +1134,9 @@ export default function SchedulePage() {
                           >
                             <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
                             <span className="text-foreground flex-1 text-left">{emp.name}</span>
-                            {crossRegionEmployeeIds.has(emp.id) && (
+                            {neiQinEmployeeIds.has(emp.id) ? (
+                              <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4 shrink-0">內勤</span>
+                            ) : crossRegionEmployeeIds.has(emp.id) && (
                               <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4 shrink-0">支援</span>
                             )}
                             {empVenueMap.has(emp.id) && (
@@ -1132,6 +1151,45 @@ export default function SchedulePage() {
                       </div>
                     );
                   });
+                })()}
+                {neiQinEmployeeIds.size > 0 && (() => {
+                  const nqEmps = pickerEmployees.filter(e => neiQinEmployeeIds.has(e.id));
+                  if (nqEmps.length === 0) return null;
+                  const allSelected = nqEmps.every(e => scheduleVisibleEmployeeIds.has(e.id));
+                  const someSelected = nqEmps.some(e => scheduleVisibleEmployeeIds.has(e.id));
+                  return (
+                    <div className="mb-0.5">
+                      <button type="button"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-muted rounded-sm"
+                        onClick={() => {
+                          const next = new Set(scheduleVisibleEmployeeIds);
+                          if (allSelected) nqEmps.forEach(e => next.delete(e.id));
+                          else nqEmps.forEach(e => next.add(e.id));
+                          setScheduleVisibleEmployeeIds(next);
+                        }}
+                        data-testid="picker-group-neiqin"
+                      >
+                        <Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} className="h-3.5 w-3.5" />
+                        內勤人員 ({nqEmps.length})
+                      </button>
+                      {nqEmps.map(emp => (
+                        <button key={emp.id} type="button"
+                          className="w-full flex items-center gap-2 pl-6 pr-2 py-1 text-sm hover:bg-muted rounded-sm"
+                          onClick={() => {
+                            const next = new Set(scheduleVisibleEmployeeIds);
+                            if (next.has(emp.id)) next.delete(emp.id);
+                            else next.add(emp.id);
+                            setScheduleVisibleEmployeeIds(next);
+                          }}
+                          data-testid={`picker-emp-${emp.id}`}
+                        >
+                          <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
+                          <span className="text-foreground flex-1 text-left">{emp.name}</span>
+                          <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4 shrink-0">{emp.role || "內勤"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
                 })()}
               </div>
               <div className="border-t px-3 py-2">
@@ -1354,7 +1412,9 @@ export default function SchedulePage() {
                         <span className="font-medium text-sm whitespace-nowrap" data-testid={`text-employee-name-${emp.id}`}>
                           {emp.name}
                         </span>
-                        {crossRegionEmployeeIds.has(emp.id) && (
+                        {neiQinEmployeeIds.has(emp.id) ? (
+                          <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4 shrink-0">內勤</span>
+                        ) : crossRegionEmployeeIds.has(emp.id) && (
                           <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4 shrink-0">支援</span>
                         )}
                       </div>
@@ -1798,7 +1858,9 @@ export default function SchedulePage() {
                               >
                                 <Checkbox checked={shiftSelectedEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
                                 <span className="text-foreground">{emp.name}</span>
-                                {crossRegionEmployeeIds.has(emp.id) && (
+                                {neiQinEmployeeIds.has(emp.id) ? (
+                                  <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4">內勤</span>
+                                ) : crossRegionEmployeeIds.has(emp.id) && (
                                   <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4">支援</span>
                                 )}
                               </button>
