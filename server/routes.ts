@@ -504,17 +504,6 @@ export async function registerRoutes(
       }
 
       for (const date of targetDates) {
-        if (!isLeave && !(isDispatch || false)) {
-          const dayErrors = validateAllRules(empId, date, effectiveStart, effectiveEnd, existingShifts, undefined, fourWeekRef, otRecords);
-          const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
-          if (blocking.length > 0) {
-            errors.push(`${date}: ${blocking[0].message}`);
-            continue;
-          }
-          const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
-          for (const w of warnItems) warnings.push(`${date}: ${w.message}`);
-        }
-
         const dayShifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
         const shiftToUpdate = matchVenueId && matchStartTime
           ? (dayShifts.find(s =>
@@ -527,6 +516,17 @@ export async function registerRoutes(
               s.startTime.substring(0, 5) === matchStartTime
             ) || dayShifts[0] || null)
           : (dayShifts[0] || null);
+
+        if (!isLeave && !(isDispatch || false)) {
+          const dayErrors = validateAllRules(empId, date, effectiveStart, effectiveEnd, existingShifts, shiftToUpdate?.id, fourWeekRef, otRecords);
+          const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
+          if (blocking.length > 0) {
+            errors.push(`${date}: ${blocking[0].message}`);
+            continue;
+          }
+          const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
+          for (const w of warnItems) warnings.push(`${date}: ${w.message}`);
+        }
 
         if (!shiftToUpdate) {
           const created = await storage.createShift({
