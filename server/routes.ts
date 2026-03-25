@@ -9,7 +9,7 @@ import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
 const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
 import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId } from "./line-webhook";
 import multer from "multer";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
 
 export async function registerRoutes(
@@ -1085,14 +1085,27 @@ export async function registerRoutes(
       if (!req.file) {
         return res.status(400).json({ message: "請選擇檔案" });
       }
-      const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer);
 
-      const punchSheetName = wb.SheetNames.find((n) => n.includes("打卡紀錄"));
-      if (!punchSheetName) {
+      const punchWorksheet = workbook.worksheets.find((ws) => ws.name.includes("打卡紀錄"));
+      const punchSheetName = punchWorksheet?.name;
+      if (!punchSheetName || !punchWorksheet) {
         return res.status(400).json({ message: "找不到「打卡紀錄」工作表，請確認檔案格式" });
       }
-      const punchSheet = wb.Sheets[punchSheetName];
-      const punchData: any[][] = XLSX.utils.sheet_to_json(punchSheet, { header: 1, defval: "" });
+
+      const punchData: any[][] = [];
+      punchWorksheet.eachRow({ includeEmpty: true }, (row) => {
+        const values = row.values as any[];
+        const rowData = Array.from({ length: Math.max(values.length - 1, 0) }, (_, i) => {
+          const v = values[i + 1];
+          if (v === null || v === undefined) return "";
+          if (typeof v === "object" && v !== null && "text" in v) return String(v.text).trim();
+          if (typeof v === "object" && v !== null && "result" in v) return v.result ?? "";
+          return v;
+        });
+        punchData.push(rowData);
+      });
       if (punchData.length < 2) {
         return res.status(400).json({ message: "打卡紀錄表無數據" });
       }
