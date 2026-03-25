@@ -162,7 +162,7 @@ export function parseTSV(tsv: string, year: number, month: number, knownVenueCod
 
     if (!employeeCode || !name) continue;
     if (/^\d{4}年/.test(category) || /^\d{1,2}月/.test(category)) continue;
-    if (/^\d{1,2}$/.test(employeeCode) && /^\d{1,2}$/.test(name)) continue;
+    if (!/^\d{6,8}$/.test(employeeCode)) continue;
 
     const colStart = dayColumnStart >= 0 ? dayColumnStart : 4;
     const cells: (ParsedShiftCell | null)[] = [];

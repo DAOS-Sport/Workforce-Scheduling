@@ -369,10 +369,10 @@ export function GoogleSheetsImportDialog({
               </div>
 
               <div className="border rounded-md overflow-auto max-h-[340px]">
-                <table className="text-[10px] border-collapse" style={{ minWidth: `${80 + 60 + 28 + daysInMonth * 28}px` }}>
-                  <thead className="sticky top-0 bg-muted z-10">
+                <table className="text-[10px] border-collapse">
+                  <thead className="bg-muted">
                     <tr>
-                      <th className="sticky left-0 bg-muted text-left px-2 py-1.5 border-b border-r font-medium min-w-[80px]">員工</th>
+                      <th className="text-left px-2 py-1.5 border-b border-r font-medium min-w-[80px]">員工</th>
                       <th className="text-left px-2 py-1.5 border-b border-r font-medium min-w-[60px]">代號</th>
                       <th className="text-left px-2 py-1.5 border-b border-r font-medium w-7">狀態</th>
                       {Array.from({ length: daysInMonth }, (_, i) => (
@@ -383,7 +383,7 @@ export function GoogleSheetsImportDialog({
                   <tbody>
                     {parsedEmployees.map((emp, idx) => (
                       <tr key={idx} className={`border-b last:border-b-0 ${!emp.found ? "bg-amber-50 dark:bg-amber-950/20" : ""}`}>
-                        <td className="sticky left-0 bg-inherit px-2 py-1 border-r font-medium truncate max-w-[80px]" data-testid={`preview-emp-name-${idx}`}>
+                        <td className="px-2 py-1 border-r font-medium whitespace-nowrap max-w-[80px] overflow-hidden" data-testid={`preview-emp-name-${idx}`}>
                           {emp.name}
                         </td>
                         <td className="px-2 py-1 border-r text-muted-foreground whitespace-nowrap">{emp.employeeCode}</td>
@@ -400,9 +400,9 @@ export function GoogleSheetsImportDialog({
                           return (
                             <td
                               key={d}
-                              className={`px-0.5 py-1 border-r text-center ${
-                                isUnknownVenue ? "bg-amber-50 dark:bg-amber-950/30" : ""
-                              } ${cell?.isLeave ? "bg-blue-50 dark:bg-blue-950/20" : ""}`}
+                              className={`px-0.5 py-1 border-r text-center whitespace-nowrap${
+                                isUnknownVenue ? " bg-amber-50 dark:bg-amber-950/30" : ""
+                              }${cell?.isLeave ? " bg-blue-50 dark:bg-blue-950/20" : ""}`}
                               title={cell?.raw}
                             >
                               <CellBadge cell={cell ?? null} venueMapping={venueMapping} />
