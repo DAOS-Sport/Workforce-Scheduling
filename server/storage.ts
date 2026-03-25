@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, gte, lte, inArray, desc } from "drizzle-orm";
+import { eq, and, gte, lte, inArray, desc, or } from "drizzle-orm";
 import {
   regions, venues, employees, shifts, venueRequirements,
   scheduleSlots, venueShiftTemplates,
@@ -46,6 +46,7 @@ export interface IStorage {
   updateVenue(id: number, data: Partial<InsertVenue>): Promise<Venue | undefined>;
 
   getEmployeesByRegion(regionId: number): Promise<Employee[]>;
+  getEmployeesForNeiQin(regionId: number): Promise<Employee[]>;
   getAllEmployees(): Promise<Employee[]>;
   getEmployee(id: number): Promise<Employee | undefined>;
   getEmployeeByCode(code: string): Promise<Employee | undefined>;
@@ -188,6 +189,21 @@ export class DatabaseStorage implements IStorage {
 
   async getEmployeesByRegion(regionId: number): Promise<Employee[]> {
     return db.select().from(employees).where(eq(employees.regionId, regionId));
+  }
+
+  async getEmployeesForNeiQin(regionId: number): Promise<Employee[]> {
+    const rows = await db.select().from(employees).where(
+      or(
+        eq(employees.regionId, regionId),
+        eq(employees.department, "營運管理處")
+      )
+    );
+    const seen = new Set<number>();
+    return rows.filter((e) => {
+      if (seen.has(e.id)) return false;
+      seen.add(e.id);
+      return true;
+    });
   }
 
   async getAllEmployees(): Promise<Employee[]> {

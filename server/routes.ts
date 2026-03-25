@@ -141,9 +141,11 @@ export async function registerRoutes(
     const { regionCode } = req.params;
     const region = await storage.getRegionByCode(regionCode);
     if (!region) return res.json([]);
-    const allEmployees = await storage.getEmployeesByRegion(region.id);
-    const employees = allEmployees.filter((e) => e.status === "active");
-    res.json(employees);
+    const allEmployees = regionCode === "D"
+      ? await storage.getEmployeesForNeiQin(region.id)
+      : await storage.getEmployeesByRegion(region.id);
+    const employeesList = allEmployees.filter((e) => e.status === "active");
+    res.json(employeesList);
   });
 
   app.post("/api/employees", async (req, res) => {
