@@ -85,6 +85,55 @@ const LEAVE_COLORS: Record<string, string> = {
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
 const ROLE_OPTIONS = ["救生", "教練", "指導員", "PT", "行政", "櫃台", "資訊班", "守望"];
 
+const TAIWAN_HOLIDAYS: Record<string, string> = {
+  // 2024
+  "2024-01-01": "元旦",
+  "2024-02-08": "除夕",
+  "2024-02-09": "春節",
+  "2024-02-10": "春節",
+  "2024-02-11": "春節",
+  "2024-02-12": "春節",
+  "2024-02-13": "春節補假",
+  "2024-02-14": "春節補假",
+  "2024-02-28": "和平紀念日",
+  "2024-04-04": "兒童節",
+  "2024-04-05": "清明節",
+  "2024-05-01": "勞動節",
+  "2024-06-10": "端午節",
+  "2024-09-17": "中秋節",
+  "2024-10-10": "國慶日",
+  // 2025
+  "2025-01-01": "元旦",
+  "2025-01-27": "除夕",
+  "2025-01-28": "春節",
+  "2025-01-29": "春節",
+  "2025-01-30": "春節",
+  "2025-01-31": "春節",
+  "2025-02-04": "春節補假",
+  "2025-02-28": "和平紀念日",
+  "2025-04-03": "兒童節補假",
+  "2025-04-04": "兒童節清明",
+  "2025-05-01": "勞動節",
+  "2025-05-31": "端午節",
+  "2025-10-06": "中秋補假",
+  "2025-10-07": "中秋節",
+  "2025-10-10": "國慶日",
+  // 2026
+  "2026-01-01": "元旦",
+  "2026-02-16": "除夕",
+  "2026-02-17": "春節",
+  "2026-02-18": "春節",
+  "2026-02-19": "春節",
+  "2026-02-20": "春節",
+  "2026-02-28": "和平紀念日",
+  "2026-04-04": "兒童節",
+  "2026-04-05": "清明節",
+  "2026-05-01": "勞動節",
+  "2026-06-19": "端午節",
+  "2026-09-25": "中秋節",
+  "2026-10-10": "國慶日",
+};
+
 export default function SchedulePage() {
   const { activeRegion } = useRegion();
   const { toast } = useToast();
@@ -707,6 +756,7 @@ export default function SchedulePage() {
 
   const openEditDispatchDialog = (ds: DispatchShift) => {
     setEditingDispatch(ds);
+    setDispatchFromCell(false);
     setDispatchDate(ds.date);
     setDispatchName(ds.dispatchName);
     setDispatchVenueId(ds.venueId?.toString() || "");
@@ -1266,23 +1316,30 @@ export default function SchedulePage() {
                   員工/場館
                 </th>
                 {monthDates.map((d, i) => {
-                  const isToday = format(d, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+                  const dateKey = format(d, "yyyy-MM-dd");
+                  const isToday = dateKey === format(new Date(), "yyyy-MM-dd");
                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                  const holiday = TAIWAN_HOLIDAYS[dateKey];
                   return (
                     <th
                       key={i}
-                      data-date-col={format(d, "yyyy-MM-dd")}
+                      data-date-col={dateKey}
                       className={`text-center p-1.5 border-b border-r font-medium ${
-                        isToday ? "bg-background" : isWeekend ? "bg-muted" : "bg-background"
+                        holiday ? "bg-red-50 dark:bg-red-950/20" : isToday ? "bg-background" : isWeekend ? "bg-muted" : "bg-background"
                       }`}
                       style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, position: "sticky", top: 0, zIndex: 25 }}
                     >
-                      <div className={`text-xs ${isWeekend ? "text-destructive/70" : "text-muted-foreground"}`}>
+                      <div className={`text-xs ${isWeekend || holiday ? "text-destructive/70" : "text-muted-foreground"}`}>
                         週{DAY_NAMES[d.getDay()]}
                       </div>
                       <div className={`text-xs ${isToday ? "text-primary font-semibold" : ""}`}>
                         {format(d, "M/d")}
                       </div>
+                      {holiday && (
+                        <div className="text-[9px] leading-tight text-red-500 dark:text-red-400 font-medium truncate mt-0.5" title={holiday}>
+                          {holiday}
+                        </div>
+                      )}
                     </th>
                   );
                 })}
