@@ -152,6 +152,9 @@ export default function SchedulePage() {
   const [dispatchPhone, setDispatchPhone] = useState("");
   const [dispatchRole, setDispatchRole] = useState("救生");
   const [dispatchNotes, setDispatchNotes] = useState("");
+  const [dispatchFromCell, setDispatchFromCell] = useState(false);
+  const [dispatchAddNameDialogOpen, setDispatchAddNameDialogOpen] = useState(false);
+  const [dispatchAddNameInput, setDispatchAddNameInput] = useState("");
   const [dispatchSectionCollapsed, setDispatchSectionCollapsed] = useState(false);
   const [pendingDispatchNames, setPendingDispatchNames] = useState<string[]>([]);
   const [inlineDispatchInput, setInlineDispatchInput] = useState("");
@@ -687,8 +690,9 @@ export default function SchedulePage() {
     },
   });
 
-  const openNewDispatchDialog = (dateStr: string, prefillName?: string) => {
+  const openNewDispatchDialog = (dateStr: string, prefillName?: string, fromCell = false) => {
     setEditingDispatch(null);
+    setDispatchFromCell(fromCell);
     setDispatchDate(dateStr);
     setDispatchName(prefillName || "");
     setDispatchVenueId(venues.length > 0 ? venues[0].id.toString() : "");
@@ -1548,7 +1552,7 @@ export default function SchedulePage() {
                     </button>
                     <button
                       className="ml-auto text-purple-500 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
-                      onClick={() => openNewDispatchDialog(format(new Date(), "yyyy-MM-dd"))}
+                      onClick={() => { setDispatchAddNameInput(""); setDispatchAddNameDialogOpen(true); }}
                       data-testid="button-add-dispatch-new"
                       title="新增派遣人員"
                     >
@@ -1641,7 +1645,7 @@ export default function SchedulePage() {
                               })}
                               <button
                                 className="w-full flex items-center justify-center py-0.5 text-purple-400/40 hover:text-purple-500/70 transition-colors"
-                                onClick={() => openNewDispatchDialog(dateStr, name)}
+                                onClick={() => openNewDispatchDialog(dateStr, name, true)}
                                 data-testid={`button-add-dispatch-${name}-${dateStr}`}
                               >
                                 <Plus className="h-3 w-3" />
@@ -1650,7 +1654,7 @@ export default function SchedulePage() {
                           ) : (
                             <button
                               className="flex items-center justify-center w-full h-[40px] text-purple-300/30 hover:text-purple-400/60 hover:bg-purple-50/30 dark:hover:bg-purple-950/20 transition-colors rounded cursor-pointer"
-                              onClick={() => openNewDispatchDialog(dateStr, name)}
+                              onClick={() => openNewDispatchDialog(dateStr, name, true)}
                               data-testid={`button-add-dispatch-${name}-${dateStr}`}
                             >
                               <Plus className="h-4 w-4" />
@@ -1710,25 +1714,42 @@ export default function SchedulePage() {
         <DialogContent className="sm:max-w-md" data-testid="dispatch-shift-dialog">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-purple-700 dark:text-purple-400">
-              {editingDispatch ? "編輯派遣班次" : "新增派遣班次"}
-              <span className="text-sm font-normal text-muted-foreground ml-2">
-                — {dispatchDate ? format(new Date(dispatchDate), "M月d日 (E)", { locale: zhTW }) : ""}
-              </span>
+              {editingDispatch
+                ? <>編輯派遣班次 <span className="text-sm font-normal text-muted-foreground ml-1">— {editingDispatch.dispatchName}</span></>
+                : dispatchFromCell
+                  ? <>{dispatchName} <span className="text-sm font-normal text-muted-foreground ml-1">— {dispatchDate ? format(new Date(dispatchDate), "M月d日 (E)", { locale: zhTW }) : ""}</span></>
+                  : "新增派遣班次"
+              }
             </DialogTitle>
-            <DialogDescription>
-              派遣人員不需在員工資料庫中建立，直接輸入姓名即可排班。
-            </DialogDescription>
+            {(dispatchFromCell && !editingDispatch) && (
+              <DialogDescription className="text-purple-600/70">
+                不受勞基法限制；時間與場館依實際安排填入。
+              </DialogDescription>
+            )}
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>派遣人員姓名 *</Label>
-              <Input
-                value={dispatchName}
-                onChange={(e) => setDispatchName(e.target.value)}
-                placeholder="輸入派遣人員姓名"
-                data-testid="input-dispatch-name"
-              />
-            </div>
+            {(!dispatchFromCell || editingDispatch) && (
+              <div className="space-y-2">
+                <Label>派遣人員姓名 *</Label>
+                <Input
+                  value={dispatchName}
+                  onChange={(e) => setDispatchName(e.target.value)}
+                  placeholder="輸入派遣人員姓名"
+                  data-testid="input-dispatch-name"
+                />
+              </div>
+            )}
+            {editingDispatch && (
+              <div className="space-y-2">
+                <Label>日期 *</Label>
+                <Input
+                  type="date"
+                  value={dispatchDate}
+                  onChange={(e) => setDispatchDate(e.target.value)}
+                  data-testid="input-dispatch-date"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>場館</Label>
               <Select value={dispatchVenueId} onValueChange={setDispatchVenueId}>
@@ -1783,7 +1804,7 @@ export default function SchedulePage() {
                 <Input
                   value={dispatchCompany}
                   onChange={(e) => setDispatchCompany(e.target.value)}
-                  placeholder="公司名稱"
+                  placeholder="公司名稱（選填）"
                   data-testid="input-dispatch-company"
                 />
               </div>
@@ -1792,7 +1813,7 @@ export default function SchedulePage() {
                 <Input
                   value={dispatchPhone}
                   onChange={(e) => setDispatchPhone(e.target.value)}
-                  placeholder="電話號碼"
+                  placeholder="電話（選填）"
                   data-testid="input-dispatch-phone"
                 />
               </div>
@@ -1802,7 +1823,7 @@ export default function SchedulePage() {
               <Input
                 value={dispatchNotes}
                 onChange={(e) => setDispatchNotes(e.target.value)}
-                placeholder="其他備註"
+                placeholder="其他備註（選填）"
                 data-testid="input-dispatch-notes"
               />
             </div>
@@ -1828,6 +1849,50 @@ export default function SchedulePage() {
               data-testid="button-save-dispatch"
             >
               {editingDispatch ? "更新" : "新增"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dispatchAddNameDialogOpen} onOpenChange={setDispatchAddNameDialogOpen}>
+        <DialogContent className="sm:max-w-xs" data-testid="dispatch-add-name-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-purple-700 dark:text-purple-400">新增派遣人員</DialogTitle>
+            <DialogDescription>輸入姓名後加入名單，再至日期欄位安排班次。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              autoFocus
+              value={dispatchAddNameInput}
+              onChange={(e) => setDispatchAddNameInput(e.target.value)}
+              placeholder="輸入姓名"
+              data-testid="input-dispatch-add-name"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const n = dispatchAddNameInput.trim();
+                  if (n && !dispatchNames.includes(n)) {
+                    setPendingDispatchNames(prev => [...prev, n]);
+                  }
+                  setDispatchAddNameDialogOpen(false);
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDispatchAddNameDialogOpen(false)}>取消</Button>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              onClick={() => {
+                const n = dispatchAddNameInput.trim();
+                if (n && !dispatchNames.includes(n)) {
+                  setPendingDispatchNames(prev => [...prev, n]);
+                }
+                setDispatchAddNameDialogOpen(false);
+              }}
+              disabled={!dispatchAddNameInput.trim()}
+              data-testid="button-confirm-add-dispatch-name"
+            >
+              加入名單
             </Button>
           </DialogFooter>
         </DialogContent>
