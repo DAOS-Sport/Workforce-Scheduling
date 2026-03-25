@@ -977,8 +977,8 @@ export default function SchedulePage() {
 
   const isLoading = venLoading || empLoading || slotsLoading;
 
-  const COL_LEFT_WIDTH = 140;
-  const COL_DATE_WIDTH = 130;
+  const COL_LEFT_WIDTH = 96;
+  const COL_DATE_WIDTH = 100;
 
   const shortageDates = useMemo(() => {
     const dateSet = new Set<string>();
@@ -1312,7 +1312,7 @@ export default function SchedulePage() {
             <thead>
               <tr>
                 <th
-                  className="text-left p-2 border-b border-r font-medium text-muted-foreground bg-background"
+                  className="text-left px-1.5 py-1 border-b border-r font-medium text-muted-foreground bg-background text-xs"
                   style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", top: 0, left: 0, zIndex: 35 }}
                 >
                   員工/場館
@@ -1385,7 +1385,7 @@ export default function SchedulePage() {
                     return (
                     <tr key={`summary-${venue.id}`} style={{ height: 36 }}>
                       <td
-                        className="p-2 border-b border-r text-left sticky left-0 z-[5]"
+                        className="px-1.5 py-1 border-b border-r text-left sticky left-0 z-[5]"
                         style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, backgroundColor: labelBg }}
                       >
                         <span className="font-medium text-xs text-white whitespace-nowrap" data-testid={`text-venue-summary-${venue.id}`}>
@@ -1466,7 +1466,7 @@ export default function SchedulePage() {
                     return [
                       <tr key={`group-${key}`}>
                         <td
-                          className="px-2 py-1 border-b border-r sticky left-0 bg-muted z-[5] text-xs font-bold text-muted-foreground tracking-wide"
+                          className="px-1.5 py-0.5 border-b border-r sticky left-0 bg-muted z-[5] text-xs font-bold text-muted-foreground tracking-wide"
                           style={{ minWidth: COL_LEFT_WIDTH }}
                         >
                           {label} ({grouped.length})
@@ -1478,15 +1478,15 @@ export default function SchedulePage() {
                       ...grouped.map((emp) => (
                   <tr key={emp.id} className="group" data-testid={`row-employee-${emp.id}`}>
                     <td
-                      className="p-2 border-b border-r sticky left-0 bg-background z-[5]"
+                      className="px-1.5 py-1 border-b border-r sticky left-0 bg-background z-[5]"
                       style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
                     >
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1">
                         {emp.role && ROLE_ICON_MAP[emp.role] && (() => {
                           const Icon = ROLE_ICON_MAP[emp.role!];
-                          return <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
+                          return <Icon className="h-3 w-3 text-muted-foreground shrink-0" />;
                         })()}
-                        <span className="font-medium text-sm whitespace-nowrap" data-testid={`text-employee-name-${emp.id}`}>
+                        <span className="font-medium text-xs whitespace-nowrap" data-testid={`text-employee-name-${emp.id}`}>
                           {emp.name}
                         </span>
                         {neiQinEmployeeIds.has(emp.id) ? (

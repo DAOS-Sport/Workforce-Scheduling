@@ -407,8 +407,11 @@ export async function registerRoutes(
       const warnings: string[] = [];
 
       for (const date of targetDates) {
+        const dayShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, date, date);
+        const existingOnDate = dayShifts[0] || null;
+
         if (!isLeave && !(isDispatch || false)) {
-          const dayErrors = validateAllRules(employeeId, date, startTime, endTime, existingShifts, undefined, fourWeekRef, otRecords);
+          const dayErrors = validateAllRules(employeeId, date, startTime, endTime, existingShifts, existingOnDate?.id, fourWeekRef, otRecords);
           const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
           if (blocking.length > 0) {
             errors.push(`${date}: ${blocking[0].message}`);
@@ -417,17 +420,34 @@ export async function registerRoutes(
           const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
           for (const w of warnItems) warnings.push(`${date}: ${w.message}`);
         }
-        const shift = await storage.createShift({
-          employeeId,
-          venueId: parseInt(venueId),
-          date,
-          startTime,
-          endTime,
-          role,
-          isDispatch: isDispatch || false,
-        });
-        if (!isLeave) existingShifts.push(shift as any);
-        results.push(shift);
+
+        let shift: any;
+        if (existingOnDate) {
+          const updated = await storage.updateShift(existingOnDate.id, {
+            venueId: parseInt(venueId),
+            startTime,
+            endTime,
+            role,
+            isDispatch: isDispatch || false,
+          });
+          shift = updated;
+          if (!isLeave) {
+            const idx = existingShifts.findIndex((s: any) => s.id === existingOnDate.id);
+            if (idx >= 0) Object.assign(existingShifts[idx], updated);
+          }
+        } else {
+          shift = await storage.createShift({
+            employeeId,
+            venueId: parseInt(venueId),
+            date,
+            startTime,
+            endTime,
+            role,
+            isDispatch: isDispatch || false,
+          });
+          if (!isLeave) existingShifts.push(shift as any);
+        }
+        if (shift) results.push(shift);
       }
 
       res.json({ created: results.length, errors, warnings, shifts: results });
