@@ -112,6 +112,14 @@ const ROLE_LABELS: Record<string, string> = {
   "櫃台": "櫃台",
 };
 
+const ROLE_SHORT: Record<string, string> = {
+  "救生": "救", "教練": "教", "指導員": "指", "PT": "PT",
+  "行政": "行", "櫃台": "櫃", "櫃檯": "櫃", "資訊班": "資",
+  "守望": "望", "清潔": "潔", "管理": "管",
+  "休假": "休", "特休": "特", "病假": "病", "事假": "事",
+  "喪假": "喪", "公假": "公", "生理假": "生", "國定假": "國",
+};
+
 const ROLE_DISPLAY: Record<string, { label: string; taskLabel: string; color: string; bgClass: string; borderClass: string; textClass: string; badgeBg: string }> = {
   "櫃檯": { label: "櫃檯", taskLabel: "櫃台服務", color: "#3B82F6", bgClass: "bg-blue-500/10", borderClass: "border-l-blue-500", textClass: "text-blue-500", badgeBg: "bg-blue-500/15 text-blue-400" },
   "救生": { label: "救生", taskLabel: "救生執勤", color: "#10B981", bgClass: "bg-emerald-500/10", borderClass: "border-l-emerald-500", textClass: "text-emerald-500", badgeBg: "bg-emerald-500/15 text-emerald-400" },
@@ -1788,20 +1796,24 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     return (
                       <div
                         key={dateStr}
-                        className={`min-h-[90px] p-1 rounded-md border ${
+                        className={`min-h-[72px] p-1 rounded-md border ${
                           today ? "border-juns-teal bg-juns-teal/5" : "border-slate-100"
                         } ${dayShifts.length > 0 ? "bg-slate-50" : ""}`}
                         data-testid={`cell-day-${dateStr}`}
                       >
-                        <div className={`text-xs text-center mb-1 ${today ? "font-bold text-juns-teal" : "text-slate-400"}`}>
+                        <div className={`text-xs text-center mb-0.5 ${today ? "font-bold text-juns-teal" : "text-slate-400"}`}>
                           {format(day, "d")}
                         </div>
                         {dayShifts.map((s, i) => {
                           const rd = getRoleDisplay(s.assignedRole);
+                          const roleAbbrev = ROLE_SHORT[s.assignedRole || ""] || "";
+                          const timeStr = `${s.startTime.slice(0, 5).replace(":", "")}-${s.endTime.slice(0, 5).replace(":", "")}`;
+                          const venuePart = s.venue?.shortName || "";
                           return (
-                            <div key={i} className={`text-[10px] leading-snug px-1 py-0.5 rounded border-l-2 pl-1 mb-0.5 ${rd.borderClass} bg-white overflow-hidden`}>
-                              <div className="font-semibold text-juns-navy break-all">{s.venue?.shortName || ""}</div>
-                              <div className={`font-medium ${rd.textClass}`}>{s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}</div>
+                            <div key={i} className={`text-[9px] leading-tight px-0.5 py-0.5 rounded border-l-2 mb-0.5 ${rd.borderClass} bg-white overflow-hidden`}>
+                              <span className="font-semibold text-juns-navy">{venuePart}</span>
+                              <span className={`font-medium ${rd.textClass}`}>{roleAbbrev}</span>
+                              <span className="text-slate-500">{timeStr}</span>
                             </div>
                           );
                         })}
@@ -2040,7 +2052,23 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   );
 }
 
-export default function PortalPage() {
+function NotLineBrowser() {
+  return (
+    <div className="min-h-screen bg-juns-surface flex flex-col items-center justify-center p-8 text-center">
+      <img src={junsLogo} alt="駿斯" className="h-14 w-14 rounded-xl mb-6 object-cover" />
+      <h1 className="text-lg font-bold text-juns-navy mb-3">請使用 LINE 開啟</h1>
+      <p className="text-sm text-slate-500 leading-relaxed mb-6">
+        員工入口網站僅限在<span className="font-semibold text-juns-navy"> LINE 內建瀏覽器 </span>中使用，
+        以確保帳號安全與正常功能。
+      </p>
+      <p className="text-xs text-slate-400 leading-relaxed">
+        請在 LINE 中點選官方帳號連結，或由 LINE 選單進入此頁面。
+      </p>
+    </div>
+  );
+}
+
+function PortalPageInner() {
   const [employee, setEmployee] = useState<PortalEmployee | null>(() => {
     try {
       const saved = localStorage.getItem("portal_employee");
@@ -2104,4 +2132,10 @@ export default function PortalPage() {
   }
 
   return <PortalMain employee={employee} />;
+}
+
+export default function PortalPage() {
+  const isLineBrowser = typeof navigator !== "undefined" && navigator.userAgent.includes("Line/");
+  if (!isLineBrowser) return <NotLineBrowser />;
+  return <PortalPageInner />;
 }

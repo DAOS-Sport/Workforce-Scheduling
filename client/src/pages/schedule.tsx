@@ -688,9 +688,16 @@ export default function SchedulePage() {
       const res = await apiRequest("POST", "/api/dispatch-shifts", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts"] });
-      toast({ title: "派遣班次已新增" });
+      const currentMonthStr = format(currentMonth, "yyyy-MM");
+      const savedDate: string = (variables as any).date || "";
+      if (savedDate && !savedDate.startsWith(currentMonthStr)) {
+        const [y, m] = savedDate.split("-");
+        toast({ title: "派遣班次已儲存", description: `日期在 ${y} 年 ${m} 月，請切換月份查看` });
+      } else {
+        toast({ title: "派遣班次已新增" });
+      }
       setDispatchDialogOpen(false);
     },
     onError: (err: Error) => {
@@ -1802,12 +1809,13 @@ export default function SchedulePage() {
                       <span className="text-xs font-bold text-purple-700 dark:text-purple-400 tracking-wide">派遣人員 ({dispatchNames.length})</span>
                     </button>
                     <button
-                      className="ml-auto text-purple-500 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
-                      onClick={() => { setDispatchAddNameInput(""); setDispatchAddNameDialogOpen(true); }}
+                      className="ml-auto flex items-center gap-0.5 px-1.5 py-0.5 rounded text-purple-500 hover:text-purple-700 hover:bg-purple-100/60 dark:hover:bg-purple-900/30 dark:hover:text-purple-300 transition-colors text-[11px] font-medium"
+                      onClick={() => openNewDispatchDialog(format(new Date(), "yyyy-MM-dd"), "", false)}
                       data-testid="button-add-dispatch-new"
-                      title="新增派遣人員"
+                      title="快速新增派遣班次（可選任意日期）"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Plus className="h-3 w-3" />
+                      快速新增
                     </button>
                   </div>
                 </td>
@@ -2031,7 +2039,7 @@ export default function SchedulePage() {
                 />
               </div>
             )}
-            {editingDispatch && (
+            {(!dispatchFromCell || editingDispatch) && (
               <div className="space-y-2">
                 <Label>日期 *</Label>
                 <Input

@@ -41,10 +41,13 @@ const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondar
   suspended: { label: "停職", variant: "secondary" },
 };
 
+const NEIGIN_DEPARTMENTS = ["人力資源處", "數位轉型發展處", "營運管理處", "行銷事業處"];
+
 export default function EmployeesPage() {
   const { activeRegion } = useRegion();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [form, setForm] = useState({
@@ -69,15 +72,18 @@ export default function EmployeesPage() {
     queryKey: ["/api/employees", activeRegion],
   });
 
-  const filteredEmployees = employees.filter(
-    (e) => {
-      if (e.status === "inactive") return false;
-      const matchesSearch = e.name.includes(search) ||
-        e.employeeCode.includes(search) ||
-        (e.phone && e.phone.includes(search));
-      return matchesSearch;
+  const filteredEmployees = employees.filter((e) => {
+    if (e.status === "inactive") return false;
+    const matchesSearch =
+      e.name.includes(search) ||
+      e.employeeCode.includes(search) ||
+      (e.phone && e.phone.includes(search));
+    if (!matchesSearch) return false;
+    if (activeRegion === "D" && departmentFilter !== "all") {
+      return e.department === departmentFilter;
     }
-  );
+    return true;
+  });
 
   const createEmployee = useMutation({
     mutationFn: async (data: any) => {
@@ -205,15 +211,30 @@ export default function EmployeesPage() {
 
       <div className="p-4 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜尋姓名、編號、電話..."
-              className="pl-8"
-              data-testid="input-search-employee"
-            />
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜尋姓名、編號、電話..."
+                className="pl-8"
+                data-testid="input-search-employee"
+              />
+            </div>
+            {activeRegion === "D" && (
+              <Select value={departmentFilter} onValueChange={setDepartmentFilter} data-testid="select-department-filter">
+                <SelectTrigger className="w-36 h-9 text-sm" data-testid="trigger-department-filter">
+                  <SelectValue placeholder="部門篩選" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部部門</SelectItem>
+                  {NEIGIN_DEPARTMENTS.map((dept) => (
+                    <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className="flex gap-2">
             <Button
