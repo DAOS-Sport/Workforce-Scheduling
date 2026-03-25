@@ -2,7 +2,6 @@ import { useState, useCallback, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -288,30 +287,32 @@ export function GoogleSheetsImportDialog({
             <div className="space-y-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>年份</Label>
-                  <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
-                    <SelectTrigger data-testid="select-import-year">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {YEARS.map(y => (
-                        <SelectItem key={y} value={String(y)}>{y} 年</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="import-year-select">年份</Label>
+                  <select
+                    id="import-year-select"
+                    value={year}
+                    onChange={e => setYear(Number(e.target.value))}
+                    data-testid="select-import-year"
+                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    {YEARS.map(y => (
+                      <option key={y} value={y}>{y} 年</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-2">
-                  <Label>月份</Label>
-                  <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
-                    <SelectTrigger data-testid="select-import-month">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MONTHS.map(m => (
-                        <SelectItem key={m} value={String(m)}>{m} 月</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="import-month-select">月份</Label>
+                  <select
+                    id="import-month-select"
+                    value={month}
+                    onChange={e => setMonth(Number(e.target.value))}
+                    data-testid="select-import-month"
+                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    {MONTHS.map(m => (
+                      <option key={m} value={m}>{m} 月</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">
@@ -449,21 +450,22 @@ export function GoogleSheetsImportDialog({
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     <div className="flex-1">
-                      <Select
+                      <select
                         value={venueMapping[code] ? String(venueMapping[code]) : ""}
-                        onValueChange={v => setVenueMapping(prev => ({ ...prev, [code]: Number(v) }))}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setVenueMapping(prev => val ? { ...prev, [code]: Number(val) } : (({ [code]: _, ...rest }) => rest)(prev));
+                        }}
+                        data-testid={`select-venue-mapping-${code}`}
+                        className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                       >
-                        <SelectTrigger data-testid={`select-venue-mapping-${code}`}>
-                          <SelectValue placeholder="選擇對應場地（不選則跳過）" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allVenues.map(v => (
-                            <SelectItem key={v.id} value={String(v.id)}>
-                              {v.shortName} ({v.name})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <option value="">選擇對應場地（不選則跳過）</option>
+                        {allVenues.map(v => (
+                          <option key={v.id} value={String(v.id)}>
+                            {v.shortName} ({v.name})
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     {venueMapping[code] ? (
                       <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
