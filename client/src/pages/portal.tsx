@@ -2162,8 +2162,5 @@ function PortalPageInner() {
 }
 
 export default function PortalPage() {
-  const liffId = import.meta.env.VITE_LIFF_ID;
-  const isLineBrowser = typeof navigator !== "undefined" && navigator.userAgent.includes("Line/");
-  if (liffId && !isLineBrowser) return <NotLineBrowser />;
   return <PortalPageInner />;
 }

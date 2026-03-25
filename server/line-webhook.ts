@@ -390,7 +390,64 @@ export async function processClockIn(
   };
 }
 
-export async function pushToLine(userId: string, text: string): Promise<boolean> {
+function buildPortalFlexMessage(): object {
+  const liffId = process.env.VITE_LIFF_ID || "";
+  const liffUrl = liffId
+    ? `https://liff.line.me/${liffId}`
+    : "https://smart-schedule-manager.replit.app/portal";
+  return {
+    type: "flex",
+    altText: "點我進行上下班打卡",
+    contents: {
+      type: "bubble",
+      size: "kilo",
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        paddingAll: "16px",
+        contents: [
+          {
+            type: "text",
+            text: "打卡系統",
+            weight: "bold",
+            size: "lg",
+            color: "#1a1a1a",
+          },
+          {
+            type: "text",
+            text: "點選下方按鈕進行上下班打卡",
+            size: "sm",
+            color: "#888888",
+            margin: "sm",
+          },
+        ],
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        paddingAll: "12px",
+        contents: [
+          {
+            type: "button",
+            style: "primary",
+            color: "#ef4444",
+            action: {
+              type: "uri",
+              label: "點我進行上下班打卡 👆",
+              uri: liffUrl,
+            },
+          },
+        ],
+      },
+    },
+  };
+}
+
+export async function pushToLine(userId: string, text: string, extraMessages?: object[]): Promise<boolean> {
+  const messages: object[] = [{ type: "text", text }];
+  if (extraMessages) messages.push(...extraMessages);
   try {
     const resp = await fetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
@@ -398,10 +455,7 @@ export async function pushToLine(userId: string, text: string): Promise<boolean>
         "Content-Type": "application/json",
         Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
       },
-      body: JSON.stringify({
-        to: userId,
-        messages: [{ type: "text", text }],
-      }),
+      body: JSON.stringify({ to: userId, messages }),
     });
     if (!resp.ok) {
       console.error("[LINE] Push failed:", resp.status, await resp.text());
@@ -414,7 +468,9 @@ export async function pushToLine(userId: string, text: string): Promise<boolean>
   }
 }
 
-async function replyToLine(replyToken: string, text: string, fallbackUserId?: string): Promise<void> {
+async function replyToLine(replyToken: string, text: string, fallbackUserId?: string, extraMessages?: object[]): Promise<void> {
+  const messages: object[] = [{ type: "text", text }];
+  if (extraMessages) messages.push(...extraMessages);
   try {
     const resp = await fetch("https://api.line.me/v2/bot/message/reply", {
       method: "POST",
@@ -422,19 +478,16 @@ async function replyToLine(replyToken: string, text: string, fallbackUserId?: st
         "Content-Type": "application/json",
         Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
       },
-      body: JSON.stringify({
-        replyToken,
-        messages: [{ type: "text", text }],
-      }),
+      body: JSON.stringify({ replyToken, messages }),
     });
     if (!resp.ok && fallbackUserId) {
       console.log("[LINE] Reply token expired, using push message instead");
-      await pushToLine(fallbackUserId, text);
+      await pushToLine(fallbackUserId, text, extraMessages);
     }
   } catch (err) {
     console.error("[LINE] Reply failed, trying push:", err);
     if (fallbackUserId) {
-      await pushToLine(fallbackUserId, text);
+      await pushToLine(fallbackUserId, text, extraMessages);
     }
   }
 }
@@ -469,7 +522,12 @@ async function handleFollowEvent(event: any): Promise<void> {
 
   const existingEmp = await storage.getEmployeeByLineId(lineUserId);
   if (existingEmp) {
-    await replyToLine(replyToken, `👋 歡迎回來，${existingEmp.name}！\n\n您的帳號已綁定，可直接傳送「位置訊息」進行 GPS 打卡。`, lineUserId);
+    await replyToLine(
+      replyToken,
+      `👋 歡迎回來，${existingEmp.name}！\n\n您的帳號已綁定，可直接傳送「位置訊息」進行 GPS 打卡，或點選下方按鈕開啟入口網站。`,
+      lineUserId,
+      [buildPortalFlexMessage()]
+    );
     return;
   }
 
@@ -494,10 +552,11 @@ async function handleTextMessage(event: any): Promise<void> {
 
   const alreadyBound = await storage.getEmployeeByLineId(lineUserId);
   if (alreadyBound) {
-    await replyToLine(replyToken,
-      `ℹ️ 您的帳號已綁定為：${alreadyBound.name}（${alreadyBound.employeeCode}）\n\n` +
-      `如需打卡，請傳送「位置訊息」。`,
-      lineUserId
+    await replyToLine(
+      replyToken,
+      `ℹ️ 您的帳號已綁定為：${alreadyBound.name}（${alreadyBound.employeeCode}）\n\n如需 GPS 打卡，請傳送「位置訊息」；或點選下方按鈕開啟入口網站。`,
+      lineUserId,
+      [buildPortalFlexMessage()]
     );
     return;
   }
@@ -540,15 +599,17 @@ async function handleTextMessage(event: any): Promise<void> {
   await storage.updateEmployee(employee.id, { lineId: lineUserId });
   console.log(`[LINE Bind] 員工 ${employee.name}(${employee.employeeCode}) 綁定 LINE ID: ${lineUserId}`);
 
-  await replyToLine(replyToken,
+  await replyToLine(
+    replyToken,
     `✅ 綁定成功！\n\n` +
     `👤 ${employee.name}（${employee.employeeCode}）\n\n` +
     `您現在可以使用以下功能：\n` +
     `📍 傳送「位置訊息」進行 GPS 打卡\n` +
-    `📱 員工入口網站查詢班表\n` +
+    `📱 點選下方按鈕開啟員工入口網站\n` +
     `🔔 接收班表通知\n\n` +
     `如有問題請洽詢主管。`,
-    lineUserId
+    lineUserId,
+    [buildPortalFlexMessage()]
   );
 }
 
