@@ -70,7 +70,8 @@ export async function registerRoutes(
       const { password } = req.body;
       if (!password) return res.status(400).json({ message: "請輸入密碼" });
 
-      const ADMIN_PASSWORD = "<removed>";
+      const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+      if (!ADMIN_PASSWORD) return res.status(500).json({ message: "伺服器未設定管理員密碼" });
       if (password !== ADMIN_PASSWORD) {
         return res.status(401).json({ message: "密碼錯誤" });
       }
