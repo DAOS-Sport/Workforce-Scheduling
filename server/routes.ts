@@ -1512,7 +1512,7 @@ export async function registerRoutes(
       const todayClocks = clockRecords
         .filter((cr) => {
           if (!cr.clockTime) return false;
-          const d = new Date(cr.clockTime);
+          const d = new Date(new Date(cr.clockTime).toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
           const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
           return ds === todayStr;
         })
