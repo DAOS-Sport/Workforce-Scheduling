@@ -38,6 +38,9 @@ export const LEAVE_CODES: Record<string, string> = {
   "喪假": "喪假",
   "公假": "公假",
   "國定假": "國定假",
+  "A": "曠職",
+  "D": "曠職",
+  "AB": "曠職",
 };
 
 const ROLE_CODES = ["救", "教", "指", "行", "櫃", "管", "守", "清", "資", "PT"];
@@ -87,6 +90,24 @@ export function parseShiftCell(raw: string, knownVenueCodes: string[] = []): Par
       leaveType: LEAVE_CODES[trimmed],
       isUnknownVenue: false,
     };
+  }
+
+  for (const [code, leaveType] of Object.entries(LEAVE_CODES)) {
+    if (trimmed.startsWith(code) && trimmed.length > code.length) {
+      const suffix = trimmed.substring(code.length);
+      if (!TIME_REGEX.test(suffix)) {
+        return {
+          raw: trimmed,
+          venueCode: "",
+          roleCode: "",
+          startTime: "00:00",
+          endTime: "00:00",
+          isLeave: true,
+          leaveType,
+          isUnknownVenue: false,
+        };
+      }
+    }
   }
 
   const timeMatch = trimmed.match(TIME_REGEX);
