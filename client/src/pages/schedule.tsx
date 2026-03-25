@@ -4,7 +4,6 @@ import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterv
 import { zhTW } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -69,6 +68,7 @@ const ROLE_SHORT: Record<string, string> = {
   "喪假": "喪",
   "公假": "公",
   "生理假": "生",
+  "國定假": "國",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -82,7 +82,7 @@ const ROLE_LABELS: Record<string, string> = {
   "守望": "守望",
 };
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
 
 const LEAVE_COLORS: Record<string, string> = {
   "休假": "bg-slate-100 dark:bg-slate-800/40 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400",
@@ -92,6 +92,7 @@ const LEAVE_COLORS: Record<string, string> = {
   "喪假": "bg-gray-100 dark:bg-gray-800/40 border border-gray-400 dark:border-gray-600 text-gray-600 dark:text-gray-400",
   "公假": "bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800 text-cyan-600 dark:text-cyan-400",
   "生理假": "bg-pink-50 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-800 text-pink-500 dark:text-pink-400",
+  "國定假": "bg-red-100 dark:bg-red-950/50 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300",
 };
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
@@ -253,7 +254,9 @@ export default function SchedulePage() {
   const [shiftClipboard, setShiftClipboard] = useState<ShiftClipboard | null>(null);
   const [draggedShiftId, setDraggedShiftId] = useState<number | null>(null);
   const [colWidths, setColWidths] = useState<number[]>([]);
+  const [colLeftWidth, setColLeftWidth] = useState(88);
   const resizingRef = useRef<{ index: number; startX: number; startWidth: number } | null>(null);
+  const resizingLeftRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const [dragConfirmTarget, setDragConfirmTarget] = useState<{ shiftId: number; targetDate: string; targetEmpId: number } | null>(null);
 
 
@@ -276,12 +279,20 @@ export default function SchedulePage() {
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!resizingRef.current) return;
-      const { index, startX, startWidth } = resizingRef.current;
-      const newWidth = Math.max(52, startWidth + (e.clientX - startX));
-      setColWidths(prev => { const next = [...prev]; next[index] = newWidth; return next; });
+      if (resizingLeftRef.current) {
+        const { startX, startWidth } = resizingLeftRef.current;
+        const newWidth = Math.max(60, startWidth + (e.clientX - startX));
+        setColLeftWidth(newWidth);
+      } else if (resizingRef.current) {
+        const { index, startX, startWidth } = resizingRef.current;
+        const newWidth = Math.max(52, startWidth + (e.clientX - startX));
+        setColWidths(prev => { const next = [...prev]; next[index] = newWidth; return next; });
+      }
     };
-    const handleMouseUp = () => { resizingRef.current = null; };
+    const handleMouseUp = () => {
+      resizingRef.current = null;
+      resizingLeftRef.current = null;
+    };
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
     return () => {
@@ -294,6 +305,11 @@ export default function SchedulePage() {
     e.preventDefault();
     resizingRef.current = { index, startX: e.clientX, startWidth: colWidths[index] ?? COL_DATE_WIDTH };
   }, [colWidths]);
+
+  const handleLeftResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    resizingLeftRef.current = { startX: e.clientX, startWidth: colLeftWidth };
+  }, [colLeftWidth]);
 
   const { data: venues = [], isLoading: venLoading } = useQuery<Venue[]>({
     queryKey: ["/api/venues", activeRegion],
@@ -443,7 +459,7 @@ export default function SchedulePage() {
 
   const precheckParams = useMemo(() => {
     if (!shiftDialogOpen || !shiftDate || !shiftStartTime || !shiftEndTime || !shiftEmployeeId) return null;
-    const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
+    const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
     if (LEAVE_TYPES.includes(shiftRole)) return null;
     return { employeeId: shiftEmployeeId, date: shiftDate, startTime: shiftStartTime, endTime: shiftEndTime, shiftIdToExclude: editingShift?.id || null };
   }, [shiftDialogOpen, shiftDate, shiftStartTime, shiftEndTime, shiftEmployeeId, shiftRole, editingShift]);
@@ -1049,8 +1065,8 @@ export default function SchedulePage() {
 
   const isLoading = venLoading || empLoading || slotsLoading;
 
-  const COL_LEFT_WIDTH = 88;
   const COL_DATE_WIDTH = 76;
+  const COL_LEFT_WIDTH = colLeftWidth;
 
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -1162,21 +1178,6 @@ export default function SchedulePage() {
           >
             本月
           </Button>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" data-testid="button-pick-date">
-                <CalendarDays className="h-3 w-3 mr-1" />
-                選月
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar
-                mode="single"
-                selected={currentMonth}
-                onSelect={(d) => { if (d) setCurrentMonth(startOfMonth(d)); }}
-              />
-            </PopoverContent>
-          </Popover>
         </div>
         <div className="flex-1 flex justify-center">
           <RegionTabs />
@@ -1455,10 +1456,14 @@ export default function SchedulePage() {
             <thead>
               <tr>
                 <th
-                  className="text-left px-1.5 py-1 border-b border-r font-medium text-muted-foreground bg-background text-xs"
+                  className="text-left px-1.5 py-1 border-b border-r font-medium text-muted-foreground bg-background text-xs relative select-none"
                   style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, position: "sticky", top: 0, left: 0, zIndex: 35 }}
                 >
                   員工/場館
+                  <div
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 transition-colors z-10"
+                    onMouseDown={handleLeftResizeMouseDown}
+                  />
                 </th>
                 {monthDates.map((d, i) => {
                   const dateKey = format(d, "yyyy-MM-dd");
@@ -1486,10 +1491,6 @@ export default function SchedulePage() {
                           {holiday}
                         </div>
                       )}
-                      <div
-                        className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
-                        onMouseDown={(e) => handleResizeMouseDown(e, i)}
-                      />
                     </th>
                   );
                 })}

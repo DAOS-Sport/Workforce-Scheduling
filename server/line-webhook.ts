@@ -604,7 +604,7 @@ export async function handleLineWebhook(body: any): Promise<void> {
   }
 }
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假"];
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
 
 let lastReminderSentDate: string | null = null;
 
