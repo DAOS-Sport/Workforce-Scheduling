@@ -371,8 +371,33 @@ function LineLoginScreen({ onLogin }: { onLogin: (emp: PortalEmployee) => void }
       handleLineCallback(code);
     } else if (lineId) {
       verifyLineId(lineId);
+    } else {
+      tryLiffAutoLogin();
     }
   }, []);
+
+  async function tryLiffAutoLogin() {
+    const liffId = import.meta.env.VITE_LIFF_ID;
+    if (!liffId) return;
+    try {
+      setChecking(true);
+      const liffModule = await import("@line/liff");
+      const liffInstance = liffModule.default;
+      await liffInstance.init({ liffId });
+      if (!liffInstance.isInClient()) {
+        setChecking(false);
+        return;
+      }
+      if (!liffInstance.isLoggedIn()) {
+        liffInstance.login();
+        return;
+      }
+      const profile = await liffInstance.getProfile();
+      await verifyLineId(profile.userId);
+    } catch {
+      setChecking(false);
+    }
+  }
 
   async function handleLineCallback(code: string) {
     setChecking(true);
