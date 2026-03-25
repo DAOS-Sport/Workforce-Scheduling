@@ -1508,12 +1508,26 @@ export async function registerRoutes(
 
       const shifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
 
+      const todayStr = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
+      const todayClocks = clockRecords
+        .filter((cr) => {
+          if (!cr.clockTime) return false;
+          const d = new Date(cr.clockTime);
+          const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          return ds === todayStr;
+        })
+        .sort((a, b) => new Date(b.clockTime!).getTime() - new Date(a.clockTime!).getTime());
+      const latestClockToday = todayClocks[0] ?? null;
+
       const summary = {
         total: records.length,
         late: records.filter((r) => r.isLate).length,
         earlyLeave: records.filter((r) => r.isEarlyLeave).length,
         anomaly: records.filter((r) => r.hasAnomaly).length,
         leave: records.filter((r) => r.leaveHours && r.leaveHours.trim() !== "").length,
+        todayLatestClock: latestClockToday
+          ? { clockType: latestClockToday.clockType, clockTime: latestClockToday.clockTime!.toISOString() }
+          : null,
         records: records.map((r) => {
           const dateShifts = shifts.filter((s) => s.date === r.date);
           const shiftInfo = dateShifts.length > 0

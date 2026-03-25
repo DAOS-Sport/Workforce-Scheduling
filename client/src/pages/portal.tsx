@@ -51,6 +51,7 @@ interface AttendanceSummary {
   earlyLeave: number;
   anomaly: number;
   leave: number;
+  todayLatestClock: { clockType: string; clockTime: string } | null;
   records: {
     date: string;
     clockIn: string | null;
@@ -897,7 +898,14 @@ const LATE_DEPARTURE_REASONS = [
   "加班",
 ];
 
-function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: PortalEmployee; onPositionUpdate?: (lat: number, lng: number) => void; onResult?: (r: ClockInResult) => void }) {
+const CLOCK_LOCK_MS = 60 * 60 * 1000;
+
+function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock }: {
+  employee: PortalEmployee;
+  onPositionUpdate?: (lat: number, lng: number) => void;
+  onResult?: (r: ClockInResult) => void;
+  todayLatestClock?: { clockType: string; clockTime: string } | null;
+}) {
   const [stage, setStage] = useState<"idle" | "scanning" | "submitting" | "done" | "error">("idle");
   const [result, setResult] = useState<ClockInResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
@@ -905,7 +913,55 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
   const [scanAngle, setScanAngle] = useState(0);
   const [reasonSubmitted, setReasonSubmitted] = useState(false);
   const [reasonSubmitting, setReasonSubmitting] = useState(false);
+  const [lockedClock, setLockedClock] = useState<{ clockType: "in" | "out"; timeStr: string; timestamp: number } | null>(null);
+  const [countdown, setCountdown] = useState(0);
   const { toast } = useToast();
+
+  const storageKey = `last_clock_${employee.id}`;
+
+  useEffect(() => {
+    let lockInfo: { clockType: "in" | "out"; timeStr: string; timestamp: number } | null = null;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Date.now() - parsed.timestamp < CLOCK_LOCK_MS) {
+          lockInfo = parsed;
+        } else {
+          localStorage.removeItem(storageKey);
+        }
+      } catch {
+        localStorage.removeItem(storageKey);
+      }
+    }
+    if (!lockInfo && todayLatestClock) {
+      const ts = new Date(todayLatestClock.clockTime).getTime();
+      if (Date.now() - ts < CLOCK_LOCK_MS) {
+        const timeStr = new Date(todayLatestClock.clockTime).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false });
+        lockInfo = { clockType: todayLatestClock.clockType as "in" | "out", timeStr, timestamp: ts };
+        localStorage.setItem(storageKey, JSON.stringify(lockInfo));
+      }
+    }
+    if (lockInfo) {
+      setLockedClock(lockInfo);
+      setCountdown(Math.max(1, Math.ceil((CLOCK_LOCK_MS - (Date.now() - lockInfo.timestamp)) / 60000)));
+    }
+  }, [employee.id, todayLatestClock, storageKey]);
+
+  useEffect(() => {
+    if (!lockedClock) return;
+    const interval = setInterval(() => {
+      const remaining = Math.ceil((CLOCK_LOCK_MS - (Date.now() - lockedClock.timestamp)) / 60000);
+      if (remaining <= 0) {
+        setLockedClock(null);
+        setCountdown(0);
+        localStorage.removeItem(storageKey);
+      } else {
+        setCountdown(remaining);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [lockedClock, storageKey]);
 
   const needsReasonSelection = result && (result.earlyArrival || result.lateDeparture) && !reasonSubmitted;
 
@@ -975,6 +1031,14 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
       setResult(data);
       onResult?.(data);
       setStage("done");
+      if (data.status === "success" || data.status === "warning") {
+        const ts = Date.now();
+        const timeStr = data.time;
+        const lock = { clockType, timeStr, timestamp: ts };
+        localStorage.setItem(storageKey, JSON.stringify(lock));
+        setLockedClock(lock);
+        setCountdown(60);
+      }
     } catch (err: any) {
       if (err.code === 1) {
         setErrorMsg("請允許位置存取權限");
@@ -987,7 +1051,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
       }
       setStage("error");
     }
-  }, [employee.id]);
+  }, [employee.id, storageKey]);
 
   return (
     <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-gps-clock-in">
@@ -998,23 +1062,41 @@ function RadarClockIn({ employee, onPositionUpdate, onResult }: { employee: Port
 
       <div className="p-4">
         {stage === "idle" && (
-          <div className="text-center">
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                className="h-12 rounded-lg bg-juns-green hover:bg-juns-green/90 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-                onClick={() => handleClockIn("in")}
-                data-testid="button-clock-in"
-              >
-                上班
-              </button>
-              <button
-                className="h-12 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-                onClick={() => handleClockIn("out")}
-                data-testid="button-clock-out"
-              >
-                下班
-              </button>
-            </div>
+          <div>
+            {lockedClock ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                  <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-green-700">
+                      {lockedClock.clockType === "in" ? "✓ 上班打卡" : "✓ 下班打卡"} {lockedClock.timeStr}
+                    </p>
+                    <p className="text-xs text-green-600">剩餘鎖定 {countdown} 分鐘</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button disabled className="h-12 rounded-lg bg-slate-100 text-slate-400 font-semibold text-base flex items-center justify-center gap-2 cursor-not-allowed" data-testid="button-clock-in">上班</button>
+                  <button disabled className="h-12 rounded-lg bg-slate-100 text-slate-400 font-semibold text-base flex items-center justify-center gap-2 cursor-not-allowed" data-testid="button-clock-out">下班</button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  className="h-12 rounded-lg bg-juns-green hover:bg-juns-green/90 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                  onClick={() => handleClockIn("in")}
+                  data-testid="button-clock-in"
+                >
+                  上班
+                </button>
+                <button
+                  className="h-12 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                  onClick={() => handleClockIn("out")}
+                  data-testid="button-clock-out"
+                >
+                  下班
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1628,7 +1710,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
         <LiveClock />
         <LocationMap lat={userPos?.lat ?? null} lng={userPos?.lng ?? null} />
         <VenueShiftInfo employee={employee} result={clockInResult} />
-        <RadarClockIn employee={employee} onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })} onResult={setClockInResult} />
+        <RadarClockIn employee={employee} onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })} onResult={setClockInResult} todayLatestClock={attendance?.todayLatestClock} />
 
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-outing-signin">
           <button className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors" data-testid="button-outing-signin">
