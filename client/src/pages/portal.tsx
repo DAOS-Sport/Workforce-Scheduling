@@ -40,8 +40,6 @@ interface PortalShift {
 
 interface CoworkerGroup {
   venue: { id: number; shortName: string } | null;
-  shiftTime: string;
-  myRole: string | null;
   coworkers: { id: number; name: string; phone: string | null; role: string; shiftRole: string; shiftTime: string | null }[];
 }
 
@@ -1924,12 +1922,6 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           <MapPin className="h-2.5 w-2.5 inline mr-0.5" />
                           {group.venue?.shortName || "未知"}
                         </span>
-                        <span className="text-[11px] text-slate-400">{group.shiftTime}</span>
-                        {group.myRole && (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${getRoleDisplay(group.myRole).badgeBg}`}>
-                            我：{getRoleDisplay(group.myRole).taskLabel}
-                          </span>
-                        )}
                       </div>
                       {group.coworkers.length === 0 ? (
                         <p className="text-xs text-slate-400 pl-2">今日僅你一人在此場館</p>
