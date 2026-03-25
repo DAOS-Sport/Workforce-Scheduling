@@ -19,8 +19,9 @@ import {
   ChevronLeft, ChevronRight, CalendarDays, Plus, Minus, ChevronUp, ChevronDown,
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
   Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft,
-  GraduationCap, Award, Briefcase, Monitor, Eye, Clipboard, ClipboardPaste
+  GraduationCap, Award, Briefcase, Monitor, Eye, Clipboard, ClipboardPaste, FileSpreadsheet
 } from "lucide-react";
+import { GoogleSheetsImportDialog } from "@/components/GoogleSheetsImportDialog";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
@@ -258,7 +259,7 @@ export default function SchedulePage() {
   const resizingRef = useRef<{ index: number; startX: number; startWidth: number } | null>(null);
   const resizingLeftRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const [dragConfirmTarget, setDragConfirmTarget] = useState<{ shiftId: number; targetDate: string; targetEmpId: number } | null>(null);
-
+  const [sheetsImportOpen, setSheetsImportOpen] = useState(false);
 
   const monthDates = useMemo(
     () => eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) }),
@@ -1238,6 +1239,17 @@ export default function SchedulePage() {
               <X className="h-2.5 w-2.5 opacity-60" />
             </button>
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1.5 shrink-0"
+            onClick={() => setSheetsImportOpen(true)}
+            data-testid="button-sheets-import"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            匯入班表
+          </Button>
 
           <Popover open={empPickerOpen} onOpenChange={setEmpPickerOpen}>
             <PopoverTrigger asChild>
@@ -3122,6 +3134,13 @@ export default function SchedulePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <GoogleSheetsImportDialog
+        open={sheetsImportOpen}
+        onOpenChange={setSheetsImportOpen}
+        currentYear={currentMonth.getFullYear()}
+        currentMonth={currentMonth.getMonth() + 1}
+      />
     </div>
   );
 }

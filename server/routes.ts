@@ -137,6 +137,26 @@ export async function registerRoutes(
     res.json(filtered);
   });
 
+  app.get("/api/employees", async (req, res) => {
+    try {
+      const { codes } = req.query;
+      if (!codes) return res.status(400).json({ message: "codes 查詢參數為必填" });
+      const codeList = String(codes).split(",").map(c => c.trim()).filter(Boolean);
+      if (codeList.length === 0) return res.json({});
+      const allEmployees = await storage.getAllEmployees();
+      const result: Record<string, { id: number; name: string; employeeCode: string; status: string }> = {};
+      for (const code of codeList) {
+        const emp = allEmployees.find(e => e.employeeCode === code);
+        if (emp) {
+          result[code] = { id: emp.id, name: emp.name, employeeCode: emp.employeeCode, status: emp.status };
+        }
+      }
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/employees/:regionCode", async (req, res) => {
     const { regionCode } = req.params;
     const region = await storage.getRegionByCode(regionCode);
@@ -401,7 +421,7 @@ export async function registerRoutes(
 
   app.post("/api/shifts/batch", async (req, res) => {
     try {
-      const { employeeId, venueId, startTime, endTime, role, isDispatch, targetDates } = req.body;
+      const { employeeId, venueId, startTime, endTime, role, isDispatch, targetDates, skipExisting } = req.body;
       if (!employeeId || !venueId || !startTime || !endTime || !role || !Array.isArray(targetDates) || targetDates.length === 0) {
         return res.status(400).json({ message: "缺少必要欄位" });
       }
@@ -444,6 +464,9 @@ export async function registerRoutes(
 
         let shift: any;
         if (existingOnDate) {
+          if (skipExisting) {
+            continue;
+          }
           const updated = await storage.updateShift(existingOnDate.id, {
             venueId: parseInt(venueId),
             startTime,
@@ -474,6 +497,53 @@ export async function registerRoutes(
       res.json({ created: results.length, errors, warnings, shifts: results });
     } catch (err: any) {
       res.status(400).json({ message: err.message });
+    }
+  });
+
+
+  app.post("/api/shifts/import-batch", async (req, res) => {
+    try {
+      const { shifts: shiftItems, skipExisting } = req.body;
+      if (!Array.isArray(shiftItems) || shiftItems.length === 0) {
+        return res.status(400).json({ message: "shifts 為必填陣列" });
+      }
+
+      const created: any[] = [];
+      const skipped: any[] = [];
+      const errors: string[] = [];
+
+      for (const item of shiftItems) {
+        const { employeeId, venueId, date, startTime, endTime, role } = item;
+        if (!employeeId || !venueId || !date || !startTime || !endTime || !role) {
+          errors.push(`${date}: 缺少必要欄位`);
+          continue;
+        }
+
+        const employee = await storage.getEmployee(employeeId);
+        if (!employee || employee.status !== "active") {
+          errors.push(`${date}: 員工狀態異常`);
+          continue;
+        }
+
+        const existingOnDate = await storage.getShiftsByEmployeeAndDateRange(employeeId, date, date);
+        if (existingOnDate.length > 0) {
+          if (skipExisting) {
+            skipped.push({ date, employeeId });
+            continue;
+          } else {
+            const updated = await storage.updateShift(existingOnDate[0].id, { venueId, startTime, endTime, role });
+            if (updated) created.push(updated);
+            continue;
+          }
+        }
+
+        const shift = await storage.createShift({ employeeId, venueId, date, startTime, endTime, role, isDispatch: false });
+        created.push(shift);
+      }
+
+      res.json({ created: created.length, skipped: skipped.length, errors, shifts: created });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
     }
   });
 
