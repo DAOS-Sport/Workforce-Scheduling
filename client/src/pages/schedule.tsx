@@ -252,6 +252,8 @@ export default function SchedulePage() {
 
   const [shiftClipboard, setShiftClipboard] = useState<ShiftClipboard | null>(null);
   const [draggedShiftId, setDraggedShiftId] = useState<number | null>(null);
+  const [colWidths, setColWidths] = useState<number[]>([]);
+  const resizingRef = useRef<{ index: number; startX: number; startWidth: number } | null>(null);
   const [dragConfirmTarget, setDragConfirmTarget] = useState<{ shiftId: number; targetDate: string; targetEmpId: number } | null>(null);
 
 
@@ -267,6 +269,31 @@ export default function SchedulePage() {
     }),
     [monthDates]
   );
+
+  useEffect(() => {
+    setColWidths(monthDates.map(() => COL_DATE_WIDTH));
+  }, [monthDates.length]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { index, startX, startWidth } = resizingRef.current;
+      const newWidth = Math.max(52, startWidth + (e.clientX - startX));
+      setColWidths(prev => { const next = [...prev]; next[index] = newWidth; return next; });
+    };
+    const handleMouseUp = () => { resizingRef.current = null; };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    resizingRef.current = { index, startX: e.clientX, startWidth: colWidths[index] ?? COL_DATE_WIDTH };
+  }, [colWidths]);
 
   const { data: venues = [], isLoading: venLoading } = useQuery<Venue[]>({
     queryKey: ["/api/venues", activeRegion],
@@ -1101,14 +1128,8 @@ export default function SchedulePage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="sticky top-0 z-50 bg-background border-b border-border/50">
-        <div className="flex items-center justify-center py-2 px-4">
-          <RegionTabs />
-        </div>
-      </div>
-
-      <div className="sticky top-[49px] z-40 bg-background flex items-center justify-between gap-2 px-4 py-2 border-b flex-wrap">
-        <div className="flex items-center gap-2">
+      <div className="sticky top-0 z-50 bg-background border-b border-border/50 flex items-center gap-2 px-4 py-2 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0">
           <h1 className="text-sm font-bold tracking-tight" data-testid="text-page-title">排班編輯器</h1>
           <span className="text-muted-foreground/40">|</span>
           <Button
@@ -1156,6 +1177,9 @@ export default function SchedulePage() {
               />
             </PopoverContent>
           </Popover>
+        </div>
+        <div className="flex-1 flex justify-center">
+          <RegionTabs />
         </div>
         <div className="flex items-start gap-2">
           {shortageDates.length > 0 && (
@@ -1427,7 +1451,7 @@ export default function SchedulePage() {
         )}
         <div className="flex-1 overflow-auto" ref={scrollRef}>
           <DndContext sensors={dndSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <table className="border-separate border-spacing-0 text-sm" style={{ minWidth: `${COL_LEFT_WIDTH + monthDates.length * COL_DATE_WIDTH}px` }}>
+          <table className="border-separate border-spacing-0 text-sm" style={{ minWidth: `${COL_LEFT_WIDTH + (colWidths.length === monthDates.length ? colWidths.reduce((a, w) => a + w, 0) : monthDates.length * COL_DATE_WIDTH)}px` }}>
             <thead>
               <tr>
                 <th
@@ -1441,14 +1465,15 @@ export default function SchedulePage() {
                   const isToday = dateKey === format(new Date(), "yyyy-MM-dd");
                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                   const holiday = TAIWAN_HOLIDAYS[dateKey];
+                  const colW = colWidths[i] ?? COL_DATE_WIDTH;
                   return (
                     <th
                       key={i}
                       data-date-col={dateKey}
-                      className={`text-center p-1.5 border-b border-r font-medium ${
+                      className={`text-center p-1.5 border-b border-r font-medium relative select-none ${
                         holiday ? "bg-red-50 dark:bg-red-950/20" : isToday ? "bg-background" : isWeekend ? "bg-muted" : "bg-background"
                       }`}
-                      style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, position: "sticky", top: 0, zIndex: 25 }}
+                      style={{ minWidth: colW, width: colW, position: "sticky", top: 0, zIndex: 25 }}
                     >
                       <div className={`text-xs ${isWeekend || holiday ? "text-destructive/70" : "text-muted-foreground"}`}>
                         週{DAY_NAMES[d.getDay()]}
@@ -1461,6 +1486,10 @@ export default function SchedulePage() {
                           {holiday}
                         </div>
                       )}
+                      <div
+                        className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
+                        onMouseDown={(e) => handleResizeMouseDown(e, i)}
+                      />
                     </th>
                   );
                 })}
@@ -1474,7 +1503,7 @@ export default function SchedulePage() {
                       <Skeleton className="h-5 w-20" />
                     </td>
                     {Array.from({ length: Math.min(monthDates.length, 10) }).map((_, j) => (
-                      <td key={j} className="p-1 border-b border-r" style={{ minWidth: COL_DATE_WIDTH }}>
+                      <td key={j} className="p-1 border-b border-r" style={{ minWidth: colWidths[j] ?? COL_DATE_WIDTH }}>
                         <Skeleton className="h-10 w-full" />
                       </td>
                     ))}
@@ -1524,7 +1553,7 @@ export default function SchedulePage() {
                           <td
                             key={di}
                             className="p-0.5 border-b border-r text-center align-middle overflow-hidden"
-                            style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH, maxWidth: COL_DATE_WIDTH, backgroundColor: cellBg }}
+                            style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH, maxWidth: colWidths[di] ?? COL_DATE_WIDTH, backgroundColor: cellBg }}
                             data-testid={`summary-cell-${venue.id}-${dateStr}`}
                           >
                             <button
@@ -1591,7 +1620,7 @@ export default function SchedulePage() {
                           {label} ({grouped.length})
                         </td>
                         {monthDates.map((_, di) => (
-                          <td key={di} className="border-b border-r bg-muted" style={{ minWidth: COL_DATE_WIDTH }} />
+                          <td key={di} className="border-b border-r bg-muted" style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH }} />
                         ))}
                       </tr>,
                       ...grouped.map((emp) => (
@@ -1627,7 +1656,7 @@ export default function SchedulePage() {
                       return (
                         <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
                           isToday ? "bg-primary/5" : isHoliday ? "bg-red-50/40 dark:bg-red-950/10" : isWeekend ? "bg-muted/20" : ""
-                        }`} style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
+                        }`} style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
                           {cellShifts.length > 0 ? (
                             <div className="space-y-0.5">
                               {cellShifts.map((shift) => {
@@ -1687,7 +1716,7 @@ export default function SchedulePage() {
                                           {venue?.shortName || "未知"}
                                         </div>
                                         <div className="flex items-center gap-0.5 shrink-0">
-                                          <span className="text-[9px] px-0.5 rounded bg-background/50 border border-current opacity-70">
+                                          <span className={`text-[9px] font-bold leading-none ${isCounter ? "text-orange-500" : "text-blue-500"}`}>
                                             {roleShort}
                                           </span>
                                           <button
@@ -1830,7 +1859,7 @@ export default function SchedulePage() {
                         <td
                           key={di}
                           className={`p-0.5 border-b border-r relative align-top ${isToday ? "bg-primary/5" : isHolidayCell ? "bg-red-50/40 dark:bg-red-950/10" : isWeekend ? "bg-muted/20" : ""}`}
-                          style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }}
+                          style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }}
                           data-testid={`cell-dispatch-${name}-${dateStr}`}
                         >
                           {cellDispatches.length > 0 ? (
@@ -1852,7 +1881,7 @@ export default function SchedulePage() {
                                       <div className="font-medium leading-tight text-[11px] truncate text-purple-700 dark:text-purple-300">
                                         {venue?.shortName || "未指定"}
                                       </div>
-                                      <span className="text-[9px] px-0.5 rounded bg-background/50 border border-purple-300 dark:border-purple-700 opacity-70 shrink-0 text-purple-600 dark:text-purple-400">
+                                      <span className={`text-[9px] font-bold leading-none shrink-0 ${ds.role === "櫃台" || ds.role === "櫃檯" ? "text-orange-500" : "text-blue-500"}`}>
                                         {roleShort}
                                       </span>
                                     </div>
@@ -1920,7 +1949,7 @@ export default function SchedulePage() {
                         </div>
                       </td>
                       {monthDates.map((_, di) => (
-                        <td key={di} className="border-b border-r bg-transparent" style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }} />
+                        <td key={di} className="border-b border-r bg-transparent" style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} />
                       ))}
                     </tr>
                   </>
