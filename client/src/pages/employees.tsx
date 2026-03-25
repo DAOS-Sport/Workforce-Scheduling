@@ -41,13 +41,10 @@ const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondar
   suspended: { label: "停職", variant: "secondary" },
 };
 
-const NEIGIN_DEPARTMENTS = ["人力資源處", "數位轉型發展處", "營運管理處", "行銷事業處"];
-
 export default function EmployeesPage() {
   const { activeRegion } = useRegion();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [departmentFilter, setDepartmentFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [form, setForm] = useState({
@@ -74,15 +71,11 @@ export default function EmployeesPage() {
 
   const filteredEmployees = employees.filter((e) => {
     if (e.status === "inactive") return false;
-    const matchesSearch =
+    return (
       e.name.includes(search) ||
       e.employeeCode.includes(search) ||
-      (e.phone && e.phone.includes(search));
-    if (!matchesSearch) return false;
-    if (activeRegion === "D" && departmentFilter !== "all") {
-      return e.department === departmentFilter;
-    }
-    return true;
+      (e.phone && e.phone.includes(search))
+    );
   });
 
   const createEmployee = useMutation({
@@ -222,19 +215,6 @@ export default function EmployeesPage() {
                 data-testid="input-search-employee"
               />
             </div>
-            {activeRegion === "D" && (
-              <Select value={departmentFilter} onValueChange={setDepartmentFilter} data-testid="select-department-filter">
-                <SelectTrigger className="w-36 h-9 text-sm" data-testid="trigger-department-filter">
-                  <SelectValue placeholder="部門篩選" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部部門</SelectItem>
-                  {NEIGIN_DEPARTMENTS.map((dept) => (
-                    <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
           </div>
           <div className="flex gap-2">
             <Button

@@ -2041,40 +2041,32 @@ export default function SchedulePage() {
             <DialogTitle className="text-lg font-bold text-purple-700 dark:text-purple-400">
               {editingDispatch
                 ? <>編輯派遣班次 <span className="text-sm font-normal text-muted-foreground ml-1">— {editingDispatch.dispatchName}</span></>
-                : dispatchFromCell
-                  ? <>{dispatchName} <span className="text-sm font-normal text-muted-foreground ml-1">— {dispatchDate ? format(new Date(dispatchDate), "M月d日 (E)", { locale: zhTW }) : ""}</span></>
-                  : "新增派遣班次"
+                : "新增派遣班次"
               }
             </DialogTitle>
-            {(dispatchFromCell && !editingDispatch) && (
-              <DialogDescription className="text-purple-600/70">
-                不受勞基法限制；時間與場館依實際安排填入。
-              </DialogDescription>
-            )}
+            <DialogDescription className="text-purple-600/70">
+              不受勞基法限制；時間與場館依實際安排填入。
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {(!dispatchFromCell || editingDispatch) && (
-              <div className="space-y-2">
-                <Label>派遣人員姓名 *</Label>
-                <Input
-                  value={dispatchName}
-                  onChange={(e) => setDispatchName(e.target.value)}
-                  placeholder="輸入派遣人員姓名"
-                  data-testid="input-dispatch-name"
-                />
-              </div>
-            )}
-            {(!dispatchFromCell || editingDispatch) && (
-              <div className="space-y-2">
-                <Label>日期 *</Label>
-                <Input
-                  type="date"
-                  value={dispatchDate}
-                  onChange={(e) => setDispatchDate(e.target.value)}
-                  data-testid="input-dispatch-date"
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>派遣人員姓名 *</Label>
+              <Input
+                value={dispatchName}
+                onChange={(e) => setDispatchName(e.target.value)}
+                placeholder="輸入派遣人員姓名"
+                data-testid="input-dispatch-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>日期 *</Label>
+              <Input
+                type="date"
+                value={dispatchDate}
+                onChange={(e) => setDispatchDate(e.target.value)}
+                data-testid="input-dispatch-date"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>場館</Label>
