@@ -102,12 +102,12 @@ export function GoogleSheetsImportDialog({
   const buildAutoVenueMapping = useCallback((codes: string[], venues: Venue[]): VenueMapping => {
     const mapping: VenueMapping = {};
     for (const code of codes) {
-      const matched = venues.find(v =>
-        v.shortName === code ||
-        v.shortName.startsWith(code) ||
-        v.name.includes(code)
-      );
-      if (matched) mapping[code] = matched.id;
+      const exact = venues.find(v => v.shortName === code);
+      if (exact) { mapping[code] = exact.id; continue; }
+      const prefix = venues.find(v => v.shortName.startsWith(code) && code.length >= 2);
+      if (prefix) { mapping[code] = prefix.id; continue; }
+      const contains = venues.find(v => v.name === code);
+      if (contains) { mapping[code] = contains.id; }
     }
     return mapping;
   }, []);
@@ -174,7 +174,7 @@ export function GoogleSheetsImportDialog({
     setStep(hasUnmapped ? "venue-mapping" : "confirm");
   }, [allVenueCodes, venueMapping]);
 
-  const buildImportShifts = useCallback((): { shifts: ImportShift[]; notFoundEmployees: string[]; totalLeave: number } => {
+  const importData = useMemo((): { shifts: ImportShift[]; notFoundEmployees: string[]; totalLeave: number } => {
     const shifts: ImportShift[] = [];
     const notFound: string[] = [];
     let totalLeave = 0;
@@ -186,6 +186,17 @@ export function GoogleSheetsImportDialog({
         continue;
       }
 
+      const firstNonLeaveVenueId = (() => {
+        for (let d = 0; d < daysInMonth; d++) {
+          const c = emp.cells[d];
+          if (c && !c.isLeave && c.venueCode) {
+            const vid = venueMapping[c.venueCode];
+            if (vid) return vid;
+          }
+        }
+        return allVenues[0]?.id;
+      })();
+
       for (let d = 0; d < daysInMonth; d++) {
         const cell = emp.cells[d];
         if (!cell) continue;
@@ -193,12 +204,11 @@ export function GoogleSheetsImportDialog({
         const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d + 1).padStart(2, "0")}`;
 
         if (cell.isLeave && cell.leaveType) {
-          const firstVenueId = allVenues[0]?.id;
-          if (!firstVenueId) continue;
+          if (!firstNonLeaveVenueId) continue;
           totalLeave++;
           shifts.push({
             employeeId: emp.employeeId,
-            venueId: firstVenueId,
+            venueId: firstNonLeaveVenueId,
             date: dateStr,
             startTime: "00:00",
             endTime: "00:00",
@@ -227,7 +237,7 @@ export function GoogleSheetsImportDialog({
   }, [parsedEmployees, venueMapping, year, month, allVenues]);
 
   const handleImport = async () => {
-    const { shifts } = buildImportShifts();
+    const { shifts } = importData;
     if (shifts.length === 0) {
       toast({ title: "無可匯入的班次", variant: "destructive" });
       return;
@@ -247,9 +257,7 @@ export function GoogleSheetsImportDialog({
     }
   };
 
-  const { shifts: previewShifts, notFoundEmployees, totalLeave } = (step === "confirm" || step === "done")
-    ? buildImportShifts()
-    : { shifts: [], notFoundEmployees: [], totalLeave: 0 };
+  const { shifts: previewShifts, notFoundEmployees, totalLeave } = importData;
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const foundCount = parsedEmployees.filter(e => e.found).length;
@@ -360,27 +368,24 @@ export function GoogleSheetsImportDialog({
               </div>
 
               <div className="border rounded-md overflow-auto max-h-[340px]">
-                <table className="w-full text-[10px] border-collapse">
+                <table className="text-[10px] border-collapse" style={{ minWidth: `${80 + 60 + 28 + daysInMonth * 28}px` }}>
                   <thead className="sticky top-0 bg-muted z-10">
                     <tr>
-                      <th className="text-left px-2 py-1.5 border-b border-r font-medium min-w-[80px]">員工</th>
+                      <th className="sticky left-0 bg-muted text-left px-2 py-1.5 border-b border-r font-medium min-w-[80px]">員工</th>
                       <th className="text-left px-2 py-1.5 border-b border-r font-medium min-w-[60px]">代號</th>
-                      <th className="text-left px-2 py-1.5 border-b border-r font-medium w-10">狀態</th>
-                      {Array.from({ length: Math.min(daysInMonth, 15) }, (_, i) => (
-                        <th key={i} className="px-1 py-1.5 border-b border-r font-medium w-8 text-center">{i + 1}</th>
+                      <th className="text-left px-2 py-1.5 border-b border-r font-medium w-7">狀態</th>
+                      {Array.from({ length: daysInMonth }, (_, i) => (
+                        <th key={i} className="px-1 py-1.5 border-b border-r font-medium w-7 text-center">{i + 1}</th>
                       ))}
-                      {daysInMonth > 15 && (
-                        <th className="px-1 py-1.5 border-b font-medium w-8 text-center text-muted-foreground">…</th>
-                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {parsedEmployees.map((emp, idx) => (
                       <tr key={idx} className={`border-b last:border-b-0 ${!emp.found ? "bg-amber-50 dark:bg-amber-950/20" : ""}`}>
-                        <td className="px-2 py-1 border-r font-medium truncate max-w-[80px]" data-testid={`preview-emp-name-${idx}`}>
+                        <td className="sticky left-0 bg-inherit px-2 py-1 border-r font-medium truncate max-w-[80px]" data-testid={`preview-emp-name-${idx}`}>
                           {emp.name}
                         </td>
-                        <td className="px-2 py-1 border-r text-muted-foreground">{emp.employeeCode}</td>
+                        <td className="px-2 py-1 border-r text-muted-foreground whitespace-nowrap">{emp.employeeCode}</td>
                         <td className="px-2 py-1 border-r text-center">
                           {emp.found ? (
                             <CheckCircle2 className="h-3 w-3 text-green-500 mx-auto" />
@@ -388,7 +393,7 @@ export function GoogleSheetsImportDialog({
                             <XCircle className="h-3 w-3 text-amber-500 mx-auto" />
                           )}
                         </td>
-                        {Array.from({ length: Math.min(daysInMonth, 15) }, (_, d) => {
+                        {Array.from({ length: daysInMonth }, (_, d) => {
                           const cell = emp.cells[d];
                           const isUnknownVenue = cell && !cell.isLeave && cell.venueCode && !venueMapping[cell.venueCode];
                           return (
@@ -403,18 +408,11 @@ export function GoogleSheetsImportDialog({
                             </td>
                           );
                         })}
-                        {daysInMonth > 15 && (
-                          <td className="px-1 py-1 text-center text-muted-foreground">…</td>
-                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-
-              {daysInMonth > 15 && (
-                <p className="text-[10px] text-muted-foreground">僅顯示前 15 天，實際匯入將包含全月</p>
-              )}
             </div>
           )}
 

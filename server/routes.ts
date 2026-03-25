@@ -512,6 +512,29 @@ export async function registerRoutes(
       const skipped: any[] = [];
       const errors: string[] = [];
 
+      const uniqueEmployeeIds = [...new Set(shiftItems.map((s: any) => s.employeeId).filter(Boolean))] as number[];
+      const allDates = shiftItems.map((s: any) => s.date as string).filter(Boolean).sort();
+      const monthStart = allDates[0];
+      const monthEnd = allDates[allDates.length - 1];
+
+      const [employeeList, existingShiftsForMonth] = await Promise.all([
+        Promise.all(uniqueEmployeeIds.map(id => storage.getEmployee(id))),
+        uniqueEmployeeIds.length > 0
+          ? storage.getShiftsByEmployeesAndDateRange(uniqueEmployeeIds, monthStart, monthEnd)
+          : Promise.resolve([]),
+      ]);
+
+      const employeeMap = new Map(
+        employeeList.filter(Boolean).map(e => [e!.id, e!])
+      );
+      const existingByKey = new Map<string, typeof existingShiftsForMonth[0]>();
+      for (const s of existingShiftsForMonth) {
+        existingByKey.set(`${s.employeeId}:${s.date}`, s);
+      }
+
+      const refConfig = await storage.getSystemConfig("four_week_reference_date");
+      const referenceDate = refConfig?.value ?? "2025-01-06";
+
       for (const item of shiftItems) {
         const { employeeId, venueId, date, startTime, endTime, role } = item;
         if (!employeeId || !venueId || !date || !startTime || !endTime || !role) {
@@ -519,26 +542,43 @@ export async function registerRoutes(
           continue;
         }
 
-        const employee = await storage.getEmployee(employeeId);
+        const employee = employeeMap.get(employeeId);
         if (!employee || employee.status !== "active") {
-          errors.push(`${date}: 員工狀態異常`);
+          errors.push(`${date}: 員工（id=${employeeId}）狀態異常`);
           continue;
         }
 
-        const existingOnDate = await storage.getShiftsByEmployeeAndDateRange(employeeId, date, date);
-        if (existingOnDate.length > 0) {
+        const isLeave = LEAVE_TYPES.includes(role);
+        if (!isLeave) {
+          const empShiftsForMonth = existingShiftsForMonth.filter(s => s.employeeId === employeeId);
+          const validationErrors = validateAllRules(employeeId, date, startTime, endTime, empShiftsForMonth, undefined, referenceDate);
+          const blocking = validationErrors.filter(e => e.severity === "error");
+          if (blocking.length > 0) {
+            errors.push(`${date} ${employee.name}：${blocking.map(e => e.message).join("；")}`);
+            continue;
+          }
+        }
+
+        const existingKey = `${employeeId}:${date}`;
+        const existingShift = existingByKey.get(existingKey);
+        if (existingShift) {
           if (skipExisting) {
             skipped.push({ date, employeeId });
             continue;
           } else {
-            const updated = await storage.updateShift(existingOnDate[0].id, { venueId, startTime, endTime, role });
-            if (updated) created.push(updated);
+            const updated = await storage.updateShift(existingShift.id, { venueId, startTime, endTime, role });
+            if (updated) {
+              created.push(updated);
+              existingByKey.set(existingKey, updated);
+            }
             continue;
           }
         }
 
         const shift = await storage.createShift({ employeeId, venueId, date, startTime, endTime, role, isDispatch: false });
         created.push(shift);
+        existingByKey.set(existingKey, shift);
+        existingShiftsForMonth.push(shift);
       }
 
       res.json({ created: created.length, skipped: skipped.length, errors, shifts: created });

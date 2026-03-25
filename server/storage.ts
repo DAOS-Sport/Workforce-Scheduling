@@ -58,6 +58,7 @@ export interface IStorage {
   getShiftsByDate(date: string): Promise<Shift[]>;
   getAllShiftsByDateRange(startDate: string, endDate: string): Promise<Shift[]>;
   getShiftsByEmployee(employeeId: number): Promise<Shift[]>;
+  getShiftsByEmployeesAndDateRange(employeeIds: number[], startDate: string, endDate: string): Promise<Shift[]>;
   getShift(id: number): Promise<Shift | undefined>;
   createShift(data: InsertShift): Promise<Shift>;
   updateShift(id: number, data: Partial<InsertShift>): Promise<Shift | undefined>;
@@ -466,6 +467,17 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(shifts).where(
       and(
         eq(shifts.employeeId, employeeId),
+        gte(shifts.date, startDate),
+        lte(shifts.date, endDate)
+      )
+    );
+  }
+
+  async getShiftsByEmployeesAndDateRange(employeeIds: number[], startDate: string, endDate: string): Promise<Shift[]> {
+    if (employeeIds.length === 0) return [];
+    return db.select().from(shifts).where(
+      and(
+        inArray(shifts.employeeId, employeeIds),
         gte(shifts.date, startDate),
         lte(shifts.date, endDate)
       )

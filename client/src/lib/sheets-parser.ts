@@ -38,9 +38,6 @@ export const LEAVE_CODES: Record<string, string> = {
   "喪假": "喪假",
   "公假": "公假",
   "國定假": "國定假",
-  "A": "休假",
-  "D": "休假",
-  "AB": "休假",
 };
 
 const ROLE_CODES = ["救", "教", "指", "行", "櫃", "管", "守", "清", "資", "PT"];
