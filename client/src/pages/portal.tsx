@@ -1810,7 +1810,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           const timeStr = `${s.startTime.slice(0, 5).replace(":", "")}-${s.endTime.slice(0, 5).replace(":", "")}`;
                           const venuePart = s.venue?.shortName || "";
                           return (
-                            <div key={i} className={`text-[9px] leading-tight px-0.5 py-0.5 rounded border-l-2 mb-0.5 ${rd.borderClass} bg-white overflow-hidden`}>
+                            <div key={i} className={`text-[10px] leading-tight px-0.5 py-0.5 rounded border-l-2 mb-0.5 ${rd.borderClass} bg-white whitespace-nowrap overflow-hidden`}>
                               <span className="font-semibold text-juns-navy">{venuePart}</span>
                               <span className={`font-medium ${rd.textClass}`}>{roleAbbrev}</span>
                               <span className="text-slate-500">{timeStr}</span>
@@ -1836,31 +1836,27 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                       return (
                         <div
                           key={s.id}
-                          className={`flex items-center gap-3 py-2.5 px-3 rounded-lg border border-juns-border ${
+                          className={`flex items-center gap-2.5 py-1.5 px-3 rounded-lg border border-juns-border ${
                             isToday(d) ? "border-juns-teal bg-juns-teal/5" : "bg-white"
                           }`}
                           data-testid={`shift-row-${s.id}`}
                         >
-                          <div className="text-center min-w-[45px]">
-                            <div className="text-xs text-slate-500 font-mono">{format(d, "M/d")}</div>
-                            <div className={`text-[11px] ${dayLabel === "日" || dayLabel === "六" ? "text-red-400" : "text-slate-400"}`}>
+                          <div className="text-center min-w-[40px] shrink-0">
+                            <div className="text-xs text-slate-500 font-mono leading-none">{format(d, "M/d")}</div>
+                            <div className={`text-[11px] leading-none mt-0.5 ${dayLabel === "日" || dayLabel === "六" ? "text-red-400" : "text-slate-400"}`}>
                               ({dayLabel})
                             </div>
                           </div>
-                          <div className={`w-0.5 h-8 rounded-full shrink-0`} style={{ backgroundColor: rd.color }} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-medium text-juns-navy truncate">{s.venue?.shortName || "未知"}</span>
-                              {s.isDispatch && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600">派遣</span>}
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-xs text-slate-400 font-mono">
-                                {s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}
-                              </span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${rd.badgeBg}`}>
-                                {rd.taskLabel}
-                              </span>
-                            </div>
+                          <div className={`w-0.5 h-6 rounded-full shrink-0`} style={{ backgroundColor: rd.color }} />
+                          <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden">
+                            <span className="text-sm font-medium text-juns-navy shrink-0">{s.venue?.shortName || "未知"}</span>
+                            <span className="text-slate-300 shrink-0">·</span>
+                            <span className={`text-xs shrink-0 ${rd.textClass}`}>{rd.label}</span>
+                            <span className="text-slate-300 shrink-0">·</span>
+                            <span className="text-xs text-slate-400 font-mono truncate">
+                              {s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}
+                            </span>
+                            {s.isDispatch && <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-600 shrink-0 ml-1">派遣</span>}
                           </div>
                         </div>
                       );
