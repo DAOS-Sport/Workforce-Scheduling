@@ -1934,7 +1934,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 <div className="flex items-center gap-1.5 mb-1.5">
                                   <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: rd.color }} />
                                   <span className={`text-[11px] font-semibold ${rd.textClass}`}>
-                                    {rd.label}夥伴
+                                    {rd.label}
                                   </span>
                                   <span className="text-[10px] text-slate-400">({members.length}人)</span>
                                 </div>
@@ -2162,6 +2162,8 @@ function PortalPageInner() {
 }
 
 export default function PortalPage() {
-  // 外部瀏覽器也允許開啟（LINE Login OAuth 支援所有瀏覽器）
+  const liffId = import.meta.env.VITE_LIFF_ID;
+  const isLineBrowser = typeof navigator !== "undefined" && navigator.userAgent.includes("Line/");
+  if (liffId && !isLineBrowser) return <NotLineBrowser />;
   return <PortalPageInner />;
 }

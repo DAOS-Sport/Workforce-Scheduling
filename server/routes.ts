@@ -1502,10 +1502,19 @@ export async function registerRoutes(
       const regionShifts = await storage.getShiftsByRegionAndDateRange(emp.regionId, today, today);
       if (regionShifts.length === 0) return res.json([]);
 
-      // 依場館分組（排除自己）
+      // 取出本人班次用於時段重疊過濾
+      const myShifts = regionShifts.filter(s => s.employeeId === employeeId);
+
+      // 依場館分組（排除自己，只保留與本人班次時段有重疊的）
       const venueMap = new Map<number, typeof regionShifts>();
       for (const s of regionShifts) {
         if (s.employeeId === employeeId) continue;
+        const cwStart = s.startTime.slice(0, 5);
+        const cwEnd = s.endTime.slice(0, 5);
+        const overlaps = myShifts.some(my =>
+          cwStart < my.endTime.slice(0, 5) && cwEnd > my.startTime.slice(0, 5)
+        );
+        if (!overlaps) continue;
         if (!venueMap.has(s.venueId)) venueMap.set(s.venueId, []);
         venueMap.get(s.venueId)!.push(s);
       }
