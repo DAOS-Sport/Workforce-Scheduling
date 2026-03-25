@@ -390,69 +390,6 @@ export async function processClockIn(
   };
 }
 
-function buildPortalFlexMessage(): object {
-  const liffId = process.env.VITE_LIFF_ID || "";
-  const liffUrl = liffId
-    ? `https://liff.line.me/${liffId}`
-    : "https://smart-schedule-manager.replit.app/portal";
-  return {
-    type: "flex",
-    altText: "員工入口網站",
-    contents: {
-      type: "bubble",
-      size: "kilo",
-      body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "sm",
-        paddingAll: "16px",
-        contents: [
-          {
-            type: "text",
-            text: "員工入口網站",
-            weight: "bold",
-            size: "lg",
-            color: "#1a1a1a",
-          },
-          {
-            type: "text",
-            text: "點選下方按鈕進行打卡或查看員工守則",
-            size: "sm",
-            color: "#888888",
-            margin: "sm",
-          },
-        ],
-      },
-      footer: {
-        type: "box",
-        layout: "vertical",
-        spacing: "sm",
-        paddingAll: "12px",
-        contents: [
-          {
-            type: "button",
-            style: "primary",
-            color: "#ef4444",
-            action: {
-              type: "uri",
-              label: "點我進行上下班打卡 👆",
-              uri: liffUrl,
-            },
-          },
-          {
-            type: "button",
-            style: "secondary",
-            action: {
-              type: "uri",
-              label: "📋 員工守則",
-              uri: liffUrl,
-            },
-          },
-        ],
-      },
-    },
-  };
-}
 
 export async function pushToLine(userId: string, text: string, extraMessages?: object[]): Promise<boolean> {
   const messages: object[] = [{ type: "text", text }];
@@ -531,12 +468,7 @@ async function handleFollowEvent(event: any): Promise<void> {
 
   const existingEmp = await storage.getEmployeeByLineId(lineUserId);
   if (existingEmp) {
-    await replyToLine(
-      replyToken,
-      `👋 歡迎回來，${existingEmp.name}！\n\n您的帳號已綁定，可直接傳送「位置訊息」進行 GPS 打卡，或點選下方按鈕開啟入口網站。`,
-      lineUserId,
-      [buildPortalFlexMessage()]
-    );
+    await replyToLine(replyToken, `👋 歡迎回來，${existingEmp.name}！\n\n您的帳號已綁定，可直接傳送「位置訊息」進行 GPS 打卡。`, lineUserId);
     return;
   }
 
@@ -561,11 +493,10 @@ async function handleTextMessage(event: any): Promise<void> {
 
   const alreadyBound = await storage.getEmployeeByLineId(lineUserId);
   if (alreadyBound) {
-    await replyToLine(
-      replyToken,
-      `ℹ️ 您的帳號已綁定為：${alreadyBound.name}（${alreadyBound.employeeCode}）\n\n如需 GPS 打卡，請傳送「位置訊息」；或點選下方按鈕開啟入口網站。`,
-      lineUserId,
-      [buildPortalFlexMessage()]
+    await replyToLine(replyToken,
+      `ℹ️ 您的帳號已綁定為：${alreadyBound.name}（${alreadyBound.employeeCode}）\n\n` +
+      `如需打卡，請傳送「位置訊息」。`,
+      lineUserId
     );
     return;
   }
@@ -608,17 +539,15 @@ async function handleTextMessage(event: any): Promise<void> {
   await storage.updateEmployee(employee.id, { lineId: lineUserId });
   console.log(`[LINE Bind] 員工 ${employee.name}(${employee.employeeCode}) 綁定 LINE ID: ${lineUserId}`);
 
-  await replyToLine(
-    replyToken,
+  await replyToLine(replyToken,
     `✅ 綁定成功！\n\n` +
     `👤 ${employee.name}（${employee.employeeCode}）\n\n` +
     `您現在可以使用以下功能：\n` +
     `📍 傳送「位置訊息」進行 GPS 打卡\n` +
-    `📱 點選下方按鈕開啟員工入口網站\n` +
+    `📱 員工入口網站查詢班表\n` +
     `🔔 接收班表通知\n\n` +
     `如有問題請洽詢主管。`,
-    lineUserId,
-    [buildPortalFlexMessage()]
+    lineUserId
   );
 }
 
