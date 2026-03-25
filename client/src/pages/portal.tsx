@@ -1262,13 +1262,31 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock }
             <AnomalyReportButton employee={employee} clockResult={result} accuracy={accuracy} context="打卡異常" />
 
             {!needsReasonSelection && (
-              <button
-                className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all mt-2"
-                onClick={() => { setStage("idle"); setResult(null); setReasonSubmitted(false); }}
-                data-testid="button-clock-again"
-              >
-                再次打卡
-              </button>
+              lockedClock ? (
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-2 p-2.5 rounded-lg bg-green-50 border border-green-200">
+                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-green-700">
+                        {lockedClock.clockType === "in" ? "✓ 上班打卡" : "✓ 下班打卡"} {lockedClock.timeStr}
+                      </p>
+                      <p className="text-[11px] text-green-600">剩餘鎖定 {countdown} 分鐘</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button disabled className="h-9 rounded-lg bg-slate-100 text-slate-400 font-semibold text-sm cursor-not-allowed">上班</button>
+                    <button disabled className="h-9 rounded-lg bg-slate-100 text-slate-400 font-semibold text-sm cursor-not-allowed">下班</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all mt-2"
+                  onClick={() => { setStage("idle"); setResult(null); setReasonSubmitted(false); }}
+                  data-testid="button-clock-again"
+                >
+                  再次打卡
+                </button>
+              )
             )}
           </div>
         )}
