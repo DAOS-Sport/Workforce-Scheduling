@@ -331,7 +331,7 @@ export default function SchedulePage() {
     if (!nqRegionId) return;
     const ids = new Set<number>();
     allSystemEmployees.forEach(e => {
-      if (e.regionId === nqRegionId && e.status !== "inactive") ids.add(e.id);
+      if (e.status !== "inactive" && (e.regionId === nqRegionId || e.department === "營運管理處")) ids.add(e.id);
     });
     setNeiQinEmployeeIds(ids);
     setScheduleVisibleEmployeeIds(prev => {
