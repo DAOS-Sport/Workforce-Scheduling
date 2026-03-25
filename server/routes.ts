@@ -17,6 +17,25 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // Seed required default guidelines if not yet present
+  try {
+    const existingGuidelines = await storage.getGuidelines("工作規則");
+    const hasSickLeave = existingGuidelines.some((g) => g.title === "病假注意事項");
+    if (!hasSickLeave) {
+      await storage.createGuideline({
+        category: "工作規則",
+        title: "病假注意事項",
+        content: "請病假需於返回上班後三日內提交就診證明（醫院收據或診斷書），否則將視同曠職。如有疑問請洽詢主管或 HR 部門。",
+        contentType: "text",
+        sortOrder: 10,
+        isActive: true,
+      });
+      console.log("[Seed] 已新增病假注意事項 guideline");
+    }
+  } catch (e) {
+    console.error("[Seed] 初始化 guideline 失敗:", e);
+  }
+
   app.use("/api/anomaly-report", (req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");

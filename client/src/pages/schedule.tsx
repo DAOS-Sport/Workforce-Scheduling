@@ -683,15 +683,28 @@ export default function SchedulePage() {
     },
   });
 
-  const createDispatchShift = useMutation({
-    mutationFn: async (data: any) => {
+  interface DispatchShiftPayload {
+    regionCode: string;
+    venueId: number | null;
+    date: string;
+    startTime: string;
+    endTime: string;
+    dispatchName: string;
+    dispatchCompany: string | null;
+    dispatchPhone: string | null;
+    role: string;
+    notes: string | null;
+  }
+
+  const createDispatchShift = useMutation<unknown, Error, DispatchShiftPayload>({
+    mutationFn: async (data) => {
       const res = await apiRequest("POST", "/api/dispatch-shifts", data);
       return res.json();
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts"] });
       const currentMonthStr = format(currentMonth, "yyyy-MM");
-      const savedDate: string = (variables as any).date || "";
+      const savedDate = variables.date;
       if (savedDate && !savedDate.startsWith(currentMonthStr)) {
         const [y, m] = savedDate.split("-");
         toast({ title: "派遣班次已儲存", description: `日期在 ${y} 年 ${m} 月，請切換月份查看` });
