@@ -516,7 +516,7 @@ export async function registerRoutes(
         }
 
         const dayShifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
-        const matchingShift = matchVenueId && matchStartTime
+        const shiftToUpdate = matchVenueId && matchStartTime
           ? (dayShifts.find(s =>
               s.venueId === Number(matchVenueId) &&
               s.startTime.substring(0, 5) === matchStartTime &&
@@ -525,10 +525,10 @@ export async function registerRoutes(
             ) || dayShifts.find(s =>
               s.venueId === Number(matchVenueId) &&
               s.startTime.substring(0, 5) === matchStartTime
-            ))
-          : null;
+            ) || dayShifts[0] || null)
+          : (dayShifts[0] || null);
 
-        if (!matchingShift) {
+        if (!shiftToUpdate) {
           const created = await storage.createShift({
             employeeId: empId,
             venueId: effectiveVenueId,
@@ -541,7 +541,7 @@ export async function registerRoutes(
           updated.push(created);
           existingShifts.push(created as any);
         } else {
-          const result = await storage.updateShift(matchingShift.id, {
+          const result = await storage.updateShift(shiftToUpdate.id, {
             venueId: effectiveVenueId,
             startTime: effectiveStart,
             endTime: effectiveEnd,
@@ -550,7 +550,7 @@ export async function registerRoutes(
           });
           if (result) {
             updated.push(result);
-            const idx = existingShifts.findIndex((s: any) => s.id === matchingShift.id);
+            const idx = existingShifts.findIndex((s: any) => s.id === shiftToUpdate.id);
             if (idx >= 0) Object.assign(existingShifts[idx], result);
           }
         }

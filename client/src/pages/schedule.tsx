@@ -694,11 +694,13 @@ export default function SchedulePage() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
-      const errMsg = data.errors?.length > 0 ? `（${data.errors.length} 天找不到符合班次）` : "";
+      const errMsg = data.errors?.length > 0 ? `（${data.errors.length} 天因排班規則已略過）` : "";
       if (data.warnings?.length > 0) {
-        toast({ title: `已更新 ${data.updated} 筆班次` + errMsg + "（有警告）", description: data.warnings.join("\n"), variant: "destructive" });
+        toast({ title: `已更新 ${data.updated} 筆班次` + errMsg, description: data.warnings.join("\n"), variant: data.errors?.length > 0 ? "destructive" : "default" });
+      } else if (data.errors?.length > 0) {
+        toast({ title: `已更新 ${data.updated} 筆班次` + errMsg, description: data.errors.join("\n"), variant: "destructive" });
       } else {
-        toast({ title: `已更新 ${data.updated} 筆班次` + errMsg });
+        toast({ title: `已更新 ${data.updated} 筆班次` });
       }
       setShiftBatchDates(new Set());
       setShiftBatchMode(false);
@@ -1499,12 +1501,13 @@ export default function SchedulePage() {
                       const cellShifts = shiftsByEmployeeDate.get(`${emp.id}-${dateStr}`) || [];
                       const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                      const isHoliday = !!TAIWAN_HOLIDAYS[dateStr];
 
                       return (
                         <td
                           key={di}
                           className={`p-0.5 border-b border-r relative align-top ${
-                            isToday ? "bg-primary/5" : isWeekend ? "bg-muted/20" : ""
+                            isToday ? "bg-primary/5" : isHoliday ? "bg-red-50/40 dark:bg-red-950/10" : isWeekend ? "bg-muted/20" : ""
                           }`}
                           style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }}
                           data-testid={`cell-${emp.id}-${dateStr}`}
@@ -1661,10 +1664,11 @@ export default function SchedulePage() {
                         : (dispatchShiftsByDate.get(dateStr) || []).filter(ds => ds.dispatchName === name);
                       const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                      const isHolidayCell = !!TAIWAN_HOLIDAYS[dateStr];
                       return (
                         <td
                           key={di}
-                          className={`p-0.5 border-b border-r relative align-top ${isToday ? "bg-primary/5" : isWeekend ? "bg-muted/20" : ""}`}
+                          className={`p-0.5 border-b border-r relative align-top ${isToday ? "bg-primary/5" : isHolidayCell ? "bg-red-50/40 dark:bg-red-950/10" : isWeekend ? "bg-muted/20" : ""}`}
                           style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }}
                           data-testid={`cell-dispatch-${name}-${dateStr}`}
                         >
@@ -1807,20 +1811,35 @@ export default function SchedulePage() {
                 />
               </div>
             )}
-            <div className="space-y-2">
-              <Label>場館</Label>
-              <Select value={dispatchVenueId} onValueChange={setDispatchVenueId}>
-                <SelectTrigger data-testid="select-dispatch-venue">
-                  <SelectValue placeholder="選擇場館" />
-                </SelectTrigger>
-                <SelectContent>
-                  {venues.map((v) => (
-                    <SelectItem key={v.id} value={v.id.toString()} data-testid={`select-dispatch-venue-${v.id}`}>
-                      {v.shortName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>場館</Label>
+                <Select value={dispatchVenueId} onValueChange={setDispatchVenueId}>
+                  <SelectTrigger data-testid="select-dispatch-venue">
+                    <SelectValue placeholder="選擇場館" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {venues.map((v) => (
+                      <SelectItem key={v.id} value={v.id.toString()} data-testid={`select-dispatch-venue-${v.id}`}>
+                        {v.shortName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>班別</Label>
+                <Select value={dispatchRole} onValueChange={setDispatchRole}>
+                  <SelectTrigger data-testid="select-dispatch-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLE_OPTIONS.map((r) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -1841,19 +1860,6 @@ export default function SchedulePage() {
                   data-testid="input-dispatch-end-time"
                 />
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>職務</Label>
-              <Select value={dispatchRole} onValueChange={setDispatchRole}>
-                <SelectTrigger data-testid="select-dispatch-role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLE_OPTIONS.map((r) => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
