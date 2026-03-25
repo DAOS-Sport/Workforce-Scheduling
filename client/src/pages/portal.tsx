@@ -2131,7 +2131,6 @@ function PortalPageInner() {
 }
 
 export default function PortalPage() {
-  const isLineBrowser = typeof navigator !== "undefined" && navigator.userAgent.includes("Line/");
-  if (!isLineBrowser) return <NotLineBrowser />;
+  // 外部瀏覽器也允許開啟（LINE Login OAuth 支援所有瀏覽器）
   return <PortalPageInner />;
 }
