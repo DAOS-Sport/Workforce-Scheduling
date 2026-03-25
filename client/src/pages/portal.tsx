@@ -1689,15 +1689,20 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
 
   const { data: todayCoworkers = [], isLoading: coworkersLoading } = useQuery<CoworkerGroup[]>({
     queryKey: ["/api/portal/today-coworkers", employee.id],
+    enabled: !!employee?.id,
+    staleTime: 60 * 1000,
   });
 
   const { data: attendance, isLoading: attendanceLoading } = useQuery<AttendanceSummary>({
     queryKey: ["/api/portal/my-attendance", employee.id],
+    enabled: !!employee?.id,
+    staleTime: 60 * 1000,
   });
 
   const { data: guidelinesData } = useQuery<{ items: GuidelineItem[]; allAcknowledged: boolean }>({
     queryKey: ["/api/portal/guidelines-check", employee.id],
-    enabled: showGuidelines,
+    enabled: showGuidelines && !!employee?.id,
+    staleTime: 60 * 1000,
   });
 
   const shiftsByDate = useMemo(() => {
@@ -2043,6 +2048,12 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
             </div>
           )}
         </div>
+
+        <div className="px-1">
+          <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-50 rounded-lg px-3 py-2">
+            line＠通知訊息僅做日常提醒叮嚀使用，實際班別/課表請以系統公告之，不得主張因未收到line＠提醒而導致遲到、早退、曠班、曠課等一切未依班表或課表出席。
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -2107,6 +2118,9 @@ function PortalPageInner() {
       localStorage.setItem("portal_line_user_id", emp.lineUserId);
     }
     localStorage.setItem("portal_employee", JSON.stringify(emp));
+    queryClient.invalidateQueries({ queryKey: ["/api/portal/today-coworkers", emp.id] });
+    queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", emp.id] });
+    queryClient.invalidateQueries({ queryKey: ["/api/portal/guidelines-check", emp.id] });
     setEmployee(emp);
   }, []);
 

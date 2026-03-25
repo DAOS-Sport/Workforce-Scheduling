@@ -1639,13 +1639,7 @@ export async function registerRoutes(
   app.get("/api/portal/my-attendance/:employeeId", async (req, res) => {
     try {
       const employeeId = parseInt(req.params.employeeId);
-      const regionIds = [1, 2, 3, 4];
-      let employee: any = null;
-      for (const rid of regionIds) {
-        const emps = await storage.getEmployeesByRegion(rid);
-        employee = emps.find((e) => e.id === employeeId);
-        if (employee) break;
-      }
+      const employee = await storage.getEmployee(employeeId);
       if (!employee) return res.status(404).json({ message: "找不到員工" });
 
       const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));

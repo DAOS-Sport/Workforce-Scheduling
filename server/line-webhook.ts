@@ -672,6 +672,8 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
     }
 
     lines.push("請準時出勤，如需請假請提前告知主管 🙏");
+    lines.push("");
+    lines.push("該通知訊息僅做提醒用，實際班別/課表請以系統公告之。");
 
     const message = lines.join("\n").trim();
 
