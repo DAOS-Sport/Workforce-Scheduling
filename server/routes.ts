@@ -412,12 +412,12 @@ export async function registerRoutes(
 
         if (!isLeave && !(isDispatch || false)) {
           const dayErrors = validateAllRules(employeeId, date, startTime, endTime, existingShifts, existingOnDate?.id, fourWeekRef, otRecords);
-          const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
+          const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "daily_12h");
           if (blocking.length > 0) {
             errors.push(`${date}: ${blocking[0].message}`);
             continue;
           }
-          const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
+          const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h" || e.type === "seven_day_rest" || e.type === "four_week_176h");
           for (const w of warnItems) warnings.push(`${date}: ${w.message}`);
         }
 
@@ -539,12 +539,12 @@ export async function registerRoutes(
 
         if (!isLeave && !(isDispatch || false)) {
           const dayErrors = validateAllRules(empId, date, effectiveStart, effectiveEnd, existingShifts, shiftToUpdate?.id, fourWeekRef, otRecords);
-          const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
+          const blocking = dayErrors.filter((e: ShiftValidationError) => e.type === "daily_12h");
           if (blocking.length > 0) {
             errors.push(`${date}: ${blocking[0].message}`);
             continue;
           }
-          const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
+          const warnItems = dayErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h" || e.type === "seven_day_rest" || e.type === "four_week_176h");
           for (const w of warnItems) warnings.push(`${date}: ${w.message}`);
         }
 

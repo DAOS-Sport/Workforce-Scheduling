@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
 import { zhTW } from "date-fns/locale";
@@ -20,9 +20,21 @@ import {
   ChevronLeft, ChevronRight, CalendarDays, Plus, Minus, ChevronUp, ChevronDown,
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
   Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft,
-  GraduationCap, Award, Briefcase, Monitor, Eye
+  GraduationCap, Award, Briefcase, Monitor, Eye, Clipboard, ClipboardPaste
 } from "lucide-react";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+
+interface ShiftClipboard {
+  venueId: number;
+  startTime: string;
+  endTime: string;
+  role: string;
+  isDispatch: boolean;
+  employeeId: number;
+  sourceShiftId?: number;
+}
 
 const ROLE_ICON_MAP: Record<string, typeof LifeBuoy> = {
   "救生": LifeBuoy,
@@ -134,6 +146,35 @@ const TAIWAN_HOLIDAYS: Record<string, string> = {
   "2026-10-10": "國慶日",
 };
 
+function DraggableShiftCard({ id, children, isDragging }: { id: number; children: React.ReactNode; isDragging: boolean }) {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={transform ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50 } : undefined}
+      className={isDragging ? "opacity-30" : ""}
+    >
+      {children}
+    </div>
+  );
+}
+
+function DroppableCell({ id, children, className, style, "data-testid": testId }: { id: string; children: React.ReactNode; className?: string; style?: React.CSSProperties; "data-testid"?: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <td
+      ref={setNodeRef}
+      className={`${className || ""} ${isOver ? "ring-2 ring-inset ring-primary/40" : ""}`}
+      style={style}
+      data-testid={testId}
+    >
+      {children}
+    </td>
+  );
+}
+
 export default function SchedulePage() {
   const { activeRegion } = useRegion();
   const { toast } = useToast();
@@ -208,6 +249,10 @@ export default function SchedulePage() {
   const [pendingDispatchNames, setPendingDispatchNames] = useState<string[]>([]);
   const [inlineDispatchInput, setInlineDispatchInput] = useState("");
   const inlineDispatchInputRef = useRef<HTMLInputElement>(null);
+
+  const [shiftClipboard, setShiftClipboard] = useState<ShiftClipboard | null>(null);
+  const [draggedShiftId, setDraggedShiftId] = useState<number | null>(null);
+  const [dragConfirmTarget, setDragConfirmTarget] = useState<{ shiftId: number; targetDate: string; targetEmpId: number } | null>(null);
 
 
   const monthDates = useMemo(
@@ -977,8 +1022,68 @@ export default function SchedulePage() {
 
   const isLoading = venLoading || empLoading || slotsLoading;
 
-  const COL_LEFT_WIDTH = 96;
-  const COL_DATE_WIDTH = 100;
+  const COL_LEFT_WIDTH = 88;
+  const COL_DATE_WIDTH = 76;
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const id = Number(event.active.id);
+    if (!isNaN(id)) setDraggedShiftId(id);
+  }, []);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    setDraggedShiftId(null);
+    const shiftId = Number(event.active.id);
+    if (!event.over || isNaN(shiftId)) return;
+    const overId = String(event.over.id);
+    const match = overId.match(/^drop-(\d+)-(.+)$/);
+    if (!match) return;
+    const targetEmpId = Number(match[1]);
+    const targetDate = match[2];
+    const draggedShift = shifts.find(s => s.id === shiftId);
+    if (!draggedShift) return;
+    if (draggedShift.employeeId !== targetEmpId) {
+      toast({ title: "不支援跨員工移動", description: "只能在同一員工的日期之間移動班卡", variant: "destructive" });
+      return;
+    }
+    if (draggedShift.date === targetDate) return;
+    const existingOnTarget = shiftsByEmployeeDate.get(`${targetEmpId}-${targetDate}`) || [];
+    if (existingOnTarget.length > 0) {
+      setDragConfirmTarget({ shiftId, targetDate, targetEmpId });
+    } else {
+      updateShift.mutate({ id: shiftId, date: targetDate, venueId: draggedShift.venueId, startTime: draggedShift.startTime, endTime: draggedShift.endTime, role: draggedShift.role, isDispatch: draggedShift.isDispatch || false });
+    }
+  }, [shifts, shiftsByEmployeeDate, updateShift, toast]);
+
+  const handleCopyShift = useCallback((shift: Shift) => {
+    setShiftClipboard({
+      venueId: shift.venueId,
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      role: shift.role,
+      isDispatch: shift.isDispatch || false,
+      employeeId: shift.employeeId,
+      sourceShiftId: shift.id,
+    });
+    toast({ title: "已複製班卡", description: `${shift.startTime.substring(0,5)}-${shift.endTime.substring(0,5)} [${shift.role}]` });
+  }, [toast]);
+
+  const handlePasteShift = useCallback((targetEmpId: number, targetDate: string) => {
+    if (!shiftClipboard) return;
+    if (shiftClipboard.employeeId !== targetEmpId) {
+      toast({ title: "不支援跨員工貼上", description: "只能將班卡貼至同一員工的其他日期", variant: "destructive" });
+      return;
+    }
+    const existingShifts = shiftsByEmployeeDate.get(`${targetEmpId}-${targetDate}`) || [];
+    if (existingShifts.length > 0) {
+      updateShift.mutate({ id: existingShifts[0].id, venueId: shiftClipboard.venueId, startTime: shiftClipboard.startTime, endTime: shiftClipboard.endTime, role: shiftClipboard.role, isDispatch: shiftClipboard.isDispatch });
+    } else {
+      createShift.mutate({ employeeId: targetEmpId, venueId: shiftClipboard.venueId, date: targetDate, startTime: shiftClipboard.startTime, endTime: shiftClipboard.endTime, role: shiftClipboard.role, isDispatch: shiftClipboard.isDispatch });
+    }
+  }, [shiftClipboard, shiftsByEmployeeDate, updateShift, createShift, toast]);
 
   const shortageDates = useMemo(() => {
     const dateSet = new Set<string>();
@@ -1076,9 +1181,22 @@ export default function SchedulePage() {
             </div>
           )}
 
+          {shiftClipboard && (
+            <button
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors shrink-0"
+              onClick={() => setShiftClipboard(null)}
+              title="清除剪貼簿"
+              data-testid="button-clear-clipboard"
+            >
+              <Clipboard className="h-3 w-3" />
+              已複製 [{shiftClipboard.role}] {shiftClipboard.startTime.substring(0,5)}-{shiftClipboard.endTime.substring(0,5)}
+              <X className="h-2.5 w-2.5 opacity-60" />
+            </button>
+          )}
+
           <Popover open={empPickerOpen} onOpenChange={setEmpPickerOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className={`h-7 text-xs gap-1.5 shrink-0 ${shortageDates.length === 0 ? "ml-auto" : ""}`} data-testid="button-employee-picker">
+              <Button variant="outline" size="sm" className={`h-7 text-xs gap-1.5 shrink-0 ${shortageDates.length === 0 && !shiftClipboard ? "ml-auto" : ""}`} data-testid="button-employee-picker">
                 <Users className="h-3.5 w-3.5" />
                 {scheduleVisibleEmployeeIds.size === 0 ? "選擇排班人員" : `已選 ${scheduleVisibleEmployeeIds.size} 人`}
                 <ChevronDown className="h-3 w-3 opacity-50" />
@@ -1308,6 +1426,7 @@ export default function SchedulePage() {
           </div>
         )}
         <div className="flex-1 overflow-auto" ref={scrollRef}>
+          <DndContext sensors={dndSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <table className="border-separate border-spacing-0 text-sm" style={{ minWidth: `${COL_LEFT_WIDTH + monthDates.length * COL_DATE_WIDTH}px` }}>
             <thead>
               <tr>
@@ -1351,7 +1470,7 @@ export default function SchedulePage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={`skel-${i}`}>
-                    <td className="p-2 border-b border-r sticky left-0 bg-background z-[5]" style={{ minWidth: COL_LEFT_WIDTH }}>
+                    <td className="p-2 border-b border-r sticky left-0 bg-background z-[5]" style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, maxWidth: COL_LEFT_WIDTH }}>
                       <Skeleton className="h-5 w-20" />
                     </td>
                     {Array.from({ length: Math.min(monthDates.length, 10) }).map((_, j) => (
@@ -1467,7 +1586,7 @@ export default function SchedulePage() {
                       <tr key={`group-${key}`}>
                         <td
                           className="px-1.5 py-0.5 border-b border-r sticky left-0 bg-muted z-[5] text-xs font-bold text-muted-foreground tracking-wide"
-                          style={{ minWidth: COL_LEFT_WIDTH }}
+                          style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, maxWidth: COL_LEFT_WIDTH }}
                         >
                           {label} ({grouped.length})
                         </td>
@@ -1478,15 +1597,15 @@ export default function SchedulePage() {
                       ...grouped.map((emp) => (
                   <tr key={emp.id} className="group" data-testid={`row-employee-${emp.id}`}>
                     <td
-                      className="px-1.5 py-1 border-b border-r sticky left-0 bg-background z-[5]"
-                      style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
+                      className="px-1.5 py-1 border-b border-r sticky left-0 bg-background z-[5] overflow-hidden"
+                      style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, maxWidth: COL_LEFT_WIDTH }}
                     >
                       <div className="flex items-center gap-1">
                         {emp.role && ROLE_ICON_MAP[emp.role] && (() => {
                           const Icon = ROLE_ICON_MAP[emp.role!];
                           return <Icon className="h-3 w-3 text-muted-foreground shrink-0" />;
                         })()}
-                        <span className="font-medium text-xs whitespace-nowrap" data-testid={`text-employee-name-${emp.id}`}>
+                        <span className="font-medium text-xs truncate" data-testid={`text-employee-name-${emp.id}`}>
                           {emp.name}
                         </span>
                         {neiQinEmployeeIds.has(emp.id) ? (
@@ -1502,16 +1621,13 @@ export default function SchedulePage() {
                       const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       const isHoliday = !!TAIWAN_HOLIDAYS[dateStr];
+                      const dropId = `drop-${emp.id}-${dateStr}`;
+                      const canPaste = !!shiftClipboard && shiftClipboard.employeeId === emp.id;
 
                       return (
-                        <td
-                          key={di}
-                          className={`p-0.5 border-b border-r relative align-top ${
-                            isToday ? "bg-primary/5" : isHoliday ? "bg-red-50/40 dark:bg-red-950/10" : isWeekend ? "bg-muted/20" : ""
-                          }`}
-                          style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }}
-                          data-testid={`cell-${emp.id}-${dateStr}`}
-                        >
+                        <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
+                          isToday ? "bg-primary/5" : isHoliday ? "bg-red-50/40 dark:bg-red-950/10" : isWeekend ? "bg-muted/20" : ""
+                        }`} style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
                           {cellShifts.length > 0 ? (
                             <div className="space-y-0.5">
                               {cellShifts.map((shift) => {
@@ -1533,64 +1649,109 @@ export default function SchedulePage() {
                                     : isCounter
                                       ? "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800"
                                       : "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800";
+                                const isDragging = draggedShiftId === shift.id;
 
                                 if (isLeave) {
                                   return (
-                                    <div
-                                      key={shift.id}
-                                      className={`rounded px-1 py-0.5 text-xs cursor-pointer transition-colors ${cardColor}`}
-                                      onClick={() => openEditShiftDialog(shift)}
-                                      data-testid={`shift-${shift.id}`}
-                                    >
-                                      <div className="flex items-center justify-center gap-1">
-                                        <span className="font-medium leading-tight text-[11px]">{shift.role}</span>
+                                    <DraggableShiftCard key={shift.id} id={shift.id} isDragging={isDragging}>
+                                      <div
+                                        className={`rounded px-1 py-0.5 text-[10px] cursor-pointer transition-colors ${cardColor} ${isDragging ? "opacity-30" : ""}`}
+                                        onClick={() => openEditShiftDialog(shift)}
+                                        data-testid={`shift-${shift.id}`}
+                                      >
+                                        <div className="flex items-center justify-between gap-0.5">
+                                          <span className="font-medium leading-tight truncate">{shift.role}</span>
+                                          <button
+                                            className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
+                                            onClick={(e) => { e.stopPropagation(); handleCopyShift(shift); }}
+                                            title="複製班卡"
+                                            data-testid={`button-copy-shift-${shift.id}`}
+                                          >
+                                            <Copy className="h-2.5 w-2.5" />
+                                          </button>
+                                        </div>
                                       </div>
-                                    </div>
+                                    </DraggableShiftCard>
                                   );
                                 }
 
                                 return (
-                                  <div
-                                    key={shift.id}
-                                    className={`rounded px-1 py-0.5 text-xs cursor-pointer transition-colors ${cardColor}`}
-                                    onClick={() => openEditShiftDialog(shift)}
-                                    data-testid={`shift-${shift.id}`}
-                                  >
-                                    <div className="flex items-center justify-between gap-1">
-                                      <div className="font-medium leading-tight text-[11px] truncate">
-                                        {venue?.shortName || "未知"}
+                                  <DraggableShiftCard key={shift.id} id={shift.id} isDragging={isDragging}>
+                                    <div
+                                      className={`rounded px-1 py-0.5 text-[10px] cursor-pointer transition-colors ${cardColor} ${isDragging ? "opacity-30" : ""}`}
+                                      onClick={() => openEditShiftDialog(shift)}
+                                      data-testid={`shift-${shift.id}`}
+                                    >
+                                      <div className="flex items-center justify-between gap-0.5">
+                                        <div className="font-medium leading-tight truncate flex-1">
+                                          {venue?.shortName || "未知"}
+                                        </div>
+                                        <div className="flex items-center gap-0.5 shrink-0">
+                                          <span className="text-[9px] px-0.5 rounded bg-background/50 border border-current opacity-70">
+                                            {roleShort}
+                                          </span>
+                                          <button
+                                            className="text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
+                                            onClick={(e) => { e.stopPropagation(); handleCopyShift(shift); }}
+                                            title="複製班卡"
+                                            data-testid={`button-copy-shift-${shift.id}`}
+                                          >
+                                            <Copy className="h-2.5 w-2.5" />
+                                          </button>
+                                        </div>
                                       </div>
-                                      <span className="text-[9px] px-0.5 rounded bg-background/50 border border-current opacity-70 shrink-0">
-                                        {roleShort}
-                                      </span>
+                                      <div className="leading-tight text-muted-foreground">
+                                        {sStart}-{sEnd}
+                                      </div>
+                                      {shift.isDispatch && (
+                                        <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium">派遣</div>
+                                      )}
                                     </div>
-                                    <div className="leading-tight text-[11px] text-muted-foreground">
-                                      {sStart}-{sEnd}
-                                    </div>
-                                    {shift.isDispatch && (
-                                      <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">派遣</div>
-                                    )}
-                                  </div>
+                                  </DraggableShiftCard>
                                 );
                               })}
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  className="flex-1 flex items-center justify-center py-0.5 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
+                                  onClick={() => openNewShiftDialog(emp.id, dateStr)}
+                                  data-testid={`button-add-shift-${emp.id}-${dateStr}`}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                                {canPaste && (
+                                  <button
+                                    className="flex items-center justify-center py-0.5 px-0.5 text-green-500/60 hover:text-green-600 transition-colors"
+                                    onClick={() => handlePasteShift(emp.id, dateStr)}
+                                    title="貼上班卡"
+                                    data-testid={`button-paste-shift-${emp.id}-${dateStr}`}
+                                  >
+                                    <ClipboardPaste className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center h-[36px]">
                               <button
-                                className="w-full flex items-center justify-center py-0.5 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
+                                className="flex-1 flex items-center justify-center h-full text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-muted/30 transition-colors rounded cursor-pointer"
                                 onClick={() => openNewShiftDialog(emp.id, dateStr)}
                                 data-testid={`button-add-shift-${emp.id}-${dateStr}`}
                               >
-                                <Plus className="h-3 w-3" />
+                                <Plus className="h-3.5 w-3.5" />
                               </button>
+                              {canPaste && (
+                                <button
+                                  className="flex items-center justify-center h-full px-0.5 text-green-500/50 hover:text-green-600 transition-colors"
+                                  onClick={() => handlePasteShift(emp.id, dateStr)}
+                                  title="貼上班卡"
+                                  data-testid={`button-paste-shift-${emp.id}-${dateStr}`}
+                                >
+                                  <ClipboardPaste className="h-3 w-3" />
+                                </button>
+                              )}
                             </div>
-                          ) : (
-                            <button
-                              className="flex items-center justify-center w-full h-[40px] text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-muted/30 transition-colors rounded cursor-pointer"
-                              onClick={() => openNewShiftDialog(emp.id, dateStr)}
-                              data-testid={`button-add-shift-${emp.id}-${dateStr}`}
-                            >
-                              <Plus className="h-4 w-4" />
-                            </button>
                           )}
-                        </td>
+                        </DroppableCell>
                       );
                     })}
                   </tr>
@@ -1603,7 +1764,7 @@ export default function SchedulePage() {
               <tr data-testid="dispatch-section-header">
                 <td
                   className="px-2 py-1.5 border-b border-r sticky left-0 bg-purple-50 dark:bg-purple-950/30 z-[5] cursor-pointer select-none"
-                  style={{ minWidth: COL_LEFT_WIDTH }}
+                  style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, maxWidth: COL_LEFT_WIDTH }}
                 >
                   <div className="flex items-center gap-1.5">
                     <button onClick={() => setDispatchSectionCollapsed(!dispatchSectionCollapsed)} className="flex items-center gap-1">
@@ -1637,8 +1798,8 @@ export default function SchedulePage() {
                 const renderDispatchRow = (name: string, isPending: boolean) => (
                   <tr key={`dispatch-${name}`} className="group" data-testid={`row-dispatch-${name}`}>
                     <td
-                      className="p-2 border-b border-r sticky left-0 bg-background z-[5]"
-                      style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
+                      className="p-2 border-b border-r sticky left-0 bg-background z-[5] overflow-hidden"
+                      style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, maxWidth: COL_LEFT_WIDTH }}
                     >
                       <div className="flex items-center gap-1.5">
                         <ArrowRightLeft className={`h-3.5 w-3.5 shrink-0 ${isPending ? "text-purple-300 dark:text-purple-700" : "text-purple-500"}`} />
@@ -1731,8 +1892,8 @@ export default function SchedulePage() {
                     {allNames.map(name => renderDispatchRow(name, pendingDispatchNames.includes(name) && !dispatchNames.includes(name)))}
                     <tr data-testid="row-dispatch-inline-add">
                       <td
-                        className="p-1.5 border-b border-r sticky left-0 bg-background z-[5]"
-                        style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
+                        className="p-1.5 border-b border-r sticky left-0 bg-background z-[5] overflow-hidden"
+                        style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, maxWidth: COL_LEFT_WIDTH }}
                       >
                         <div className="flex items-center gap-1">
                           <Plus className="h-3.5 w-3.5 text-purple-300 shrink-0" />
@@ -1767,9 +1928,49 @@ export default function SchedulePage() {
               })()}
             </tbody>
           </table>
+          <DragOverlay>
+            {draggedShiftId ? (() => {
+              const s = shifts.find(sh => sh.id === draggedShiftId);
+              if (!s) return null;
+              const v = venueMap.get(s.venueId);
+              return (
+                <div className="rounded px-1 py-0.5 text-[10px] bg-blue-200 dark:bg-blue-800 border border-blue-400 shadow-lg opacity-90 cursor-grabbing w-[68px]">
+                  <div className="font-medium truncate">{v?.shortName || "?"}</div>
+                  <div className="text-muted-foreground">{s.startTime.substring(0,5)}-{s.endTime.substring(0,5)}</div>
+                </div>
+              );
+            })() : null}
+          </DragOverlay>
+          </DndContext>
         </div>
 
       </div>
+
+      <Dialog open={!!dragConfirmTarget} onOpenChange={() => setDragConfirmTarget(null)}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>覆蓋確認</DialogTitle>
+            <DialogDescription>目標日期已有班次，是否覆蓋？</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setDragConfirmTarget(null)}>取消</Button>
+            <Button onClick={() => {
+              if (!dragConfirmTarget) return;
+              const draggedShift = shifts.find(s => s.id === dragConfirmTarget.shiftId);
+              if (draggedShift) {
+                const existing = shiftsByEmployeeDate.get(`${dragConfirmTarget.targetEmpId}-${dragConfirmTarget.targetDate}`) || [];
+                if (existing.length > 0) {
+                  updateShift.mutate({ id: existing[0].id, venueId: draggedShift.venueId, startTime: draggedShift.startTime, endTime: draggedShift.endTime, role: draggedShift.role, isDispatch: draggedShift.isDispatch || false });
+                  deleteShift.mutate(dragConfirmTarget.shiftId);
+                } else {
+                  updateShift.mutate({ id: dragConfirmTarget.shiftId, date: dragConfirmTarget.targetDate, venueId: draggedShift.venueId, startTime: draggedShift.startTime, endTime: draggedShift.endTime, role: draggedShift.role, isDispatch: draggedShift.isDispatch || false });
+                }
+              }
+              setDragConfirmTarget(null);
+            }}>覆蓋</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dispatchDialogOpen} onOpenChange={setDispatchDialogOpen}>
         <DialogContent className="sm:max-w-md" data-testid="dispatch-shift-dialog">
@@ -2170,6 +2371,30 @@ export default function SchedulePage() {
               預覽：{venues.find((v) => v.id.toString() === shiftVenueId)?.shortName || "—"} {shiftStartTime}-{shiftEndTime} [{shiftRole}]
               {shiftIsDispatch && " (派遣)"}
             </div>
+
+            {shiftClipboard && (
+              <div className="flex items-center gap-2 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-2">
+                <Clipboard className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                <span className="text-xs text-green-700 dark:text-green-400 flex-1">
+                  剪貼簿：{venueMap.get(shiftClipboard.venueId)?.shortName || "?"} {shiftClipboard.startTime.substring(0,5)}-{shiftClipboard.endTime.substring(0,5)} [{shiftClipboard.role}]
+                </span>
+                <button
+                  type="button"
+                  className="text-[10px] px-2 py-0.5 rounded bg-green-600 text-white hover:bg-green-700 transition-colors shrink-0"
+                  onClick={() => {
+                    setShiftVenueId(shiftClipboard.venueId.toString());
+                    setShiftStartTime(shiftClipboard.startTime.substring(0, 5));
+                    setShiftEndTime(shiftClipboard.endTime.substring(0, 5));
+                    setShiftRole(shiftClipboard.role);
+                    setShiftIsDispatch(shiftClipboard.isDispatch);
+                    setShiftTemplateId("custom");
+                  }}
+                  data-testid="button-load-clipboard"
+                >
+                  套用至此批次
+                </button>
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center gap-2">
