@@ -153,6 +153,9 @@ export default function SchedulePage() {
   const [dispatchRole, setDispatchRole] = useState("救生");
   const [dispatchNotes, setDispatchNotes] = useState("");
   const [dispatchSectionCollapsed, setDispatchSectionCollapsed] = useState(false);
+  const [pendingDispatchNames, setPendingDispatchNames] = useState<string[]>([]);
+  const [inlineDispatchInput, setInlineDispatchInput] = useState("");
+  const inlineDispatchInputRef = useRef<HTMLInputElement>(null);
 
 
   const monthDates = useMemo(
@@ -268,6 +271,12 @@ export default function SchedulePage() {
     dispatchShiftsData.forEach(ds => names.add(ds.dispatchName));
     return Array.from(names).sort();
   }, [dispatchShiftsData]);
+
+  useEffect(() => {
+    if (pendingDispatchNames.length === 0) return;
+    const realSet = new Set(dispatchNames);
+    setPendingDispatchNames(prev => prev.filter(n => !realSet.has(n)));
+  }, [dispatchNames]);
 
   useEffect(() => {
     if (empLoading) return;
@@ -1560,28 +1569,33 @@ export default function SchedulePage() {
                 })}
               </tr>
               {!dispatchSectionCollapsed && (() => {
-                const allNames = dispatchNames.length > 0 ? dispatchNames : ["__add_new__"];
-                return allNames.map((name) => (
+                const allNames = [...dispatchNames, ...pendingDispatchNames.filter(n => !dispatchNames.includes(n))];
+                const renderDispatchRow = (name: string, isPending: boolean) => (
                   <tr key={`dispatch-${name}`} className="group" data-testid={`row-dispatch-${name}`}>
                     <td
                       className="p-2 border-b border-r sticky left-0 bg-background z-[5]"
                       style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
                     >
-                      {name !== "__add_new__" ? (
-                        <div className="flex items-center gap-1.5">
-                          <ArrowRightLeft className="h-3.5 w-3.5 text-purple-500 shrink-0" />
-                          <span className="font-medium text-sm whitespace-nowrap text-purple-700 dark:text-purple-400" data-testid={`text-dispatch-name-${name}`}>
-                            {name}
-                          </span>
-                          <span className="text-[9px] px-1 py-0 rounded bg-purple-500/15 text-purple-500 leading-4 shrink-0">派遣</span>
-                        </div>
-                      ) : (
-                        <div className="text-xs text-muted-foreground/50 italic">點擊日期格新增派遣</div>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        <ArrowRightLeft className={`h-3.5 w-3.5 shrink-0 ${isPending ? "text-purple-300 dark:text-purple-700" : "text-purple-500"}`} />
+                        <span className={`font-medium text-sm whitespace-nowrap ${isPending ? "text-purple-400 dark:text-purple-600 italic" : "text-purple-700 dark:text-purple-400"}`} data-testid={`text-dispatch-name-${name}`}>
+                          {name}
+                        </span>
+                        <span className="text-[9px] px-1 py-0 rounded bg-purple-500/15 text-purple-500 leading-4 shrink-0">派遣</span>
+                        {isPending && (
+                          <button
+                            className="ml-auto text-purple-300/60 hover:text-red-400 transition-colors"
+                            onClick={() => setPendingDispatchNames(prev => prev.filter(n => n !== name))}
+                            title="移除此列"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                     {monthDates.map((d, di) => {
                       const dateStr = format(d, "yyyy-MM-dd");
-                      const cellDispatches = name === "__add_new__"
+                      const cellDispatches = isPending
                         ? []
                         : (dispatchShiftsByDate.get(dateStr) || []).filter(ds => ds.dispatchName === name);
                       const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
@@ -1636,7 +1650,7 @@ export default function SchedulePage() {
                           ) : (
                             <button
                               className="flex items-center justify-center w-full h-[40px] text-purple-300/30 hover:text-purple-400/60 hover:bg-purple-50/30 dark:hover:bg-purple-950/20 transition-colors rounded cursor-pointer"
-                              onClick={() => openNewDispatchDialog(dateStr, name !== "__add_new__" ? name : undefined)}
+                              onClick={() => openNewDispatchDialog(dateStr, name)}
                               data-testid={`button-add-dispatch-${name}-${dateStr}`}
                             >
                               <Plus className="h-4 w-4" />
@@ -1646,7 +1660,45 @@ export default function SchedulePage() {
                       );
                     })}
                   </tr>
-                ));
+                );
+                return (
+                  <>
+                    {allNames.map(name => renderDispatchRow(name, pendingDispatchNames.includes(name) && !dispatchNames.includes(name)))}
+                    <tr data-testid="row-dispatch-inline-add">
+                      <td
+                        className="p-1.5 border-b border-r sticky left-0 bg-background z-[5]"
+                        style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH }}
+                      >
+                        <div className="flex items-center gap-1">
+                          <Plus className="h-3.5 w-3.5 text-purple-300 shrink-0" />
+                          <input
+                            ref={inlineDispatchInputRef}
+                            type="text"
+                            value={inlineDispatchInput}
+                            onChange={e => setInlineDispatchInput(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") {
+                                const name = inlineDispatchInput.trim();
+                                if (name && !dispatchNames.includes(name) && !pendingDispatchNames.includes(name)) {
+                                  setPendingDispatchNames(prev => [...prev, name]);
+                                }
+                                setInlineDispatchInput("");
+                              } else if (e.key === "Escape") {
+                                setInlineDispatchInput("");
+                              }
+                            }}
+                            placeholder="輸入姓名後按 Enter 新增一列..."
+                            className="flex-1 text-xs bg-transparent border-none outline-none text-purple-600 dark:text-purple-400 placeholder:text-purple-300/40 dark:placeholder:text-purple-700/60 min-w-0"
+                            data-testid="input-dispatch-inline-name"
+                          />
+                        </div>
+                      </td>
+                      {monthDates.map((_, di) => (
+                        <td key={di} className="border-b border-r bg-transparent" style={{ minWidth: COL_DATE_WIDTH, width: COL_DATE_WIDTH }} />
+                      ))}
+                    </tr>
+                  </>
+                );
               })()}
             </tbody>
           </table>
