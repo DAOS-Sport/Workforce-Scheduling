@@ -397,7 +397,7 @@ function buildPortalFlexMessage(): object {
     : "https://smart-schedule-manager.replit.app/portal";
   return {
     type: "flex",
-    altText: "點我進行上下班打卡",
+    altText: "員工入口網站",
     contents: {
       type: "bubble",
       size: "kilo",
@@ -409,14 +409,14 @@ function buildPortalFlexMessage(): object {
         contents: [
           {
             type: "text",
-            text: "打卡系統",
+            text: "員工入口網站",
             weight: "bold",
             size: "lg",
             color: "#1a1a1a",
           },
           {
             type: "text",
-            text: "點選下方按鈕進行上下班打卡",
+            text: "點選下方按鈕進行打卡或查看員工守則",
             size: "sm",
             color: "#888888",
             margin: "sm",
@@ -436,6 +436,15 @@ function buildPortalFlexMessage(): object {
             action: {
               type: "uri",
               label: "點我進行上下班打卡 👆",
+              uri: liffUrl,
+            },
+          },
+          {
+            type: "button",
+            style: "secondary",
+            action: {
+              type: "uri",
+              label: "📋 員工守則",
               uri: liffUrl,
             },
           },
