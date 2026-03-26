@@ -481,8 +481,7 @@ export default function SchedulePage() {
     const dayOfWeek = new Date(shiftDate).getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const dayType = isWeekend ? "weekend" : "weekday";
-    const normalizeRole = (r: string) => r === "櫃檯" ? "櫃台" : r;
-    const matched = shiftVenueTemplates.filter(t => t.dayType === dayType && normalizeRole(t.role) === normalizeRole(shiftRole));
+    const matched = shiftVenueTemplates.filter(t => t.dayType === dayType);
     const seen = new Set<string>();
     return matched.filter(t => {
       const key = `${t.shiftLabel}-${t.startTime}-${t.endTime}`;
@@ -1508,7 +1507,7 @@ export default function SchedulePage() {
                       key={i}
                       data-date-col={dateKey}
                       className={`text-center p-1.5 border-b border-r font-medium relative select-none ${
-                        holiday ? "bg-red-50 dark:bg-red-950/20" : isToday ? "bg-background" : isWeekend ? "bg-muted" : "bg-background"
+                        holiday ? "bg-yellow-100 dark:bg-yellow-900/30" : isToday ? "bg-background" : isWeekend ? "bg-muted" : "bg-background"
                       }`}
                       style={{ minWidth: colW, width: colW, position: "sticky", top: 0, zIndex: 25 }}
                     >
@@ -1688,7 +1687,7 @@ export default function SchedulePage() {
 
                       return (
                         <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
-                          isToday ? "bg-primary/5" : isHoliday ? "bg-red-50/40 dark:bg-red-950/10" : isWeekend ? "bg-muted/20" : ""
+                          isToday ? "bg-primary/5" : isHoliday ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-muted/20" : ""
                         }`} style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
                           {cellShifts.length > 0 ? (
                             <div className="space-y-0.5">
@@ -1892,7 +1891,7 @@ export default function SchedulePage() {
                       return (
                         <td
                           key={di}
-                          className={`p-0.5 border-b border-r relative align-top ${isToday ? "bg-primary/5" : isHolidayCell ? "bg-red-50/40 dark:bg-red-950/10" : isWeekend ? "bg-muted/20" : ""}`}
+                          className={`p-0.5 border-b border-r relative align-top ${isToday ? "bg-primary/5" : isHolidayCell ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-muted/20" : ""}`}
                           style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }}
                           data-testid={`cell-dispatch-${name}-${dateStr}`}
                         >
