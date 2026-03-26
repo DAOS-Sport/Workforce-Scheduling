@@ -1094,16 +1094,25 @@ export async function registerRoutes(
         return res.status(400).json({ message: "找不到「打卡紀錄」工作表，請確認檔案格式" });
       }
 
+      const resolveCellValue = (v: any): any => {
+        if (v === null || v === undefined) return "";
+        if (v instanceof Date) return v.toISOString().slice(0, 10);
+        if (typeof v === "object") {
+          if ("richText" in v && Array.isArray(v.richText))
+            return v.richText.map((r: any) => r.text ?? "").join("").trim();
+          if ("result" in v) return resolveCellValue(v.result);
+          if ("text" in v) return String(v.text).trim();
+          if ("hyperlink" in v && "text" in v) return String(v.text).trim();
+        }
+        return v;
+      };
+
       const punchData: any[][] = [];
       punchWorksheet.eachRow({ includeEmpty: true }, (row) => {
         const values = row.values as any[];
-        const rowData = Array.from({ length: Math.max(values.length - 1, 0) }, (_, i) => {
-          const v = values[i + 1];
-          if (v === null || v === undefined) return "";
-          if (typeof v === "object" && v !== null && "text" in v) return String(v.text).trim();
-          if (typeof v === "object" && v !== null && "result" in v) return v.result ?? "";
-          return v;
-        });
+        const rowData = Array.from({ length: Math.max(values.length - 1, 0) }, (_, i) =>
+          resolveCellValue(values[i + 1])
+        );
         punchData.push(rowData);
       });
       if (punchData.length < 2) {

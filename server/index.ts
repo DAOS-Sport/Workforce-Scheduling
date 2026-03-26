@@ -10,6 +10,10 @@ import connectPgSimple from "connect-pg-simple";
 
 const app = express();
 app.set("trust proxy", 1);
+
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+  console.warn("[WARN] SESSION_SECRET is not set. Using insecure fallback secret in production!");
+}
 const httpServer = createServer(app);
 
 declare module "http" {
@@ -36,7 +40,7 @@ app.use(
     cookie: {
       maxAge: 30 * 24 * 60 * 60 * 1000,
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
     },
   })
@@ -79,7 +83,8 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        const body = JSON.stringify(capturedJsonResponse);
+        logLine += ` :: ${body.length > 200 ? body.slice(0, 200) + "…" : body}`;
       }
 
       log(logLine);
