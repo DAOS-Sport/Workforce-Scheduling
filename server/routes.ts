@@ -512,29 +512,48 @@ export async function registerRoutes(
       const created: any[] = [];
       const skipped: any[] = [];
       const errors: string[] = [];
+      const warnings: string[] = [];
 
       const uniqueEmployeeIds = [...new Set(shiftItems.map((s: any) => s.employeeId).filter(Boolean))] as number[];
       const allDates = shiftItems.map((s: any) => s.date as string).filter(Boolean).sort();
       const monthStart = allDates[0];
       const monthEnd = allDates[allDates.length - 1];
 
-      const [employeeList, existingShiftsForMonth] = await Promise.all([
+      const refConfig = await storage.getSystemConfig("four_week_reference_date");
+      const referenceDate = refConfig?.value ?? "2025-01-06";
+
+      // Extend preload range 6 days before monthStart for seven-day-rest boundary checks
+      const preloadStart = (() => {
+        const d = new Date(monthStart + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() - 6);
+        return d.toISOString().split("T")[0];
+      })();
+
+      // Cover the full four-week periods that overlap the import range (for 176h checks)
+      const periodOfStart = getFourWeekPeriod(monthStart, referenceDate);
+      const periodOfEnd = getFourWeekPeriod(monthEnd, referenceDate);
+      const otRangeStart = periodOfStart.start < preloadStart ? periodOfStart.start : preloadStart;
+      const otRangeEnd = periodOfEnd.end > monthEnd ? periodOfEnd.end : monthEnd;
+
+      const [employeeList, existingShiftsForMonth, approvedOT] = await Promise.all([
         Promise.all(uniqueEmployeeIds.map(id => storage.getEmployee(id))),
         uniqueEmployeeIds.length > 0
-          ? storage.getShiftsByEmployeesAndDateRange(uniqueEmployeeIds, monthStart, monthEnd)
+          ? storage.getShiftsByEmployeesAndDateRange(uniqueEmployeeIds, preloadStart, monthEnd)
           : Promise.resolve([]),
+        storage.getApprovedOvertimeByDateRange(otRangeStart, otRangeEnd),
       ]);
+
+      const otRecords = approvedOT.map(ot => ({ employeeId: ot.employeeId, date: ot.date, startTime: ot.startTime, endTime: ot.endTime }));
 
       const employeeMap = new Map(
         employeeList.filter(Boolean).map(e => [e!.id, e!])
       );
       const existingByKey = new Map<string, typeof existingShiftsForMonth[0]>();
       for (const s of existingShiftsForMonth) {
-        existingByKey.set(`${s.employeeId}:${s.date}`, s);
+        if (s.date >= monthStart) {
+          existingByKey.set(`${s.employeeId}:${s.date}`, s);
+        }
       }
-
-      const refConfig = await storage.getSystemConfig("four_week_reference_date");
-      const referenceDate = refConfig?.value ?? "2025-01-06";
 
       for (const item of shiftItems) {
         const { employeeId, venueId, date, startTime, endTime, role } = item;
@@ -551,13 +570,15 @@ export async function registerRoutes(
 
         const isLeave = LEAVE_TYPES.includes(role);
         if (!isLeave) {
-          const empShiftsForMonth = existingShiftsForMonth.filter(s => s.employeeId === employeeId);
-          const validationErrors = validateAllRules(employeeId, date, startTime, endTime, empShiftsForMonth, undefined, referenceDate);
-          const blocking = validationErrors;
+          const empShifts = existingShiftsForMonth.filter(s => s.employeeId === employeeId);
+          const allErrors = validateAllRules(employeeId, date, startTime, endTime, empShifts, undefined, referenceDate, otRecords);
+          const blocking = allErrors.filter((e: ShiftValidationError) => e.type === "seven_day_rest" || e.type === "daily_12h" || e.type === "four_week_176h");
           if (blocking.length > 0) {
             errors.push(`${date} ${employee.name}：${blocking.map(e => e.message).join("；")}`);
             continue;
           }
+          const warnItems = allErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
+          for (const w of warnItems) warnings.push(`${date} ${employee.name}：${w.message}`);
         }
 
         const existingKey = `${employeeId}:${date}`;
@@ -571,6 +592,8 @@ export async function registerRoutes(
             if (updated) {
               created.push(updated);
               existingByKey.set(existingKey, updated);
+              const idx = existingShiftsForMonth.findIndex(s => s.id === existingShift.id);
+              if (idx >= 0) Object.assign(existingShiftsForMonth[idx], updated);
             }
             continue;
           }
@@ -582,7 +605,7 @@ export async function registerRoutes(
         existingShiftsForMonth.push(shift);
       }
 
-      res.json({ created: created.length, skipped: skipped.length, errors, shifts: created });
+      res.json({ created: created.length, skipped: skipped.length, errors, warnings, shifts: created });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

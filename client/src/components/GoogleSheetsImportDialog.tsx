@@ -91,7 +91,7 @@ export function GoogleSheetsImportDialog({
   const [venueMapping, setVenueMapping] = useState<VenueMapping>({});
   const [skipExisting, setSkipExisting] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[]; warnings: string[] } | null>(null);
 
   const { data: allVenues = [] } = useQuery<Venue[]>({
     queryKey: ["/api/venues-all"],
@@ -246,7 +246,7 @@ export function GoogleSheetsImportDialog({
     try {
       const res = await apiRequest("POST", "/api/shifts/import-batch", { shifts, skipExisting });
       const result = await res.json();
-      setImportResult({ created: result.created, skipped: result.skipped, errors: result.errors });
+      setImportResult({ created: result.created, skipped: result.skipped, errors: result.errors ?? [], warnings: result.warnings ?? [] });
       setStep("done");
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
     } catch (err: any) {
@@ -559,9 +559,24 @@ export function GoogleSheetsImportDialog({
                 </div>
               </div>
 
+              {importResult.warnings.length > 0 && (
+                <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-1" data-testid="import-warnings">
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400 mb-1">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    勞基法警告（已匯入，建議確認）：
+                  </div>
+                  {importResult.warnings.slice(0, 8).map((w, i) => (
+                    <div key={i} className="text-xs text-amber-700 dark:text-amber-400">{w}</div>
+                  ))}
+                  {importResult.warnings.length > 8 && (
+                    <div className="text-xs text-muted-foreground">...還有 {importResult.warnings.length - 8} 則警告</div>
+                  )}
+                </div>
+              )}
+
               {importResult.errors.length > 0 && (
                 <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 space-y-1">
-                  <div className="text-sm font-medium text-destructive">錯誤記錄：</div>
+                  <div className="text-sm font-medium text-destructive">違規阻擋（未匯入）：</div>
                   {importResult.errors.slice(0, 5).map((err, i) => (
                     <div key={i} className="text-xs text-destructive">{err}</div>
                   ))}
