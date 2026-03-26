@@ -91,7 +91,7 @@ export function GoogleSheetsImportDialog({
   const [venueMapping, setVenueMapping] = useState<VenueMapping>({});
   const [skipExisting, setSkipExisting] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[]; warnings: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[]; warnings: string[]; dispatched: string[] } | null>(null);
 
   const { data: allVenues = [] } = useQuery<Venue[]>({
     queryKey: ["/api/venues-all"],
@@ -246,9 +246,12 @@ export function GoogleSheetsImportDialog({
     try {
       const res = await apiRequest("POST", "/api/shifts/import-batch", { shifts, skipExisting });
       const result = await res.json();
-      setImportResult({ created: result.created, skipped: result.skipped, errors: result.errors ?? [], warnings: result.warnings ?? [] });
+      setImportResult({ created: result.created, skipped: result.skipped, errors: result.errors ?? [], warnings: result.warnings ?? [], dispatched: result.dispatched ?? [] });
       setStep("done");
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      if ((result.dispatched ?? []).length > 0) {
+        queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts"] });
+      }
     } catch (err: any) {
       toast({ title: "匯入失敗", description: err.message, variant: "destructive" });
     } finally {
@@ -544,12 +547,18 @@ export function GoogleSheetsImportDialog({
                 <span className="font-medium">匯入完成</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-lg border p-3 text-center">
                   <div className="text-2xl font-bold text-green-600" data-testid="text-result-created">
                     {importResult.created}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">已匯入班次</div>
+                  <div className="text-xs text-muted-foreground mt-1">已匯入</div>
+                </div>
+                <div className="rounded-lg border p-3 text-center">
+                  <div className="text-2xl font-bold text-purple-600" data-testid="text-result-dispatched">
+                    {importResult.dispatched.length}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">轉派遣</div>
                 </div>
                 <div className="rounded-lg border p-3 text-center">
                   <div className="text-2xl font-bold text-muted-foreground" data-testid="text-result-skipped">
@@ -558,6 +567,21 @@ export function GoogleSheetsImportDialog({
                   <div className="text-xs text-muted-foreground mt-1">已跳過</div>
                 </div>
               </div>
+
+              {importResult.dispatched.length > 0 && (
+                <div className="rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30 p-3 space-y-1" data-testid="import-dispatched">
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-purple-700 dark:text-purple-400 mb-1">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    自動轉派遣（工時超限，已建立於派遣區）：
+                  </div>
+                  {importResult.dispatched.slice(0, 8).map((d, i) => (
+                    <div key={i} className="text-xs text-purple-700 dark:text-purple-400">{d}</div>
+                  ))}
+                  {importResult.dispatched.length > 8 && (
+                    <div className="text-xs text-muted-foreground">...還有 {importResult.dispatched.length - 8} 筆</div>
+                  )}
+                </div>
+              )}
 
               {importResult.warnings.length > 0 && (
                 <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-1" data-testid="import-warnings">

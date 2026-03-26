@@ -19,7 +19,8 @@ import {
   ChevronLeft, ChevronRight, CalendarDays, Plus, Minus, ChevronUp, ChevronDown,
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
   Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft,
-  GraduationCap, Award, Briefcase, Monitor, Eye, Clipboard, ClipboardPaste, FileSpreadsheet
+  GraduationCap, Award, Briefcase, Monitor, Eye, Clipboard, ClipboardPaste, FileSpreadsheet,
+  CheckCircle2, AlertTriangle
 } from "lucide-react";
 import { GoogleSheetsImportDialog } from "@/components/GoogleSheetsImportDialog";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
@@ -407,6 +408,17 @@ export default function SchedulePage() {
     return map;
   }, [dispatchShiftsData]);
 
+  const dispatchShiftsByVenueDate = useMemo(() => {
+    const map = new Map<string, DispatchShift[]>();
+    dispatchShiftsData.forEach((ds) => {
+      if (!ds.venueId) return;
+      const key = `${ds.venueId}-${ds.date}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(ds);
+    });
+    return map;
+  }, [dispatchShiftsData]);
+
   const dispatchNames = useMemo(() => {
     const names = new Set<string>();
     dispatchShiftsData.forEach(ds => names.add(ds.dispatchName));
@@ -555,12 +567,28 @@ export default function SchedulePage() {
     return overlap >= slotDuration * 0.5;
   };
 
+  const dispatchOverlapsSlot = (ds: DispatchShift, slot: ScheduleSlot) => {
+    if (!ds.startTime || !ds.endTime) return false;
+    const shStart = timeToMin(ds.startTime);
+    const shEnd = timeToMin(ds.endTime);
+    const slStart = timeToMin(slot.startTime);
+    const slEnd = timeToMin(slot.endTime);
+    const overlapStart = Math.max(shStart, slStart);
+    const overlapEnd = Math.min(shEnd, slEnd);
+    const overlap = overlapEnd - overlapStart;
+    const slotDuration = slEnd - slStart;
+    return slotDuration > 0 && overlap >= slotDuration * 0.5;
+  };
+
   const venueDateShortage = useMemo(() => {
     const map = new Map<string, Map<string, number>>();
     scheduleSlots.forEach((slot) => {
       const key = `${slot.venueId}-${slot.date}`;
       const venueDateShifts = shiftsByVenueDate.get(key) || [];
-      const assignedCount = venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length;
+      const dispatchForKey = dispatchShiftsByVenueDate.get(key) || [];
+      const assignedCount =
+        venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length +
+        dispatchForKey.filter((ds) => dispatchOverlapsSlot(ds, slot)).length;
       const shortage = slot.requiredCount - assignedCount;
       if (shortage > 0) {
         if (!map.has(key)) map.set(key, new Map());
@@ -569,15 +597,19 @@ export default function SchedulePage() {
       }
     });
     return map;
-  }, [scheduleSlots, shiftsByVenueDate]);
+  }, [scheduleSlots, shiftsByVenueDate, dispatchShiftsByVenueDate]);
 
   const gapAnalysis = useMemo(() => {
     const gaps: { venueId: number; venueName: string; date: string; startTime: string; endTime: string; role: string; required: number; assigned: number; shortage: number }[] = [];
     let totalShortage = 0;
     scheduleSlots.forEach((slot) => {
       const venue = venues.find((v) => v.id === slot.venueId);
-      const venueDateShifts = shiftsByVenueDate.get(`${slot.venueId}-${slot.date}`) || [];
-      const assignedCount = venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length;
+      const key = `${slot.venueId}-${slot.date}`;
+      const venueDateShifts = shiftsByVenueDate.get(key) || [];
+      const dispatchForKey = dispatchShiftsByVenueDate.get(key) || [];
+      const assignedCount =
+        venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length +
+        dispatchForKey.filter((ds) => dispatchOverlapsSlot(ds, slot)).length;
       const shortage = slot.requiredCount - assignedCount;
       if (shortage > 0) {
         totalShortage += shortage;
@@ -595,7 +627,7 @@ export default function SchedulePage() {
       }
     });
     return { gaps, totalShortage };
-  }, [scheduleSlots, shiftsByVenueDate, venues]);
+  }, [scheduleSlots, shiftsByVenueDate, dispatchShiftsByVenueDate, venues]);
 
   const createSlot = useMutation({
     mutationFn: async (data: any) => {
@@ -2173,28 +2205,74 @@ export default function SchedulePage() {
       </Dialog>
 
       <Dialog open={dispatchAddNameDialogOpen} onOpenChange={setDispatchAddNameDialogOpen}>
-        <DialogContent className="sm:max-w-xs" data-testid="dispatch-add-name-dialog">
+        <DialogContent className="sm:max-w-sm" data-testid="dispatch-add-name-dialog">
           <DialogHeader>
             <DialogTitle className="text-purple-700 dark:text-purple-400">新增派遣人員</DialogTitle>
-            <DialogDescription>輸入姓名後加入名單，再至日期欄位安排班次。</DialogDescription>
+            <DialogDescription>輸入姓名後系統自動核對在職員工名單，再至日期欄位安排班次。</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <Input
-              autoFocus
-              value={dispatchAddNameInput}
-              onChange={(e) => setDispatchAddNameInput(e.target.value)}
-              placeholder="輸入姓名"
-              data-testid="input-dispatch-add-name"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const n = dispatchAddNameInput.trim();
-                  if (n && !dispatchNames.includes(n)) {
-                    setPendingDispatchNames(prev => [...prev, n]);
+            <div className="space-y-1.5">
+              <Label htmlFor="dispatch-add-name-input">派遣人員姓名</Label>
+              <Input
+                id="dispatch-add-name-input"
+                autoFocus
+                value={dispatchAddNameInput}
+                onChange={(e) => setDispatchAddNameInput(e.target.value)}
+                placeholder="輸入姓名"
+                data-testid="input-dispatch-add-name"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const n = dispatchAddNameInput.trim();
+                    if (n && !dispatchNames.includes(n)) {
+                      setPendingDispatchNames(prev => [...prev, n]);
+                    }
+                    setDispatchAddNameDialogOpen(false);
                   }
-                  setDispatchAddNameDialogOpen(false);
-                }
-              }}
-            />
+                }}
+              />
+            </div>
+            {(() => {
+              const trimmed = dispatchAddNameInput.trim();
+              if (!trimmed) return null;
+              const matchedEmployee = employees.find(e => e.name === trimmed && e.status === "active");
+              const partialMatches = employees.filter(e => e.status === "active" && e.name.includes(trimmed) && e.name !== trimmed);
+              if (matchedEmployee) {
+                return (
+                  <div className="flex items-center gap-2 rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-2 text-sm text-green-700 dark:text-green-400" data-testid="dispatch-name-match-found">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <div>
+                      <span className="font-medium">{matchedEmployee.name}</span>
+                      <span className="text-xs ml-2 opacity-75">{matchedEmployee.role} · {matchedEmployee.employeeCode}</span>
+                    </div>
+                  </div>
+                );
+              }
+              if (partialMatches.length > 0) {
+                return (
+                  <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-sm" data-testid="dispatch-name-partial-match">
+                    <div className="text-xs text-blue-600 dark:text-blue-400 mb-1">相似姓名：</div>
+                    <div className="flex flex-wrap gap-1">
+                      {partialMatches.slice(0, 5).map(e => (
+                        <button
+                          key={e.id}
+                          onClick={() => setDispatchAddNameInput(e.name)}
+                          className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors"
+                          data-testid={`dispatch-name-suggestion-${e.id}`}
+                        >
+                          {e.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <div className="flex items-center gap-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-700 dark:text-amber-400" data-testid="dispatch-name-not-found">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>非在職員工名單，仍可加入</span>
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDispatchAddNameDialogOpen(false)}>取消</Button>
@@ -2792,8 +2870,12 @@ export default function SchedulePage() {
                 return cellSlots.length > 0 ? (
                   <>
                     {cellSlots.map((slot) => {
-                      const venueDateShifts = shiftsByVenueDate.get(`${slot.venueId}-${slot.date}`) || [];
-                      const assignedCount = venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length;
+                      const _slotKey = `${slot.venueId}-${slot.date}`;
+                      const venueDateShifts = shiftsByVenueDate.get(_slotKey) || [];
+                      const _dispatchForSlot = dispatchShiftsByVenueDate.get(_slotKey) || [];
+                      const assignedCount =
+                        venueDateShifts.filter((sh) => shiftOverlapsSlot(sh, slot)).length +
+                        _dispatchForSlot.filter((ds) => dispatchOverlapsSlot(ds, slot)).length;
                       const shortage = slot.requiredCount - assignedCount;
                       const isFull = shortage <= 0;
                       const isRescue = slot.role === "救生";

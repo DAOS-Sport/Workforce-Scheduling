@@ -513,6 +513,7 @@ export async function registerRoutes(
       const skipped: any[] = [];
       const errors: string[] = [];
       const warnings: string[] = [];
+      const dispatched: string[] = [];
 
       const uniqueEmployeeIds = [...new Set(shiftItems.map((s: any) => s.employeeId).filter(Boolean))] as number[];
       const allDates = shiftItems.map((s: any) => s.date as string).filter(Boolean).sort();
@@ -578,7 +579,28 @@ export async function registerRoutes(
             continue;
           }
           const warnItems = allErrors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
-          for (const w of warnItems) warnings.push(`${date} ${employee.name}：${w.message}`);
+          if (warnItems.length > 0) {
+            // Soft-limit exceeded → auto-create as dispatch shift (no labor law restrictions)
+            const reason = warnItems.map(e => e.type === "rest_11h" ? "輪班間隔不足11h" : "四週工時超160h").join("、");
+            try {
+              await storage.createDispatchShift({
+                regionId: employee.regionId,
+                venueId,
+                date,
+                startTime,
+                endTime,
+                dispatchName: employee.name,
+                dispatchCompany: null,
+                dispatchPhone: null,
+                role,
+                notes: `匯入轉派遣（${reason}）`,
+              });
+              dispatched.push(`${date} ${employee.name}（${reason}）`);
+            } catch {
+              warnings.push(`${date} ${employee.name}：派遣轉換失敗，${reason}`);
+            }
+            continue;
+          }
         }
 
         const existingKey = `${employeeId}:${date}`;
@@ -605,7 +627,7 @@ export async function registerRoutes(
         existingShiftsForMonth.push(shift);
       }
 
-      res.json({ created: created.length, skipped: skipped.length, errors, warnings, shifts: created });
+      res.json({ created: created.length, skipped: skipped.length, errors, warnings, dispatched, shifts: created });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
