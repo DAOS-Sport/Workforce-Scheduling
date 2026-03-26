@@ -1753,7 +1753,7 @@ export default function SchedulePage() {
                                 const isLeave = LEAVE_TYPES.includes(shift.role);
                                 const matchedSlot = slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sl.endTime.substring(0, 5) >= sEnd) 
                                   || slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
-                                const shiftRole = isLeave ? shift.role : (matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role);
+                                const shiftRole = isLeave ? shift.role : (shift.role || matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role);
                                 const roleShort = ROLE_SHORT[shiftRole] || shiftRole.slice(0, 1);
                                 const roleColor = isLeave
                                   ? null
