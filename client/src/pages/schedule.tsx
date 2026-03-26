@@ -97,6 +97,27 @@ const LEAVE_COLORS: Record<string, string> = {
   "國定假": "bg-red-100 dark:bg-red-950/50 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300",
 };
 
+interface RoleColorConfig { card: string; badge: string; dot: string; text: string; }
+const ROLE_COLORS: Record<string, RoleColorConfig> = {
+  "救生":  { card: "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800",    badge: "bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300",    dot: "bg-blue-500",   text: "text-blue-700 dark:text-blue-300" },
+  "守望":  { card: "bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800",    badge: "bg-cyan-100 dark:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300",    dot: "bg-cyan-500",   text: "text-cyan-700 dark:text-cyan-300" },
+  "教練":  { card: "bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800", badge: "bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-300", dot: "bg-violet-500", text: "text-violet-700 dark:text-violet-300" },
+  "指導員":{ card: "bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800", badge: "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300", dot: "bg-indigo-500", text: "text-indigo-700 dark:text-indigo-300" },
+  "PT":    { card: "bg-pink-50 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-800",    badge: "bg-pink-100 dark:bg-pink-900/60 text-pink-700 dark:text-pink-300",    dot: "bg-pink-500",   text: "text-pink-700 dark:text-pink-300" },
+  "行政":  { card: "bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700", badge: "bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300", dot: "bg-slate-400",  text: "text-slate-600 dark:text-slate-300" },
+  "櫃台":  { card: "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800", badge: "bg-orange-100 dark:bg-orange-900/60 text-orange-700 dark:text-orange-300", dot: "bg-orange-500", text: "text-orange-700 dark:text-orange-300" },
+  "櫃檯":  { card: "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800", badge: "bg-orange-100 dark:bg-orange-900/60 text-orange-700 dark:text-orange-300", dot: "bg-orange-500", text: "text-orange-700 dark:text-orange-300" },
+  "資訊班":{ card: "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800",  badge: "bg-green-100 dark:bg-green-900/60 text-green-700 dark:text-green-300",  dot: "bg-green-500",  text: "text-green-700 dark:text-green-300" },
+  "清潔":  { card: "bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800", badge: "bg-yellow-100 dark:bg-yellow-900/60 text-yellow-700 dark:text-yellow-300", dot: "bg-yellow-500", text: "text-yellow-700 dark:text-yellow-300" },
+  "管理":  { card: "bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700",    badge: "bg-gray-100 dark:bg-gray-700/60 text-gray-600 dark:text-gray-300",    dot: "bg-gray-400",   text: "text-gray-600 dark:text-gray-300" },
+};
+const DISPATCH_ROLE_COLOR: RoleColorConfig = { card: "bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800", badge: "bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300", dot: "bg-purple-500", text: "text-purple-700 dark:text-purple-300" };
+const DEFAULT_ROLE_COLOR: RoleColorConfig = ROLE_COLORS["救生"];
+function getRoleColor(role: string, isDispatch = false): RoleColorConfig {
+  if (isDispatch) return DISPATCH_ROLE_COLOR;
+  return ROLE_COLORS[role] || DEFAULT_ROLE_COLOR;
+}
+
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
 const ROLE_OPTIONS = ["救生", "教練", "指導員", "PT", "行政", "櫃台", "資訊班", "守望"];
 
@@ -1734,26 +1755,24 @@ export default function SchedulePage() {
                                   || slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
                                 const shiftRole = isLeave ? shift.role : (matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role);
                                 const roleShort = ROLE_SHORT[shiftRole] || shiftRole.slice(0, 1);
-                                const isCounter = shiftRole === "櫃台" || shiftRole === "櫃檯";
+                                const roleColor = isLeave
+                                  ? null
+                                  : getRoleColor(shiftRole, shift.isDispatch);
                                 const cardColor = isLeave
                                   ? (LEAVE_COLORS[shift.role] || LEAVE_COLORS["休假"])
-                                  : shift.isDispatch
-                                    ? "bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800"
-                                    : isCounter
-                                      ? "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800"
-                                      : "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800";
+                                  : roleColor!.card;
                                 const isDragging = draggedShiftId === shift.id;
 
                                 if (isLeave) {
                                   return (
                                     <DraggableShiftCard key={shift.id} id={shift.id} isDragging={isDragging}>
                                       <div
-                                        className={`rounded px-1 py-0.5 text-[10px] cursor-pointer transition-colors ${cardColor} ${isDragging ? "opacity-30" : ""}`}
+                                        className={`rounded-md px-1.5 py-1 text-[10px] cursor-pointer transition-all hover:shadow-sm ${cardColor} ${isDragging ? "opacity-30" : ""}`}
                                         onClick={() => openEditShiftDialog(shift)}
                                         data-testid={`shift-${shift.id}`}
                                       >
                                         <div className="flex items-center justify-between gap-0.5">
-                                          <span className="font-medium leading-tight truncate">{shift.role}</span>
+                                          <span className="font-semibold leading-tight truncate">{shift.role}</span>
                                           <button
                                             className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
                                             onClick={(e) => { e.stopPropagation(); handleCopyShift(shift); }}
@@ -1771,16 +1790,16 @@ export default function SchedulePage() {
                                 return (
                                   <DraggableShiftCard key={shift.id} id={shift.id} isDragging={isDragging}>
                                     <div
-                                      className={`rounded px-1 py-0.5 text-[10px] cursor-pointer transition-colors ${cardColor} ${isDragging ? "opacity-30" : ""}`}
+                                      className={`rounded-md px-1.5 py-1 text-[10px] cursor-pointer transition-all hover:shadow-sm ${cardColor} ${isDragging ? "opacity-30" : ""}`}
                                       onClick={() => openEditShiftDialog(shift)}
                                       data-testid={`shift-${shift.id}`}
                                     >
-                                      <div className="flex items-center justify-between gap-0.5">
-                                        <div className="font-medium leading-tight truncate flex-1">
+                                      <div className="flex items-center justify-between gap-0.5 mb-0.5">
+                                        <div className="font-semibold leading-tight truncate flex-1 text-[11px]">
                                           {venue?.shortName || "未知"}
                                         </div>
                                         <div className="flex items-center gap-0.5 shrink-0">
-                                          <span className={`text-[9px] font-bold leading-none ${isCounter ? "text-orange-500" : "text-blue-500"}`}>
+                                          <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 ${roleColor!.badge}`}>
                                             {roleShort}
                                           </span>
                                           <button
@@ -1793,11 +1812,11 @@ export default function SchedulePage() {
                                           </button>
                                         </div>
                                       </div>
-                                      <div className="leading-tight text-muted-foreground">
-                                        {sStart}-{sEnd}
+                                      <div className="leading-tight text-muted-foreground text-[10px]">
+                                        {sStart}–{sEnd}
                                       </div>
                                       {shift.isDispatch && (
-                                        <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium">派遣</div>
+                                        <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium mt-0.5">派遣</div>
                                       )}
                                     </div>
                                   </DraggableShiftCard>
@@ -1937,24 +1956,24 @@ export default function SchedulePage() {
                                 return (
                                   <div
                                     key={ds.id}
-                                    className="rounded px-1 py-0.5 text-xs cursor-pointer transition-colors bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800"
+                                    className="rounded-md px-1.5 py-1 text-xs cursor-pointer transition-all hover:shadow-sm bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800"
                                     onClick={() => openEditDispatchDialog(ds)}
                                     data-testid={`dispatch-shift-${ds.id}`}
                                     title={`${ds.dispatchCompany ? ds.dispatchCompany + " | " : ""}${ds.dispatchPhone || ""}`}
                                   >
-                                    <div className="flex items-center justify-between gap-1">
-                                      <div className="font-medium leading-tight text-[11px] truncate text-purple-700 dark:text-purple-300">
+                                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                                      <div className="font-semibold leading-tight text-[11px] truncate text-purple-700 dark:text-purple-300">
                                         {venue?.shortName || "未指定"}
                                       </div>
-                                      <span className={`text-[9px] font-bold leading-none shrink-0 ${ds.role === "櫃台" || ds.role === "櫃檯" ? "text-orange-500" : "text-blue-500"}`}>
+                                      <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 shrink-0 ${getRoleColor(ds.role).badge}`}>
                                         {roleShort}
                                       </span>
                                     </div>
-                                    <div className="leading-tight text-[11px] text-muted-foreground">
-                                      {sStart}-{sEnd}
+                                    <div className="leading-tight text-[10px] text-muted-foreground">
+                                      {sStart}–{sEnd}
                                     </div>
                                     {ds.dispatchCompany && (
-                                      <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium truncate">{ds.dispatchCompany}</div>
+                                      <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium truncate mt-0.5">{ds.dispatchCompany}</div>
                                     )}
                                   </div>
                                 );
@@ -2118,12 +2137,30 @@ export default function SchedulePage() {
                 <Label>班別</Label>
                 <Select value={dispatchRole} onValueChange={setDispatchRole}>
                   <SelectTrigger data-testid="select-dispatch-role">
-                    <SelectValue />
+                    <SelectValue>
+                      {dispatchRole && (() => {
+                        const rc = ROLE_COLORS[dispatchRole];
+                        return (
+                          <span className="flex items-center gap-1.5">
+                            {rc && <span className={`inline-block w-2 h-2 rounded-full ${rc.dot} shrink-0`} />}
+                            {dispatchRole}
+                          </span>
+                        );
+                      })()}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {ROLE_OPTIONS.map((r) => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
+                    {ROLE_OPTIONS.map((r) => {
+                      const rc = ROLE_COLORS[r];
+                      return (
+                        <SelectItem key={r} value={r}>
+                          <span className="flex items-center gap-2">
+                            <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${rc?.dot || "bg-gray-400"}`} />
+                            {r}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -2411,13 +2448,31 @@ export default function SchedulePage() {
                 <Label>班別</Label>
                 <Select value={shiftRole} onValueChange={(v) => { setShiftRole(v); setShiftTemplateId("custom"); if (LEAVE_TYPES.includes(v)) { setShiftStartTime("00:00"); setShiftEndTime("00:00"); setShiftVenueId(""); } }}>
                   <SelectTrigger data-testid="select-shift-role">
-                    <SelectValue placeholder="選擇班別" />
+                    <SelectValue placeholder="選擇班別">
+                      {shiftRole && !["---work-separator","---leave-separator"].includes(shiftRole) && (() => {
+                        const rc = ROLE_COLORS[shiftRole];
+                        return (
+                          <span className="flex items-center gap-1.5">
+                            {rc && <span className={`inline-block w-2 h-2 rounded-full ${rc.dot} shrink-0`} />}
+                            {shiftRole}
+                          </span>
+                        );
+                      })()}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="---work-separator" disabled><span className="text-xs text-muted-foreground">── 工作班別 ──</span></SelectItem>
-                    {ROLE_OPTIONS.map(r => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
+                    {ROLE_OPTIONS.map(r => {
+                      const rc = ROLE_COLORS[r];
+                      return (
+                        <SelectItem key={r} value={r}>
+                          <span className="flex items-center gap-2">
+                            <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${rc?.dot || "bg-gray-400"}`} />
+                            {r}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
                     <SelectItem value="---leave-separator" disabled><span className="text-xs text-muted-foreground">── 假別 ──</span></SelectItem>
                     {LEAVE_TYPES.map(lt => (
                       <SelectItem key={lt} value={lt}>{lt}</SelectItem>
@@ -2499,10 +2554,34 @@ export default function SchedulePage() {
               </div>
             )}
 
-            <div className="rounded-md bg-muted/30 p-3 text-xs text-muted-foreground">
-              預覽：{venues.find((v) => v.id.toString() === shiftVenueId)?.shortName || "—"} {shiftStartTime}-{shiftEndTime} [{shiftRole}]
-              {shiftIsDispatch && " (派遣)"}
-            </div>
+            {(() => {
+              const isLeavePreview = LEAVE_TYPES.includes(shiftRole);
+              const previewVenue = venues.find((v) => v.id.toString() === shiftVenueId);
+              const previewRoleColor = isLeavePreview ? null : getRoleColor(shiftRole, shiftIsDispatch);
+              const previewCardColor = isLeavePreview
+                ? (LEAVE_COLORS[shiftRole] || LEAVE_COLORS["休假"])
+                : previewRoleColor!.card;
+              const previewShort = ROLE_SHORT[shiftRole] || shiftRole.slice(0, 1);
+              return (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">預覽</Label>
+                  <div className={`rounded-md px-2 py-1.5 text-[11px] w-fit min-w-[80px] ${previewCardColor}`}>
+                    {isLeavePreview ? (
+                      <div className="font-semibold">{shiftRole}</div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <div className="font-semibold">{previewVenue?.shortName || "—"}</div>
+                          <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 ${previewRoleColor!.badge}`}>{previewShort}</span>
+                        </div>
+                        <div className="text-muted-foreground">{shiftStartTime || "--:--"}–{shiftEndTime || "--:--"}</div>
+                        {shiftIsDispatch && <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium mt-0.5">派遣</div>}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {shiftClipboard && (
               <div className="flex items-center gap-2 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-2">
