@@ -1507,7 +1507,7 @@ export default function SchedulePage() {
                       key={i}
                       data-date-col={dateKey}
                       className={`text-center p-1.5 border-b border-r font-medium relative select-none ${
-                        holiday ? "bg-yellow-100 dark:bg-yellow-900/30" : isToday ? "bg-background" : isWeekend ? "bg-muted" : "bg-background"
+                        holiday ? "bg-yellow-100 dark:bg-yellow-900/30" : isToday ? "bg-background" : isWeekend ? "bg-yellow-100 dark:bg-yellow-900/30" : "bg-background"
                       }`}
                       style={{ minWidth: colW, width: colW, position: "sticky", top: 0, zIndex: 25 }}
                     >
@@ -1687,7 +1687,7 @@ export default function SchedulePage() {
 
                       return (
                         <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
-                          isToday ? "bg-primary/5" : isHoliday ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-muted/20" : ""
+                          isToday ? "bg-primary/5" : isHoliday ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
                         }`} style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
                           {cellShifts.length > 0 ? (
                             <div className="space-y-0.5">
@@ -1891,7 +1891,7 @@ export default function SchedulePage() {
                       return (
                         <td
                           key={di}
-                          className={`p-0.5 border-b border-r relative align-top ${isToday ? "bg-primary/5" : isHolidayCell ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-muted/20" : ""}`}
+                          className={`p-0.5 border-b border-r relative align-top ${isToday ? "bg-primary/5" : isHolidayCell ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""}`}
                           style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }}
                           data-testid={`cell-dispatch-${name}-${dateStr}`}
                         >
