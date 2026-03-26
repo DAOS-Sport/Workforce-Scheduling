@@ -101,6 +101,11 @@ export interface ClockInResult {
   nearbyVenues: NearbyVenue[];
   userLat: number | null;
   userLng: number | null;
+  recordId?: number;
+  earlyArrival?: boolean;
+  earlyMinutes?: number;
+  lateDeparture?: boolean;
+  lateMinutes?: number;
 }
 
 export async function processClockIn(

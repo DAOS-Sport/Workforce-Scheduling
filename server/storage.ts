@@ -513,10 +513,6 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
-  async getAllVenues(): Promise<Venue[]> {
-    return db.select().from(venues);
-  }
-
   async createClockRecord(data: InsertClockRecord): Promise<ClockRecord> {
     const [record] = await db.insert(clockRecords).values(data).returning();
     return record;

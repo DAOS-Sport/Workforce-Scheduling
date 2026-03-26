@@ -301,7 +301,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "該員工非在職狀態，無法排班" });
       }
 
-      const isLeave = LEAVE_TYPES.includes(parsed.role);
+      const isLeave = LEAVE_TYPES.includes(parsed.role ?? "");
       const isDispatchShift = parsed.isDispatch || false;
       let warnings: ShiftValidationError[] = [];
 
@@ -553,7 +553,7 @@ export async function registerRoutes(
         if (!isLeave) {
           const empShiftsForMonth = existingShiftsForMonth.filter(s => s.employeeId === employeeId);
           const validationErrors = validateAllRules(employeeId, date, startTime, endTime, empShiftsForMonth, undefined, referenceDate);
-          const blocking = validationErrors.filter(e => e.severity === "error");
+          const blocking = validationErrors;
           if (blocking.length > 0) {
             errors.push(`${date} ${employee.name}：${blocking.map(e => e.message).join("；")}`);
             continue;
@@ -1478,13 +1478,13 @@ export async function registerRoutes(
       }
 
       const slotsCache: Record<string, any[]> = {};
-      async function getSlotsForVenueDate(venueId: number, date: string) {
+      const getSlotsForVenueDate = async (venueId: number, date: string) => {
         const key = `${venueId}-${date}`;
         if (!slotsCache[key]) {
           slotsCache[key] = await storage.getScheduleSlotsByVenueAndDate(venueId, date);
         }
         return slotsCache[key];
-      }
+      };
 
       const enriched = await Promise.all(myShifts.map(async (s) => {
         const slots = await getSlotsForVenueDate(s.venueId, s.date);
@@ -2797,7 +2797,7 @@ export async function registerRoutes(
 
       const clockByEmpDate = new Map<string, typeof clockRecords>();
       for (const cr of clockRecords) {
-        const crDate = new Date(cr.clockTime).toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+        const crDate = new Date(cr.clockTime!).toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
         const key = `${cr.employeeId}-${crDate}`;
         if (!clockByEmpDate.has(key)) clockByEmpDate.set(key, []);
         clockByEmpDate.get(key)!.push(cr);
@@ -2831,13 +2831,13 @@ export async function registerRoutes(
           }));
 
           const clockInData = clockIns.map(c => ({
-            time: new Date(c.clockTime).toLocaleTimeString("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit" }),
+            time: new Date(c.clockTime!).toLocaleTimeString("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit" }),
             status: c.status,
             venue: c.matchedVenueName || "",
             failReason: c.failReason || "",
           }));
           const clockOutData = clockOuts.map(c => ({
-            time: new Date(c.clockTime).toLocaleTimeString("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit" }),
+            time: new Date(c.clockTime!).toLocaleTimeString("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit" }),
             status: c.status,
             venue: c.matchedVenueName || "",
           }));
@@ -2906,7 +2906,7 @@ export async function registerRoutes(
 
       const clockByEmpDate = new Map<string, typeof clockRecords>();
       for (const cr of clockRecords) {
-        const crDate = new Date(cr.clockTime).toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+        const crDate = new Date(cr.clockTime!).toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
         const key = `${cr.employeeId}-${crDate}`;
         if (!clockByEmpDate.has(key)) clockByEmpDate.set(key, []);
         clockByEmpDate.get(key)!.push(cr);
