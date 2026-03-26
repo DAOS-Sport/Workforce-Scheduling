@@ -1,6 +1,8 @@
 import { storage } from "./storage";
 
 const RAGIC_API_URL = "https://ap7.ragic.com/xinsheng/ragicforms4/20004";
+const PAGE_SIZE = 1000;
+const MAX_RETRIES = 3;
 
 interface RagicEmployee {
   name: string;
@@ -140,36 +142,110 @@ function parseRagicRecord(record: Record<string, any>): RagicEmployee | null {
   };
 }
 
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url: string, headers: Record<string, string>): Promise<Record<string, any>> {
+  let lastErr: Error | null = null;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        throw new Error(`Ragic HTTP ${response.status} ${response.statusText}`);
+      }
+      const data = await response.json();
+      return data as Record<string, any>;
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`[ragic] 第 ${attempt} 次請求失敗: ${err.message}，${attempt < MAX_RETRIES ? `等待 ${attempt * 2}s 後重試...` : "已達最大重試次數"}`);
+      if (attempt < MAX_RETRIES) {
+        await sleep(attempt * 2000);
+      }
+    }
+  }
+  throw lastErr ?? new Error("fetchWithRetry: unknown error");
+}
+
+async function fetchAllRagicRecords(apiKey: string): Promise<Record<string, any>> {
+  const headers = {
+    Authorization: `Basic ${apiKey}`,
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+  };
+
+  const allRecords: Record<string, any> = {};
+  let offset = 0;
+  let page = 1;
+
+  while (true) {
+    const params = new URLSearchParams({
+      v: "3",
+      limit: String(PAGE_SIZE),
+      offset: String(offset),
+      _: String(Date.now()),
+    });
+    const url = `${RAGIC_API_URL}?${params.toString()}`;
+    console.log(`[ragic] 拉取第 ${page} 頁 (offset=${offset}, limit=${PAGE_SIZE})...`);
+
+    const data = await fetchWithRetry(url, headers);
+
+    const entries = Object.entries(data).filter(([k]) => !k.startsWith("@"));
+    if (entries.length === 0) {
+      console.log(`[ragic] 第 ${page} 頁無資料，停止分頁`);
+      break;
+    }
+
+    for (const [k, v] of entries) {
+      allRecords[k] = v;
+    }
+
+    console.log(`[ragic] 第 ${page} 頁取得 ${entries.length} 筆，累計 ${Object.keys(allRecords).length} 筆`);
+
+    if (entries.length < PAGE_SIZE) {
+      console.log(`[ragic] 最後一頁（筆數 ${entries.length} < ${PAGE_SIZE}），完成拉取`);
+      break;
+    }
+
+    offset += PAGE_SIZE;
+    page++;
+    await sleep(300);
+  }
+
+  return allRecords;
+}
+
 export async function syncFromRagic(): Promise<{
   created: number;
   updated: number;
   skipped: number;
   deactivated: number;
   errors: string[];
+  skipReasons: Record<string, number>;
+  totalFetched: number;
 }> {
   const apiKey = process.env.RAGIC_API_KEY;
   if (!apiKey) throw new Error("RAGIC_API_KEY not configured");
 
-  const result = { created: 0, updated: 0, skipped: 0, deactivated: 0, errors: [] as string[] };
+  const result = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    deactivated: 0,
+    errors: [] as string[],
+    skipReasons: {} as Record<string, number>,
+    totalFetched: 0,
+  };
 
-  const params = new URLSearchParams({
-    v: "3",
-    limit: "1000",
-    _: String(Date.now()),
-  });
-  const response = await fetch(`${RAGIC_API_URL}?${params.toString()}`, {
-    headers: {
-      Authorization: `Basic ${apiKey}`,
-      "Cache-Control": "no-cache",
-      "Pragma": "no-cache",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Ragic API error: ${response.status} ${response.statusText}`);
+  function addSkip(reason: string) {
+    result.skipped++;
+    result.skipReasons[reason] = (result.skipReasons[reason] ?? 0) + 1;
   }
 
-  const data = await response.json();
+  const data = await fetchAllRagicRecords(apiKey);
+  result.totalFetched = Object.keys(data).length;
+  console.log(`[ragic] 共拉取 ${result.totalFetched} 筆原始記錄，開始處理...`);
+
   const regions = await storage.getRegions();
   const regionMap = new Map(regions.map((r) => [r.code, r.id]));
 
@@ -177,12 +253,12 @@ export async function syncFromRagic(): Promise<{
     try {
       const parsed = parseRagicRecord(record as Record<string, any>);
       if (!parsed) {
-        result.skipped++;
+        addSkip("姓名或員工編號空白");
         continue;
       }
 
       if (!SYNC_ROLES.includes(parsed.role)) {
-        result.skipped++;
+        addSkip(`職務不在同步範圍(${parsed.rawRole || "空白"})`);
         continue;
       }
 
@@ -213,23 +289,24 @@ export async function syncFromRagic(): Promise<{
           updateData.status = parsed.status;
         } else if (parsed.rawStatus && INACTIVE_STATUSES.includes(parsed.rawStatus)) {
           updateData.status = "inactive";
+          result.deactivated++;
         }
 
         await storage.updateEmployee(existing.id, updateData);
         result.updated++;
       } else {
         if (!ACTIVE_STATUSES.includes(parsed.rawStatus)) {
-          result.skipped++;
+          addSkip(`非在職狀態(${parsed.rawStatus || "空白"})`);
           continue;
         }
         if (!regionId) {
           result.errors.push(`${parsed.name}(${parsed.employeeCode}): 部門「${parsed.department}」無對應區域，跳過新增`);
-          result.skipped++;
+          addSkip("部門無對應區域");
           continue;
         }
         if (!parsed.employmentType) {
           result.errors.push(`${parsed.name}(${parsed.employeeCode}): 聘雇類別「${parsed.rawEmploymentType}」不是正職/兼職，跳過新增`);
-          result.skipped++;
+          addSkip(`聘雇類別未知(${parsed.rawEmploymentType || "空白"})`);
           continue;
         }
         await storage.createEmployee({
@@ -251,6 +328,11 @@ export async function syncFromRagic(): Promise<{
     }
   }
 
+  console.log(`[ragic] 同步完成 — 新增:${result.created} 更新:${result.updated} 略過:${result.skipped} 停用:${result.deactivated} 錯誤:${result.errors.length}`);
+  if (Object.keys(result.skipReasons).length > 0) {
+    console.log(`[ragic] 略過原因:`, result.skipReasons);
+  }
+
   return result;
 }
 
@@ -259,30 +341,16 @@ export async function syncVenuesFromRagic(): Promise<{
   existing: number;
   skipped: number;
   errors: string[];
+  updated: number;
 }> {
   const apiKey = process.env.RAGIC_API_KEY;
   if (!apiKey) throw new Error("RAGIC_API_KEY not configured");
 
-  const result = { created: 0, existing: 0, skipped: 0, errors: [] as string[] };
+  const result = { created: 0, existing: 0, skipped: 0, errors: [] as string[], updated: 0 };
 
-  const params = new URLSearchParams({
-    v: "3",
-    limit: "1000",
-    _: String(Date.now()),
-  });
-  const response = await fetch(`${RAGIC_API_URL}?${params.toString()}`, {
-    headers: {
-      Authorization: `Basic ${apiKey}`,
-      "Cache-Control": "no-cache",
-      Pragma: "no-cache",
-    },
-  });
+  const data = await fetchAllRagicRecords(apiKey);
+  console.log(`[ragic-venue] 共拉取 ${Object.keys(data).length} 筆原始記錄`);
 
-  if (!response.ok) {
-    throw new Error(`Ragic API error: ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json();
   const regions = await storage.getRegions();
   const regionMap = new Map(regions.map((r) => [r.code, r.id]));
 
@@ -343,5 +411,6 @@ export async function syncVenuesFromRagic(): Promise<{
     }
   }
 
+  console.log(`[ragic-venue] 場館同步完成 — 新增:${result.created} 已存在:${result.existing} 略過:${result.skipped} 錯誤:${result.errors.length}`);
   return result;
 }

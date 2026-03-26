@@ -58,7 +58,7 @@ export default function EmployeesPage() {
     employmentType: "full_time",
     regionId: 0,
   });
-  const [syncResult, setSyncResult] = useState<{ created: number; updated: number; skipped: number; deactivated: number; errors: string[] } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ created: number; updated: number; skipped: number; deactivated: number; errors: string[]; skipReasons?: Record<string, number>; totalFetched?: number } | null>(null);
 
   const { data: regionsData = [] } = useQuery<{ id: number; name: string; code: string }[]>({
     queryKey: ["/api/regions"],
@@ -146,9 +146,12 @@ export default function EmployeesPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       setSyncResult(data);
+      const parts = [`新增 ${data.created}`, `更新 ${data.updated}`, `略過 ${data.skipped}`];
+      if (data.deactivated > 0) parts.splice(2, 0, `停用 ${data.deactivated}`);
+      if (data.totalFetched) parts.unshift(`拉取 ${data.totalFetched} 筆`);
       toast({
         title: "Ragic 同步完成",
-        description: `新增 ${data.created} 人、更新 ${data.updated} 人${data.deactivated > 0 ? `、停用 ${data.deactivated} 人` : ""}、略過 ${data.skipped} 人`,
+        description: parts.join("、"),
       });
     },
     onError: (err: Error) => {
@@ -233,14 +236,32 @@ export default function EmployeesPage() {
           </div>
         </div>
 
-        {syncResult && syncResult.errors.length > 0 && (
-          <Card className="p-4 border-amber-300 bg-amber-50 dark:bg-amber-950/20">
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">同步警告 ({syncResult.errors.length} 筆)</p>
-            <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-1 max-h-32 overflow-auto">
-              {syncResult.errors.map((err, i) => (
-                <li key={i}>• {err}</li>
-              ))}
-            </ul>
+        {syncResult && (syncResult.errors.length > 0 || (syncResult.skipReasons && Object.keys(syncResult.skipReasons).length > 0)) && (
+          <Card className="p-4 border-amber-300 bg-amber-50 dark:bg-amber-950/20 space-y-3">
+            {syncResult.skipReasons && Object.keys(syncResult.skipReasons).length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-1.5">
+                  略過原因統計（共 {syncResult.skipped} 筆）
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(syncResult.skipReasons).map(([reason, count]) => (
+                    <span key={reason} className="text-xs bg-amber-200/60 dark:bg-amber-800/40 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded-full">
+                      {reason}：{count} 筆
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {syncResult.errors.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-1">警告訊息 ({syncResult.errors.length} 筆)</p>
+                <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-1 max-h-32 overflow-auto">
+                  {syncResult.errors.map((err, i) => (
+                    <li key={i}>• {err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Card>
         )}
 

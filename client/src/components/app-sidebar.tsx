@@ -109,9 +109,11 @@ export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
                 className="h-7 w-7 shrink-0 text-muted-foreground hover:text-red-500"
                 onClick={onLogout}
                 title="登出"
+                aria-label="登出"
                 data-testid="button-admin-logout"
               >
                 <LogOut className="h-3.5 w-3.5" />
+                <span className="sr-only">登出</span>
               </Button>
             )}
           </div>
