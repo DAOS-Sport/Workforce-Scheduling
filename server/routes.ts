@@ -1905,7 +1905,7 @@ export async function registerRoutes(
       const allRows = [...xlsxRows, ...gpsRows].sort((a, b) => b.date.localeCompare(a.date));
 
       const summary = {
-        total: records.length,
+        total: allRows.length,
         late: records.filter((r) => r.isLate).length,
         earlyLeave: records.filter((r) => r.isEarlyLeave).length,
         anomaly: records.filter((r) => r.hasAnomaly).length,

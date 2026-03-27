@@ -1116,29 +1116,29 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
           return (
             <div className="grid grid-cols-2 gap-3">
               {clockInLocked ? (
-                <button disabled className="h-14 rounded-lg bg-juns-green/10 border border-juns-green/30 text-juns-green font-semibold text-sm flex flex-col items-center justify-center gap-0.5 cursor-not-allowed" data-testid="button-clock-in">
+                <button disabled className="h-14 rounded-lg bg-emerald-100 border-2 border-emerald-400 text-emerald-700 font-semibold text-sm flex flex-col items-center justify-center gap-0.5 cursor-not-allowed" data-testid="button-clock-in">
                   <div className="flex items-center gap-1">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     <span>上班已打卡</span>
                   </div>
-                  {clockInTime && <span className="text-xs font-normal opacity-80">{clockInTime}</span>}
+                  {clockInTime && <span className="text-xs font-bold">{clockInTime}</span>}
                 </button>
               ) : (
                 <button
-                  className="h-12 rounded-lg bg-juns-green hover:bg-juns-green/90 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                  className="h-12 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                   onClick={() => handleClockIn("in")}
                   data-testid="button-clock-in"
                 >
-                  上班
+                  ↑ 上班
                 </button>
               )}
               {clockOutLocked ? (
-                <button disabled className="h-14 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 font-semibold text-sm flex flex-col items-center justify-center gap-0.5 cursor-not-allowed" data-testid="button-clock-out">
+                <button disabled className="h-14 rounded-lg bg-blue-100 border-2 border-blue-400 text-blue-700 font-semibold text-sm flex flex-col items-center justify-center gap-0.5 cursor-not-allowed" data-testid="button-clock-out">
                   <div className="flex items-center gap-1">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     <span>下班已打卡</span>
                   </div>
-                  {clockOutTime && <span className="text-xs font-normal opacity-80">{clockOutTime}</span>}
+                  {clockOutTime && <span className="text-xs font-bold">{clockOutTime}</span>}
                 </button>
               ) : (
                 <button
@@ -1146,7 +1146,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
                   onClick={() => handleClockIn("out")}
                   data-testid="button-clock-out"
                 >
-                  下班
+                  ↓ 下班
                 </button>
               )}
             </div>
@@ -1999,11 +1999,11 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
           <div className="p-4">
             {attendanceLoading ? (
               <div className="h-16 bg-slate-100 rounded-lg animate-pulse" />
-            ) : !attendance || attendance.total === 0 ? (
+            ) : !attendance || attendance.records.length === 0 ? (
               <p className="text-sm text-center text-slate-400 py-3">本月尚無出勤紀錄</p>
             ) : (
               <div>
-                <div className="grid grid-cols-4 gap-2 mb-3">
+                <div className="grid grid-cols-4 gap-2 mb-4">
                   {[
                     { label: "出勤天數", value: attendance.total, warn: false },
                     { label: "遲到", value: attendance.late, warn: attendance.late > 0 },
@@ -2018,7 +2018,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     </div>
                   ))}
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {attendance.records.map((r, idx) => {
                     const d = parseISO(r.date);
                     const tags: string[] = [];
@@ -2026,23 +2026,47 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     if (r.isEarlyLeave) tags.push("早退");
                     if (r.hasAnomaly) tags.push("異常");
                     return (
-                      <div key={idx} className="flex items-center gap-2 text-xs py-1.5 border-b border-juns-border last:border-b-0">
-                        <span className="text-slate-400 min-w-[40px] font-mono">{format(d, "M/d")}</span>
-                        <div className="flex flex-col gap-0.5 min-w-0">
-                          {r.shiftInfo && (
-                            <span className="text-[10px] text-slate-400">班別：{r.shiftInfo}</span>
-                          )}
-                          <span className="text-slate-500 font-mono">
-                            簽到 {r.clockIn || "--"} ~ {r.clockOut || "--"}
+                      <div key={idx} className="rounded-lg border border-juns-border overflow-hidden">
+                        <div className="px-3 py-1.5 bg-slate-50 border-b border-juns-border flex items-center justify-between">
+                          <span className="text-xs font-semibold text-juns-navy font-mono">
+                            {format(d, "M月d日")}（{format(d, "EEE", { locale: zhTW })}）
                           </span>
+                          {r.shiftInfo && (
+                            <span className="text-[10px] text-slate-400">{r.shiftInfo}</span>
+                          )}
                         </div>
-                        <div className="flex gap-1 ml-auto shrink-0">
-                          {tags.length > 0 ? tags.map((t) => (
-                            <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">
-                              {t}
-                            </span>
-                          )) : (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-600">正常</span>
+                        <div className="divide-y divide-juns-border">
+                          <div className="flex items-center gap-2.5 px-3 py-2">
+                            <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                            <span className="text-[11px] text-slate-400 w-12">上班打卡</span>
+                            {r.clockIn ? (
+                              <span className="text-sm font-mono font-semibold text-green-700">{r.clockIn}</span>
+                            ) : (
+                              <span className="text-xs text-slate-300 italic">未打卡</span>
+                            )}
+                            {r.isLate && (
+                              <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">遲到</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2.5 px-3 py-2">
+                            <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                            <span className="text-[11px] text-slate-400 w-12">下班打卡</span>
+                            {r.clockOut ? (
+                              <span className="text-sm font-mono font-semibold text-blue-700">{r.clockOut}</span>
+                            ) : (
+                              <span className="text-xs text-slate-300 italic">未打卡</span>
+                            )}
+                            {r.isEarlyLeave && (
+                              <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-500">早退</span>
+                            )}
+                            {r.hasAnomaly && !r.isEarlyLeave && (
+                              <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">異常</span>
+                            )}
+                          </div>
+                          {tags.length === 0 && r.clockIn && r.clockOut && (
+                            <div className="px-3 py-1 flex justify-end">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-600">正常</span>
+                            </div>
                           )}
                         </div>
                       </div>
