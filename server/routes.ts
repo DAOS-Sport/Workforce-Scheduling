@@ -1893,15 +1893,46 @@ export async function registerRoutes(
           : null;
 
         const gpsMissingOut = !clockOutRecord;
+
+        const clockInStr = new Date(clockInRecord.clockTime!).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" });
+        const clockOutStr = clockOutRecord?.clockTime
+          ? new Date(clockOutRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
+          : null;
+
+        // Compare against scheduled shift time (first shift of the day)
+        let gpsIsLate = false;
+        let gpsIsEarlyLeave = false;
+        let gpsHasAnomaly = gpsMissingOut && dateStr < todayStr; // missing clock-out on past date
+
+        if (dateShifts.length > 0) {
+          const sched = dateShifts[0];
+          const schedStart = sched.startTime.slice(0, 5); // "HH:MM"
+          const schedEnd = sched.endTime.slice(0, 5);
+
+          // Late: clocked in more than 10 minutes after scheduled start
+          const [sH, sM] = schedStart.split(":").map(Number);
+          const [iH, iM] = clockInStr.split(":").map(Number);
+          const lateMinutes = (iH * 60 + iM) - (sH * 60 + sM);
+          if (lateMinutes > 10) gpsIsLate = true;
+
+          if (clockOutStr) {
+            const [eH, eM] = schedEnd.split(":").map(Number);
+            const [oH, oM] = clockOutStr.split(":").map(Number);
+            const earlyMinutes = (eH * 60 + eM) - (oH * 60 + oM);
+            // Early leave: clocked out more than 10 minutes before scheduled end
+            if (earlyMinutes > 10) gpsIsEarlyLeave = true;
+            // Anomaly: clock-in and clock-out at exact same time (0-duration punch)
+            if (clockInStr === clockOutStr) gpsHasAnomaly = true;
+          }
+        }
+
         gpsRows.push({
           date: dateStr,
-          clockIn: new Date(clockInRecord.clockTime!).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }),
-          clockOut: clockOutRecord?.clockTime
-            ? new Date(clockOutRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
-            : null,
-          isLate: false,
-          isEarlyLeave: false,
-          hasAnomaly: gpsMissingOut && dateStr < todayStr, // missing clock-out on a past date = anomaly
+          clockIn: clockInStr,
+          clockOut: clockOutStr,
+          isLate: gpsIsLate,
+          isEarlyLeave: gpsIsEarlyLeave,
+          hasAnomaly: gpsHasAnomaly,
           leaveType: null,
           shiftInfo,
           shiftType: dateShifts[0]?.shiftType || null,
