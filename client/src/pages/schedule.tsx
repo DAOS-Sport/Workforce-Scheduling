@@ -123,14 +123,14 @@ const ROLE_OPTIONS = ["救生", "教練", "指導員", "PT", "行政", "櫃台",
 
 interface DateAnnotation { color: string; note: string; }
 
-const ANNOTATION_COLORS: Record<string, { header: string; cell: string; text: string; dot: string }> = {
-  yellow: { header: "bg-yellow-100 dark:bg-yellow-900/30",  cell: "bg-yellow-50/70 dark:bg-yellow-950/20",  text: "text-yellow-700 dark:text-yellow-400",  dot: "bg-yellow-400" },
-  orange: { header: "bg-orange-100 dark:bg-orange-900/30",  cell: "bg-orange-50/70 dark:bg-orange-950/20",  text: "text-orange-700 dark:text-orange-400",  dot: "bg-orange-400" },
-  red:    { header: "bg-red-100 dark:bg-red-900/30",         cell: "bg-red-50/70 dark:bg-red-950/20",         text: "text-red-700 dark:text-red-400",         dot: "bg-red-400"    },
-  blue:   { header: "bg-blue-100 dark:bg-blue-900/30",       cell: "bg-blue-50/70 dark:bg-blue-950/20",       text: "text-blue-700 dark:text-blue-400",       dot: "bg-blue-400"   },
-  green:  { header: "bg-green-100 dark:bg-green-900/30",     cell: "bg-green-50/70 dark:bg-green-950/20",     text: "text-green-700 dark:text-green-400",     dot: "bg-green-400"  },
-  purple: { header: "bg-purple-100 dark:bg-purple-900/30",   cell: "bg-purple-50/70 dark:bg-purple-950/20",   text: "text-purple-700 dark:text-purple-400",   dot: "bg-purple-400" },
-  pink:   { header: "bg-pink-100 dark:bg-pink-900/30",       cell: "bg-pink-50/70 dark:bg-pink-950/20",       text: "text-pink-700 dark:text-pink-400",       dot: "bg-pink-400"   },
+const ANNOTATION_COLORS: Record<string, { header: string; cell: string; text: string; dot: string; border: string }> = {
+  yellow: { header: "bg-yellow-100 dark:bg-yellow-900/30",  cell: "bg-yellow-50/70 dark:bg-yellow-950/20",  text: "text-yellow-700 dark:text-yellow-400",  dot: "bg-yellow-400",  border: "border-b-yellow-300 dark:border-b-yellow-700" },
+  orange: { header: "bg-orange-100 dark:bg-orange-900/30",  cell: "bg-orange-50/70 dark:bg-orange-950/20",  text: "text-orange-700 dark:text-orange-400",  dot: "bg-orange-400",  border: "border-b-orange-300 dark:border-b-orange-700" },
+  red:    { header: "bg-red-100 dark:bg-red-900/30",         cell: "bg-red-50/70 dark:bg-red-950/20",         text: "text-red-700 dark:text-red-400",         dot: "bg-red-400",     border: "border-b-red-300 dark:border-b-red-700"       },
+  blue:   { header: "bg-blue-100 dark:bg-blue-900/30",       cell: "bg-blue-50/70 dark:bg-blue-950/20",       text: "text-blue-700 dark:text-blue-400",       dot: "bg-blue-400",    border: "border-b-blue-300 dark:border-b-blue-700"     },
+  green:  { header: "bg-green-100 dark:bg-green-900/30",     cell: "bg-green-50/70 dark:bg-green-950/20",     text: "text-green-700 dark:text-green-400",     dot: "bg-green-400",   border: "border-b-green-300 dark:border-b-green-700"   },
+  purple: { header: "bg-purple-100 dark:bg-purple-900/30",   cell: "bg-purple-50/70 dark:bg-purple-950/20",   text: "text-purple-700 dark:text-purple-400",   dot: "bg-purple-400",  border: "border-b-purple-300 dark:border-b-purple-700" },
+  pink:   { header: "bg-pink-100 dark:bg-pink-900/30",       cell: "bg-pink-50/70 dark:bg-pink-950/20",       text: "text-pink-700 dark:text-pink-400",       dot: "bg-pink-400",    border: "border-b-pink-300 dark:border-b-pink-700"     },
 };
 const ANNOTATION_COLOR_KEYS = ["yellow", "orange", "red", "blue", "green", "purple", "pink"] as const;
 
@@ -1696,7 +1696,8 @@ export default function SchedulePage() {
                           setAnnotationPopoverKey(dateKey);
                           setPopoverNote(annotation?.note || "");
                         } else {
-                          if (annotation) saveAnnotation(dateKey, annotation.color, popoverNote);
+                          const currentColor = annotation?.color || "yellow";
+                          if (annotation || popoverNote.trim()) saveAnnotation(dateKey, currentColor, popoverNote);
                           setAnnotationPopoverKey(null);
                         }
                       }}>
@@ -1743,7 +1744,8 @@ export default function SchedulePage() {
                                 onChange={(e) => setPopoverNote(e.target.value.slice(0, 20))}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") {
-                                    if (annotation) saveAnnotation(dateKey, annotation.color, popoverNote);
+                                    const currentColor = annotation?.color || "yellow";
+                                    if (annotation || popoverNote.trim()) saveAnnotation(dateKey, currentColor, popoverNote);
                                     setAnnotationPopoverKey(null);
                                   }
                                 }}
@@ -1936,7 +1938,7 @@ export default function SchedulePage() {
 
                       return (
                         <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
-                          cellAnnotationStyle ? cellAnnotationStyle.cell :
+                          cellAnnotationStyle ? `${cellAnnotationStyle.cell} ${cellAnnotationStyle.border}` :
                           isToday ? "bg-primary/5" : isHoliday ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
                         }`} style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
                           {cellShifts.length > 0 ? (
@@ -2097,7 +2099,7 @@ export default function SchedulePage() {
                   const dispatchHeaderAnnotation = dateAnnotations.get(dateStr);
                   const dispatchHeaderStyle = dispatchHeaderAnnotation ? ANNOTATION_COLORS[dispatchHeaderAnnotation.color] : null;
                   return (
-                    <td key={di} className={`border-b border-r text-center ${dispatchHeaderStyle ? dispatchHeaderStyle.cell : "bg-purple-50/50 dark:bg-purple-950/20"}`} style={{ minWidth: COL_DATE_WIDTH }}>
+                    <td key={di} className={`border-b border-r text-center ${dispatchHeaderStyle ? `${dispatchHeaderStyle.cell} ${dispatchHeaderStyle.border}` : "bg-purple-50/50 dark:bg-purple-950/20"}`} style={{ minWidth: COL_DATE_WIDTH }}>
                       {dispatchSectionCollapsed && dayDispatches.length > 0 && (
                         <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">{dayDispatches.length}人</span>
                       )}
@@ -2144,7 +2146,7 @@ export default function SchedulePage() {
                         <td
                           key={di}
                           className={`p-0.5 border-b border-r relative align-top ${
-                            dispatchCellStyle ? dispatchCellStyle.cell :
+                            dispatchCellStyle ? `${dispatchCellStyle.cell} ${dispatchCellStyle.border}` :
                             isToday ? "bg-primary/5" : isHolidayCell ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
                           }`}
                           style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }}
