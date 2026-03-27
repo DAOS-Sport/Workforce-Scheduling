@@ -142,9 +142,9 @@ export function GoogleSheetsImportDialog({
       }
       const exact = venues.find(v => v.shortName === code);
       if (exact) { mapping[code] = exact.id; suggested.add(code); continue; }
-      const byPrefix = code.length >= 2 ? venues.find(v => v.shortName.startsWith(code)) : undefined;
+      const byPrefix = venues.find(v => v.shortName.startsWith(code));
       if (byPrefix) { mapping[code] = byPrefix.id; suggested.add(code); continue; }
-      const byContains = code.length >= 2 ? venues.find(v => v.shortName.includes(code)) : undefined;
+      const byContains = venues.find(v => v.shortName.includes(code));
       if (byContains) { mapping[code] = byContains.id; suggested.add(code); continue; }
       const byName = venues.find(v => v.name === code);
       if (byName) { mapping[code] = byName.id; suggested.add(code); }
