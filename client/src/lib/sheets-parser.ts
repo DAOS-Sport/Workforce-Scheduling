@@ -68,19 +68,20 @@ function splitVenueAndRole(
     }
   }
 
-  // Step 2: role-code heuristic — split only when the venue prefix starts a known shortName.
-  // Prefix match (startsWith) avoids false positives from single-char substrings.
+  // Step 2: role-code heuristic — split when venue prefix is found in any known shortName.
+  // Uses includes so abbreviations like "商" (from "三重商工") are matched on first import.
+  // Step 1 cache takes priority; ambiguous first-import cases resolve on subsequent imports.
   for (let len = 1; len < prefix.length; len++) {
     const potentialVenue = prefix.substring(0, len);
     const potentialRole = prefix.substring(len);
     if (ROLE_CODES.includes(potentialRole) || potentialRole === "PT") {
-      if (venueShortNames.some(n => n.startsWith(potentialVenue))) {
+      if (venueShortNames.some(n => n.includes(potentialVenue))) {
         return { venueCode: potentialVenue, roleCode: potentialRole };
       }
     }
   }
 
-  // Step 3: no plausible role split found — entire prefix is the venue abbreviation.
+  // Step 3: no split found — treat entire prefix as venue abbreviation.
   return { venueCode: prefix, roleCode: "" };
 }
 
