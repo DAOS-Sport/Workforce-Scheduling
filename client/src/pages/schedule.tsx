@@ -2448,7 +2448,7 @@ export default function SchedulePage() {
                       const dKey = format(d, "yyyy-MM-dd");
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       const selected = dispatchBatchDates.has(dKey);
-                      const hasDispatch = dispatchShiftsData.some(ds => ds.date === dKey);
+                      const hasDispatch = dispatchShiftsData.some(ds => ds.date === dKey && ds.dispatchName === dispatchName);
                       return (
                         <button
                           key={dKey}
