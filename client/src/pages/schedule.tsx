@@ -1628,19 +1628,17 @@ export default function SchedulePage() {
                   const holiday = TAIWAN_HOLIDAYS[dateKey];
                   const isCustomHighlight = customHighlightedDates.has(dateKey);
                   const colW = colWidths[i] ?? COL_DATE_WIDTH;
+                  const headerBg = isCustomHighlight
+                    ? (holiday ? "bg-orange-100 dark:bg-orange-900/30 ring-1 ring-inset ring-yellow-400/60 dark:ring-yellow-600/40" : "bg-orange-100 dark:bg-orange-900/30")
+                    : holiday ? "bg-yellow-100 dark:bg-yellow-900/30"
+                    : isToday ? "bg-background"
+                    : isWeekend ? "bg-yellow-100 dark:bg-yellow-900/30" : "bg-background";
                   return (
                     <th
                       key={i}
                       data-date-col={dateKey}
-                      onClick={() => toggleCustomHighlight(dateKey)}
-                      className={`text-center p-1.5 border-b border-r font-medium relative select-none cursor-pointer ${
-                        isCustomHighlight ? "bg-orange-100 dark:bg-orange-900/30" :
-                        holiday ? "bg-yellow-100 dark:bg-yellow-900/30" :
-                        isToday ? "bg-background" :
-                        isWeekend ? "bg-yellow-100 dark:bg-yellow-900/30" : "bg-background"
-                      }`}
+                      className={`text-center p-1.5 border-b border-r font-medium relative select-none ${headerBg}`}
                       style={{ minWidth: colW, width: colW, position: "sticky", top: 0, zIndex: 25 }}
-                      title={isCustomHighlight ? "點擊取消標記" : "點擊標記日期"}
                       data-testid={`date-header-${dateKey}`}
                     >
                       <div className={`text-xs ${isCustomHighlight ? "text-orange-700 dark:text-orange-400" : isWeekend || holiday ? "text-destructive/70" : "text-muted-foreground"}`}>
@@ -1654,11 +1652,14 @@ export default function SchedulePage() {
                           {holiday}
                         </div>
                       )}
-                      {isCustomHighlight && !holiday && (
-                        <div className="text-[9px] leading-tight text-orange-600 dark:text-orange-400 font-medium mt-0.5">
-                          ★
-                        </div>
-                      )}
+                      <button
+                        className={`mt-0.5 text-[9px] leading-none transition-colors ${isCustomHighlight ? "text-orange-500 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-200" : "text-muted-foreground/30 hover:text-orange-400"}`}
+                        onClick={() => toggleCustomHighlight(dateKey)}
+                        title={isCustomHighlight ? "取消橘色標記" : "標記為特殊日期"}
+                        data-testid={`button-highlight-${dateKey}`}
+                      >
+                        {isCustomHighlight ? "★" : "☆"}
+                      </button>
                       <div
                         className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 transition-colors z-10"
                         onMouseDown={(e) => { e.stopPropagation(); handleResizeMouseDown(e, i); }}
@@ -1823,11 +1824,13 @@ export default function SchedulePage() {
                       const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       const isHoliday = !!TAIWAN_HOLIDAYS[dateStr];
+                      const isCellCustom = customHighlightedDates.has(dateStr);
                       const dropId = `drop-${emp.id}-${dateStr}`;
                       const canPaste = !!shiftClipboard && shiftClipboard.employeeId === emp.id;
 
                       return (
                         <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
+                          isCellCustom ? "bg-orange-50 dark:bg-orange-950/20 border-b-orange-300 dark:border-b-orange-700" :
                           isToday ? "bg-primary/5" : isHoliday ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
                         }`} style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
                           {cellShifts.length > 0 ? (
@@ -1985,8 +1988,9 @@ export default function SchedulePage() {
                 {monthDates.map((d, di) => {
                   const dateStr = format(d, "yyyy-MM-dd");
                   const dayDispatches = dispatchShiftsByDate.get(dateStr) || [];
+                  const isDispatchHeaderCustom = customHighlightedDates.has(dateStr);
                   return (
-                    <td key={di} className="border-b border-r bg-purple-50/50 dark:bg-purple-950/20 text-center" style={{ minWidth: COL_DATE_WIDTH }}>
+                    <td key={di} className={`border-b border-r text-center ${isDispatchHeaderCustom ? "bg-orange-100/60 dark:bg-orange-950/30" : "bg-purple-50/50 dark:bg-purple-950/20"}`} style={{ minWidth: COL_DATE_WIDTH }}>
                       {dispatchSectionCollapsed && dayDispatches.length > 0 && (
                         <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">{dayDispatches.length}人</span>
                       )}
@@ -2027,10 +2031,14 @@ export default function SchedulePage() {
                       const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       const isHolidayCell = !!TAIWAN_HOLIDAYS[dateStr];
+                      const isDispatchCellCustom = customHighlightedDates.has(dateStr);
                       return (
                         <td
                           key={di}
-                          className={`p-0.5 border-b border-r relative align-top ${isToday ? "bg-primary/5" : isHolidayCell ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""}`}
+                          className={`p-0.5 border-b border-r relative align-top ${
+                            isDispatchCellCustom ? "bg-orange-50 dark:bg-orange-950/20" :
+                            isToday ? "bg-primary/5" : isHolidayCell ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
+                          }`}
                           style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }}
                           data-testid={`cell-dispatch-${name}-${dateStr}`}
                         >

@@ -173,6 +173,7 @@ export async function registerRoutes(
     try {
       const parsed = insertEmployeeSchema.parse(req.body);
       const employee = await storage.createEmployee(parsed);
+      storage.reconcileDispatchLinks().catch(() => {});
       res.json(employee);
     } catch (err: any) {
       if (err.name === "ZodError") {
@@ -188,6 +189,7 @@ export async function registerRoutes(
       const partial = insertEmployeeSchema.partial().parse(req.body);
       const employee = await storage.updateEmployee(id, partial);
       if (!employee) return res.status(404).json({ message: "Employee not found" });
+      storage.reconcileDispatchLinks().catch(() => {});
       res.json(employee);
     } catch (err: any) {
       if (err.name === "ZodError") {
@@ -963,6 +965,15 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       await storage.deleteDispatchShift(id);
       res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/dispatch-shifts/reconcile-links", async (req, res) => {
+    try {
+      const count = await storage.reconcileDispatchLinks();
+      res.json({ updated: count, message: `已自動連結 ${count} 筆派遣班次` });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

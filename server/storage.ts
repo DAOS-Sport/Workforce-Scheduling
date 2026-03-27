@@ -125,6 +125,7 @@ export interface IStorage {
   getDispatchShift(id: number): Promise<DispatchShift | undefined>;
   updateDispatchShift(id: number, data: Partial<InsertDispatchShift>): Promise<DispatchShift | undefined>;
   deleteDispatchShift(id: number): Promise<void>;
+  reconcileDispatchLinks(): Promise<number>;
 
   createOvertimeRequest(data: InsertOvertimeRequest): Promise<OvertimeRequest>;
   getOvertimeRequests(status?: string): Promise<OvertimeRequest[]>;
@@ -620,6 +621,25 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDispatchShift(id: number): Promise<void> {
     await db.delete(dispatchShifts).where(eq(dispatchShifts.id, id));
+  }
+
+  async reconcileDispatchLinks(): Promise<number> {
+    const allEmployees = await db.select().from(employees).where(eq(employees.isActive, true));
+    const nameToId = new Map<string, number>();
+    for (const emp of allEmployees) {
+      nameToId.set(emp.name.trim(), emp.id);
+    }
+    const unlinked = await db.select().from(dispatchShifts).where(eq(dispatchShifts.linkedEmployeeId, null as any));
+    let count = 0;
+    for (const ds of unlinked) {
+      if (!ds.dispatchName) continue;
+      const empId = nameToId.get(ds.dispatchName.trim());
+      if (empId) {
+        await db.update(dispatchShifts).set({ linkedEmployeeId: empId }).where(eq(dispatchShifts.id, ds.id));
+        count++;
+      }
+    }
+    return count;
   }
 
   async updateClockRecordReason(id: number, earlyArrivalReason?: string, lateDepartureReason?: string): Promise<ClockRecord | undefined> {
