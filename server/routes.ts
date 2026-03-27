@@ -502,45 +502,6 @@ export async function registerRoutes(
   });
 
 
-  const xlsxUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
-  app.post("/api/parse-xlsx", xlsxUpload.single("file"), async (req: Request, res: Response) => {
-    try {
-      if (!req.file) return res.status(400).json({ message: "請上傳 XLSX 檔案" });
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(req.file.buffer);
-      const sheet = workbook.worksheets[0];
-      if (!sheet) return res.status(400).json({ message: "找不到工作表" });
-
-      const rows: string[][] = [];
-      sheet.eachRow({ includeEmpty: false }, (row) => {
-        const cells: string[] = [];
-        const colCount = typeof row.cellCount === "number" ? row.cellCount : 50;
-        for (let c = 1; c <= Math.max(colCount, 40); c++) {
-          const cell = row.getCell(c);
-          let val = "";
-          if (cell.value === null || cell.value === undefined) {
-            val = "";
-          } else if (typeof cell.value === "object" && "richText" in (cell.value as any)) {
-            val = (cell.value as any).richText.map((rt: any) => rt.text ?? "").join("").trim();
-          } else if (typeof cell.value === "object" && "result" in (cell.value as any)) {
-            val = String((cell.value as any).result ?? "").trim();
-          } else {
-            val = String(cell.value).trim();
-          }
-          cells.push(val);
-        }
-        while (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
-        rows.push(cells);
-      });
-
-      const tsv = rows.map(r => r.join("\t")).join("\n");
-      res.json({ tsv });
-    } catch (err: any) {
-      console.error("[parse-xlsx]", err);
-      res.status(500).json({ message: err.message });
-    }
-  });
-
   app.post("/api/shifts/import-batch", async (req, res) => {
     try {
       const { shifts: shiftItems, skipExisting, violationMode = "dispatch" } = req.body;

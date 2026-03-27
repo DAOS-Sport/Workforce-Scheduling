@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from "react";
+import * as XLSX from "xlsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -212,22 +213,17 @@ export function GoogleSheetsImportDialog({
     setXlsxLoading(true);
     setParseError("");
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/parse-xlsx", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "XLSX 解析失敗");
-      }
-      const { tsv } = await res.json();
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array", raw: false });
+      const sheetName = wb.SheetNames[0];
+      if (!sheetName) throw new Error("找不到工作表");
+      const sheet = wb.Sheets[sheetName];
+      const tsv = XLSX.utils.sheet_to_csv(sheet, { FS: "\t", blankrows: false });
       setTsvText(tsv);
       await handleParseTsv(tsv);
-    } catch (err: any) {
-      setParseError("XLSX 上傳失敗：" + err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "XLSX 解析失敗";
+      setParseError("XLSX 解析失敗：" + msg);
     } finally {
       setXlsxLoading(false);
     }
