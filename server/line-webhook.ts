@@ -163,18 +163,18 @@ export async function processClockIn(
 
   const recentRecords = await storage.getClockRecordsByEmployee(employee.id, todayStr, todayStr);
   if (recentRecords.length > 0) {
-    const lastRecord = recentRecords[0];
-    if (lastRecord.clockTime) {
-      const lastTime = new Date(lastRecord.clockTime).getTime();
+    const lastValidRecord = recentRecords.find(r => r.status === "success" || r.status === "warning");
+    if (lastValidRecord?.clockTime) {
+      const lastTime = new Date(lastValidRecord.clockTime).getTime();
       const nowTime = now.getTime();
       const diffMinutes = (nowTime - lastTime) / (1000 * 60);
       if (diffMinutes < 60) {
         const remaining = Math.ceil(60 - diffMinutes);
-        const lastType = lastRecord.clockType === "in" ? "上班" : "下班";
+        const lastType = lastValidRecord.clockType === "in" ? "上班" : "下班";
         return {
           status: "fail",
           clockType: forcedClockType || "in",
-          venueName: lastRecord.matchedVenueName || null,
+          venueName: lastValidRecord.matchedVenueName || null,
           distance: null,
           time: timeStr,
           date: todayStr,
@@ -775,6 +775,8 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
       clockedInEmployees.add(cr.employeeId);
     }
   }
+  console.log(`[未打卡提醒] 今日有效上班打卡人數: ${clockedInEmployees.size}，員工ID列表: [${Array.from(clockedInEmployees).join(", ")}]`);
+  console.log(`[未打卡提醒] 今日班次總數: ${workShifts.length}，當前時間: ${currentTimeStr}`);
 
   const allVenues = await storage.getAllVenues();
   const venueMap = new Map<number, Venue>();
@@ -788,12 +790,21 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
     const lateThresholdMin = (shiftH * 60 + shiftM) + 15;
     const currentMin = currentHour * 60 + currentMinute;
 
-    if (currentMin < lateThresholdMin) continue;
+    if (currentMin < lateThresholdMin) {
+      console.log(`[未打卡提醒] 跳過（未到閾值）: 員工ID=${shift.employeeId} 班次=${shiftStart} 閾值=${Math.floor(lateThresholdMin/60)}:${String(lateThresholdMin%60).padStart(2,"0")}`);
+      continue;
+    }
 
-    if (clockedInEmployees.has(shift.employeeId)) continue;
+    if (clockedInEmployees.has(shift.employeeId)) {
+      console.log(`[未打卡提醒] 跳過（已打卡）: 員工ID=${shift.employeeId} 班次=${shiftStart}`);
+      continue;
+    }
 
     const notifyKey = `${todayStr}-${shift.employeeId}-${shift.id}`;
-    if (missingClockInNotified.has(notifyKey)) continue;
+    if (missingClockInNotified.has(notifyKey)) {
+      console.log(`[未打卡提醒] 跳過（已通知過）: 員工ID=${shift.employeeId} 班次=${shiftStart}`);
+      continue;
+    }
 
     const emp = await storage.getEmployee(shift.employeeId);
     if (!emp || emp.status !== "active") continue;
