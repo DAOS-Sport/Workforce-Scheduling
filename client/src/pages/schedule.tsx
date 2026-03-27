@@ -1848,7 +1848,7 @@ export default function SchedulePage() {
                                 const roleShort = ROLE_SHORT[shiftRole] || shiftRole.slice(0, 1);
                                 const roleColor = isLeave
                                   ? null
-                                  : getRoleColor(shiftRole, shift.isDispatch);
+                                  : getRoleColor(shiftRole, shift.isDispatch ?? false);
                                 const cardColor = isLeave
                                   ? (LEAVE_COLORS[shift.role] || LEAVE_COLORS["休假"])
                                   : roleColor!.card;

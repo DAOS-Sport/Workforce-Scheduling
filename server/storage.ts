@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, gte, lte, inArray, desc, or } from "drizzle-orm";
+import { eq, and, gte, lte, inArray, desc, or, isNull } from "drizzle-orm";
 import {
   regions, venues, employees, shifts, venueRequirements,
   scheduleSlots, venueShiftTemplates,
@@ -624,12 +624,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async reconcileDispatchLinks(): Promise<number> {
-    const allEmployees = await db.select().from(employees).where(eq(employees.isActive, true));
+    const activeEmployees = await db.select().from(employees).where(eq(employees.status, "active"));
     const nameToId = new Map<string, number>();
-    for (const emp of allEmployees) {
+    for (const emp of activeEmployees) {
       nameToId.set(emp.name.trim(), emp.id);
     }
-    const unlinked = await db.select().from(dispatchShifts).where(eq(dispatchShifts.linkedEmployeeId, null as any));
+    const unlinked = await db.select().from(dispatchShifts).where(isNull(dispatchShifts.linkedEmployeeId));
     let count = 0;
     for (const ds of unlinked) {
       if (!ds.dispatchName) continue;
