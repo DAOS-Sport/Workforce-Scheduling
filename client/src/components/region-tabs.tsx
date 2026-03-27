@@ -7,8 +7,8 @@ export function RegionTabs() {
   const { activeRegion, setActiveRegion } = useRegion();
 
   return (
-    <Tabs value={activeRegion} onValueChange={(v) => setActiveRegion(v as RegionCode)}>
-      <TabsList data-testid="tabs-region" className="justify-center">
+    <Tabs value={activeRegion} onValueChange={(v) => setActiveRegion(v as RegionCode)} className="flex justify-center">
+      <TabsList data-testid="tabs-region">
         {REGIONS_DATA.map((region) => (
           <TabsTrigger
             key={region.code}
