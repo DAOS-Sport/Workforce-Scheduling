@@ -813,9 +813,10 @@ function LiveClock() {
     return () => clearInterval(timer);
   }, []);
 
-  const dateStr = format(now, "M月d日 EEEE", { locale: zhTW });
-  const timeStr = format(now, "HH:mm");
-  const secStr = format(now, ":ss");
+  const taiwanNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  const dateStr = format(taiwanNow, "M月d日 EEEE", { locale: zhTW });
+  const timeStr = format(taiwanNow, "HH:mm");
+  const secStr = format(taiwanNow, ":ss");
 
   return (
     <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-live-clock">
@@ -889,7 +890,11 @@ function VenueShiftInfo({ employee, result }: { employee: PortalEmployee; result
   });
 
   const matchedVenue = result?.venueName;
-  const todayShift = todayShifts.find(s => matchedVenue ? s.venue?.name === matchedVenue || s.venue?.shortName === matchedVenue : true);
+  const todayShift = (
+    matchedVenue
+      ? todayShifts.find(s => s.venue?.name === matchedVenue || s.venue?.shortName === matchedVenue)
+      : null
+  ) ?? todayShifts[0] ?? null;
 
   return (
     <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-venue-shift-info">
@@ -1764,7 +1769,13 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
         <LiveClock />
         <LocationMap lat={userPos?.lat ?? null} lng={userPos?.lng ?? null} />
         <VenueShiftInfo employee={employee} result={clockInResult} />
-        <RadarClockIn employee={employee} onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })} onResult={setClockInResult} todayLatestClock={attendance?.todayLatestClock} />
+        <RadarClockIn employee={employee} onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })} onResult={(result) => {
+          setClockInResult(result);
+          if (result.status === "success" || result.status === "warning") {
+            queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", employee.id] });
+            queryClient.invalidateQueries({ queryKey: ["/api/portal/today-coworkers", employee.id] });
+          }
+        }} todayLatestClock={attendance?.todayLatestClock} />
 
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-outing-signin">
           <button className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors" data-testid="button-outing-signin">

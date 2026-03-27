@@ -7,7 +7,7 @@ import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
 
 const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
-import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId } from "./line-webhook";
+import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId, formatClockInMessage } from "./line-webhook";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
@@ -1721,7 +1721,7 @@ export async function registerRoutes(
   app.get("/api/portal/guidelines-check/:employeeId", async (req, res) => {
     try {
       const employeeId = parseInt(req.params.employeeId);
-      const now = new Date();
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
       const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
       const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
       const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -1783,10 +1783,10 @@ export async function registerRoutes(
       }
 
       const existingAcks = await storage.getGuidelineAcksByEmployee(employeeId);
-      const now = new Date();
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
       const existingThisMonth = existingAcks.filter((a) => {
         if (!a.acknowledgedAt) return false;
-        const d = new Date(a.acknowledgedAt);
+        const d = new Date(new Date(a.acknowledgedAt).toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
       });
       const alreadyAckedIds = new Set(existingThisMonth.map((a) => a.guidelineId));
@@ -1830,6 +1830,78 @@ export async function registerRoutes(
         .sort((a, b) => new Date(b.clockTime!).getTime() - new Date(a.clockTime!).getTime());
       const latestClockToday = todayClocks[0] ?? null;
 
+      // Build a map of GPS clock records grouped by Taiwan date for easy lookup
+      const gpsDateMap = new Map<string, typeof clockRecords>();
+      for (const cr of clockRecords) {
+        if (!cr.clockTime) continue;
+        const d = new Date(new Date(cr.clockTime).toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+        const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        if (!gpsDateMap.has(ds)) gpsDateMap.set(ds, []);
+        gpsDateMap.get(ds)!.push(cr);
+      }
+
+      // Map xlsx records (priority source)
+      const xlsxDates = new Set(records.map((r) => r.date));
+      const xlsxRows = records.map((r) => {
+        const dateShifts = shifts.filter((s) => s.date === r.date);
+        const shiftInfo = dateShifts.length > 0
+          ? dateShifts.map((s) => `${s.startTime.substring(0, 5)}-${s.endTime.substring(0, 5)}`).join(", ")
+          : r.scheduledStart && r.scheduledEnd
+            ? `${r.scheduledStart}-${r.scheduledEnd}`
+            : null;
+
+        const dateClockRecords = gpsDateMap.get(r.date) || [];
+        const clockInRecord = dateClockRecords.find((cr) => cr.clockType === "in");
+        const clockOutRecord = [...dateClockRecords].reverse().find((cr) => cr.clockType === "out");
+
+        return {
+          date: r.date,
+          clockIn: clockInRecord && clockInRecord.clockTime
+            ? new Date(clockInRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
+            : r.clockIn || null,
+          clockOut: clockOutRecord && clockOutRecord.clockTime
+            ? new Date(clockOutRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
+            : r.clockOut || null,
+          isLate: r.isLate,
+          isEarlyLeave: r.isEarlyLeave,
+          hasAnomaly: r.hasAnomaly,
+          leaveType: r.leaveType,
+          shiftInfo,
+          shiftType: r.shiftType || null,
+        };
+      });
+
+      // Synthesize rows from GPS records for dates not covered by xlsx
+      const gpsRows: typeof xlsxRows = [];
+      for (const [dateStr, dayClocks] of Array.from(gpsDateMap.entries())) {
+        if (xlsxDates.has(dateStr)) continue;
+        const validClocks = dayClocks.filter((cr) => cr.status === "success" || cr.status === "warning");
+        const clockInRecord = validClocks.find((cr) => cr.clockType === "in");
+        const clockOutRecord = [...validClocks].reverse().find((cr) => cr.clockType === "out");
+        if (!clockInRecord) continue; // no valid clock-in, skip this date
+
+        const dateShifts = shifts.filter((s) => s.date === dateStr);
+        const shiftInfo = dateShifts.length > 0
+          ? dateShifts.map((s) => `${s.startTime.substring(0, 5)}-${s.endTime.substring(0, 5)}`).join(", ")
+          : null;
+
+        gpsRows.push({
+          date: dateStr,
+          clockIn: new Date(clockInRecord.clockTime!).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }),
+          clockOut: clockOutRecord?.clockTime
+            ? new Date(clockOutRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
+            : null,
+          isLate: false,
+          isEarlyLeave: false,
+          hasAnomaly: false,
+          leaveType: null,
+          shiftInfo,
+          shiftType: dateShifts[0]?.shiftType || null,
+        });
+      }
+
+      const allRows = [...xlsxRows, ...gpsRows].sort((a, b) => b.date.localeCompare(a.date));
+
       const summary = {
         total: records.length,
         late: records.filter((r) => r.isLate).length,
@@ -1839,39 +1911,7 @@ export async function registerRoutes(
         todayLatestClock: latestClockToday
           ? { clockType: latestClockToday.clockType, clockTime: latestClockToday.clockTime!.toISOString() }
           : null,
-        records: records.map((r) => {
-          const dateShifts = shifts.filter((s) => s.date === r.date);
-          const shiftInfo = dateShifts.length > 0
-            ? dateShifts.map((s) => `${s.startTime.substring(0, 5)}-${s.endTime.substring(0, 5)}`).join(", ")
-            : r.scheduledStart && r.scheduledEnd
-              ? `${r.scheduledStart}-${r.scheduledEnd}`
-              : null;
-
-          const dateClockRecords = clockRecords.filter((cr) => {
-            if (!cr.clockTime) return false;
-            const crDate = new Date(cr.clockTime);
-            const crDateStr = `${crDate.getFullYear()}-${String(crDate.getMonth() + 1).padStart(2, "0")}-${String(crDate.getDate()).padStart(2, "0")}`;
-            return crDateStr === r.date;
-          });
-          const clockInRecord = dateClockRecords.find((cr) => cr.clockType === "in");
-          const clockOutRecord = [...dateClockRecords].reverse().find((cr) => cr.clockType === "out");
-
-          return {
-            date: r.date,
-            clockIn: clockInRecord && clockInRecord.clockTime
-              ? new Date(clockInRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
-              : r.clockIn || null,
-            clockOut: clockOutRecord && clockOutRecord.clockTime
-              ? new Date(clockOutRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
-              : r.clockOut || null,
-            isLate: r.isLate,
-            isEarlyLeave: r.isEarlyLeave,
-            hasAnomaly: r.hasAnomaly,
-            leaveType: r.leaveType,
-            shiftInfo,
-            shiftType: r.shiftType || null,
-          };
-        }),
+        records: allRows,
       };
 
       res.json(summary);
@@ -1954,6 +1994,25 @@ export async function registerRoutes(
       const params = employeeId ? { employeeId: Number(employeeId) } : { lineUserId };
       const forcedType = clockType === "in" || clockType === "out" ? clockType : undefined;
       const result = await processClockIn(params, latitude, longitude, forcedType);
+
+      // Push LINE notification back to the employee after portal GPS clock-in
+      if (result.status === "success" || result.status === "warning") {
+        try {
+          let empToNotify = null;
+          if (lineUserId && isValidLineUserId(lineUserId)) {
+            empToNotify = await storage.getEmployeeByLineId(lineUserId);
+          } else if (employeeId) {
+            empToNotify = await storage.getEmployee(Number(employeeId));
+          }
+          if (empToNotify?.lineId && isValidLineUserId(empToNotify.lineId)) {
+            const msg = formatClockInMessage(result);
+            await pushToLine(empToNotify.lineId, msg);
+          }
+        } catch (pushErr) {
+          console.error("[LIFF] LINE push error:", pushErr);
+        }
+      }
+
       res.json(result);
     } catch (err: any) {
       console.error("[Clock-in] Error:", err);

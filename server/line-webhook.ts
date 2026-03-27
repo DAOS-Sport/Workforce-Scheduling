@@ -67,15 +67,24 @@ function isTimeInShiftWindow(now: Date, shift: Shift, bufferMinutes: number = 30
 function determineClockType(now: Date, shifts: Shift[]): "in" | "out" {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
+  // Pick the shift whose midpoint is closest to the current time,
+  // then determine in/out based on that shift alone.
+  let bestShift = shifts[0];
+  let bestDist = Infinity;
   for (const shift of shifts) {
     const [sh, sm] = shift.startTime.split(":").map(Number);
     const [eh, em] = shift.endTime.split(":").map(Number);
     const midpoint = ((sh * 60 + sm) + (eh * 60 + em)) / 2;
-    if (nowMinutes >= midpoint) {
-      return "out";
+    const dist = Math.abs(nowMinutes - midpoint);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestShift = shift;
     }
   }
-  return "in";
+  const [bsh, bsm] = bestShift.startTime.split(":").map(Number);
+  const [beh, bem] = bestShift.endTime.split(":").map(Number);
+  const midpoint = ((bsh * 60 + bsm) + (beh * 60 + bem)) / 2;
+  return nowMinutes >= midpoint ? "out" : "in";
 }
 
 export interface NearbyVenue {
@@ -169,23 +178,29 @@ export async function processClockIn(
       const nowTime = now.getTime();
       const diffMinutes = (nowTime - lastTime) / (1000 * 60);
       if (diffMinutes < 60) {
-        const remaining = Math.ceil(60 - diffMinutes);
-        const lastType = lastValidRecord.clockType === "in" ? "上班" : "下班";
-        return {
-          status: "fail",
-          clockType: forcedClockType || "in",
-          venueName: lastValidRecord.matchedVenueName || null,
-          distance: null,
-          time: timeStr,
-          date: todayStr,
-          shiftInfo: null,
-          failReason: `重複打卡：距上次${lastType}打卡不足 60 分鐘（還需等待 ${remaining} 分鐘）`,
-          employeeName: employee.name,
-          radius: null,
-          nearbyVenues: [],
-          userLat: lat,
-          userLng: lng,
-        };
+        // Only block if trying to repeat the same clock type within 60 minutes.
+        // Switching direction (in→out or out→in) is always allowed.
+        const expectedNextType: "in" | "out" = lastValidRecord.clockType === "in" ? "out" : "in";
+        const intendedType = forcedClockType ?? expectedNextType;
+        if (intendedType === lastValidRecord.clockType) {
+          const remaining = Math.ceil(60 - diffMinutes);
+          const lastType = lastValidRecord.clockType === "in" ? "上班" : "下班";
+          return {
+            status: "fail",
+            clockType: forcedClockType || lastValidRecord.clockType,
+            venueName: lastValidRecord.matchedVenueName || null,
+            distance: null,
+            time: timeStr,
+            date: todayStr,
+            shiftInfo: null,
+            failReason: `重複打卡：距上次${lastType}打卡不足 60 分鐘（還需等待 ${remaining} 分鐘）`,
+            employeeName: employee.name,
+            radius: null,
+            nearbyVenues: [],
+            userLat: lat,
+            userLng: lng,
+          };
+        }
       }
     }
   }
@@ -232,11 +247,12 @@ export async function processClockIn(
   const effectiveRadius = closestVenue.radius || 300;
 
   if (closestDistance > effectiveRadius) {
+    const failClockType = forcedClockType || "in";
     await storage.createClockRecord({
       employeeId: employee.id,
       venueId: null,
       shiftId: null,
-      clockType: "in",
+      clockType: failClockType,
       latitude: lat,
       longitude: lng,
       distance: Math.round(closestDistance),
@@ -247,7 +263,7 @@ export async function processClockIn(
 
     return {
       status: "fail",
-      clockType: "in",
+      clockType: failClockType,
       venueName: closestVenue.shortName,
       distance: Math.round(closestDistance),
       time: timeStr,
@@ -267,11 +283,12 @@ export async function processClockIn(
   const matchingShift = venueShifts.find((s) => isTimeInShiftWindow(now, s));
 
   if (venueShifts.length === 0) {
+    const warnClockType = forcedClockType || "in";
     await storage.createClockRecord({
       employeeId: employee.id,
       venueId: closestVenue.id,
       shiftId: null,
-      clockType: "in",
+      clockType: warnClockType,
       latitude: lat,
       longitude: lng,
       distance: Math.round(closestDistance),
@@ -282,7 +299,7 @@ export async function processClockIn(
 
     return {
       status: "warning",
-      clockType: "in",
+      clockType: warnClockType,
       venueName: closestVenue.shortName,
       distance: Math.round(closestDistance),
       time: timeStr,
@@ -443,7 +460,7 @@ async function replyToLine(replyToken: string, text: string, fallbackUserId?: st
   }
 }
 
-function formatClockInMessage(result: ClockInResult): string {
+export function formatClockInMessage(result: ClockInResult): string {
   const liffHint = "\n\n💡 建議使用選單中的「打卡」按鈕，定位更準確。";
 
   if (result.status === "error") {
@@ -757,6 +774,13 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   const taipeiNow = getTaiwanNow();
   const todayStr = formatTaiwanDate(taipeiNow);
   const currentHour = taipeiNow.getHours();
+
+  // Clean up entries from previous days to prevent unbounded Set growth
+  for (const key of Array.from(missingClockInNotified)) {
+    if (!key.startsWith(todayStr)) {
+      missingClockInNotified.delete(key);
+    }
+  }
   const currentMinute = taipeiNow.getMinutes();
   const currentTimeStr = `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
 
