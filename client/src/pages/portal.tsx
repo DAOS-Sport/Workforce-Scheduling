@@ -1694,6 +1694,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [showGuidelines, setShowGuidelines] = useState(false);
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [clockInResult, setClockInResult] = useState<ClockInResult | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (navigator.geolocation) {
