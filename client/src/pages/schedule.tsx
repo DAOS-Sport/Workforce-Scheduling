@@ -140,6 +140,8 @@ const TAIWAN_HOLIDAYS: Record<string, string> = {
   "2024-10-10": "國慶日",
   // 2025
   "2025-01-01": "元旦",
+  "2025-01-23": "彈性放假",
+  "2025-01-24": "彈性放假",
   "2025-01-27": "除夕",
   "2025-01-28": "春節",
   "2025-01-29": "春節",
@@ -150,20 +152,24 @@ const TAIWAN_HOLIDAYS: Record<string, string> = {
   "2025-04-03": "兒童節補假",
   "2025-04-04": "兒童節清明",
   "2025-05-01": "勞動節",
+  "2025-05-30": "彈性放假",
   "2025-05-31": "端午節",
   "2025-10-06": "中秋補假",
   "2025-10-07": "中秋節",
   "2025-10-10": "國慶日",
   // 2026
   "2026-01-01": "元旦",
+  "2026-01-02": "彈性放假",
   "2026-02-16": "除夕",
   "2026-02-17": "春節",
   "2026-02-18": "春節",
   "2026-02-19": "春節",
   "2026-02-20": "春節",
   "2026-02-28": "和平紀念日",
+  "2026-03-02": "和平紀念日補假",
   "2026-04-04": "兒童節",
   "2026-04-05": "清明節",
+  "2026-04-06": "兒童節清明補假",
   "2026-05-01": "勞動節",
   "2026-06-19": "端午節",
   "2026-09-25": "中秋節",
@@ -267,12 +273,16 @@ export default function SchedulePage() {
   const [dispatchRole, setDispatchRole] = useState("救生");
   const [dispatchNotes, setDispatchNotes] = useState("");
   const [dispatchFromCell, setDispatchFromCell] = useState(false);
+  const [dispatchLinkedEmployeeId, setDispatchLinkedEmployeeId] = useState<number | null>(null);
+  const [dispatchBatchMode, setDispatchBatchMode] = useState(false);
+  const [dispatchBatchDates, setDispatchBatchDates] = useState<Set<string>>(new Set());
   const [dispatchAddNameDialogOpen, setDispatchAddNameDialogOpen] = useState(false);
   const [dispatchAddNameInput, setDispatchAddNameInput] = useState("");
   const [dispatchSectionCollapsed, setDispatchSectionCollapsed] = useState(false);
   const [pendingDispatchNames, setPendingDispatchNames] = useState<string[]>([]);
   const [inlineDispatchInput, setInlineDispatchInput] = useState("");
   const inlineDispatchInputRef = useRef<HTMLInputElement>(null);
+  const [customHighlightedDates, setCustomHighlightedDates] = useState<Set<string>>(new Set());
 
   const [shiftClipboard, setShiftClipboard] = useState<ShiftClipboard | null>(null);
   const [draggedShiftId, setDraggedShiftId] = useState<number | null>(null);
@@ -418,6 +428,41 @@ export default function SchedulePage() {
   const { data: dispatchShiftsData = [] } = useQuery<DispatchShift[]>({
     queryKey: ["/api/dispatch-shifts", activeRegion, dateRange.start, dateRange.end],
   });
+
+  const { data: customHighlightConfig } = useQuery<{ key: string; value: string | null }>({
+    queryKey: ["/api/system-config/custom_highlighted_dates"],
+  });
+
+  useEffect(() => {
+    if (!customHighlightConfig?.value) {
+      setCustomHighlightedDates(new Set());
+      return;
+    }
+    try {
+      const parsed = JSON.parse(customHighlightConfig.value);
+      if (Array.isArray(parsed)) setCustomHighlightedDates(new Set(parsed));
+    } catch { setCustomHighlightedDates(new Set()); }
+  }, [customHighlightConfig]);
+
+  const saveCustomHighlightMutation = useMutation({
+    mutationFn: async (dates: string[]) => {
+      const res = await apiRequest("POST", "/api/system-config/custom_highlighted_dates", { value: JSON.stringify(dates) });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/system-config/custom_highlighted_dates"] });
+    },
+  });
+
+  const toggleCustomHighlight = (dateKey: string) => {
+    setCustomHighlightedDates(prev => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) next.delete(dateKey);
+      else next.add(dateKey);
+      saveCustomHighlightMutation.mutate([...next]);
+      return next;
+    });
+  };
 
   const dispatchShiftsByDate = useMemo(() => {
     const map = new Map<string, DispatchShift[]>();
@@ -747,6 +792,7 @@ export default function SchedulePage() {
     dispatchPhone: string | null;
     role: string;
     notes: string | null;
+    linkedEmployeeId?: number | null;
   }
 
   const createDispatchShift = useMutation<unknown, Error, DispatchShiftPayload>({
@@ -794,6 +840,23 @@ export default function SchedulePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts"] });
       toast({ title: "派遣班次已刪除" });
       setDispatchDialogOpen(false);
+    },
+  });
+
+  const batchCreateDispatchShifts = useMutation({
+    mutationFn: async (data: { regionCode: string; dates: string[]; venueId: number | null; startTime: string; endTime: string; dispatchName: string; dispatchCompany: string | null; dispatchPhone: string | null; role: string; notes: string | null; linkedEmployeeId: number | null }) => {
+      const res = await apiRequest("POST", "/api/dispatch-shifts/batch-create", data);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts"] });
+      toast({ title: `已新增 ${data.created} 筆派遣班次` });
+      setDispatchDialogOpen(false);
+      setDispatchBatchDates(new Set());
+      setDispatchBatchMode(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "批次新增失敗", description: err.message, variant: "destructive" });
     },
   });
 
@@ -914,6 +977,9 @@ export default function SchedulePage() {
     setDispatchPhone("");
     setDispatchRole("救生");
     setDispatchNotes("");
+    setDispatchLinkedEmployeeId(null);
+    setDispatchBatchMode(false);
+    setDispatchBatchDates(new Set());
     setDispatchDialogOpen(true);
   };
 
@@ -929,15 +995,17 @@ export default function SchedulePage() {
     setDispatchPhone(ds.dispatchPhone || "");
     setDispatchRole(ds.role || "救生");
     setDispatchNotes(ds.notes || "");
+    setDispatchLinkedEmployeeId(ds.linkedEmployeeId || null);
+    setDispatchBatchMode(false);
+    setDispatchBatchDates(new Set());
     setDispatchDialogOpen(true);
   };
 
   const handleSaveDispatch = () => {
-    if (!dispatchName || !dispatchDate || !dispatchStartTime || !dispatchEndTime) return;
-    const payload = {
+    if (!dispatchName || !dispatchStartTime || !dispatchEndTime) return;
+    const basePayload = {
       regionCode: activeRegion,
       venueId: dispatchVenueId ? parseInt(dispatchVenueId) : null,
-      date: dispatchDate,
       startTime: dispatchStartTime,
       endTime: dispatchEndTime,
       dispatchName: dispatchName,
@@ -945,11 +1013,15 @@ export default function SchedulePage() {
       dispatchPhone: dispatchPhone || null,
       role: dispatchRole,
       notes: dispatchNotes || null,
+      linkedEmployeeId: dispatchLinkedEmployeeId,
     };
     if (editingDispatch) {
-      updateDispatchShift.mutate({ id: editingDispatch.id, ...payload });
+      updateDispatchShift.mutate({ id: editingDispatch.id, date: dispatchDate, ...basePayload });
+    } else if (dispatchBatchMode && dispatchBatchDates.size > 0) {
+      batchCreateDispatchShifts.mutate({ ...basePayload, dates: [...dispatchBatchDates] });
     } else {
-      createDispatchShift.mutate(payload);
+      if (!dispatchDate) return;
+      createDispatchShift.mutate({ ...basePayload, date: dispatchDate });
     }
   };
 
@@ -1554,17 +1626,24 @@ export default function SchedulePage() {
                   const isToday = dateKey === format(new Date(), "yyyy-MM-dd");
                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                   const holiday = TAIWAN_HOLIDAYS[dateKey];
+                  const isCustomHighlight = customHighlightedDates.has(dateKey);
                   const colW = colWidths[i] ?? COL_DATE_WIDTH;
                   return (
                     <th
                       key={i}
                       data-date-col={dateKey}
-                      className={`text-center p-1.5 border-b border-r font-medium relative select-none ${
-                        holiday ? "bg-yellow-100 dark:bg-yellow-900/30" : isToday ? "bg-background" : isWeekend ? "bg-yellow-100 dark:bg-yellow-900/30" : "bg-background"
+                      onClick={() => toggleCustomHighlight(dateKey)}
+                      className={`text-center p-1.5 border-b border-r font-medium relative select-none cursor-pointer ${
+                        isCustomHighlight ? "bg-orange-100 dark:bg-orange-900/30" :
+                        holiday ? "bg-yellow-100 dark:bg-yellow-900/30" :
+                        isToday ? "bg-background" :
+                        isWeekend ? "bg-yellow-100 dark:bg-yellow-900/30" : "bg-background"
                       }`}
                       style={{ minWidth: colW, width: colW, position: "sticky", top: 0, zIndex: 25 }}
+                      title={isCustomHighlight ? "點擊取消標記" : "點擊標記日期"}
+                      data-testid={`date-header-${dateKey}`}
                     >
-                      <div className={`text-xs ${isWeekend || holiday ? "text-destructive/70" : "text-muted-foreground"}`}>
+                      <div className={`text-xs ${isCustomHighlight ? "text-orange-700 dark:text-orange-400" : isWeekend || holiday ? "text-destructive/70" : "text-muted-foreground"}`}>
                         週{DAY_NAMES[d.getDay()]}
                       </div>
                       <div className={`text-xs ${isToday ? "text-primary font-semibold" : ""}`}>
@@ -1575,6 +1654,15 @@ export default function SchedulePage() {
                           {holiday}
                         </div>
                       )}
+                      {isCustomHighlight && !holiday && (
+                        <div className="text-[9px] leading-tight text-orange-600 dark:text-orange-400 font-medium mt-0.5">
+                          ★
+                        </div>
+                      )}
+                      <div
+                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 transition-colors z-10"
+                        onMouseDown={(e) => { e.stopPropagation(); handleResizeMouseDown(e, i); }}
+                      />
                     </th>
                   );
                 })}
@@ -2103,20 +2191,95 @@ export default function SchedulePage() {
               <Label>派遣人員姓名 *</Label>
               <Input
                 value={dispatchName}
-                onChange={(e) => setDispatchName(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setDispatchName(v);
+                  const matched = allSystemEmployees.find(emp => emp.name === v.trim() && emp.status === "active");
+                  setDispatchLinkedEmployeeId(matched ? matched.id : null);
+                }}
                 placeholder="輸入派遣人員姓名"
                 data-testid="input-dispatch-name"
               />
+              {(() => {
+                if (!dispatchName.trim()) return null;
+                if (dispatchLinkedEmployeeId) {
+                  const emp = allSystemEmployees.find(e => e.id === dispatchLinkedEmployeeId);
+                  return (
+                    <div className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded px-2 py-1" data-testid="dispatch-linked-employee-badge">
+                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                      <span>已連結在職員工 · {emp?.role} · {emp?.employeeCode}</span>
+                      <button className="ml-auto text-green-500 hover:text-green-700" onClick={() => setDispatchLinkedEmployeeId(null)} title="取消連結">×</button>
+                    </div>
+                  );
+                }
+                const partials = allSystemEmployees.filter(e => e.status === "active" && e.name.includes(dispatchName.trim()) && e.name !== dispatchName.trim());
+                if (partials.length > 0) {
+                  return (
+                    <div className="text-xs text-muted-foreground rounded px-2 py-1 bg-muted/40">
+                      相似：{partials.slice(0,3).map(e => (
+                        <button key={e.id} className="text-primary underline mr-1" onClick={() => { setDispatchName(e.name); setDispatchLinkedEmployeeId(e.id); }}>{e.name}</button>
+                      ))}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
-            <div className="space-y-2">
-              <Label>日期 *</Label>
-              <Input
-                type="date"
-                value={dispatchDate}
-                onChange={(e) => setDispatchDate(e.target.value)}
-                data-testid="input-dispatch-date"
-              />
-            </div>
+            {!editingDispatch && (
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">批次排班模式</Label>
+                <Switch
+                  checked={dispatchBatchMode}
+                  onCheckedChange={(v) => { setDispatchBatchMode(v); setDispatchBatchDates(new Set()); }}
+                  data-testid="switch-dispatch-batch-mode"
+                />
+              </div>
+            )}
+            {!dispatchBatchMode || editingDispatch ? (
+              <div className="space-y-2">
+                <Label>日期 *</Label>
+                <Input
+                  type="date"
+                  value={dispatchDate}
+                  onChange={(e) => setDispatchDate(e.target.value)}
+                  data-testid="input-dispatch-date"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>選擇日期（批次） *</Label>
+                <div className="rounded-md border p-2 max-h-40 overflow-y-auto" data-testid="dispatch-batch-date-picker">
+                  <div className="grid grid-cols-7 gap-0.5">
+                    {monthDates.map((d) => {
+                      const dKey = format(d, "yyyy-MM-dd");
+                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                      const selected = dispatchBatchDates.has(dKey);
+                      return (
+                        <button
+                          key={dKey}
+                          type="button"
+                          onClick={() => {
+                            setDispatchBatchDates(prev => {
+                              const next = new Set(prev);
+                              if (next.has(dKey)) next.delete(dKey);
+                              else next.add(dKey);
+                              return next;
+                            });
+                          }}
+                          data-testid={`dispatch-batch-date-${dKey}`}
+                          className={`text-[11px] rounded py-0.5 text-center transition-colors ${selected ? "bg-purple-600 text-white font-bold" : isWeekend ? "text-destructive/70 hover:bg-muted" : "hover:bg-muted"}`}
+                        >
+                          {format(d, "d")}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {dispatchBatchDates.size > 0 && (
+                  <p className="text-xs text-muted-foreground">已選 {dispatchBatchDates.size} 天</p>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>場館</Label>
@@ -2232,10 +2395,15 @@ export default function SchedulePage() {
             </div>
             <Button
               onClick={handleSaveDispatch}
-              disabled={!dispatchName || !dispatchStartTime || !dispatchEndTime || createDispatchShift.isPending || updateDispatchShift.isPending}
+              disabled={
+                !dispatchName || !dispatchStartTime || !dispatchEndTime ||
+                (!editingDispatch && !dispatchBatchMode && !dispatchDate) ||
+                (!editingDispatch && dispatchBatchMode && dispatchBatchDates.size === 0) ||
+                createDispatchShift.isPending || updateDispatchShift.isPending || batchCreateDispatchShifts.isPending
+              }
               data-testid="button-save-dispatch"
             >
-              {editingDispatch ? "更新" : "新增"}
+              {editingDispatch ? "更新" : dispatchBatchMode ? `批次新增（${dispatchBatchDates.size}天）` : "新增"}
             </Button>
           </DialogFooter>
         </DialogContent>

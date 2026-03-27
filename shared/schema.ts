@@ -271,6 +271,7 @@ export const dispatchShifts = pgTable("dispatch_shifts", {
   dispatchPhone: text("dispatch_phone"),
   role: text("role").notNull().default("救生"),
   notes: text("notes"),
+  linkedEmployeeId: integer("linked_employee_id"),
 });
 
 export const insertDispatchShiftSchema = createInsertSchema(dispatchShifts).omit({ id: true });

@@ -8,7 +8,7 @@ export function RegionTabs() {
 
   return (
     <Tabs value={activeRegion} onValueChange={(v) => setActiveRegion(v as RegionCode)}>
-      <TabsList data-testid="tabs-region">
+      <TabsList data-testid="tabs-region" className="justify-center">
         {REGIONS_DATA.map((region) => (
           <TabsTrigger
             key={region.code}

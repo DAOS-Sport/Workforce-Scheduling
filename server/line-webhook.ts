@@ -632,10 +632,9 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
   const allShifts = await storage.getShiftsByDate(tomorrowStr);
   const workShifts = allShifts.filter(s => !LEAVE_TYPES.includes(s.role));
 
-  if (workShifts.length === 0) {
-    console.log(`[推撥] ${tomorrowStr} 無上班班次，跳過推撥`);
-    return { sent: 0, skipped: 0, noLineId: 0 };
-  }
+  const allVenues = await storage.getAllVenues();
+  const venueMap = new Map<number, Venue>();
+  for (const v of allVenues) venueMap.set(v.id, v);
 
   const shiftsByEmployee = new Map<number, Shift[]>();
   for (const s of workShifts) {
@@ -644,20 +643,36 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
     shiftsByEmployee.set(s.employeeId, arr);
   }
 
-  const allVenues = await storage.getAllVenues();
-  const venueMap = new Map<number, Venue>();
-  for (const v of allVenues) venueMap.set(v.id, v);
+  const dispatchTomorrow = await storage.getDispatchShiftsByDate(tomorrowStr);
+  const linkedDispatchByEmployee = new Map<number, typeof dispatchTomorrow>();
+  for (const d of dispatchTomorrow) {
+    if (!d.linkedEmployeeId) continue;
+    const arr = linkedDispatchByEmployee.get(d.linkedEmployeeId) || [];
+    arr.push(d);
+    linkedDispatchByEmployee.set(d.linkedEmployeeId, arr);
+  }
+
+  const allEmpIds = new Set([...shiftsByEmployee.keys(), ...linkedDispatchByEmployee.keys()]);
+
+  if (allEmpIds.size === 0) {
+    console.log(`[推撥] ${tomorrowStr} 無上班班次，跳過推撥`);
+    return { sent: 0, skipped: 0, noLineId: 0 };
+  }
 
   let sent = 0;
   let skipped = 0;
   let noLineId = 0;
 
-  for (const [empId, empShifts] of shiftsByEmployee) {
+  for (const empId of allEmpIds) {
     const emp = await storage.getEmployee(empId);
     if (!emp) { skipped++; continue; }
     if (!emp.lineId) { noLineId++; continue; }
 
+    const empShifts = shiftsByEmployee.get(empId) || [];
+    const empDispatch = linkedDispatchByEmployee.get(empId) || [];
     const sortedShifts = empShifts.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const sortedDispatch = empDispatch.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
     const lines: string[] = [];
     lines.push(`📋 明日班表通知`);
     lines.push(`📅 ${displayDate}`);
@@ -672,6 +687,19 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
       lines.push(`⏰ ${start} - ${end}`);
       lines.push(`👤 ${shift.role}`);
       if (shift.isDispatch) lines.push(`🔸 派遣`);
+      lines.push("");
+    }
+
+    for (const ds of sortedDispatch) {
+      const venue = ds.venueId ? venueMap.get(ds.venueId) : undefined;
+      const venueName = venue?.shortName || venue?.name || "外派場館";
+      const start = ds.startTime.substring(0, 5);
+      const end = ds.endTime.substring(0, 5);
+      lines.push(`🏢 ${venueName}`);
+      lines.push(`⏰ ${start} - ${end}`);
+      lines.push(`👤 ${ds.role}`);
+      lines.push(`🔸 外部派遣班次`);
+      if (ds.dispatchCompany) lines.push(`🏬 ${ds.dispatchCompany}`);
       lines.push("");
     }
 

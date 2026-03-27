@@ -882,7 +882,7 @@ export async function registerRoutes(
 
   app.post("/api/dispatch-shifts", async (req, res) => {
     try {
-      const { regionCode, venueId, date, startTime, endTime, dispatchName, dispatchCompany, dispatchPhone, role, notes } = req.body;
+      const { regionCode, venueId, date, startTime, endTime, dispatchName, dispatchCompany, dispatchPhone, role, notes, linkedEmployeeId } = req.body;
       if (!regionCode || !date || !startTime || !endTime || !dispatchName) {
         return res.status(400).json({ message: "缺少必要欄位（區域、日期、時間、派遣人員姓名）" });
       }
@@ -899,8 +899,37 @@ export async function registerRoutes(
         dispatchPhone: dispatchPhone || null,
         role: role || "救生",
         notes: notes || null,
+        linkedEmployeeId: linkedEmployeeId || null,
       });
       res.json(record);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/dispatch-shifts/batch-create", async (req, res) => {
+    try {
+      const { regionCode, dates, venueId, startTime, endTime, dispatchName, dispatchCompany, dispatchPhone, role, notes, linkedEmployeeId } = req.body;
+      if (!regionCode || !dates || !Array.isArray(dates) || dates.length === 0 || !startTime || !endTime || !dispatchName) {
+        return res.status(400).json({ message: "缺少必要欄位（區域、日期列表、時間、派遣人員姓名）" });
+      }
+      const region = await storage.getRegionByCode(regionCode);
+      if (!region) return res.status(404).json({ message: "找不到區域" });
+      const inserts = (dates as string[]).map((date) => ({
+        regionId: region.id,
+        venueId: venueId || null,
+        date,
+        startTime,
+        endTime,
+        dispatchName,
+        dispatchCompany: dispatchCompany || null,
+        dispatchPhone: dispatchPhone || null,
+        role: role || "救生",
+        notes: notes || null,
+        linkedEmployeeId: linkedEmployeeId || null,
+      }));
+      const records = await storage.batchCreateDispatchShifts(inserts);
+      res.json({ created: records.length, records });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -918,7 +947,7 @@ export async function registerRoutes(
         if (!region) return res.status(404).json({ message: "找不到區域" });
         updateData.regionId = region.id;
       }
-      const allowedFields = ["venueId", "date", "startTime", "endTime", "dispatchName", "dispatchCompany", "dispatchPhone", "role", "notes"];
+      const allowedFields = ["venueId", "date", "startTime", "endTime", "dispatchName", "dispatchCompany", "dispatchPhone", "role", "notes", "linkedEmployeeId"];
       for (const field of allowedFields) {
         if (rest[field] !== undefined) updateData[field] = rest[field];
       }

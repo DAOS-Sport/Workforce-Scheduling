@@ -119,7 +119,9 @@ export interface IStorage {
   updateClockRecordReason(id: number, earlyArrivalReason?: string, lateDepartureReason?: string): Promise<ClockRecord | undefined>;
 
   createDispatchShift(data: InsertDispatchShift): Promise<DispatchShift>;
+  batchCreateDispatchShifts(data: InsertDispatchShift[]): Promise<DispatchShift[]>;
   getDispatchShifts(regionId: number, startDate: string, endDate: string): Promise<DispatchShift[]>;
+  getDispatchShiftsByDate(date: string): Promise<DispatchShift[]>;
   getDispatchShift(id: number): Promise<DispatchShift | undefined>;
   updateDispatchShift(id: number, data: Partial<InsertDispatchShift>): Promise<DispatchShift | undefined>;
   deleteDispatchShift(id: number): Promise<void>;
@@ -583,6 +585,16 @@ export class DatabaseStorage implements IStorage {
     return record;
   }
 
+  async batchCreateDispatchShifts(data: InsertDispatchShift[]): Promise<DispatchShift[]> {
+    if (data.length === 0) return [];
+    const results: DispatchShift[] = [];
+    for (const item of data) {
+      const [record] = await db.insert(dispatchShifts).values(item).returning();
+      results.push(record);
+    }
+    return results;
+  }
+
   async getDispatchShifts(regionId: number, startDate: string, endDate: string): Promise<DispatchShift[]> {
     return db.select().from(dispatchShifts)
       .where(and(
@@ -590,6 +602,10 @@ export class DatabaseStorage implements IStorage {
         gte(dispatchShifts.date, startDate),
         lte(dispatchShifts.date, endDate),
       ));
+  }
+
+  async getDispatchShiftsByDate(date: string): Promise<DispatchShift[]> {
+    return db.select().from(dispatchShifts).where(eq(dispatchShifts.date, date));
   }
 
   async getDispatchShift(id: number): Promise<DispatchShift | undefined> {
