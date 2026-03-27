@@ -142,9 +142,11 @@ export function GoogleSheetsImportDialog({
       }
       const exact = venues.find(v => v.shortName === code);
       if (exact) { mapping[code] = exact.id; suggested.add(code); continue; }
-      const byContains = venues.find(v => v.shortName.includes(code) && code.length >= 1);
+      const byPrefix = code.length >= 2 ? venues.find(v => v.shortName.startsWith(code)) : undefined;
+      if (byPrefix) { mapping[code] = byPrefix.id; suggested.add(code); continue; }
+      const byContains = code.length >= 2 ? venues.find(v => v.shortName.includes(code)) : undefined;
       if (byContains) { mapping[code] = byContains.id; suggested.add(code); continue; }
-      const byName = venues.find(v => v.name === code || v.name.includes(code));
+      const byName = venues.find(v => v.name === code);
       if (byName) { mapping[code] = byName.id; suggested.add(code); }
     }
     return { mapping, suggested };
@@ -551,7 +553,7 @@ export function GoogleSheetsImportDialog({
 
               {allVenueCodes.filter(code => venueMapping[code]).length > 0 && (
                 <div className="rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-3">
-                  <div className="text-xs font-medium text-green-700 dark:text-green-400 mb-1.5">已自動對應：</div>
+                  <div className="text-xs font-medium text-green-700 dark:text-green-400 mb-1.5">已建議對應（可手動修改）：</div>
                   <div className="flex flex-wrap gap-2">
                     {allVenueCodes.filter(code => venueMapping[code]).map(code => {
                       const venue = allVenues.find(v => v.id === venueMapping[code]);
@@ -562,8 +564,10 @@ export function GoogleSheetsImportDialog({
                           <span>→</span>
                           <span>{venue?.shortName}</span>
                           {isSuggested ? (
-                            <span className="text-[10px] text-green-500 dark:text-green-600">（自動）</span>
-                          ) : null}
+                            <span className="text-[10px] text-green-500 dark:text-green-600">（自動建議）</span>
+                          ) : (
+                            <span className="text-[10px] text-blue-500 dark:text-blue-400">（已記憶）</span>
+                          )}
                           <CheckCircle2 className="h-3 w-3" />
                         </div>
                       );
