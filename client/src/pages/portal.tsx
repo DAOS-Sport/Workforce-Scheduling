@@ -50,6 +50,8 @@ interface AttendanceSummary {
   anomaly: number;
   leave: number;
   todayLatestClock: { clockType: string; clockTime: string } | null;
+  todayClockIn: { clockTime: string } | null;
+  todayClockOut: { clockTime: string } | null;
   records: {
     date: string;
     clockIn: string | null;
@@ -936,11 +938,13 @@ const LATE_DEPARTURE_REASONS = [
 
 const CLOCK_LOCK_MS = 60 * 60 * 1000;
 
-function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock }: {
+function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, todayClockIn, todayClockOut }: {
   employee: PortalEmployee;
   onPositionUpdate?: (lat: number, lng: number) => void;
   onResult?: (r: ClockInResult) => void;
   todayLatestClock?: { clockType: string; clockTime: string } | null;
+  todayClockIn?: { clockTime: string } | null;
+  todayClockOut?: { clockTime: string } | null;
 }) {
   const [stage, setStage] = useState<"idle" | "scanning" | "submitting" | "done" | "error">("idle");
   const [result, setResult] = useState<ClockInResult | null>(null);
@@ -1097,26 +1101,29 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock }
       </div>
 
       <div className="p-4">
-        {stage === "idle" && (
-          <div>
-            {lockedClock ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
-                  <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-green-700">
-                      {lockedClock.clockType === "in" ? "✓ 上班打卡" : "✓ 下班打卡"} {lockedClock.timeStr}
-                    </p>
-                    <p className="text-xs text-green-600">剩餘鎖定 {countdown} 分鐘</p>
+        {stage === "idle" && (() => {
+          const serverInTime = todayClockIn?.clockTime
+            ? new Date(todayClockIn.clockTime).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false })
+            : null;
+          const serverOutTime = todayClockOut?.clockTime
+            ? new Date(todayClockOut.clockTime).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false })
+            : null;
+          const clockInLocked = !!(todayClockIn || lockedClock?.clockType === "in");
+          const clockOutLocked = !!(todayClockOut || lockedClock?.clockType === "out");
+          const clockInTime = serverInTime || (lockedClock?.clockType === "in" ? lockedClock.timeStr : null);
+          const clockOutTime = serverOutTime || (lockedClock?.clockType === "out" ? lockedClock.timeStr : null);
+
+          return (
+            <div className="grid grid-cols-2 gap-3">
+              {clockInLocked ? (
+                <button disabled className="h-14 rounded-lg bg-juns-green/10 border border-juns-green/30 text-juns-green font-semibold text-sm flex flex-col items-center justify-center gap-0.5 cursor-not-allowed" data-testid="button-clock-in">
+                  <div className="flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>上班已打卡</span>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button disabled className="h-12 rounded-lg bg-slate-100 text-slate-400 font-semibold text-base flex items-center justify-center gap-2 cursor-not-allowed" data-testid="button-clock-in">上班</button>
-                  <button disabled className="h-12 rounded-lg bg-slate-100 text-slate-400 font-semibold text-base flex items-center justify-center gap-2 cursor-not-allowed" data-testid="button-clock-out">下班</button>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
+                  {clockInTime && <span className="text-xs font-normal opacity-80">{clockInTime}</span>}
+                </button>
+              ) : (
                 <button
                   className="h-12 rounded-lg bg-juns-green hover:bg-juns-green/90 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                   onClick={() => handleClockIn("in")}
@@ -1124,6 +1131,16 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock }
                 >
                   上班
                 </button>
+              )}
+              {clockOutLocked ? (
+                <button disabled className="h-14 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 font-semibold text-sm flex flex-col items-center justify-center gap-0.5 cursor-not-allowed" data-testid="button-clock-out">
+                  <div className="flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>下班已打卡</span>
+                  </div>
+                  {clockOutTime && <span className="text-xs font-normal opacity-80">{clockOutTime}</span>}
+                </button>
+              ) : (
                 <button
                   className="h-12 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                   onClick={() => handleClockIn("out")}
@@ -1131,10 +1148,10 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock }
                 >
                   下班
                 </button>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          );
+        })()}
 
         {(stage === "scanning" || stage === "submitting") && (
           <div className="text-center">
@@ -1298,31 +1315,13 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock }
             <AnomalyReportButton employee={employee} clockResult={result} accuracy={accuracy} context="打卡異常" />
 
             {!needsReasonSelection && (
-              lockedClock ? (
-                <div className="mt-2 space-y-2">
-                  <div className="flex items-center gap-2 p-2.5 rounded-lg bg-green-50 border border-green-200">
-                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-green-700">
-                        {lockedClock.clockType === "in" ? "✓ 上班打卡" : "✓ 下班打卡"} {lockedClock.timeStr}
-                      </p>
-                      <p className="text-[11px] text-green-600">剩餘鎖定 {countdown} 分鐘</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button disabled className="h-9 rounded-lg bg-slate-100 text-slate-400 font-semibold text-sm cursor-not-allowed">上班</button>
-                    <button disabled className="h-9 rounded-lg bg-slate-100 text-slate-400 font-semibold text-sm cursor-not-allowed">下班</button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all mt-2"
-                  onClick={() => { setStage("idle"); setResult(null); setReasonSubmitted(false); }}
-                  data-testid="button-clock-again"
-                >
-                  再次打卡
-                </button>
-              )
+              <button
+                className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all mt-2"
+                onClick={() => { setStage("idle"); setResult(null); setReasonSubmitted(false); }}
+                data-testid="button-clock-again"
+              >
+                返回打卡畫面
+              </button>
             )}
           </div>
         )}
@@ -1769,13 +1768,20 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
         <LiveClock />
         <LocationMap lat={userPos?.lat ?? null} lng={userPos?.lng ?? null} />
         <VenueShiftInfo employee={employee} result={clockInResult} />
-        <RadarClockIn employee={employee} onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })} onResult={(result) => {
-          setClockInResult(result);
-          if (result.status === "success" || result.status === "warning") {
-            queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", employee.id] });
-            queryClient.invalidateQueries({ queryKey: ["/api/portal/today-coworkers", employee.id] });
-          }
-        }} todayLatestClock={attendance?.todayLatestClock} />
+        <RadarClockIn
+          employee={employee}
+          onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })}
+          onResult={(result) => {
+            setClockInResult(result);
+            if (result.status === "success" || result.status === "warning") {
+              queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", employee.id] });
+              queryClient.invalidateQueries({ queryKey: ["/api/portal/today-coworkers", employee.id] });
+            }
+          }}
+          todayLatestClock={attendance?.todayLatestClock}
+          todayClockIn={attendance?.todayClockIn}
+          todayClockOut={attendance?.todayClockOut}
+        />
 
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-outing-signin">
           <button className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors" data-testid="button-outing-signin">

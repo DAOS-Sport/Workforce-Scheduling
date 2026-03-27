@@ -1829,6 +1829,8 @@ export async function registerRoutes(
         })
         .sort((a, b) => new Date(b.clockTime!).getTime() - new Date(a.clockTime!).getTime());
       const latestClockToday = todayClocks[0] ?? null;
+      const todayClockInRecord = todayClocks.find(cr => cr.clockType === "in" && (cr.status === "success" || cr.status === "warning")) ?? null;
+      const todayClockOutRecord = [...todayClocks].find(cr => cr.clockType === "out" && (cr.status === "success" || cr.status === "warning")) ?? null;
 
       // Build a map of GPS clock records grouped by Taiwan date for easy lookup
       const gpsDateMap = new Map<string, typeof clockRecords>();
@@ -1910,6 +1912,12 @@ export async function registerRoutes(
         leave: records.filter((r) => r.leaveHours && r.leaveHours.trim() !== "").length,
         todayLatestClock: latestClockToday
           ? { clockType: latestClockToday.clockType, clockTime: latestClockToday.clockTime!.toISOString() }
+          : null,
+        todayClockIn: todayClockInRecord
+          ? { clockTime: todayClockInRecord.clockTime!.toISOString() }
+          : null,
+        todayClockOut: todayClockOutRecord
+          ? { clockTime: todayClockOutRecord.clockTime!.toISOString() }
           : null,
         records: allRows,
       };
