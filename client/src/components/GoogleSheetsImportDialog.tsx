@@ -173,7 +173,8 @@ export function GoogleSheetsImportDialog({
     }
 
     const knownCodes = Object.keys(loadVenueMappingCache());
-    const result = parseTSV(tsv, year, month, knownCodes);
+    const shortNames = allVenues.map(v => v.shortName);
+    const result = parseTSV(tsv, year, month, knownCodes, shortNames);
     if (result.employees.length === 0) {
       setParseError("無法解析員工資料，請確認格式正確（Tab 分隔，欄位順序：類別、員工代號、正兼職、姓名、第1日...）");
       return;

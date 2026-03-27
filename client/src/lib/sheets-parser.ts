@@ -25,6 +25,7 @@ export interface ParseResult {
   daysInMonth: number;
   employees: ParsedEmployeeRow[];
   allVenueCodes: string[];
+  venueShortNames?: string[];
 }
 
 export const LEAVE_CODES: Record<string, string> = {
@@ -52,13 +53,16 @@ function parseTime(raw: string): string {
   return raw.substring(0, 2) + ":" + raw.substring(2, 4);
 }
 
-function splitVenueAndRole(prefix: string, knownVenueCodes: string[]): { venueCode: string; roleCode: string } {
+function splitVenueAndRole(
+  prefix: string,
+  knownVenueCodes: string[],
+  venueShortNames: string[] = []
+): { venueCode: string; roleCode: string } {
   if (!prefix) return { venueCode: "", roleCode: "" };
 
   // Step 1: user-confirmed abbreviations from the mapping cache (longest first).
-  // This correctly handles multi-char abbreviations like "北清" that overlap with role codes.
-  // e.g. cache=["北清","新","商","松山"] → "北清0900-1800" prefix="北清" → exact match → {venue:"北清", role:""}
-  // e.g. cache=["新"] → "新辦1300-2200" prefix="新辦" → "新" matches prefix → {venue:"新", role:"辦"}
+  // "北清" in cache → prefix.startsWith("北清") → {venue:"北清", role:""} ✓
+  // "新" in cache → prefix.startsWith("新") → "新辦" → {venue:"新", role:"辦"} ✓
   const sortedKnown = [...knownVenueCodes].sort((a, b) => b.length - a.length);
   for (const code of sortedKnown) {
     if (prefix.startsWith(code)) {
@@ -66,24 +70,35 @@ function splitVenueAndRole(prefix: string, knownVenueCodes: string[]): { venueCo
     }
   }
 
-  // Step 2: role-code heuristic for first-import (when cache is empty).
-  // Scan from shortest venue upward; take the first split where the suffix is a known role code.
-  // This allows "商救" → {venue:"商", role:"救"} and "新辦" → {venue:"新", role:"辦"} on the
-  // very first import before the user's venue cache is populated.
-  // Known limitation: "北清" (venue abbreviation ending in role code "清") is misidentified as
-  // {venue:"北", role:"清"} on first import; subsequent imports use the cache (step 1) correctly.
+  // Step 2: venue-plausibility role-code heuristic (first import when cache is empty).
+  // A split is accepted ONLY when the venue part is a plausible abbreviation checked against
+  // the venue shortNames. Single-char venues MUST start a shortName (strict); multi-char venues
+  // can be contained anywhere in a shortName (permissive, for abbreviations like "松山").
+  //
+  // Results with shortNames=["三重商工","新北高中","松山國小",...]:
+  //   "新辦": venue="新" (1 char) → "新北高中".startsWith("新") → accept → {venue:"新",role:"辦"} ✓
+  //   "商救": venue="商" (1 char) → no shortName startsWith("商") → reject → step 3 ✓ (first import)
+  //           (after user maps "商救", cache step 1 handles it on subsequent imports)
+  //   "北清": venue="北" (1 char) → no shortName startsWith("北") → reject → step 3 ✓
+  //   "松山救": venue="松山" (2 chars) → "松山國小".includes("松山") → accept → {venue:"松山",role:"救"} ✓
   for (let len = 1; len < prefix.length; len++) {
+    const potentialVenue = prefix.substring(0, len);
     const potentialRole = prefix.substring(len);
     if (ROLE_CODES.includes(potentialRole) || potentialRole === "PT") {
-      return { venueCode: prefix.substring(0, len), roleCode: potentialRole };
+      const isPlausible = potentialVenue.length === 1
+        ? venueShortNames.some(n => n.startsWith(potentialVenue))
+        : venueShortNames.some(n => n.includes(potentialVenue));
+      if (isPlausible) {
+        return { venueCode: potentialVenue, roleCode: potentialRole };
+      }
     }
   }
 
-  // Step 3: no role code found — entire prefix is the venue abbreviation (e.g. "松山", "北清").
+  // Step 3: no plausible role split found — entire prefix is the venue abbreviation.
   return { venueCode: prefix, roleCode: "" };
 }
 
-export function parseShiftCell(raw: string, knownVenueCodes: string[] = []): ParsedShiftCell | null {
+export function parseShiftCell(raw: string, knownVenueCodes: string[] = [], venueShortNames: string[] = []): ParsedShiftCell | null {
   const trimmed = raw.trim();
   if (!trimmed || trimmed === "-" || trimmed === "—" || trimmed === "　" || trimmed === "") return null;
 
@@ -129,7 +144,7 @@ export function parseShiftCell(raw: string, knownVenueCodes: string[] = []): Par
   const startTime = parseTime(timeMatch[1]);
   const endTime = parseTime(timeMatch[2]);
 
-  const { venueCode, roleCode } = splitVenueAndRole(prefix, knownVenueCodes);
+  const { venueCode, roleCode } = splitVenueAndRole(prefix, knownVenueCodes, venueShortNames);
 
   return {
     raw: trimmed,
@@ -149,7 +164,7 @@ function looksLikeEmployeeRow(cols: string[]): boolean {
   return code.length > 0 && name.length > 0;
 }
 
-export function parseTSV(tsv: string, year: number, month: number, knownVenueCodes: string[] = []): ParseResult {
+export function parseTSV(tsv: string, year: number, month: number, knownVenueCodes: string[] = [], venueShortNames: string[] = []): ParseResult {
   const lines = tsv.split("\n").map(l => l.trimEnd());
   const daysInMonth = new Date(year, month, 0).getDate();
 
@@ -199,7 +214,7 @@ export function parseTSV(tsv: string, year: number, month: number, knownVenueCod
     for (let d = 0; d < daysInMonth; d++) {
       const colIndex = colStart + d;
       const cellRaw = colIndex < cols.length ? cols[colIndex]?.trim() || "" : "";
-      cells.push(parseShiftCell(cellRaw, knownVenueCodes));
+      cells.push(parseShiftCell(cellRaw, knownVenueCodes, venueShortNames));
     }
 
     employeeRows.push({
