@@ -152,9 +152,6 @@ export function GoogleSheetsImportDialog({
     return { mapping, suggested };
   }, []);
 
-  const unmappedVenueCodes = useMemo(() => {
-    return allVenueCodes.filter(code => !venueMapping[code]);
-  }, [allVenueCodes, venueMapping]);
 
   const handleClose = () => {
     setStep("month");
@@ -232,9 +229,8 @@ export function GoogleSheetsImportDialog({
   }, [handleParseTsv]);
 
   const handlePreviewNext = useCallback(() => {
-    const hasUnmapped = allVenueCodes.some(code => !venueMapping[code]);
-    setStep(hasUnmapped ? "venue-mapping" : "confirm");
-  }, [allVenueCodes, venueMapping]);
+    setStep(allVenueCodes.length > 0 ? "venue-mapping" : "confirm");
+  }, [allVenueCodes]);
 
   const updateVenueMapping = useCallback((code: string, venueId: number | null) => {
     setVenueMapping(prev => {
@@ -548,66 +544,51 @@ export function GoogleSheetsImportDialog({
           {step === "venue-mapping" && (
             <div className="space-y-4 py-4">
               <div className="text-sm text-muted-foreground">
-                以下場館代碼尚未自動對應，請手動選擇對應的系統場地。未設定的代碼對應的班次將跳過：
+                確認或修改每個場館代碼的對應場地。未設定的代碼對應的班次將跳過：
               </div>
 
-              {allVenueCodes.filter(code => venueMapping[code]).length > 0 && (
-                <div className="rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-3">
-                  <div className="text-xs font-medium text-green-700 dark:text-green-400 mb-1.5">已建議對應（可手動修改）：</div>
-                  <div className="flex flex-wrap gap-2">
-                    {allVenueCodes.filter(code => venueMapping[code]).map(code => {
-                      const venue = allVenues.find(v => v.id === venueMapping[code]);
-                      const isSuggested = autoSuggestedCodes.has(code);
-                      return (
-                        <div key={code} className="flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
-                          <Badge variant="secondary" className="font-bold">{code}</Badge>
-                          <span>→</span>
-                          <span>{venue?.shortName}</span>
-                          {isSuggested ? (
-                            <span className="text-[10px] text-green-500 dark:text-green-600">（自動建議）</span>
-                          ) : (
-                            <span className="text-[10px] text-blue-500 dark:text-blue-400">（已記憶）</span>
-                          )}
-                          <CheckCircle2 className="h-3 w-3" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-3">
-                {unmappedVenueCodes.map(code => (
-                  <div key={code} className="flex items-center gap-3 p-3 border rounded-md">
-                    <div className="w-20 text-center">
-                      <Badge variant="secondary" className="text-base font-bold">{code}</Badge>
+                {allVenueCodes.map(code => {
+                  const isSuggested = autoSuggestedCodes.has(code);
+                  const isMapped = !!venueMapping[code];
+                  return (
+                    <div key={code} className={`flex items-center gap-3 p-3 border rounded-md ${isMapped ? "border-green-200 dark:border-green-800" : ""}`}>
+                      <div className="w-24 text-center shrink-0">
+                        <Badge variant="secondary" className="text-base font-bold">{code}</Badge>
+                        {isMapped && isSuggested && (
+                          <div className="text-[10px] text-green-600 dark:text-green-400 mt-0.5">自動建議</div>
+                        )}
+                        {isMapped && !isSuggested && (
+                          <div className="text-[10px] text-blue-500 dark:text-blue-400 mt-0.5">已記憶</div>
+                        )}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1">
+                        <select
+                          value={venueMapping[code] ? String(venueMapping[code]) : ""}
+                          onChange={e => {
+                            const val = e.target.value;
+                            updateVenueMapping(code, val ? Number(val) : null);
+                          }}
+                          data-testid={`select-venue-mapping-${code}`}
+                          className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                        >
+                          <option value="">（不對應，跳過此代碼的班次）</option>
+                          {allVenues.map(v => (
+                            <option key={v.id} value={String(v.id)}>
+                              {v.shortName} ({v.name})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {isMapped ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <div className="flex-1">
-                      <select
-                        value={venueMapping[code] ? String(venueMapping[code]) : ""}
-                        onChange={e => {
-                          const val = e.target.value;
-                          updateVenueMapping(code, val ? Number(val) : null);
-                        }}
-                        data-testid={`select-venue-mapping-${code}`}
-                        className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                      >
-                        <option value="">選擇對應場地（不選則跳過）</option>
-                        {allVenues.map(v => (
-                          <option key={v.id} value={String(v.id)}>
-                            {v.shortName} ({v.name})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {venueMapping[code] ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-muted-foreground shrink-0" />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -802,7 +783,7 @@ export function GoogleSheetsImportDialog({
                   if (step === "paste") setStep("month");
                   else if (step === "preview") setStep("paste");
                   else if (step === "venue-mapping") setStep("preview");
-                  else if (step === "confirm") setStep(unmappedVenueCodes.length > 0 ? "venue-mapping" : "preview");
+                  else if (step === "confirm") setStep(allVenueCodes.length > 0 ? "venue-mapping" : "preview");
                 }}
                 data-testid="button-import-back"
               >
