@@ -55,14 +55,10 @@ function parseTime(raw: string): string {
 function splitVenueAndRole(prefix: string, knownVenueCodes: string[]): { venueCode: string; roleCode: string } {
   if (!prefix) return { venueCode: "", roleCode: "" };
 
-  // Match against known venue shortNames (longest match wins, to avoid "北清" splitting as "北"+"清").
-  // Role codes like "清" can appear in venue names, so we only split where the venue part is
-  // a confirmed shortName from the database. Role suffix is whatever follows the venue match.
-  // Example: knownCodes=["新","商","松山","北清"] →
-  //   "新辦"  → "新" matches → {venue:"新", role:"辦"} ✓
-  //   "北清"  → "北清" matches → {venue:"北清", role:""}  ✓
-  //   "商救"  → "商" matches   → {venue:"商", role:"救"}  ✓
-  //   "松山"  → "松山" matches → {venue:"松山", role:""} ✓
+  // Step 1: user-confirmed abbreviations from the mapping cache (longest first).
+  // This correctly handles multi-char abbreviations like "北清" that overlap with role codes.
+  // e.g. cache=["北清","新","商","松山"] → "北清0900-1800" prefix="北清" → exact match → {venue:"北清", role:""}
+  // e.g. cache=["新"] → "新辦1300-2200" prefix="新辦" → "新" matches prefix → {venue:"新", role:"辦"}
   const sortedKnown = [...knownVenueCodes].sort((a, b) => b.length - a.length);
   for (const code of sortedKnown) {
     if (prefix.startsWith(code)) {
@@ -70,8 +66,20 @@ function splitVenueAndRole(prefix: string, knownVenueCodes: string[]): { venueCo
     }
   }
 
-  // No known venue matched — treat the entire prefix as the venue abbreviation.
-  // This avoids false splits when a new/unmapped venue abbreviation is encountered.
+  // Step 2: role-code heuristic for first-import (when cache is empty).
+  // Scan from shortest venue upward; take the first split where the suffix is a known role code.
+  // This allows "商救" → {venue:"商", role:"救"} and "新辦" → {venue:"新", role:"辦"} on the
+  // very first import before the user's venue cache is populated.
+  // Known limitation: "北清" (venue abbreviation ending in role code "清") is misidentified as
+  // {venue:"北", role:"清"} on first import; subsequent imports use the cache (step 1) correctly.
+  for (let len = 1; len < prefix.length; len++) {
+    const potentialRole = prefix.substring(len);
+    if (ROLE_CODES.includes(potentialRole) || potentialRole === "PT") {
+      return { venueCode: prefix.substring(0, len), roleCode: potentialRole };
+    }
+  }
+
+  // Step 3: no role code found — entire prefix is the venue abbreviation (e.g. "松山", "北清").
   return { venueCode: prefix, roleCode: "" };
 }
 
