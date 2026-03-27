@@ -290,6 +290,7 @@ export default function SchedulePage() {
   const [dispatchLinkedEmployeeId, setDispatchLinkedEmployeeId] = useState<number | null>(null);
   const [dispatchBatchMode, setDispatchBatchMode] = useState(false);
   const [dispatchBatchDates, setDispatchBatchDates] = useState<Set<string>>(new Set());
+  const [dispatchTemplateId, setDispatchTemplateId] = useState<string>("custom");
   const [dispatchAddNameDialogOpen, setDispatchAddNameDialogOpen] = useState(false);
   const [dispatchAddNameInput, setDispatchAddNameInput] = useState("");
   const [dispatchSectionCollapsed, setDispatchSectionCollapsed] = useState(false);
@@ -568,6 +569,11 @@ export default function SchedulePage() {
     enabled: !!shiftVenueId && shiftDialogOpen,
   });
 
+  const { data: dispatchVenueTemplates = [] } = useQuery<VenueShiftTemplate[]>({
+    queryKey: ["/api/venue-shift-templates", dispatchVenueId ? parseInt(dispatchVenueId) : null],
+    enabled: !!dispatchVenueId && dispatchDialogOpen,
+  });
+
   const precheckParams = useMemo(() => {
     if (!shiftDialogOpen || !shiftDate || !shiftStartTime || !shiftEndTime || !shiftEmployeeId) return null;
     const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
@@ -600,6 +606,24 @@ export default function SchedulePage() {
       return true;
     });
   }, [shiftVenueTemplates, shiftDate, shiftRole]);
+
+  const filteredDispatchTemplates = useMemo(() => {
+    const refDate = dispatchBatchMode
+      ? (dispatchBatchDates.size > 0 ? Array.from(dispatchBatchDates)[0] : "")
+      : dispatchDate;
+    if (!refDate || dispatchVenueTemplates.length === 0) return [];
+    const dayOfWeek = new Date(refDate).getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const dayType = isWeekend ? "weekend" : "weekday";
+    const matched = dispatchVenueTemplates.filter(t => t.dayType === dayType);
+    const seen = new Set<string>();
+    return matched.filter(t => {
+      const key = `${t.shiftLabel}-${t.startTime}-${t.endTime}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [dispatchVenueTemplates, dispatchDate, dispatchBatchMode, dispatchBatchDates]);
 
   const { data: allVenues = [] } = useQuery<Venue[]>({
     queryKey: ["/api/venues-all"],
@@ -1012,6 +1036,7 @@ export default function SchedulePage() {
     setDispatchLinkedEmployeeId(null);
     setDispatchBatchMode(false);
     setDispatchBatchDates(new Set());
+    setDispatchTemplateId("custom");
     setDispatchDialogOpen(true);
   };
 
@@ -1030,6 +1055,7 @@ export default function SchedulePage() {
     setDispatchLinkedEmployeeId(ds.linkedEmployeeId || null);
     setDispatchBatchMode(false);
     setDispatchBatchDates(new Set());
+    setDispatchTemplateId("custom");
     setDispatchDialogOpen(true);
   };
 
@@ -2366,12 +2392,62 @@ export default function SchedulePage() {
             ) : (
               <div className="space-y-2">
                 <Label>選擇日期（批次） *</Label>
-                <div className="rounded-md border p-2 max-h-40 overflow-y-auto" data-testid="dispatch-batch-date-picker">
-                  <div className="grid grid-cols-7 gap-0.5">
+                <div className="rounded-md border p-2 space-y-2" data-testid="dispatch-batch-date-picker">
+                  <div className="flex gap-1 flex-wrap">
+                    {(() => {
+                      const refDate = dispatchBatchDates.size > 0 ? Array.from(dispatchBatchDates)[0] : format(monthDates[0], "yyyy-MM-dd");
+                      const weekday = new Date(refDate).getDay();
+                      return (
+                        <button
+                          type="button"
+                          className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+                          onClick={() => {
+                            const sameDays = monthDates.filter(d => d.getDay() === weekday);
+                            setDispatchBatchDates(new Set(sameDays.map(d => format(d, "yyyy-MM-dd"))));
+                          }}
+                          data-testid="button-dispatch-batch-same-weekday"
+                        >
+                          全選同星期{DAY_NAMES[weekday]}
+                        </button>
+                      );
+                    })()}
+                    <button
+                      type="button"
+                      className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+                      onClick={() => setDispatchBatchDates(new Set(monthDates.map(d => format(d, "yyyy-MM-dd"))))}
+                      data-testid="button-dispatch-batch-all"
+                    >
+                      全選
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+                      onClick={() => {
+                        const dispatchDateSet = new Set(dispatchShiftsData.map(ds => ds.date));
+                        const emptyDays = monthDates
+                          .map(d => format(d, "yyyy-MM-dd"))
+                          .filter(d => !dispatchDateSet.has(d));
+                        setDispatchBatchDates(new Set(emptyDays));
+                      }}
+                      data-testid="button-dispatch-batch-empty"
+                    >
+                      全選空白日
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+                      onClick={() => setDispatchBatchDates(new Set())}
+                      data-testid="button-dispatch-batch-clear"
+                    >
+                      清除
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-0.5 max-h-40 overflow-y-auto">
                     {monthDates.map((d) => {
                       const dKey = format(d, "yyyy-MM-dd");
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       const selected = dispatchBatchDates.has(dKey);
+                      const hasDispatch = dispatchShiftsData.some(ds => ds.date === dKey);
                       return (
                         <button
                           key={dKey}
@@ -2385,23 +2461,38 @@ export default function SchedulePage() {
                             });
                           }}
                           data-testid={`dispatch-batch-date-${dKey}`}
-                          className={`text-[11px] rounded py-0.5 text-center transition-colors ${selected ? "bg-purple-600 text-white font-bold" : isWeekend ? "text-destructive/70 hover:bg-muted" : "hover:bg-muted"}`}
+                          className={`relative text-[11px] rounded py-0.5 text-center transition-colors ${
+                            selected
+                              ? "bg-purple-600 text-white font-bold"
+                              : hasDispatch
+                                ? "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 font-medium hover:bg-purple-200 dark:hover:bg-purple-800/50"
+                                : isWeekend
+                                  ? "text-destructive/70 hover:bg-muted"
+                                  : "hover:bg-muted"
+                          }`}
                         >
                           {format(d, "d")}
+                          {hasDispatch && !selected && (
+                            <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-purple-500" />
+                          )}
                         </button>
                       );
                     })}
                   </div>
+                  {dispatchBatchDates.size > 0 && (
+                    <p className="text-xs text-muted-foreground">已選 {dispatchBatchDates.size} 天</p>
+                  )}
+                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-purple-100 dark:bg-purple-900/40 border border-purple-300 dark:border-purple-700" />已有派遣</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-purple-600" />已勾選</span>
+                  </div>
                 </div>
-                {dispatchBatchDates.size > 0 && (
-                  <p className="text-xs text-muted-foreground">已選 {dispatchBatchDates.size} 天</p>
-                )}
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>場館</Label>
-                <Select value={dispatchVenueId} onValueChange={setDispatchVenueId}>
+                <Select value={dispatchVenueId} onValueChange={(v) => { setDispatchVenueId(v); setDispatchTemplateId("custom"); }}>
                   <SelectTrigger data-testid="select-dispatch-venue">
                     <SelectValue placeholder="選擇場館" />
                   </SelectTrigger>
@@ -2446,13 +2537,44 @@ export default function SchedulePage() {
                 </Select>
               </div>
             </div>
+            <div className="space-y-2">
+              <Label>排班範本</Label>
+              <Select
+                value={dispatchTemplateId}
+                onValueChange={(val) => {
+                  setDispatchTemplateId(val);
+                  if (val !== "custom") {
+                    const tpl = filteredDispatchTemplates.find(t => t.id.toString() === val);
+                    if (tpl) {
+                      setDispatchStartTime(tpl.startTime);
+                      setDispatchEndTime(tpl.endTime);
+                    }
+                  }
+                }}
+              >
+                <SelectTrigger data-testid="select-dispatch-template">
+                  <SelectValue placeholder="選擇排班範本（可選）" />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredDispatchTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id.toString()}>
+                      {t.shiftLabel} ({t.startTime}–{t.endTime})
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">自訂時間</SelectItem>
+                </SelectContent>
+              </Select>
+              {filteredDispatchTemplates.length === 0 && (
+                <p className="text-[10px] text-muted-foreground italic">此場館尚未設定排班範本</p>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>開始時間 *</Label>
                 <Input
                   type="time"
                   value={dispatchStartTime}
-                  onChange={(e) => setDispatchStartTime(e.target.value)}
+                  onChange={(e) => { setDispatchStartTime(e.target.value); setDispatchTemplateId("custom"); }}
                   data-testid="input-dispatch-start-time"
                 />
               </div>
@@ -2461,11 +2583,28 @@ export default function SchedulePage() {
                 <Input
                   type="time"
                   value={dispatchEndTime}
-                  onChange={(e) => setDispatchEndTime(e.target.value)}
+                  onChange={(e) => { setDispatchEndTime(e.target.value); setDispatchTemplateId("custom"); }}
                   data-testid="input-dispatch-end-time"
                 />
               </div>
             </div>
+            {(() => {
+              const previewVenue = venueMap.get(parseInt(dispatchVenueId || "0"));
+              const previewShort = ROLE_SHORT[dispatchRole] || dispatchRole.slice(0, 1);
+              return (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">預覽</Label>
+                  <div className={`rounded-md px-2 py-1.5 text-[11px] w-fit min-w-[80px] ${DISPATCH_ROLE_COLOR.card}`}>
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <div className="font-semibold">{previewVenue?.shortName || "—"}</div>
+                      <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 ${DISPATCH_ROLE_COLOR.badge}`}>{previewShort}</span>
+                    </div>
+                    <div className="text-muted-foreground">{dispatchStartTime || "--:--"}–{dispatchEndTime || "--:--"}</div>
+                    <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium mt-0.5">派遣</div>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>派遣公司</Label>
