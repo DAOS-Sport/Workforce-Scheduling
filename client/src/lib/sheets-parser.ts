@@ -60,9 +60,7 @@ function splitVenueAndRole(
 ): { venueCode: string; roleCode: string } {
   if (!prefix) return { venueCode: "", roleCode: "" };
 
-  // Step 1: user-confirmed abbreviations from the mapping cache (longest first).
-  // "北清" in cache → prefix.startsWith("北清") → {venue:"北清", role:""} ✓
-  // "新" in cache → prefix.startsWith("新") → "新辦" → {venue:"新", role:"辦"} ✓
+  // Step 1: user-confirmed venue codes from localStorage cache, longest match first.
   const sortedKnown = [...knownVenueCodes].sort((a, b) => b.length - a.length);
   for (const code of sortedKnown) {
     if (prefix.startsWith(code)) {
@@ -70,19 +68,13 @@ function splitVenueAndRole(
     }
   }
 
-  // Step 2: role-code heuristic with venue-plausibility check (for first import, cache empty).
-  // Accept a split only when the venue part appears in at least one venue shortName (via includes).
-  // "商救": venue="商" → "三重商工".includes("商") → accept → {venue:"商", role:"救"} ✓
-  // "新辦": venue="新" → "新北高中".includes("新") → accept → {venue:"新", role:"辦"} ✓
-  // "松山救": venue="松山" → "松山國小".includes("松山") → accept → {venue:"松山", role:"救"} ✓
-  // "北清": step 1 from cache handles it after first import; heuristic may split on first import
-  //         if no cache and "北" appears in some shortName (e.g. "新北高中" contains "北").
+  // Step 2: role-code heuristic — split only when the venue prefix starts a known shortName.
+  // Prefix match (startsWith) avoids false positives from single-char substrings.
   for (let len = 1; len < prefix.length; len++) {
     const potentialVenue = prefix.substring(0, len);
     const potentialRole = prefix.substring(len);
     if (ROLE_CODES.includes(potentialRole) || potentialRole === "PT") {
-      const isPlausible = venueShortNames.some(n => n.includes(potentialVenue));
-      if (isPlausible) {
+      if (venueShortNames.some(n => n.startsWith(potentialVenue))) {
         return { venueCode: potentialVenue, roleCode: potentialRole };
       }
     }
