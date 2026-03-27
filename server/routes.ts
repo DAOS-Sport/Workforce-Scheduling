@@ -508,6 +508,9 @@ export async function registerRoutes(
       if (!Array.isArray(shiftItems) || shiftItems.length === 0) {
         return res.status(400).json({ message: "shifts 為必填陣列" });
       }
+      if (violationMode !== "warn" && violationMode !== "dispatch") {
+        return res.status(400).json({ message: "violationMode 必須為 warn 或 dispatch" });
+      }
 
       const created: any[] = [];
       const skipped: any[] = [];

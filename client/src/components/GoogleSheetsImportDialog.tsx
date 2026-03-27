@@ -122,7 +122,7 @@ export function GoogleSheetsImportDialog({
     dispatched: string[];
   } | null>(null);
 
-  const { data: allVenues = [] } = useQuery<Venue[]>({
+  const { data: allVenues = [], isLoading: venuesLoading } = useQuery<Venue[]>({
     queryKey: ["/api/venues-all"],
     enabled: open,
   });
@@ -813,9 +813,9 @@ export function GoogleSheetsImportDialog({
               </Button>
             )}
             {step === "paste" && (
-              <Button size="sm" onClick={handleParse} disabled={isLoading || xlsxLoading} data-testid="button-import-parse">
-                {isLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-                解析並預覽
+              <Button size="sm" onClick={handleParse} disabled={isLoading || xlsxLoading || venuesLoading} data-testid="button-import-parse">
+                {(isLoading || venuesLoading) ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                {venuesLoading ? "載入場館中…" : "解析並預覽"}
               </Button>
             )}
             {step === "preview" && (
