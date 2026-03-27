@@ -1784,7 +1784,11 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
         />
 
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-outing-signin">
-          <button className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors" data-testid="button-outing-signin">
+          <button
+            className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors"
+            data-testid="button-outing-signin"
+            onClick={() => toast({ title: "外出/簽到功能即將推出", description: "此功能尚未開放，敬請期待" })}
+          >
             <span className="text-sm font-semibold text-juns-navy">外出/簽到</span>
             <ChevronRight className="h-4 w-4 text-slate-400" />
           </button>
@@ -1927,7 +1931,9 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                 {todayCoworkers.map((group, gIdx) => {
                   const roleGroups = new Map<string, typeof group.coworkers>();
                   group.coworkers.forEach((cw) => {
-                    const key = cw.shiftRole || "其他";
+                    // 守望 is a lifeguard sub-type — merge under 救生 category
+                    const rawRole = cw.shiftRole || "其他";
+                    const key = rawRole === "守望" ? "救生" : rawRole;
                     if (!roleGroups.has(key)) roleGroups.set(key, []);
                     roleGroups.get(key)!.push(cw);
                   });

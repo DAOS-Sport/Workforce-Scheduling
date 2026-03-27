@@ -1688,12 +1688,17 @@ export async function registerRoutes(
           let shiftRole = empRoleMap[coworker.role] || coworker.role;
           const cwStart = s.startTime.slice(0, 5);
           const cwEnd = s.endTime.slice(0, 5);
-          const matchedSlot = slots.find((sl) =>
-            sl.startTime.slice(0, 5) <= cwStart && sl.endTime.slice(0, 5) >= cwEnd
-          ) || slots.find((sl) =>
-            sl.startTime.slice(0, 5) <= cwStart && cwStart < sl.endTime.slice(0, 5)
-          );
-          if (matchedSlot) shiftRole = matchedSlot.role;
+          // Only let schedule-slot roles override lifeguard-type employees.
+          // Counter / cleaning / manager employees always keep their own role.
+          const isLifeguardType = ["lifeguard", "守望"].includes(coworker.role);
+          if (isLifeguardType) {
+            const matchedSlot = slots.find((sl) =>
+              sl.startTime.slice(0, 5) <= cwStart && sl.endTime.slice(0, 5) >= cwEnd
+            ) || slots.find((sl) =>
+              sl.startTime.slice(0, 5) <= cwStart && cwStart < sl.endTime.slice(0, 5)
+            );
+            if (matchedSlot) shiftRole = matchedSlot.role;
+          }
           return {
             id: coworker.id,
             name: coworker.name,
@@ -1887,6 +1892,7 @@ export async function registerRoutes(
           ? dateShifts.map((s) => `${s.startTime.substring(0, 5)}-${s.endTime.substring(0, 5)}`).join(", ")
           : null;
 
+        const gpsMissingOut = !clockOutRecord;
         gpsRows.push({
           date: dateStr,
           clockIn: new Date(clockInRecord.clockTime!).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }),
@@ -1895,7 +1901,7 @@ export async function registerRoutes(
             : null,
           isLate: false,
           isEarlyLeave: false,
-          hasAnomaly: false,
+          hasAnomaly: gpsMissingOut && dateStr < todayStr, // missing clock-out on a past date = anomaly
           leaveType: null,
           shiftInfo,
           shiftType: dateShifts[0]?.shiftType || null,
@@ -1906,9 +1912,9 @@ export async function registerRoutes(
 
       const summary = {
         total: allRows.length,
-        late: records.filter((r) => r.isLate).length,
-        earlyLeave: records.filter((r) => r.isEarlyLeave).length,
-        anomaly: records.filter((r) => r.hasAnomaly).length,
+        late: allRows.filter((r) => r.isLate).length,
+        earlyLeave: allRows.filter((r) => r.isEarlyLeave).length,
+        anomaly: allRows.filter((r) => r.hasAnomaly).length,
         leave: records.filter((r) => r.leaveHours && r.leaveHours.trim() !== "").length,
         todayLatestClock: latestClockToday
           ? { clockType: latestClockToday.clockType, clockTime: latestClockToday.clockTime!.toISOString() }
