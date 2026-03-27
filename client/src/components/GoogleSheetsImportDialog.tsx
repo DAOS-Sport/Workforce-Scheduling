@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { parseTSV, type ParsedEmployeeRow, type ParsedShiftCell, LEAVE_CODES } from "@/lib/sheets-parser";
 import type { Venue } from "@shared/schema";
-import { CheckCircle2, XCircle, AlertTriangle, FileSpreadsheet, ChevronRight, ChevronLeft, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, FileSpreadsheet, ChevronRight, ChevronLeft, Loader2, FileUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 interface GoogleSheetsImportDialogProps {
@@ -22,6 +22,7 @@ const YEARS = [2024, 2025, 2026, 2027];
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 type Step = "month" | "paste" | "preview" | "venue-mapping" | "confirm" | "done";
+type ViolationMode = "warn" | "dispatch";
 
 interface EmployeeLookup {
   [code: string]: { id: number; name: string; employeeCode: string; status: string } | undefined;
@@ -45,6 +46,7 @@ const ROLE_CODE_MAP: Record<string, string> = {
   "教": "教練",
   "指": "指導員",
   "行": "行政",
+  "辦": "行政",
   "櫃": "櫃台",
   "管": "管理",
   "守": "守望",
@@ -59,6 +61,22 @@ function buildShiftRole(roleCode: string): string {
 }
 
 const LEAVE_ROLE_VALUES = new Set(Object.values(LEAVE_CODES));
+const LS_VENUE_KEY = "import-venue-code-mapping";
+
+function loadVenueMappingCache(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(LS_VENUE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveVenueMappingCache(mapping: Record<string, string>) {
+  try {
+    localStorage.setItem(LS_VENUE_KEY, JSON.stringify(mapping));
+  } catch {}
+}
 
 function CellBadge({ cell, venueMapping }: { cell: ParsedShiftCell | null; venueMapping: VenueMapping }) {
   if (!cell) return <span className="text-[10px] text-muted-foreground/40">—</span>;
@@ -80,6 +98,7 @@ export function GoogleSheetsImportDialog({
   currentMonth,
 }: GoogleSheetsImportDialogProps) {
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<Step>("month");
   const [year, setYear] = useState(currentYear);
@@ -89,26 +108,45 @@ export function GoogleSheetsImportDialog({
   const [parsedEmployees, setParsedEmployees] = useState<ParsedEmployeeRow[]>([]);
   const [allVenueCodes, setAllVenueCodes] = useState<string[]>([]);
   const [venueMapping, setVenueMapping] = useState<VenueMapping>({});
+  const [autoSuggestedCodes, setAutoSuggestedCodes] = useState<Set<string>>(new Set());
   const [skipExisting, setSkipExisting] = useState(true);
+  const [violationMode, setViolationMode] = useState<ViolationMode>("dispatch");
   const [isLoading, setIsLoading] = useState(false);
-  const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[]; warnings: string[]; dispatched: string[] } | null>(null);
+  const [xlsxLoading, setXlsxLoading] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    created: number;
+    skipped: number;
+    errors: string[];
+    warnings: string[];
+    dispatched: string[];
+  } | null>(null);
 
   const { data: allVenues = [] } = useQuery<Venue[]>({
     queryKey: ["/api/venues-all"],
     enabled: open,
   });
 
-  const buildAutoVenueMapping = useCallback((codes: string[], venues: Venue[]): VenueMapping => {
+  const buildAutoVenueMapping = useCallback((codes: string[], venues: Venue[]): { mapping: VenueMapping; suggested: Set<string> } => {
+    const cache = loadVenueMappingCache();
     const mapping: VenueMapping = {};
+    const suggested = new Set<string>();
+
     for (const code of codes) {
+      if (cache[code]) {
+        const cachedVenue = venues.find(v => v.shortName === cache[code] || String(v.id) === cache[code]);
+        if (cachedVenue) {
+          mapping[code] = cachedVenue.id;
+          continue;
+        }
+      }
       const exact = venues.find(v => v.shortName === code);
-      if (exact) { mapping[code] = exact.id; continue; }
-      const prefix = venues.find(v => v.shortName.startsWith(code) && code.length >= 2);
-      if (prefix) { mapping[code] = prefix.id; continue; }
-      const contains = venues.find(v => v.name === code);
-      if (contains) { mapping[code] = contains.id; }
+      if (exact) { mapping[code] = exact.id; suggested.add(code); continue; }
+      const byContains = venues.find(v => v.shortName.includes(code) && code.length >= 1);
+      if (byContains) { mapping[code] = byContains.id; suggested.add(code); continue; }
+      const byName = venues.find(v => v.name === code || v.name.includes(code));
+      if (byName) { mapping[code] = byName.id; suggested.add(code); }
     }
-    return mapping;
+    return { mapping, suggested };
   }, []);
 
   const unmappedVenueCodes = useMemo(() => {
@@ -122,22 +160,22 @@ export function GoogleSheetsImportDialog({
     setParsedEmployees([]);
     setAllVenueCodes([]);
     setVenueMapping({});
+    setAutoSuggestedCodes(new Set());
     setImportResult(null);
     onOpenChange(false);
   };
 
-  const handleParse = useCallback(async () => {
+  const handleParseTsv = useCallback(async (tsv: string) => {
     setParseError("");
-    if (!tsvText.trim()) {
-      setParseError("請貼上 Google Sheets 資料");
+    if (!tsv.trim()) {
+      setParseError("請貼上班表資料或上傳 XLSX 檔案");
       return;
     }
 
     const knownCodes = allVenues.map(v => v.shortName);
-
-    const result = parseTSV(tsvText, year, month, knownCodes);
+    const result = parseTSV(tsv, year, month, knownCodes);
     if (result.employees.length === 0) {
-      setParseError("無法解析員工資料，請確認格式正確（Tab 分隔）");
+      setParseError("無法解析員工資料，請確認格式正確（Tab 分隔，欄位順序：類別、員工代號、正兼職、姓名、第1日...）");
       return;
     }
 
@@ -154,11 +192,11 @@ export function GoogleSheetsImportDialog({
         employeeId: lookup[emp.employeeCode]?.id,
       }));
       setParsedEmployees(enriched);
-
       setAllVenueCodes(result.allVenueCodes);
 
-      const autoMapping = buildAutoVenueMapping(result.allVenueCodes, allVenues);
-      setVenueMapping(autoMapping);
+      const { mapping, suggested } = buildAutoVenueMapping(result.allVenueCodes, allVenues);
+      setVenueMapping(mapping);
+      setAutoSuggestedCodes(suggested);
 
       setStep("preview");
     } catch (err: any) {
@@ -166,12 +204,52 @@ export function GoogleSheetsImportDialog({
     } finally {
       setIsLoading(false);
     }
-  }, [tsvText, year, month, allVenues, buildAutoVenueMapping]);
+  }, [year, month, allVenues, buildAutoVenueMapping]);
+
+  const handleParse = useCallback(() => handleParseTsv(tsvText), [tsvText, handleParseTsv]);
+
+  const handleXlsxUpload = useCallback(async (file: File) => {
+    setXlsxLoading(true);
+    setParseError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/parse-xlsx", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "XLSX 解析失敗");
+      }
+      const { tsv } = await res.json();
+      setTsvText(tsv);
+      await handleParseTsv(tsv);
+    } catch (err: any) {
+      setParseError("XLSX 上傳失敗：" + err.message);
+    } finally {
+      setXlsxLoading(false);
+    }
+  }, [handleParseTsv]);
 
   const handlePreviewNext = useCallback(() => {
     const hasUnmapped = allVenueCodes.some(code => !venueMapping[code]);
     setStep(hasUnmapped ? "venue-mapping" : "confirm");
   }, [allVenueCodes, venueMapping]);
+
+  const updateVenueMapping = useCallback((code: string, venueId: number | null) => {
+    setVenueMapping(prev => {
+      const next = venueId ? { ...prev, [code]: venueId } : (({ [code]: _, ...rest }) => rest)(prev);
+      const venue = allVenues.find(v => v.id === venueId);
+      if (venue) {
+        const cache = loadVenueMappingCache();
+        cache[code] = venue.shortName;
+        saveVenueMappingCache(cache);
+      }
+      return next;
+    });
+  }, [allVenues]);
 
   const importData = useMemo((): { shifts: ImportShift[]; notFoundEmployees: string[]; totalLeave: number } => {
     const shifts: ImportShift[] = [];
@@ -244,9 +322,15 @@ export function GoogleSheetsImportDialog({
 
     setIsLoading(true);
     try {
-      const res = await apiRequest("POST", "/api/shifts/import-batch", { shifts, skipExisting });
+      const res = await apiRequest("POST", "/api/shifts/import-batch", { shifts, skipExisting, violationMode });
       const result = await res.json();
-      setImportResult({ created: result.created, skipped: result.skipped, errors: result.errors ?? [], warnings: result.warnings ?? [], dispatched: result.dispatched ?? [] });
+      setImportResult({
+        created: result.created,
+        skipped: result.skipped,
+        errors: result.errors ?? [],
+        warnings: result.warnings ?? [],
+        dispatched: result.dispatched ?? [],
+      });
       setStep("done");
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       if ((result.dispatched ?? []).length > 0) {
@@ -267,10 +351,10 @@ export function GoogleSheetsImportDialog({
 
   const stepTitle: Record<Step, string> = {
     month: "選擇要匯入的年份與月份",
-    paste: "貼上從 Google Sheets 複製的 TSV 資料",
+    paste: "貼上班表資料或上傳 XLSX 檔案",
     preview: "解析預覽 — 員工與班次辨識結果",
     "venue-mapping": "設定場館代碼對應",
-    confirm: "確認匯入摘要",
+    confirm: "確認匯入設定",
     done: "匯入完成",
   };
 
@@ -280,7 +364,7 @@ export function GoogleSheetsImportDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-green-600" />
-            匯入 Google Sheets 班表
+            匯入班表
           </DialogTitle>
           <DialogDescription>{stepTitle[step]}</DialogDescription>
         </DialogHeader>
@@ -326,11 +410,54 @@ export function GoogleSheetsImportDialog({
 
           {step === "paste" && (
             <div className="space-y-4 py-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) handleXlsxUpload(file);
+                  e.target.value = "";
+                }}
+              />
+              <div
+                className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files[0];
+                  if (file && file.name.endsWith(".xlsx")) handleXlsxUpload(file);
+                  else toast({ title: "請選擇 .xlsx 檔案", variant: "destructive" });
+                }}
+                data-testid="dropzone-xlsx"
+              >
+                {xlsxLoading ? (
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className="text-sm">正在解析 XLSX...</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <FileUp className="h-8 w-8 text-primary/60" />
+                    <span className="text-sm font-medium text-foreground">點擊或拖曳上傳 XLSX 班表</span>
+                    <span className="text-xs">支援 .xlsx 格式（Excel 2007+）</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">或</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+
               <div className="space-y-2">
-                <Label>Google Sheets 資料（Tab 分隔）</Label>
+                <Label>直接貼上班表資料（從 Excel / Google Sheets 複製）</Label>
                 <textarea
-                  className="w-full h-64 p-3 text-xs font-mono border border-border rounded-md bg-background text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-                  placeholder="在 Google Sheets 中選取班表範圍（Ctrl+A 全選或框選），然後複製（Ctrl+C），再貼到這裡（Ctrl+V）..."
+                  className="w-full h-48 p-3 text-xs font-mono border border-border rounded-md bg-background text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="在 Excel 或 Google Sheets 中選取班表範圍，複製（Ctrl+C），再貼到這裡（Ctrl+V）..."
                   value={tsvText}
                   onChange={e => setTsvText(e.target.value)}
                   data-testid="textarea-tsv-input"
@@ -343,7 +470,7 @@ export function GoogleSheetsImportDialog({
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                格式：每列為一位員工，欄位依序為「類別、員工代號、正兼職、姓名、第1日…」，班次如「商救0900-1800」「松山0600-1500」，請假如「休」「特休」「病假」。
+                格式：每列一位員工，欄位依序為「類別、員工代號、正兼職、姓名、第1日...」。班次如「商救0900-1800」「新辦1300-2200」，請假如「休」「特休」「事假」。
               </p>
             </div>
           )}
@@ -432,11 +559,15 @@ export function GoogleSheetsImportDialog({
                   <div className="flex flex-wrap gap-2">
                     {allVenueCodes.filter(code => venueMapping[code]).map(code => {
                       const venue = allVenues.find(v => v.id === venueMapping[code]);
+                      const isSuggested = autoSuggestedCodes.has(code);
                       return (
                         <div key={code} className="flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
                           <Badge variant="secondary" className="font-bold">{code}</Badge>
                           <span>→</span>
                           <span>{venue?.shortName}</span>
+                          {isSuggested ? (
+                            <span className="text-[10px] text-green-500 dark:text-green-600">（自動）</span>
+                          ) : null}
                           <CheckCircle2 className="h-3 w-3" />
                         </div>
                       );
@@ -457,7 +588,7 @@ export function GoogleSheetsImportDialog({
                         value={venueMapping[code] ? String(venueMapping[code]) : ""}
                         onChange={e => {
                           const val = e.target.value;
-                          setVenueMapping(prev => val ? { ...prev, [code]: Number(val) } : (({ [code]: _, ...rest }) => rest)(prev));
+                          updateVenueMapping(code, val ? Number(val) : null);
                         }}
                         data-testid={`select-venue-mapping-${code}`}
                         className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -534,6 +665,48 @@ export function GoogleSheetsImportDialog({
                 </div>
               </div>
 
+              <div className="rounded-md border p-4 space-y-3">
+                <Label className="text-sm font-medium">違規班次處理方式</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setViolationMode("dispatch")}
+                    data-testid="radio-violation-dispatch"
+                    className={`flex flex-col gap-1.5 rounded-lg border p-3 text-left transition-colors ${
+                      violationMode === "dispatch"
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : "border-border hover:border-primary/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`h-3.5 w-3.5 rounded-full border-2 flex items-center justify-center ${violationMode === "dispatch" ? "border-primary" : "border-muted-foreground"}`}>
+                        {violationMode === "dispatch" && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                      </div>
+                      <span className="text-sm font-medium">🔀 轉派遣模式</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground pl-5">違規班次自動移至派遣區，不計入員工正職工時</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViolationMode("warn")}
+                    data-testid="radio-violation-warn"
+                    className={`flex flex-col gap-1.5 rounded-lg border p-3 text-left transition-colors ${
+                      violationMode === "warn"
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : "border-border hover:border-primary/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`h-3.5 w-3.5 rounded-full border-2 flex items-center justify-center ${violationMode === "warn" ? "border-primary" : "border-muted-foreground"}`}>
+                        {violationMode === "warn" && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                      </div>
+                      <span className="text-sm font-medium">⚠️ 警告模式</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground pl-5">全部匯入，違規班次標記警告，可事後手動修改</p>
+                  </button>
+                </div>
+              </div>
+
               <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-700 dark:text-blue-300">
                 <strong>匯入範圍：</strong>{year} 年 {month} 月，共 {previewShifts.length} 筆記錄（含請假）
               </div>
@@ -547,7 +720,7 @@ export function GoogleSheetsImportDialog({
                 <span className="font-medium">匯入完成</span>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div className="rounded-lg border p-3 text-center">
                   <div className="text-2xl font-bold text-green-600" data-testid="text-result-created">
                     {importResult.created}
@@ -561,6 +734,12 @@ export function GoogleSheetsImportDialog({
                   <div className="text-xs text-muted-foreground mt-1">轉派遣</div>
                 </div>
                 <div className="rounded-lg border p-3 text-center">
+                  <div className="text-2xl font-bold text-amber-600" data-testid="text-result-warnings">
+                    {importResult.warnings.length}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">警告</div>
+                </div>
+                <div className="rounded-lg border p-3 text-center">
                   <div className="text-2xl font-bold text-muted-foreground" data-testid="text-result-skipped">
                     {importResult.skipped}
                   </div>
@@ -572,7 +751,7 @@ export function GoogleSheetsImportDialog({
                 <div className="rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30 p-3 space-y-1" data-testid="import-dispatched">
                   <div className="flex items-center gap-1.5 text-sm font-medium text-purple-700 dark:text-purple-400 mb-1">
                     <AlertTriangle className="h-4 w-4 shrink-0" />
-                    自動轉派遣（工時超限，已建立於派遣區）：
+                    自動轉派遣（工時違規，已建立於派遣區）：
                   </div>
                   {importResult.dispatched.slice(0, 8).map((d, i) => (
                     <div key={i} className="text-xs text-purple-700 dark:text-purple-400">{d}</div>
@@ -600,7 +779,7 @@ export function GoogleSheetsImportDialog({
 
               {importResult.errors.length > 0 && (
                 <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 space-y-1">
-                  <div className="text-sm font-medium text-destructive">違規阻擋（未匯入）：</div>
+                  <div className="text-sm font-medium text-destructive">錯誤（未匯入）：</div>
                   {importResult.errors.slice(0, 5).map((err, i) => (
                     <div key={i} className="text-xs text-destructive">{err}</div>
                   ))}
@@ -643,7 +822,7 @@ export function GoogleSheetsImportDialog({
               </Button>
             )}
             {step === "paste" && (
-              <Button size="sm" onClick={handleParse} disabled={isLoading} data-testid="button-import-parse">
+              <Button size="sm" onClick={handleParse} disabled={isLoading || xlsxLoading} data-testid="button-import-parse">
                 {isLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
                 解析並預覽
               </Button>

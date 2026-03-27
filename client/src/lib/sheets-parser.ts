@@ -43,7 +43,7 @@ export const LEAVE_CODES: Record<string, string> = {
   "AB": "曠職",
 };
 
-const ROLE_CODES = ["救", "教", "指", "行", "櫃", "管", "守", "清", "資", "PT"];
+const ROLE_CODES = ["救", "教", "指", "行", "辦", "櫃", "管", "守", "清", "資", "PT"];
 
 const TIME_REGEX = /(\d{3,4})-(\d{3,4})/;
 
