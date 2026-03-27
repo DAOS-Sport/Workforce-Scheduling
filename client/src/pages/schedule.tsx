@@ -121,6 +121,19 @@ function getRoleColor(role: string, isDispatch = false): RoleColorConfig {
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
 const ROLE_OPTIONS = ["救生", "教練", "指導員", "PT", "行政", "櫃台", "資訊班", "守望"];
 
+interface DateAnnotation { color: string; note: string; }
+
+const ANNOTATION_COLORS: Record<string, { header: string; cell: string; text: string; dot: string }> = {
+  yellow: { header: "bg-yellow-100 dark:bg-yellow-900/30",  cell: "bg-yellow-50/70 dark:bg-yellow-950/20",  text: "text-yellow-700 dark:text-yellow-400",  dot: "bg-yellow-400" },
+  orange: { header: "bg-orange-100 dark:bg-orange-900/30",  cell: "bg-orange-50/70 dark:bg-orange-950/20",  text: "text-orange-700 dark:text-orange-400",  dot: "bg-orange-400" },
+  red:    { header: "bg-red-100 dark:bg-red-900/30",         cell: "bg-red-50/70 dark:bg-red-950/20",         text: "text-red-700 dark:text-red-400",         dot: "bg-red-400"    },
+  blue:   { header: "bg-blue-100 dark:bg-blue-900/30",       cell: "bg-blue-50/70 dark:bg-blue-950/20",       text: "text-blue-700 dark:text-blue-400",       dot: "bg-blue-400"   },
+  green:  { header: "bg-green-100 dark:bg-green-900/30",     cell: "bg-green-50/70 dark:bg-green-950/20",     text: "text-green-700 dark:text-green-400",     dot: "bg-green-400"  },
+  purple: { header: "bg-purple-100 dark:bg-purple-900/30",   cell: "bg-purple-50/70 dark:bg-purple-950/20",   text: "text-purple-700 dark:text-purple-400",   dot: "bg-purple-400" },
+  pink:   { header: "bg-pink-100 dark:bg-pink-900/30",       cell: "bg-pink-50/70 dark:bg-pink-950/20",       text: "text-pink-700 dark:text-pink-400",       dot: "bg-pink-400"   },
+};
+const ANNOTATION_COLOR_KEYS = ["yellow", "orange", "red", "blue", "green", "purple", "pink"] as const;
+
 const TAIWAN_HOLIDAYS: Record<string, string> = {
   // 2024
   "2024-01-01": "元旦",
@@ -167,6 +180,7 @@ const TAIWAN_HOLIDAYS: Record<string, string> = {
   "2026-02-20": "春節",
   "2026-02-28": "和平紀念日",
   "2026-03-02": "和平紀念日補假",
+  "2026-04-03": "彈性放假",
   "2026-04-04": "兒童節",
   "2026-04-05": "清明節",
   "2026-04-06": "兒童節清明補假",
@@ -282,7 +296,9 @@ export default function SchedulePage() {
   const [pendingDispatchNames, setPendingDispatchNames] = useState<string[]>([]);
   const [inlineDispatchInput, setInlineDispatchInput] = useState("");
   const inlineDispatchInputRef = useRef<HTMLInputElement>(null);
-  const [customHighlightedDates, setCustomHighlightedDates] = useState<Set<string>>(new Set());
+  const [dateAnnotations, setDateAnnotations] = useState<Map<string, DateAnnotation>>(new Map());
+  const [annotationPopoverKey, setAnnotationPopoverKey] = useState<string | null>(null);
+  const [popoverNote, setPopoverNote] = useState("");
 
   const [shiftClipboard, setShiftClipboard] = useState<ShiftClipboard | null>(null);
   const [draggedShiftId, setDraggedShiftId] = useState<number | null>(null);
@@ -429,39 +445,55 @@ export default function SchedulePage() {
     queryKey: ["/api/dispatch-shifts", activeRegion, dateRange.start, dateRange.end],
   });
 
-  const { data: customHighlightConfig } = useQuery<{ key: string; value: string | null }>({
-    queryKey: ["/api/system-config/custom_highlighted_dates"],
+  const { data: dateAnnotationsConfig } = useQuery<{ key: string; value: string | null }>({
+    queryKey: ["/api/system-config/date_annotations"],
   });
 
   useEffect(() => {
-    if (!customHighlightConfig?.value) {
-      setCustomHighlightedDates(new Set());
+    if (!dateAnnotationsConfig?.value) {
+      setDateAnnotations(new Map());
       return;
     }
     try {
-      const parsed = JSON.parse(customHighlightConfig.value);
-      if (Array.isArray(parsed)) setCustomHighlightedDates(new Set(parsed));
-    } catch { setCustomHighlightedDates(new Set()); }
-  }, [customHighlightConfig]);
+      const parsed = JSON.parse(dateAnnotationsConfig.value);
+      if (Array.isArray(parsed)) {
+        const map = new Map<string, DateAnnotation>();
+        for (const item of parsed) {
+          if (item.date && item.color) map.set(item.date, { color: item.color, note: item.note || "" });
+        }
+        setDateAnnotations(map);
+      }
+    } catch { setDateAnnotations(new Map()); }
+  }, [dateAnnotationsConfig]);
 
-  const saveCustomHighlightMutation = useMutation({
-    mutationFn: async (dates: string[]) => {
-      const res = await apiRequest("POST", "/api/system-config/custom_highlighted_dates", { value: JSON.stringify(dates) });
+  const saveDateAnnotationsMutation = useMutation({
+    mutationFn: async (annotations: Map<string, DateAnnotation>) => {
+      const arr = Array.from(annotations.entries()).map(([date, ann]) => ({ date, color: ann.color, note: ann.note }));
+      const res = await apiRequest("POST", "/api/system-config/date_annotations", { value: JSON.stringify(arr) });
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/system-config/custom_highlighted_dates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/system-config/date_annotations"] });
     },
   });
 
-  const toggleCustomHighlight = (dateKey: string) => {
-    setCustomHighlightedDates(prev => {
-      const next = new Set(prev);
-      if (next.has(dateKey)) next.delete(dateKey);
-      else next.add(dateKey);
-      saveCustomHighlightMutation.mutate([...next]);
+  const saveAnnotation = (dateKey: string, color: string, note: string) => {
+    setDateAnnotations(prev => {
+      const next = new Map(prev);
+      next.set(dateKey, { color, note });
+      saveDateAnnotationsMutation.mutate(next);
       return next;
     });
+  };
+
+  const clearAnnotation = (dateKey: string) => {
+    setDateAnnotations(prev => {
+      const next = new Map(prev);
+      next.delete(dateKey);
+      saveDateAnnotationsMutation.mutate(next);
+      return next;
+    });
+    setAnnotationPopoverKey(null);
   };
 
   const dispatchShiftsByDate = useMemo(() => {
@@ -1626,22 +1658,24 @@ export default function SchedulePage() {
                   const isToday = dateKey === format(new Date(), "yyyy-MM-dd");
                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                   const holiday = TAIWAN_HOLIDAYS[dateKey];
-                  const isCustomHighlight = customHighlightedDates.has(dateKey);
+                  const annotation = dateAnnotations.get(dateKey);
+                  const annotationStyle = annotation ? ANNOTATION_COLORS[annotation.color] : null;
                   const colW = colWidths[i] ?? COL_DATE_WIDTH;
-                  const headerBg = isCustomHighlight
-                    ? (holiday ? "bg-orange-100 dark:bg-orange-900/30 ring-1 ring-inset ring-yellow-400/60 dark:ring-yellow-600/40" : "bg-orange-100 dark:bg-orange-900/30")
+                  const headerBg = annotationStyle
+                    ? (holiday ? `${annotationStyle.header} ring-1 ring-inset ring-yellow-400/60 dark:ring-yellow-600/40` : annotationStyle.header)
                     : holiday ? "bg-yellow-100 dark:bg-yellow-900/30"
                     : isToday ? "bg-background"
                     : isWeekend ? "bg-yellow-100 dark:bg-yellow-900/30" : "bg-background";
+                  const isPopoverOpen = annotationPopoverKey === dateKey;
                   return (
                     <th
                       key={i}
                       data-date-col={dateKey}
                       className={`text-center p-1.5 border-b border-r font-medium relative select-none ${headerBg}`}
-                      style={{ minWidth: colW, width: colW, position: "sticky", top: 0, zIndex: 25 }}
+                      style={{ minWidth: colW, width: colW, position: "sticky", top: 0, zIndex: isPopoverOpen ? 35 : 25 }}
                       data-testid={`date-header-${dateKey}`}
                     >
-                      <div className={`text-xs ${isCustomHighlight ? "text-orange-700 dark:text-orange-400" : isWeekend || holiday ? "text-destructive/70" : "text-muted-foreground"}`}>
+                      <div className={`text-xs ${annotationStyle ? annotationStyle.text : isWeekend || holiday ? "text-destructive/70" : "text-muted-foreground"}`}>
                         週{DAY_NAMES[d.getDay()]}
                       </div>
                       <div className={`text-xs ${isToday ? "text-primary font-semibold" : ""}`}>
@@ -1652,14 +1686,85 @@ export default function SchedulePage() {
                           {holiday}
                         </div>
                       )}
-                      <button
-                        className={`mt-0.5 text-[9px] leading-none transition-colors ${isCustomHighlight ? "text-orange-500 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-200" : "text-muted-foreground/30 hover:text-orange-400"}`}
-                        onClick={() => toggleCustomHighlight(dateKey)}
-                        title={isCustomHighlight ? "取消橘色標記" : "標記為特殊日期"}
-                        data-testid={`button-highlight-${dateKey}`}
-                      >
-                        {isCustomHighlight ? "★" : "☆"}
-                      </button>
+                      {annotation?.note && (
+                        <div className={`text-[9px] leading-tight truncate mt-0.5 font-medium ${annotationStyle?.text || ""}`} title={annotation.note}>
+                          {annotation.note}
+                        </div>
+                      )}
+                      <Popover open={isPopoverOpen} onOpenChange={(open) => {
+                        if (open) {
+                          setAnnotationPopoverKey(dateKey);
+                          setPopoverNote(annotation?.note || "");
+                        } else {
+                          if (annotation) saveAnnotation(dateKey, annotation.color, popoverNote);
+                          setAnnotationPopoverKey(null);
+                        }
+                      }}>
+                        <PopoverTrigger asChild>
+                          <button
+                            className={`mt-0.5 text-[9px] leading-none transition-colors ${annotationStyle ? `${annotationStyle.text} hover:opacity-70` : "text-muted-foreground/30 hover:text-orange-400"}`}
+                            onClick={(e) => e.stopPropagation()}
+                            title={annotation ? "編輯標記/備注" : "新增標記/備注"}
+                            data-testid={`button-highlight-${dateKey}`}
+                          >
+                            {annotation ? "★" : "☆"}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          className="w-52 p-2.5 shadow-lg"
+                          side="bottom"
+                          align="center"
+                          style={{ zIndex: 9999 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="space-y-2">
+                            <div className="text-xs font-medium text-muted-foreground mb-1">選擇顏色</div>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {ANNOTATION_COLOR_KEYS.map(colorKey => {
+                                const c = ANNOTATION_COLORS[colorKey];
+                                const isSelected = annotation?.color === colorKey;
+                                return (
+                                  <button
+                                    key={colorKey}
+                                    className={`w-6 h-6 rounded-full transition-all ${c.dot} ${isSelected ? "ring-2 ring-offset-1 ring-foreground scale-110" : "hover:scale-110 opacity-80 hover:opacity-100"}`}
+                                    onClick={() => {
+                                      saveAnnotation(dateKey, colorKey, popoverNote);
+                                    }}
+                                    title={colorKey}
+                                    data-testid={`color-${colorKey}-${dateKey}`}
+                                  />
+                                );
+                              })}
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-xs font-medium text-muted-foreground">備注（最多20字）</div>
+                              <Input
+                                value={popoverNote}
+                                onChange={(e) => setPopoverNote(e.target.value.slice(0, 20))}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    if (annotation) saveAnnotation(dateKey, annotation.color, popoverNote);
+                                    setAnnotationPopoverKey(null);
+                                  }
+                                }}
+                                placeholder="輸入備注（可選）"
+                                className="h-7 text-xs"
+                                maxLength={20}
+                                data-testid={`input-note-${dateKey}`}
+                              />
+                            </div>
+                            {annotation && (
+                              <button
+                                className="w-full text-xs text-destructive/70 hover:text-destructive transition-colors py-0.5"
+                                onClick={() => clearAnnotation(dateKey)}
+                                data-testid={`button-clear-annotation-${dateKey}`}
+                              >
+                                清除標記
+                              </button>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                       <div
                         className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 transition-colors z-10"
                         onMouseDown={(e) => { e.stopPropagation(); handleResizeMouseDown(e, i); }}
@@ -1824,13 +1929,14 @@ export default function SchedulePage() {
                       const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       const isHoliday = !!TAIWAN_HOLIDAYS[dateStr];
-                      const isCellCustom = customHighlightedDates.has(dateStr);
+                      const cellAnnotation = dateAnnotations.get(dateStr);
+                      const cellAnnotationStyle = cellAnnotation ? ANNOTATION_COLORS[cellAnnotation.color] : null;
                       const dropId = `drop-${emp.id}-${dateStr}`;
                       const canPaste = !!shiftClipboard && shiftClipboard.employeeId === emp.id;
 
                       return (
                         <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
-                          isCellCustom ? "bg-orange-50 dark:bg-orange-950/20 border-b-orange-300 dark:border-b-orange-700" :
+                          cellAnnotationStyle ? cellAnnotationStyle.cell :
                           isToday ? "bg-primary/5" : isHoliday ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
                         }`} style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
                           {cellShifts.length > 0 ? (
@@ -1988,9 +2094,10 @@ export default function SchedulePage() {
                 {monthDates.map((d, di) => {
                   const dateStr = format(d, "yyyy-MM-dd");
                   const dayDispatches = dispatchShiftsByDate.get(dateStr) || [];
-                  const isDispatchHeaderCustom = customHighlightedDates.has(dateStr);
+                  const dispatchHeaderAnnotation = dateAnnotations.get(dateStr);
+                  const dispatchHeaderStyle = dispatchHeaderAnnotation ? ANNOTATION_COLORS[dispatchHeaderAnnotation.color] : null;
                   return (
-                    <td key={di} className={`border-b border-r text-center ${isDispatchHeaderCustom ? "bg-orange-100/60 dark:bg-orange-950/30" : "bg-purple-50/50 dark:bg-purple-950/20"}`} style={{ minWidth: COL_DATE_WIDTH }}>
+                    <td key={di} className={`border-b border-r text-center ${dispatchHeaderStyle ? dispatchHeaderStyle.cell : "bg-purple-50/50 dark:bg-purple-950/20"}`} style={{ minWidth: COL_DATE_WIDTH }}>
                       {dispatchSectionCollapsed && dayDispatches.length > 0 && (
                         <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">{dayDispatches.length}人</span>
                       )}
@@ -2031,12 +2138,13 @@ export default function SchedulePage() {
                       const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       const isHolidayCell = !!TAIWAN_HOLIDAYS[dateStr];
-                      const isDispatchCellCustom = customHighlightedDates.has(dateStr);
+                      const dispatchCellAnnotation = dateAnnotations.get(dateStr);
+                      const dispatchCellStyle = dispatchCellAnnotation ? ANNOTATION_COLORS[dispatchCellAnnotation.color] : null;
                       return (
                         <td
                           key={di}
                           className={`p-0.5 border-b border-r relative align-top ${
-                            isDispatchCellCustom ? "bg-orange-50 dark:bg-orange-950/20" :
+                            dispatchCellStyle ? dispatchCellStyle.cell :
                             isToday ? "bg-primary/5" : isHolidayCell ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
                           }`}
                           style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }}
