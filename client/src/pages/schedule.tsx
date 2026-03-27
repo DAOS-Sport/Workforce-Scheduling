@@ -2395,8 +2395,7 @@ export default function SchedulePage() {
                 <div className="rounded-md border p-2 space-y-2" data-testid="dispatch-batch-date-picker">
                   <div className="flex gap-1 flex-wrap">
                     {(() => {
-                      const refDate = dispatchBatchDates.size > 0 ? Array.from(dispatchBatchDates)[0] : format(monthDates[0], "yyyy-MM-dd");
-                      const weekday = new Date(refDate).getDay();
+                      const weekday = new Date(dispatchDate || format(monthDates[0], "yyyy-MM-dd")).getDay();
                       return (
                         <button
                           type="button"
@@ -2423,10 +2422,12 @@ export default function SchedulePage() {
                       type="button"
                       className="text-[10px] px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
                       onClick={() => {
-                        const dispatchDateSet = new Set(dispatchShiftsData.map(ds => ds.date));
+                        const nameShiftsOnDate = new Set(
+                          dispatchShiftsData.filter(ds => ds.dispatchName === dispatchName).map(ds => ds.date)
+                        );
                         const emptyDays = monthDates
                           .map(d => format(d, "yyyy-MM-dd"))
-                          .filter(d => !dispatchDateSet.has(d));
+                          .filter(d => !nameShiftsOnDate.has(d));
                         setDispatchBatchDates(new Set(emptyDays));
                       }}
                       data-testid="button-dispatch-batch-empty"
@@ -2543,7 +2544,10 @@ export default function SchedulePage() {
                 value={dispatchTemplateId}
                 onValueChange={(val) => {
                   setDispatchTemplateId(val);
-                  if (val !== "custom") {
+                  if (val === "custom") {
+                    setDispatchStartTime("");
+                    setDispatchEndTime("");
+                  } else {
                     const tpl = filteredDispatchTemplates.find(t => t.id.toString() === val);
                     if (tpl) {
                       setDispatchStartTime(tpl.startTime);
