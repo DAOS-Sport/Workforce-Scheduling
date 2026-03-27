@@ -1642,8 +1642,12 @@ export async function registerRoutes(
       const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
       const today = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
 
+      // Map both English and Chinese DB role values to the canonical display string.
       const empRoleMap: Record<string, string> = {
         lifeguard: "救生", counter: "櫃檯", cleaning: "清潔", manager: "管理",
+        救生: "救生", 守望: "守望",
+        櫃台: "櫃檯", 櫃檯: "櫃檯",
+        清潔: "清潔", 主管職: "管理", 教練: "教練", 無職: "無職",
       };
 
       const emp = await storage.getEmployee(employeeId);
@@ -1690,7 +1694,7 @@ export async function registerRoutes(
           const cwEnd = s.endTime.slice(0, 5);
           // Only let schedule-slot roles override lifeguard-type employees.
           // Counter / cleaning / manager employees always keep their own role.
-          const isLifeguardType = ["lifeguard", "守望"].includes(coworker.role);
+          const isLifeguardType = ["lifeguard", "救生", "守望"].includes(coworker.role);
           if (isLifeguardType) {
             const matchedSlot = slots.find((sl) =>
               sl.startTime.slice(0, 5) <= cwStart && sl.endTime.slice(0, 5) >= cwEnd

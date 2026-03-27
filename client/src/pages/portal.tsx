@@ -124,6 +124,10 @@ const ROLE_DISPLAY: Record<string, { label: string; taskLabel: string; color: st
   "櫃檯": { label: "櫃檯", taskLabel: "櫃台服務", color: "#3B82F6", bgClass: "bg-blue-500/10", borderClass: "border-l-blue-500", textClass: "text-blue-500", badgeBg: "bg-blue-500/15 text-blue-400" },
   "救生": { label: "救生", taskLabel: "救生執勤", color: "#10B981", bgClass: "bg-emerald-500/10", borderClass: "border-l-emerald-500", textClass: "text-emerald-500", badgeBg: "bg-emerald-500/15 text-emerald-400" },
   "守望": { label: "守望", taskLabel: "守望執勤", color: "#F59E0B", bgClass: "bg-amber-500/10", borderClass: "border-l-amber-500", textClass: "text-amber-500", badgeBg: "bg-amber-500/15 text-amber-400" },
+  "清潔": { label: "清潔", taskLabel: "清潔維護", color: "#8B5CF6", bgClass: "bg-violet-500/10", borderClass: "border-l-violet-500", textClass: "text-violet-500", badgeBg: "bg-violet-500/15 text-violet-400" },
+  "管理": { label: "管理", taskLabel: "管理職務", color: "#64748B", bgClass: "bg-slate-500/10", borderClass: "border-l-slate-500", textClass: "text-slate-500", badgeBg: "bg-slate-500/15 text-slate-400" },
+  "教練": { label: "教練", taskLabel: "教學執勤", color: "#F97316", bgClass: "bg-orange-500/10", borderClass: "border-l-orange-500", textClass: "text-orange-500", badgeBg: "bg-orange-500/15 text-orange-400" },
+  "無職": { label: "無職", taskLabel: "", color: "#94A3B8", bgClass: "bg-slate-100", borderClass: "border-l-slate-300", textClass: "text-slate-400", badgeBg: "bg-slate-100 text-slate-400" },
 };
 
 function getRoleDisplay(role: string | null | undefined) {
