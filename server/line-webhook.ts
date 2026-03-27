@@ -827,6 +827,7 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
     const shiftStart = shift.startTime.substring(0, 5);
     const shiftEnd = shift.endTime.substring(0, 5);
 
+    console.log(`[未打卡提醒] 發送通知: ${emp.name}（ID=${emp.id}）班次=${shiftStart}-${shiftEnd} 場館=${venueName} lineId=${emp.lineId ? "有" : "無"}`);
     if (emp.lineId) {
       const lineMsg = [
         `⚠️ 打卡提醒`,
@@ -840,6 +841,7 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
 
       try {
         await pushToLine(emp.lineId, lineMsg);
+        console.log(`[未打卡提醒] LINE推播成功: ${emp.name}`);
       } catch (err) {
         console.error(`[未打卡提醒] LINE推播失敗 ${emp.name}:`, err);
       }
