@@ -55,7 +55,14 @@ function parseTime(raw: string): string {
 function splitVenueAndRole(prefix: string, knownVenueCodes: string[]): { venueCode: string; roleCode: string } {
   if (!prefix) return { venueCode: "", roleCode: "" };
 
-  // 1. Try known venue codes first (longest match wins) — handles user-confirmed mappings
+  // Match against known venue shortNames (longest match wins, to avoid "北清" splitting as "北"+"清").
+  // Role codes like "清" can appear in venue names, so we only split where the venue part is
+  // a confirmed shortName from the database. Role suffix is whatever follows the venue match.
+  // Example: knownCodes=["新","商","松山","北清"] →
+  //   "新辦"  → "新" matches → {venue:"新", role:"辦"} ✓
+  //   "北清"  → "北清" matches → {venue:"北清", role:""}  ✓
+  //   "商救"  → "商" matches   → {venue:"商", role:"救"}  ✓
+  //   "松山"  → "松山" matches → {venue:"松山", role:""} ✓
   const sortedKnown = [...knownVenueCodes].sort((a, b) => b.length - a.length);
   for (const code of sortedKnown) {
     if (prefix.startsWith(code)) {
@@ -63,18 +70,8 @@ function splitVenueAndRole(prefix: string, knownVenueCodes: string[]): { venueCo
     }
   }
 
-  // 2. Try each possible split position and prefer one where the role suffix is a known role code.
-  //    Iterate from shortest venue (len=1) upward so we find the first valid role split.
-  //    e.g. "新辦" → len=1: venue="新", role="辦" (in ROLE_CODES) → return early.
-  //         "松山救" → len=1: role="山救" (not in ROLE_CODES) → len=2: role="救" ✓
-  for (let len = 1; len <= prefix.length; len++) {
-    const potentialRole = prefix.substring(len);
-    if (ROLE_CODES.includes(potentialRole) || potentialRole === "PT") {
-      return { venueCode: prefix.substring(0, len), roleCode: potentialRole };
-    }
-  }
-
-  // 3. No valid role found — entire prefix is the venue abbreviation (e.g. "松山", "北清")
+  // No known venue matched — treat the entire prefix as the venue abbreviation.
+  // This avoids false splits when a new/unmapped venue abbreviation is encountered.
   return { venueCode: prefix, roleCode: "" };
 }
 
