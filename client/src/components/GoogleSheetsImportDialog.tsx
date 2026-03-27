@@ -246,6 +246,15 @@ export function GoogleSheetsImportDialog({
     });
   }, [allVenues]);
 
+  const persistAllVenueMappings = useCallback((currentMapping: VenueMapping) => {
+    const cache = loadVenueMappingCache();
+    for (const [code, venueId] of Object.entries(currentMapping)) {
+      const venue = allVenues.find(v => v.id === venueId);
+      if (venue) cache[code] = venue.shortName;
+    }
+    saveVenueMappingCache(cache);
+  }, [allVenues]);
+
   const importData = useMemo((): { shifts: ImportShift[]; notFoundEmployees: string[]; totalLeave: number } => {
     const shifts: ImportShift[] = [];
     const notFound: string[] = [];
@@ -816,7 +825,7 @@ export function GoogleSheetsImportDialog({
               </Button>
             )}
             {step === "venue-mapping" && (
-              <Button size="sm" onClick={() => setStep("confirm")} data-testid="button-import-next-venue">
+              <Button size="sm" onClick={() => { persistAllVenueMappings(venueMapping); setStep("confirm"); }} data-testid="button-import-next-venue">
                 下一步
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>

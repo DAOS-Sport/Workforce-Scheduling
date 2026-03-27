@@ -70,24 +70,18 @@ function splitVenueAndRole(
     }
   }
 
-  // Step 2: venue-plausibility role-code heuristic (first import when cache is empty).
-  // A split is accepted ONLY when the venue part is a plausible abbreviation checked against
-  // the venue shortNames. Single-char venues MUST start a shortName (strict); multi-char venues
-  // can be contained anywhere in a shortName (permissive, for abbreviations like "松山").
-  //
-  // Results with shortNames=["三重商工","新北高中","松山國小",...]:
-  //   "新辦": venue="新" (1 char) → "新北高中".startsWith("新") → accept → {venue:"新",role:"辦"} ✓
-  //   "商救": venue="商" (1 char) → no shortName startsWith("商") → reject → step 3 ✓ (first import)
-  //           (after user maps "商救", cache step 1 handles it on subsequent imports)
-  //   "北清": venue="北" (1 char) → no shortName startsWith("北") → reject → step 3 ✓
-  //   "松山救": venue="松山" (2 chars) → "松山國小".includes("松山") → accept → {venue:"松山",role:"救"} ✓
+  // Step 2: role-code heuristic with venue-plausibility check (for first import, cache empty).
+  // Accept a split only when the venue part appears in at least one venue shortName (via includes).
+  // "商救": venue="商" → "三重商工".includes("商") → accept → {venue:"商", role:"救"} ✓
+  // "新辦": venue="新" → "新北高中".includes("新") → accept → {venue:"新", role:"辦"} ✓
+  // "松山救": venue="松山" → "松山國小".includes("松山") → accept → {venue:"松山", role:"救"} ✓
+  // "北清": step 1 from cache handles it after first import; heuristic may split on first import
+  //         if no cache and "北" appears in some shortName (e.g. "新北高中" contains "北").
   for (let len = 1; len < prefix.length; len++) {
     const potentialVenue = prefix.substring(0, len);
     const potentialRole = prefix.substring(len);
     if (ROLE_CODES.includes(potentialRole) || potentialRole === "PT") {
-      const isPlausible = potentialVenue.length === 1
-        ? venueShortNames.some(n => n.startsWith(potentialVenue))
-        : venueShortNames.some(n => n.includes(potentialVenue));
+      const isPlausible = venueShortNames.some(n => n.includes(potentialVenue));
       if (isPlausible) {
         return { venueCode: potentialVenue, roleCode: potentialRole };
       }
