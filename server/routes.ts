@@ -1857,9 +1857,13 @@ export async function registerRoutes(
             ? `${r.scheduledStart}-${r.scheduledEnd}`
             : null;
 
-        const dateClockRecords = gpsDateMap.get(r.date) || [];
-        const clockInRecord = dateClockRecords.find((cr) => cr.clockType === "in");
-        const clockOutRecord = [...dateClockRecords].reverse().find((cr) => cr.clockType === "out");
+        // Sort by clockTime ascending so earliest clock-in and latest clock-out are
+        // correctly identified even if an employee accidentally tapped multiple times.
+        const dateClockRecords = (gpsDateMap.get(r.date) || [])
+          .filter(Boolean)
+          .sort((a, b) => new Date(a.clockTime ?? 0).getTime() - new Date(b.clockTime ?? 0).getTime());
+        const clockInRecord = dateClockRecords.find((cr) => cr.clockType === "in");   // earliest in
+        const clockOutRecord = [...dateClockRecords].reverse().find((cr) => cr.clockType === "out"); // latest out
 
         return {
           date: r.date,
@@ -1882,9 +1886,13 @@ export async function registerRoutes(
       const gpsRows: typeof xlsxRows = [];
       for (const [dateStr, dayClocks] of Array.from(gpsDateMap.entries())) {
         if (xlsxDates.has(dateStr)) continue;
-        const validClocks = dayClocks.filter((cr) => cr.status === "success" || cr.status === "warning");
-        const clockInRecord = validClocks.find((cr) => cr.clockType === "in");
-        const clockOutRecord = [...validClocks].reverse().find((cr) => cr.clockType === "out");
+        // Sort ascending by clockTime so we always pick earliest clock-in and latest
+        // clock-out — this handles accidental double-taps during the shift gracefully.
+        const validClocks = dayClocks
+          .filter((cr) => cr.status === "success" || cr.status === "warning")
+          .sort((a, b) => new Date(a.clockTime ?? 0).getTime() - new Date(b.clockTime ?? 0).getTime());
+        const clockInRecord = validClocks.find((cr) => cr.clockType === "in");   // earliest in
+        const clockOutRecord = [...validClocks].reverse().find((cr) => cr.clockType === "out"); // latest out
         if (!clockInRecord) continue; // no valid clock-in, skip this date
 
         const dateShifts = shifts.filter((s) => s.date === dateStr);
