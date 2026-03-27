@@ -55,24 +55,27 @@ function parseTime(raw: string): string {
 function splitVenueAndRole(prefix: string, knownVenueCodes: string[]): { venueCode: string; roleCode: string } {
   if (!prefix) return { venueCode: "", roleCode: "" };
 
+  // 1. Try known venue codes first (longest match wins) — handles user-confirmed mappings
   const sortedKnown = [...knownVenueCodes].sort((a, b) => b.length - a.length);
   for (const code of sortedKnown) {
     if (prefix.startsWith(code)) {
-      const roleCode = prefix.substring(code.length);
-      return { venueCode: code, roleCode };
+      return { venueCode: code, roleCode: prefix.substring(code.length) };
     }
   }
 
-  for (let len = 4; len >= 1; len--) {
-    if (prefix.length < len) continue;
-    const potentialVenue = prefix.substring(0, len);
+  // 2. Try each possible split position and prefer one where the role suffix is a known role code.
+  //    Iterate from shortest venue (len=1) upward so we find the first valid role split.
+  //    e.g. "新辦" → len=1: venue="新", role="辦" (in ROLE_CODES) → return early.
+  //         "松山救" → len=1: role="山救" (not in ROLE_CODES) → len=2: role="救" ✓
+  for (let len = 1; len <= prefix.length; len++) {
     const potentialRole = prefix.substring(len);
-    if (!potentialRole || ROLE_CODES.includes(potentialRole) || potentialRole === "PT") {
-      return { venueCode: potentialVenue, roleCode: potentialRole };
+    if (ROLE_CODES.includes(potentialRole) || potentialRole === "PT") {
+      return { venueCode: prefix.substring(0, len), roleCode: potentialRole };
     }
   }
 
-  return { venueCode: prefix.substring(0, 1), roleCode: prefix.substring(1) };
+  // 3. No valid role found — entire prefix is the venue abbreviation (e.g. "松山", "北清")
+  return { venueCode: prefix, roleCode: "" };
 }
 
 export function parseShiftCell(raw: string, knownVenueCodes: string[] = []): ParsedShiftCell | null {
