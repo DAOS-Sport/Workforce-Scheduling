@@ -81,7 +81,7 @@ function mapRole(jobTitle: string): string {
   if (!jobTitle) return "無職";
   if (jobTitle.includes("救生")) return "救生";
   if (jobTitle.includes("守望")) return "守望";
-  if (jobTitle.includes("櫃台") || jobTitle.includes("櫃檯")) return "櫃台";
+  if (jobTitle.includes("櫃台") || jobTitle.includes("櫃檯") || jobTitle.includes("櫃臺")) return "櫃台";
   if (jobTitle.includes("教練")) return "教練";
   if (jobTitle.includes("機電")) return "機電";
   if (jobTitle.includes("清潔")) return "清潔";

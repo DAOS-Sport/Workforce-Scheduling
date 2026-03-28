@@ -128,6 +128,9 @@ const ROLE_DISPLAY: Record<string, { label: string; taskLabel: string; color: st
   "管理": { label: "管理", taskLabel: "管理職務", color: "#64748B", bgClass: "bg-slate-500/10", borderClass: "border-l-slate-500", textClass: "text-slate-500", badgeBg: "bg-slate-500/15 text-slate-400" },
   "教練": { label: "教練", taskLabel: "教學執勤", color: "#F97316", bgClass: "bg-orange-500/10", borderClass: "border-l-orange-500", textClass: "text-orange-500", badgeBg: "bg-orange-500/15 text-orange-400" },
   "無職": { label: "無職", taskLabel: "", color: "#94A3B8", bgClass: "bg-slate-100", borderClass: "border-l-slate-300", textClass: "text-slate-400", badgeBg: "bg-slate-100 text-slate-400" },
+  "行政": { label: "行政", taskLabel: "行政作業", color: "#64748B", bgClass: "bg-slate-500/10", borderClass: "border-l-slate-500", textClass: "text-slate-500", badgeBg: "bg-slate-500/15 text-slate-400" },
+  "機電": { label: "機電", taskLabel: "機電維護", color: "#78716C", bgClass: "bg-stone-500/10", borderClass: "border-l-stone-500", textClass: "text-stone-500", badgeBg: "bg-stone-500/15 text-stone-400" },
+  "資訊": { label: "資訊", taskLabel: "資訊系統", color: "#6366F1", bgClass: "bg-indigo-500/10", borderClass: "border-l-indigo-500", textClass: "text-indigo-500", badgeBg: "bg-indigo-500/15 text-indigo-400" },
 };
 
 function getRoleDisplay(role: string | null | undefined) {
