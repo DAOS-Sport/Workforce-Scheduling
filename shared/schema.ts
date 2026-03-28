@@ -423,6 +423,20 @@ export function getAllPeriodsForMonth(year: number, month: number, referenceDate
   return periods;
 }
 
+// Tracks which employee+shift combos have already received a "missing clock-in" LINE push today.
+// Stored in DB so it survives server restarts.
+export const missingClockNotifications = pgTable("missing_clock_notifications", {
+  id: serial("id").primaryKey(),
+  date: text("date").notNull(),          // YYYY-MM-DD (Taiwan)
+  employeeId: integer("employee_id").notNull(),
+  shiftId: integer("shift_id").notNull(),
+  notifiedAt: timestamp("notified_at").defaultNow(),
+});
+
+export const insertMissingClockNotificationSchema = createInsertSchema(missingClockNotifications).omit({ id: true, notifiedAt: true });
+export type InsertMissingClockNotification = z.infer<typeof insertMissingClockNotificationSchema>;
+export type MissingClockNotification = typeof missingClockNotifications.$inferSelect;
+
 export interface VacancyInfo {
   venueId: number;
   venueName: string;

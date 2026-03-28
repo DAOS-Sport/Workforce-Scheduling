@@ -740,11 +740,11 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
   return { sent, skipped, noLineId };
 }
 
-const missingClockInNotified = new Set<string>();
-
+// NOTE: Notification deduplication is now stored in the DB (missing_clock_notifications table)
+// so server restarts no longer cause duplicate LINE messages.
+// resetMissingClockInTracker is kept for compatibility but is a no-op.
 function resetMissingClockInTracker() {
-  missingClockInNotified.clear();
-  console.log("[未打卡提醒] 已重置每日追蹤記錄");
+  console.log("[未打卡提醒] DB 追蹤已啟用，無需重置記憶體狀態");
 }
 
 async function sendMissingClockInEmail(to: string[], subject: string, html: string) {
@@ -775,12 +775,16 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   const todayStr = formatTaiwanDate(taipeiNow);
   const currentHour = taipeiNow.getHours();
 
-  // Clean up entries from previous days to prevent unbounded Set growth
-  for (const key of Array.from(missingClockInNotified)) {
-    if (!key.startsWith(todayStr)) {
-      missingClockInNotified.delete(key);
-    }
-  }
+  // Load today's already-sent notifications from DB (survives server restarts)
+  const alreadySentRows = await storage.getMissingClockNotificationsForDate(todayStr);
+  const alreadySentKeys = new Set(alreadySentRows.map(r => `${r.employeeId}-${r.shiftId}`));
+
+  // Clean up old notification records (older than yesterday) to keep the table lean
+  const yesterday = new Date(taipeiNow);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,"0")}-${String(yesterday.getDate()).padStart(2,"0")}`;
+  await storage.clearOldMissingClockNotifications(yesterdayStr).catch(() => {}); // non-critical
+
   const currentMinute = taipeiNow.getMinutes();
   const currentTimeStr = `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
 
@@ -824,9 +828,9 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
       continue;
     }
 
-    const notifyKey = `${todayStr}-${shift.employeeId}-${shift.id}`;
-    if (missingClockInNotified.has(notifyKey)) {
-      console.log(`[未打卡提醒] 跳過（已通知過）: 員工ID=${shift.employeeId} 班次=${shiftStart}`);
+    const notifyKey = `${shift.employeeId}-${shift.id}`;
+    if (alreadySentKeys.has(notifyKey)) {
+      console.log(`[未打卡提醒] 跳過（DB已記錄通知過）: 員工ID=${shift.employeeId} 班次=${shiftStart}`);
       continue;
     }
 
@@ -837,7 +841,8 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
     const venueName = venue?.shortName || venue?.name || "未知場館";
 
     missingEmployees.push({ emp, shift, venueName });
-    missingClockInNotified.add(notifyKey);
+    // Mark in local set so within this run we don't double-process
+    alreadySentKeys.add(notifyKey);
   }
 
   if (missingEmployees.length === 0) {
@@ -870,6 +875,11 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
         console.error(`[未打卡提醒] LINE推播失敗 ${emp.name}:`, err);
       }
     }
+
+    // Persist to DB so server restarts don't cause re-notification for this shift
+    await storage.createMissingClockNotification(todayStr, emp.id, shift.id).catch((e) =>
+      console.error(`[未打卡提醒] DB 寫入失敗 empId=${emp.id} shiftId=${shift.id}:`, e)
+    );
     notified++;
   }
 

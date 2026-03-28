@@ -13,6 +13,7 @@ import {
   notificationRecipients,
   salaryRateConfigs,
   systemConfigs,
+  missingClockNotifications,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -32,6 +33,7 @@ import {
   type NotificationRecipient, type InsertNotificationRecipient,
   type SalaryRateConfig,
   type SystemConfig,
+  type MissingClockNotification,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -151,6 +153,12 @@ export interface IStorage {
 
   getSystemConfig(key: string): Promise<SystemConfig | undefined>;
   upsertSystemConfig(key: string, value: string): Promise<SystemConfig>;
+
+  // Missing clock-in notification tracking (persisted in DB so restarts don't cause re-sends)
+  hasMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<boolean>;
+  createMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<void>;
+  clearOldMissingClockNotifications(beforeDate: string): Promise<void>;
+  getMissingClockNotificationsForDate(date: string): Promise<MissingClockNotification[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -788,6 +796,38 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return created;
     }
+  }
+
+  // ── Missing clock-in notification tracking ────────────────────────────────
+  async hasMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<boolean> {
+    const [row] = await db.select({ id: missingClockNotifications.id })
+      .from(missingClockNotifications)
+      .where(and(
+        eq(missingClockNotifications.date, date),
+        eq(missingClockNotifications.employeeId, employeeId),
+        eq(missingClockNotifications.shiftId, shiftId),
+      ))
+      .limit(1);
+    return !!row;
+  }
+
+  async createMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<void> {
+    await db.insert(missingClockNotifications)
+      .values({ date, employeeId, shiftId })
+      .onConflictDoNothing();
+  }
+
+  async clearOldMissingClockNotifications(beforeDate: string): Promise<void> {
+    await db.delete(missingClockNotifications)
+      .where(and(
+        // delete all records with date < beforeDate
+        lte(missingClockNotifications.date, beforeDate),
+      ));
+  }
+
+  async getMissingClockNotificationsForDate(date: string): Promise<MissingClockNotification[]> {
+    return db.select().from(missingClockNotifications)
+      .where(eq(missingClockNotifications.date, date));
   }
 }
 
