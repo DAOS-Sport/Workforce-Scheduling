@@ -2216,6 +2216,17 @@ function PortalPageInner() {
   return <PortalMain employee={employee} />;
 }
 
+/** Returns true only when running inside LINE's in-app browser (mobile or desktop). */
+function isLineInAppBrowser(): boolean {
+  const ua = navigator.userAgent;
+  // LINE's in-app browser always includes "Line/" in the UA string.
+  // LIFF SDK also sets this flag when the page is opened inside LINE.
+  return /Line\//i.test(ua);
+}
+
 export default function PortalPage() {
+  if (!isLineInAppBrowser()) {
+    return <NotLineBrowser />;
+  }
   return <PortalPageInner />;
 }
