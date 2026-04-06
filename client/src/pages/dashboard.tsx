@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
-import { Users, Building2, Calendar, CheckCircle2, Clock, Shield, TrendingUp, Zap, Send, AlertTriangle } from "lucide-react";
+import { Users, Building2, Calendar, CheckCircle2, Clock, Shield, TrendingUp, Zap, Send, AlertTriangle, RotateCcw } from "lucide-react";
 import type { Employee, Venue, Shift, ScheduleSlot } from "@shared/schema";
 import { useMemo, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
@@ -39,8 +39,10 @@ export default function DashboardPage() {
   const [scheduleResult, setScheduleResult] = useState<{ sent: number; skipped: number; noLineId: number } | null>(null);
   const [lateReportResult, setLateReportResult] = useState<{ sent: number; skipped: number; noLineId: number } | null>(null);
 
+  const [forceResend, setForceResend] = useState(false);
+
   const weeklyScheduleMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/admin/trigger-weekly-schedule", { force: true }),
+    mutationFn: () => apiRequest("POST", "/api/admin/trigger-weekly-schedule", { force: forceResend }),
     onSuccess: async (res) => {
       const data = await res.json();
       setScheduleResult(data);
@@ -50,7 +52,7 @@ export default function DashboardPage() {
   });
 
   const weeklyLateReportMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/admin/trigger-weekly-late-report", { force: true }),
+    mutationFn: () => apiRequest("POST", "/api/admin/trigger-weekly-late-report", { force: forceResend }),
     onSuccess: async (res) => {
       const data = await res.json();
       setLateReportResult(data);
@@ -245,14 +247,29 @@ export default function DashboardPage() {
         </div>
 
         <Card className="p-5 rounded-xl shadow-md border-border/50">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="p-2 rounded-lg bg-blue-500/10">
-              <Send className="h-4 w-4 text-blue-500" />
+          <div className="flex items-center justify-between gap-2.5 mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <Send className="h-4 w-4 text-blue-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-sm">每週 LINE 推播（手動觸發）</h3>
+                <p className="text-xs text-muted-foreground">自動排程：週日 19:00 發下週班表、週一 09:00 發上週遲到報告</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-semibold text-sm">每週 LINE 推播（手動觸發）</h3>
-              <p className="text-xs text-muted-foreground">自動排程：週日 19:00 發下週班表、週一 09:00 發上週遲到報告</p>
-            </div>
+            <button
+              data-testid="toggle-force-resend"
+              onClick={() => setForceResend(f => !f)}
+              className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                forceResend
+                  ? "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400"
+                  : "bg-muted/50 text-muted-foreground border-border/50"
+              }`}
+              title={forceResend ? "忽略去重，強制重送" : "尊重去重，本週已送者跳過"}
+            >
+              <RotateCcw className="h-3 w-3" />
+              {forceResend ? "強制重送" : "去重保護"}
+            </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
