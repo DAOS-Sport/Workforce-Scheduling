@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, date, time, serial, timestamp, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, date, time, serial, timestamp, real, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -445,7 +445,9 @@ export const weeklyPushNotifications = pgTable("weekly_push_notifications", {
   employeeId: integer("employee_id").notNull(),
   pushType: text("push_type").notNull(),              // 'schedule' | 'late_report'
   sentAt: timestamp("sent_at").defaultNow(),
-});
+}, (t) => ({
+  uniq: unique("wpn_uniq_week_emp_type").on(t.weekStartDate, t.employeeId, t.pushType),
+}));
 
 export const insertWeeklyPushNotificationSchema = createInsertSchema(weeklyPushNotifications).omit({ id: true, sentAt: true });
 export type InsertWeeklyPushNotification = z.infer<typeof insertWeeklyPushNotificationSchema>;

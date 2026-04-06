@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, and, gte, lte, inArray, desc, or, isNull } from "drizzle-orm";
 import {
   regions, venues, employees, shifts, venueRequirements,
@@ -863,3 +863,31 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+/**
+ * Ensures the weekly_push_notifications table exists with the required unique constraint.
+ * Called at server startup so the table is guaranteed to exist before any cron/API access.
+ */
+export async function ensureWeeklyPushTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS weekly_push_notifications (
+      id SERIAL PRIMARY KEY,
+      week_start_date TEXT NOT NULL,
+      employee_id INTEGER NOT NULL,
+      push_type TEXT NOT NULL,
+      sent_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'wpn_uniq_week_emp_type'
+      ) THEN
+        ALTER TABLE weekly_push_notifications
+        ADD CONSTRAINT wpn_uniq_week_emp_type
+        UNIQUE (week_start_date, employee_id, push_type);
+      END IF;
+    END $$
+  `);
+}

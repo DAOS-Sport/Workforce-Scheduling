@@ -5,6 +5,7 @@ import { createServer } from "http";
 import cron from "node-cron";
 import { syncFromRagic } from "./ragic";
 import { sendShiftReminders, checkMissingClockIn, resetMissingClockInTracker, sendWeeklySchedulePush, sendWeeklyLateReport } from "./line-webhook";
+import { ensureWeeklyPushTable } from "./storage";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 
@@ -100,6 +101,14 @@ app.use((req, res, next) => {
     await seedDatabase();
   } catch (err) {
     console.error("Seed error:", err);
+  }
+
+  // Ensure weekly push notification dedup table exists (idempotent, safe to run every startup)
+  try {
+    await ensureWeeklyPushTable();
+    log("weekly_push_notifications 表格確認完成", "db");
+  } catch (err: any) {
+    log(`weekly_push_notifications 表格建立失敗: ${err.message}`, "db");
   }
 
   await registerRoutes(httpServer, app);
