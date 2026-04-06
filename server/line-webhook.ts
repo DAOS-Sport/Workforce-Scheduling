@@ -1028,12 +1028,14 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
     lines.push("該通知訊息僅做提醒用，實際班別請以系統公告為主。");
 
     const message = lines.join("\n").trim();
-    try {
-      await pushToLine(emp.lineId, message);
-      await storage.createWeeklyPushNotification(weekStartStr, empId, "schedule");
+    const ok = await pushToLine(emp.lineId, message);
+    if (ok) {
+      await storage.createWeeklyPushNotification(weekStartStr, empId, "schedule").catch(e =>
+        console.error(`[週班表推播] 去重寫入失敗 empId=${empId}:`, e)
+      );
       sent++;
-    } catch (err) {
-      console.error(`[週班表推播] 發送失敗 empId=${empId}:`, err);
+    } else {
+      console.error(`[週班表推播] 發送失敗 empId=${empId}`);
       skipped++;
     }
   }
@@ -1170,12 +1172,14 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
     lines.push("如有疑問，請與主管確認打卡記錄 🙏");
 
     const message = lines.join("\n").trim();
-    try {
-      await pushToLine(emp.lineId, message);
-      await storage.createWeeklyPushNotification(weekStartStr, empId, "late_report").catch(() => {});
+    const ok = await pushToLine(emp.lineId, message);
+    if (ok) {
+      await storage.createWeeklyPushNotification(weekStartStr, empId, "late_report").catch(e =>
+        console.error(`[週遲到報告] 去重寫入失敗 empId=${empId}:`, e)
+      );
       sent++;
-    } catch (err) {
-      console.error(`[週遲到報告] 發送失敗 empId=${empId}:`, err);
+    } else {
+      console.error(`[週遲到報告] 發送失敗 empId=${empId}`);
       skipped++;
     }
   }
