@@ -2020,7 +2020,7 @@ export async function registerRoutes(
       return res.status(401).json({ message: "未登入" });
     }
     try {
-      const force = req.body?.force !== false; // default true for manual trigger
+      const force = req.body?.force === true; // default false (respect dedup)
       const result = await sendWeeklySchedulePush(force);
       res.json(result);
     } catch (err: any) {
@@ -2033,7 +2033,7 @@ export async function registerRoutes(
       return res.status(401).json({ message: "未登入" });
     }
     try {
-      const force = req.body?.force !== false; // default true for manual trigger
+      const force = req.body?.force === true; // default false (respect dedup)
       const result = await sendWeeklyLateReport(force);
       res.json(result);
     } catch (err: any) {
