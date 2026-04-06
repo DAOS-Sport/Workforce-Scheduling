@@ -4,7 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import cron from "node-cron";
 import { syncFromRagic } from "./ragic";
-import { sendShiftReminders, checkMissingClockIn, resetMissingClockInTracker } from "./line-webhook";
+import { sendShiftReminders, checkMissingClockIn, resetMissingClockInTracker, sendWeeklySchedulePush, sendWeeklyLateReport } from "./line-webhook";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 
@@ -184,6 +184,28 @@ app.use((req, res, next) => {
         resetMissingClockInTracker();
       }, { timezone: "Asia/Taipei" });
       log("已排程每日午夜重置未打卡追蹤記錄", "cron");
+
+      cron.schedule("0 19 * * 0", async () => {
+        log("開始執行每週下週班表推播...", "cron");
+        try {
+          const result = await sendWeeklySchedulePush();
+          log(`週班表推播完成: 發送 ${result.sent}, 跳過 ${result.skipped}, 無LINE ${result.noLineId}`, "cron");
+        } catch (err: any) {
+          log(`週班表推播失敗: ${err.message}`, "cron");
+        }
+      }, { timezone: "Asia/Taipei" });
+      log("已排程每週日 19:00 (台灣時間) 自動推播下週班表", "cron");
+
+      cron.schedule("0 9 * * 1", async () => {
+        log("開始執行上週遲到報告推播...", "cron");
+        try {
+          const result = await sendWeeklyLateReport();
+          log(`週遲到報告推播完成: 發送 ${result.sent}, 跳過 ${result.skipped}, 無LINE ${result.noLineId}`, "cron");
+        } catch (err: any) {
+          log(`週遲到報告推播失敗: ${err.message}`, "cron");
+        }
+      }, { timezone: "Asia/Taipei" });
+      log("已排程每週一 09:00 (台灣時間) 自動推播上週遲到報告", "cron");
     },
   );
 })();

@@ -437,6 +437,20 @@ export const insertMissingClockNotificationSchema = createInsertSchema(missingCl
 export type InsertMissingClockNotification = z.infer<typeof insertMissingClockNotificationSchema>;
 export type MissingClockNotification = typeof missingClockNotifications.$inferSelect;
 
+// Deduplication table for weekly LINE pushes (schedule + late report).
+// Keyed by week_start_date (YYYY-MM-DD of Monday) + employee_id + push_type.
+export const weeklyPushNotifications = pgTable("weekly_push_notifications", {
+  id: serial("id").primaryKey(),
+  weekStartDate: text("week_start_date").notNull(),  // YYYY-MM-DD (Monday)
+  employeeId: integer("employee_id").notNull(),
+  pushType: text("push_type").notNull(),              // 'schedule' | 'late_report'
+  sentAt: timestamp("sent_at").defaultNow(),
+});
+
+export const insertWeeklyPushNotificationSchema = createInsertSchema(weeklyPushNotifications).omit({ id: true, sentAt: true });
+export type InsertWeeklyPushNotification = z.infer<typeof insertWeeklyPushNotificationSchema>;
+export type WeeklyPushNotification = typeof weeklyPushNotifications.$inferSelect;
+
 export interface VacancyInfo {
   venueId: number;
   venueName: string;

@@ -7,7 +7,7 @@ import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
 
 const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
-import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId, formatClockInMessage } from "./line-webhook";
+import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId, formatClockInMessage, sendWeeklySchedulePush, sendWeeklyLateReport } from "./line-webhook";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
@@ -2009,6 +2009,32 @@ export async function registerRoutes(
     try {
       const force = req.body?.force === true;
       const result = await sendShiftReminders(force);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/trigger-weekly-schedule", async (req, res) => {
+    if (!req.session.adminId) {
+      return res.status(401).json({ message: "未登入" });
+    }
+    try {
+      const force = req.body?.force !== false; // default true for manual trigger
+      const result = await sendWeeklySchedulePush(force);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/trigger-weekly-late-report", async (req, res) => {
+    if (!req.session.adminId) {
+      return res.status(401).json({ message: "未登入" });
+    }
+    try {
+      const force = req.body?.force !== false; // default true for manual trigger
+      const result = await sendWeeklyLateReport(force);
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

@@ -936,3 +936,250 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
 }
 
 export { resetMissingClockInTracker };
+
+// ── 每週班表推播（週日 19:00 推下週班表）─────────────────────────────────────
+export async function sendWeeklySchedulePush(force = false): Promise<{ sent: number; skipped: number; noLineId: number }> {
+  const taipeiNow = getTaiwanNow();
+
+  // Compute next Monday
+  const dow = taipeiNow.getDay(); // 0=Sun
+  const daysUntilNextMon = dow === 0 ? 1 : 8 - dow;
+  const nextMonday = new Date(taipeiNow);
+  nextMonday.setDate(taipeiNow.getDate() + daysUntilNextMon);
+  nextMonday.setHours(0, 0, 0, 0);
+
+  const nextSunday = new Date(nextMonday);
+  nextSunday.setDate(nextMonday.getDate() + 6);
+
+  const weekStartStr = formatTaiwanDate(nextMonday);
+  const weekEndStr   = formatTaiwanDate(nextSunday);
+
+  // Prune old dedup records (keep last 4 weeks)
+  const fourWeeksAgo = new Date(taipeiNow);
+  fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+  await storage.clearOldWeeklyPushNotifications(formatTaiwanDate(fourWeeksAgo)).catch(() => {});
+
+  const weekShifts = await storage.getAllShiftsByDateRange(weekStartStr, weekEndStr);
+  const workShifts = weekShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+
+  if (workShifts.length === 0) {
+    console.log(`[週班表推播] ${weekStartStr}~${weekEndStr} 無班次，跳過`);
+    return { sent: 0, skipped: 0, noLineId: 0 };
+  }
+
+  const allVenues = await storage.getAllVenues();
+  const venueMap = new Map<number, Venue>();
+  for (const v of allVenues) venueMap.set(v.id, v);
+
+  const shiftsByEmployee = new Map<number, Shift[]>();
+  for (const s of workShifts) {
+    const arr = shiftsByEmployee.get(s.employeeId) || [];
+    arr.push(s);
+    shiftsByEmployee.set(s.employeeId, arr);
+  }
+
+  const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
+  let sent = 0, skipped = 0, noLineId = 0;
+
+  for (const [empId, empShifts] of shiftsByEmployee) {
+    if (!force) {
+      const alreadySent = await storage.hasWeeklyPushNotification(weekStartStr, empId, "schedule");
+      if (alreadySent) { skipped++; continue; }
+    }
+
+    const emp = await storage.getEmployee(empId);
+    if (!emp) { skipped++; continue; }
+    if (!emp.lineId) { noLineId++; continue; }
+
+    const shiftsByDate = new Map<string, Shift[]>();
+    for (const s of empShifts) {
+      const arr = shiftsByDate.get(s.date) || [];
+      arr.push(s);
+      shiftsByDate.set(s.date, arr);
+    }
+
+    const lines: string[] = [];
+    lines.push(`📋 下週班表通知`);
+    lines.push(`📅 ${nextMonday.getMonth() + 1}/${nextMonday.getDate()} - ${nextSunday.getMonth() + 1}/${nextSunday.getDate()}`);
+    lines.push("");
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(nextMonday);
+      d.setDate(nextMonday.getDate() + i);
+      const dateStr = formatTaiwanDate(d);
+      const dayShifts = (shiftsByDate.get(dateStr) || []).sort((a, b) => a.startTime.localeCompare(b.startTime));
+      if (dayShifts.length === 0) continue;
+
+      const dayName = dayNames[d.getDay()];
+      lines.push(`▸ ${d.getMonth() + 1}/${d.getDate()}（${dayName}）`);
+
+      for (const shift of dayShifts) {
+        const venue = venueMap.get(shift.venueId);
+        const venueName = venue?.shortName || venue?.name || "未知場館";
+        const start = shift.startTime.substring(0, 5);
+        const end   = shift.endTime.substring(0, 5);
+        lines.push(`  🏢 ${venueName}  ${start}-${end}`);
+        if (shift.isDispatch) lines.push(`  🔸 派遣`);
+      }
+      lines.push("");
+    }
+
+    lines.push("請準時出勤，如需請假請提前告知主管 🙏");
+    lines.push("該通知訊息僅做提醒用，實際班別請以系統公告為主。");
+
+    const message = lines.join("\n").trim();
+    try {
+      await pushToLine(emp.lineId, message);
+      await storage.createWeeklyPushNotification(weekStartStr, empId, "schedule");
+      sent++;
+    } catch (err) {
+      console.error(`[週班表推播] 發送失敗 empId=${empId}:`, err);
+      skipped++;
+    }
+  }
+
+  console.log(`[週班表推播] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
+  return { sent, skipped, noLineId };
+}
+
+// ── 每週遲到報告（週一 09:00 推上週異常）────────────────────────────────────
+export async function sendWeeklyLateReport(force = false): Promise<{ sent: number; skipped: number; noLineId: number }> {
+  const taipeiNow = getTaiwanNow();
+
+  // Compute last Monday (start of last week)
+  const dow = taipeiNow.getDay(); // 0=Sun, 1=Mon
+  const daysToLastMon = dow === 0 ? 6 : dow - 1;
+  const lastMonday = new Date(taipeiNow);
+  lastMonday.setDate(taipeiNow.getDate() - daysToLastMon - 7);
+  lastMonday.setHours(0, 0, 0, 0);
+
+  const lastSunday = new Date(lastMonday);
+  lastSunday.setDate(lastMonday.getDate() + 6);
+
+  const weekStartStr = formatTaiwanDate(lastMonday);
+  const weekEndStr   = formatTaiwanDate(lastSunday);
+
+  const weekShifts = await storage.getAllShiftsByDateRange(weekStartStr, weekEndStr);
+  const workShifts = weekShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+
+  const clockRecs = await storage.getClockRecordsByDateRange(weekStartStr, weekEndStr);
+
+  // Group clock records by employee + date
+  type ClockKey = string; // `${empId}:${dateStr}`
+  const clocksByEmpDate = new Map<ClockKey, { in?: Date; out?: Date }>();
+
+  for (const cr of clockRecs) {
+    if (!cr.clockTime) continue;
+    if (cr.status !== "success" && cr.status !== "warning") continue;
+    const crDate = new Date(cr.clockTime.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+    const dateStr = formatTaiwanDate(crDate);
+    const key: ClockKey = `${cr.employeeId}:${dateStr}`;
+    const entry = clocksByEmpDate.get(key) || {};
+
+    if (cr.clockType === "in") {
+      if (!entry.in || crDate < entry.in) entry.in = crDate; // earliest in
+    } else if (cr.clockType === "out") {
+      if (!entry.out || crDate > entry.out) entry.out = crDate; // latest out
+    }
+    clocksByEmpDate.set(key, entry);
+  }
+
+  // Group shifts by employee
+  const shiftsByEmployee = new Map<number, Shift[]>();
+  for (const s of workShifts) {
+    const arr = shiftsByEmployee.get(s.employeeId) || [];
+    arr.push(s);
+    shiftsByEmployee.set(s.employeeId, arr);
+  }
+
+  const LATE_THRESHOLD_MIN  = 10;
+  const EARLY_THRESHOLD_MIN = 10;
+
+  let sent = 0, skipped = 0, noLineId = 0;
+
+  for (const [empId, empShifts] of shiftsByEmployee) {
+    if (!force) {
+      const alreadySent = await storage.hasWeeklyPushNotification(weekStartStr, empId, "late_report");
+      if (alreadySent) { skipped++; continue; }
+    }
+
+    // Collect anomalies for this employee
+    type AnomalyEntry = { date: string; dayName: string; shiftLabel: string; issues: string[] };
+    const anomalies: AnomalyEntry[] = [];
+    const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
+
+    for (const shift of empShifts) {
+      const key: ClockKey = `${empId}:${shift.date}`;
+      const clocks = clocksByEmpDate.get(key);
+      const issues: string[] = [];
+
+      const [sh, sm] = shift.startTime.split(":").map(Number);
+      const [eh, em] = shift.endTime.split(":").map(Number);
+      const shiftStartMin = sh * 60 + sm;
+      const shiftEndMin   = eh * 60 + em;
+
+      if (clocks?.in) {
+        const h = clocks.in.getHours(), m = clocks.in.getMinutes();
+        const clockInMin = h * 60 + m;
+        if (clockInMin - shiftStartMin > LATE_THRESHOLD_MIN) {
+          const lateBy = clockInMin - shiftStartMin;
+          issues.push(`遲到 ${lateBy} 分鐘（${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")} 上班，預計 ${shift.startTime.substring(0,5)}）`);
+        }
+      }
+
+      if (clocks?.out) {
+        const h = clocks.out.getHours(), m = clocks.out.getMinutes();
+        const clockOutMin = h * 60 + m;
+        if (shiftEndMin - clockOutMin > EARLY_THRESHOLD_MIN) {
+          const earlyBy = shiftEndMin - clockOutMin;
+          issues.push(`早退 ${earlyBy} 分鐘（${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")} 下班，預計 ${shift.endTime.substring(0,5)}）`);
+        }
+      }
+
+      if (issues.length > 0) {
+        const d = new Date(shift.date + "T00:00:00+08:00");
+        const dayName = dayNames[d.getDay()];
+        const m2 = d.getMonth() + 1;
+        const dd = d.getDate();
+        anomalies.push({
+          date: shift.date,
+          dayName,
+          shiftLabel: `${m2}/${dd}（${dayName}）${shift.startTime.substring(0,5)}-${shift.endTime.substring(0,5)}`,
+          issues,
+        });
+      }
+    }
+
+    if (anomalies.length === 0) continue; // no anomalies → don't send
+
+    const emp = await storage.getEmployee(empId);
+    if (!emp) { skipped++; continue; }
+    if (!emp.lineId) { noLineId++; continue; }
+
+    const lines: string[] = [];
+    lines.push(`📊 上週出勤異常通知`);
+    lines.push(`📅 ${lastMonday.getMonth()+1}/${lastMonday.getDate()} - ${lastSunday.getMonth()+1}/${lastSunday.getDate()}`);
+    lines.push("");
+
+    for (const a of anomalies) {
+      lines.push(`▸ ${a.shiftLabel}`);
+      for (const issue of a.issues) lines.push(`  ⚠️ ${issue}`);
+      lines.push("");
+    }
+
+    lines.push("如有疑問，請與主管確認打卡記錄 🙏");
+
+    const message = lines.join("\n").trim();
+    try {
+      await pushToLine(emp.lineId, message);
+      await storage.createWeeklyPushNotification(weekStartStr, empId, "late_report").catch(() => {});
+      sent++;
+    } catch (err) {
+      console.error(`[週遲到報告] 發送失敗 empId=${empId}:`, err);
+      skipped++;
+    }
+  }
+
+  console.log(`[週遲到報告] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
+  return { sent, skipped, noLineId };
+}

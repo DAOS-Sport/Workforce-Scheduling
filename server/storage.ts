@@ -14,6 +14,7 @@ import {
   salaryRateConfigs,
   systemConfigs,
   missingClockNotifications,
+  weeklyPushNotifications,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -34,6 +35,7 @@ import {
   type SalaryRateConfig,
   type SystemConfig,
   type MissingClockNotification,
+  type WeeklyPushNotification,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -159,6 +161,11 @@ export interface IStorage {
   createMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<void>;
   clearOldMissingClockNotifications(beforeDate: string): Promise<void>;
   getMissingClockNotificationsForDate(date: string): Promise<MissingClockNotification[]>;
+
+  // Weekly push notification deduplication
+  hasWeeklyPushNotification(weekStartDate: string, employeeId: number, pushType: string): Promise<boolean>;
+  createWeeklyPushNotification(weekStartDate: string, employeeId: number, pushType: string): Promise<void>;
+  clearOldWeeklyPushNotifications(beforeWeekStart: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -828,6 +835,30 @@ export class DatabaseStorage implements IStorage {
   async getMissingClockNotificationsForDate(date: string): Promise<MissingClockNotification[]> {
     return db.select().from(missingClockNotifications)
       .where(eq(missingClockNotifications.date, date));
+  }
+
+  // ── Weekly push notification deduplication ────────────────────────────────
+  async hasWeeklyPushNotification(weekStartDate: string, employeeId: number, pushType: string): Promise<boolean> {
+    const [row] = await db.select({ id: weeklyPushNotifications.id })
+      .from(weeklyPushNotifications)
+      .where(and(
+        eq(weeklyPushNotifications.weekStartDate, weekStartDate),
+        eq(weeklyPushNotifications.employeeId, employeeId),
+        eq(weeklyPushNotifications.pushType, pushType),
+      ))
+      .limit(1);
+    return !!row;
+  }
+
+  async createWeeklyPushNotification(weekStartDate: string, employeeId: number, pushType: string): Promise<void> {
+    await db.insert(weeklyPushNotifications)
+      .values({ weekStartDate, employeeId, pushType })
+      .onConflictDoNothing();
+  }
+
+  async clearOldWeeklyPushNotifications(beforeWeekStart: string): Promise<void> {
+    await db.delete(weeklyPushNotifications)
+      .where(lte(weeklyPushNotifications.weekStartDate, beforeWeekStart));
   }
 }
 

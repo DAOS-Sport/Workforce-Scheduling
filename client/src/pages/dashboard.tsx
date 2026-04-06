@@ -1,14 +1,17 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, startOfWeek, addDays, startOfMonth, endOfMonth } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
-import { Users, Building2, Calendar, AlertTriangle, CheckCircle2, Clock, Shield, TrendingUp, Zap } from "lucide-react";
+import { Users, Building2, Calendar, CheckCircle2, Clock, Shield, TrendingUp, Zap, Send, AlertTriangle } from "lucide-react";
 import type { Employee, Venue, Shift, ScheduleSlot } from "@shared/schema";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 function CircularProgress({ value, max, size = 56, strokeWidth = 5, color = "hsl(var(--primary))" }: { value: number; max: number; size?: number; strokeWidth?: number; color?: string }) {
   const radius = (size - strokeWidth) / 2;
@@ -31,6 +34,30 @@ function CircularProgress({ value, max, size = 56, strokeWidth = 5, color = "hsl
 
 export default function DashboardPage() {
   const { activeRegion } = useRegion();
+  const { toast } = useToast();
+
+  const [scheduleResult, setScheduleResult] = useState<{ sent: number; skipped: number; noLineId: number } | null>(null);
+  const [lateReportResult, setLateReportResult] = useState<{ sent: number; skipped: number; noLineId: number } | null>(null);
+
+  const weeklyScheduleMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/trigger-weekly-schedule", { force: true }),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      setScheduleResult(data);
+      toast({ title: "下週班表推播完成", description: `發送 ${data.sent} 人，跳過 ${data.skipped}，無LINE ${data.noLineId}` });
+    },
+    onError: () => { toast({ title: "推播失敗", variant: "destructive" }); },
+  });
+
+  const weeklyLateReportMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/trigger-weekly-late-report", { force: true }),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      setLateReportResult(data);
+      toast({ title: "上週遲到報告推播完成", description: `發送 ${data.sent} 人，跳過 ${data.skipped}，無LINE ${data.noLineId}` });
+    },
+    onError: () => { toast({ title: "推播失敗", variant: "destructive" }); },
+  });
 
   const weekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
@@ -216,6 +243,56 @@ export default function DashboardPage() {
             )}
           </Card>
         </div>
+
+        <Card className="p-5 rounded-xl shadow-md border-border/50">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="p-2 rounded-lg bg-blue-500/10">
+              <Send className="h-4 w-4 text-blue-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">每週 LINE 推播（手動觸發）</h3>
+              <p className="text-xs text-muted-foreground">自動排程：週日 19:00 發下週班表、週一 09:00 發上週遲到報告</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Button
+                data-testid="button-trigger-weekly-schedule"
+                variant="outline"
+                className="w-full"
+                onClick={() => weeklyScheduleMutation.mutate()}
+                disabled={weeklyScheduleMutation.isPending}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {weeklyScheduleMutation.isPending ? "推播中..." : "立即推播下週班表"}
+              </Button>
+              {scheduleResult && (
+                <div className="text-xs rounded-lg bg-muted/50 p-2.5 space-y-0.5" data-testid="text-schedule-push-result">
+                  <p className="font-medium text-green-600 dark:text-green-400">✓ 推播完成</p>
+                  <p className="text-muted-foreground">發送 {scheduleResult.sent} 人 · 跳過 {scheduleResult.skipped} 人 · 無LINE {scheduleResult.noLineId} 人</p>
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Button
+                data-testid="button-trigger-weekly-late-report"
+                variant="outline"
+                className="w-full"
+                onClick={() => weeklyLateReportMutation.mutate()}
+                disabled={weeklyLateReportMutation.isPending}
+              >
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                {weeklyLateReportMutation.isPending ? "推播中..." : "立即推播上週遲到報告"}
+              </Button>
+              {lateReportResult && (
+                <div className="text-xs rounded-lg bg-muted/50 p-2.5 space-y-0.5" data-testid="text-late-report-push-result">
+                  <p className="font-medium text-green-600 dark:text-green-400">✓ 推播完成</p>
+                  <p className="text-muted-foreground">發送 {lateReportResult.sent} 人 · 跳過 {lateReportResult.skipped} 人 · 無LINE {lateReportResult.noLineId} 人</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   );
