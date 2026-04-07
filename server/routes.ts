@@ -428,13 +428,11 @@ export async function registerRoutes(
       if (!Array.isArray(shiftIds) || shiftIds.length === 0) {
         return res.status(400).json({ message: "shiftIds array is required" });
       }
+      const uniqueIds = [...new Set(shiftIds.map(Number).filter(n => Number.isInteger(n) && n > 0))];
       let deletedCount = 0;
-      for (const id of shiftIds) {
-        const numId = Number(id);
-        if (!isNaN(numId)) {
-          await storage.deleteShift(numId);
-          deletedCount++;
-        }
+      for (const numId of uniqueIds) {
+        const ok = await storage.deleteShift(numId);
+        if (ok) deletedCount++;
       }
       res.json({ success: true, deletedCount });
     } catch (err: any) {

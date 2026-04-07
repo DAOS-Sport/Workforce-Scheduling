@@ -329,6 +329,14 @@ export default function SchedulePage() {
   const activeRegionRef = useRef(activeRegion);
   useEffect(() => { activeRegionRef.current = activeRegion; }, [activeRegion]);
 
+  useEffect(() => {
+    try {
+      setFixedOrder(localStorage.getItem(`schedule_fixed_order_${activeRegion}`) === "true");
+      const saved = localStorage.getItem(`schedule_employee_order_${activeRegion}`);
+      setCustomEmployeeOrder(saved ? JSON.parse(saved) : []);
+    } catch { /* ignore */ }
+  }, [activeRegion]);
+
   const monthDates = useMemo(
     () => eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) }),
     [currentMonth]
