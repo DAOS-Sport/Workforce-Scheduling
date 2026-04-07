@@ -38,6 +38,36 @@ interface ReportClockRecord {
   longitude: number;
 }
 
+interface ClockAmendment {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  employeeCode: string;
+  clockType: string;
+  requestedTime: string;
+  reason: string;
+  status: string;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+}
+
+interface OvertimeRequest {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  employeeCode: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+  status: string;
+  source: string;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+}
+
 function getTaiwanToday(): string {
   const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -65,6 +95,12 @@ function formatTaiwanDate(iso: string): string {
   });
 }
 
+function isoToTaiwanDateStr(iso: string): string {
+  const d = new Date(iso);
+  const taipei = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  return `${taipei.getFullYear()}-${String(taipei.getMonth() + 1).padStart(2, "0")}-${String(taipei.getDate()).padStart(2, "0")}`;
+}
+
 function statusLabel(status: string): string {
   if (status === "success") return "成功";
   if (status === "fail") return "失敗";
@@ -72,8 +108,52 @@ function statusLabel(status: string): string {
   return status;
 }
 
+function reviewStatusLabel(status: string): string {
+  if (status === "pending") return "待審核";
+  if (status === "approved") return "已核准";
+  if (status === "rejected") return "已拒絕";
+  return status;
+}
+
 function clockTypeLabel(ct: string): string {
   return ct === "in" ? "上班" : "下班";
+}
+
+function sourceLabel(s: string): string {
+  if (s === "manual") return "手動";
+  if (s === "auto") return "自動";
+  return s;
+}
+
+function parseFailReason(failReason: string | null): { note: string; minutes: number | null } {
+  if (!failReason) return { note: "", minutes: null };
+
+  const withHoursAndMins = (prefix: string, noteLabel: string) => {
+    const reHM = new RegExp(`^${prefix}\\s*(\\d+)\\s*小時\\s*(\\d+)\\s*分鐘`);
+    const reH = new RegExp(`^${prefix}\\s*(\\d+)\\s*小時`);
+    const reM = new RegExp(`^${prefix}\\s*(\\d+)\\s*分鐘`);
+    let m = failReason.match(reHM);
+    if (m) return { note: noteLabel, minutes: parseInt(m[1]) * 60 + parseInt(m[2]) };
+    m = failReason.match(reH);
+    if (m) return { note: noteLabel, minutes: parseInt(m[1]) * 60 };
+    m = failReason.match(reM);
+    if (m) return { note: noteLabel, minutes: parseInt(m[1]) };
+    return null;
+  };
+
+  let result = withHoursAndMins("遲到", "遲到");
+  if (result) return result;
+
+  result = withHoursAndMins("提早", "提早到");
+  if (result) return result;
+
+  result = withHoursAndMins("晚下班", "晚下班");
+  if (result) return result;
+
+  if (failReason === "今日無排班") return { note: "今日無排班", minutes: null };
+  if (failReason.includes("不在任何場館範圍內")) return { note: "不在任何場館範圍內", minutes: null };
+
+  return { note: failReason, minutes: null };
 }
 
 export default function ReportsPage() {
@@ -91,6 +171,7 @@ export default function ReportsPage() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterClockType, setFilterClockType] = useState("all");
   const [filterVenueId, setFilterVenueId] = useState("all");
+  const [exporting, setExporting] = useState(false);
 
   const startDate = useCustomRange
     ? customStart
@@ -130,41 +211,103 @@ export default function ReportsPage() {
   const inCount = useMemo(() => records.filter((r) => r.clockType === "in").length, [records]);
   const outCount = useMemo(() => records.filter((r) => r.clockType === "out").length, [records]);
 
-  function handleExportExcel() {
+  async function handleExportExcel() {
     if (records.length === 0) {
       toast({ title: "無資料可匯出", variant: "destructive" });
       return;
     }
 
-    const rows = records.map((r) => ({
-      "員工姓名": r.employeeName,
-      "員工編號": r.employeeCode,
-      "日期": formatTaiwanDate(r.clockTime),
-      "打卡時間": formatTaiwanDateTime(r.clockTime),
-      "打卡類型": clockTypeLabel(r.clockType),
-      "場館": r.venueName || r.matchedVenueName || "—",
-      "打卡狀態": statusLabel(r.status),
-      "距離(m)": r.distance !== null ? r.distance : "",
-      "備註": r.failReason || "",
-    }));
+    setExporting(true);
+    try {
+      const wb = XLSX.utils.book_new();
 
-    const ws = XLSX.utils.json_to_sheet(rows);
+      const clockRows = records.map((r) => {
+        const { note, minutes } = parseFailReason(r.failReason);
+        return {
+          "員工姓名": r.employeeName,
+          "員工編號": r.employeeCode,
+          "日期": formatTaiwanDate(r.clockTime),
+          "打卡時間": formatTaiwanDateTime(r.clockTime),
+          "打卡類型": clockTypeLabel(r.clockType),
+          "場館": r.venueName || r.matchedVenueName || "—",
+          "打卡狀態": statusLabel(r.status),
+          "距離(m)": r.distance !== null ? Math.round(r.distance) : "",
+          "備註": note,
+          "分鐘數": minutes !== null ? minutes : "",
+        };
+      });
+      const ws1 = XLSX.utils.json_to_sheet(clockRows);
+      ws1["!cols"] = [
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 22 }, { wch: 10 },
+        { wch: 18 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 8 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws1, "打卡記錄");
 
-    const colWidths = [
-      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 22 }, { wch: 10 },
-      { wch: 18 }, { wch: 10 }, { wch: 10 }, { wch: 30 },
-    ];
-    ws["!cols"] = colWidths;
+      const [amendRes, overtimeRes] = await Promise.all([
+        fetch("/api/clock-amendments"),
+        fetch("/api/overtime-requests"),
+      ]);
+      const allAmendments: ClockAmendment[] = amendRes.ok ? await amendRes.json() : [];
+      const allOvertimes: OvertimeRequest[] = overtimeRes.ok ? await overtimeRes.json() : [];
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "打卡記錄");
+      const amendRows = allAmendments
+        .filter((a) => {
+          const d = isoToTaiwanDateStr(a.requestedTime);
+          return d >= startDate && d <= endDate;
+        })
+        .sort((a, b) => a.employeeCode.localeCompare(b.employeeCode))
+        .map((a) => ({
+          "員工編號": a.employeeCode,
+          "員工姓名": a.employeeName,
+          "申請打卡時間": formatTaiwanDateTime(a.requestedTime),
+          "打卡類型": clockTypeLabel(a.clockType),
+          "申請原因": a.reason,
+          "狀態": reviewStatusLabel(a.status),
+          "審核人": a.reviewedByName || "",
+          "審核時間": a.reviewedAt ? formatTaiwanDateTime(a.reviewedAt) : "",
+          "審核備註": a.reviewNote || "",
+        }));
+      const ws2 = XLSX.utils.json_to_sheet(amendRows);
+      ws2["!cols"] = [
+        { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 10 },
+        { wch: 28 }, { wch: 10 }, { wch: 12 }, { wch: 22 }, { wch: 28 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws2, "補打卡申請");
 
-    const fileName = useCustomRange
-      ? `打卡記錄_${customStart}_${customEnd}.xlsx`
-      : `打卡記錄_${format(currentMonth, "yyyy-MM")}.xlsx`;
+      const overtimeRows = allOvertimes
+        .filter((o) => o.date >= startDate && o.date <= endDate)
+        .sort((a, b) => a.employeeCode.localeCompare(b.employeeCode))
+        .map((o) => ({
+          "員工編號": o.employeeCode,
+          "員工姓名": o.employeeName,
+          "日期": o.date,
+          "開始時間": o.startTime,
+          "結束時間": o.endTime,
+          "申請原因": o.reason,
+          "狀態": reviewStatusLabel(o.status),
+          "來源": sourceLabel(o.source),
+          "審核人": o.reviewedByName || "",
+          "審核時間": o.reviewedAt ? formatTaiwanDateTime(o.reviewedAt) : "",
+          "審核備註": o.reviewNote || "",
+        }));
+      const ws3 = XLSX.utils.json_to_sheet(overtimeRows);
+      ws3["!cols"] = [
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 10 },
+        { wch: 28 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 22 }, { wch: 28 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws3, "加班申請");
 
-    XLSX.writeFile(wb, fileName);
-    toast({ title: `已匯出 ${records.length} 筆資料`, description: fileName });
+      const fileName = useCustomRange
+        ? `打卡記錄_${customStart}_${customEnd}.xlsx`
+        : `打卡記錄_${format(currentMonth, "yyyy-MM")}.xlsx`;
+
+      XLSX.writeFile(wb, fileName);
+      toast({ title: `已匯出 ${records.length} 筆資料`, description: `${fileName}（共 3 個分頁）` });
+    } catch (err: any) {
+      toast({ title: "匯出失敗", description: err.message, variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
   }
 
   function handleResetFilters() {
@@ -188,16 +331,16 @@ export default function ReportsPage() {
             <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
             報表匯出
           </h1>
-          <p className="text-sm text-muted-foreground">打卡記錄篩選查詢與 Excel 匯出</p>
+          <p className="text-sm text-muted-foreground">打卡記錄篩選查詢與 Excel 匯出（含補打卡、加班申請分頁）</p>
         </div>
         <Button
           onClick={handleExportExcel}
           className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-          disabled={isLoading || records.length === 0}
+          disabled={isLoading || records.length === 0 || exporting}
           data-testid="button-export-excel"
         >
           <Download className="h-4 w-4" />
-          匯出 Excel ({records.length} 筆)
+          {exporting ? "匯出中..." : `匯出 Excel (${records.length} 筆)`}
         </Button>
       </div>
 
@@ -426,58 +569,65 @@ export default function ReportsPage() {
                     <th className="text-left p-3 font-medium whitespace-nowrap">狀態</th>
                     <th className="text-left p-3 font-medium whitespace-nowrap">距離</th>
                     <th className="text-left p-3 font-medium whitespace-nowrap">備註</th>
+                    <th className="text-right p-3 font-medium whitespace-nowrap">分鐘數</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {records.map((r) => (
-                    <tr key={r.id} className="border-b hover:bg-muted/30 transition-colors" data-testid={`row-report-${r.id}`}>
-                      <td className="p-3 font-medium whitespace-nowrap" data-testid={`cell-name-${r.id}`}>{r.employeeName}</td>
-                      <td className="p-3 text-muted-foreground text-xs whitespace-nowrap" data-testid={`cell-code-${r.id}`}>{r.employeeCode}</td>
-                      <td className="p-3 whitespace-nowrap text-muted-foreground">{formatTaiwanDate(r.clockTime)}</td>
-                      <td className="p-3 whitespace-nowrap font-mono text-xs">{formatTaiwanDateTime(r.clockTime)}</td>
-                      <td className="p-3 whitespace-nowrap">
-                        <Badge
-                          variant={r.clockType === "in" ? "default" : "secondary"}
-                          className="text-[11px]"
-                          data-testid={`cell-type-${r.id}`}
-                        >
-                          {clockTypeLabel(r.clockType)}
-                        </Badge>
-                      </td>
-                      <td className="p-3 whitespace-nowrap text-sm">
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-                          {r.venueName || r.matchedVenueName || "—"}
-                        </div>
-                      </td>
-                      <td className="p-3 whitespace-nowrap">
-                        {r.status === "success" && (
-                          <Badge className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20 text-[11px]" data-testid={`cell-status-${r.id}`}>
-                            <CheckCircle className="h-3 w-3 mr-1" />成功
+                  {records.map((r) => {
+                    const { note, minutes } = parseFailReason(r.failReason);
+                    return (
+                      <tr key={r.id} className="border-b hover:bg-muted/30 transition-colors" data-testid={`row-report-${r.id}`}>
+                        <td className="p-3 font-medium whitespace-nowrap" data-testid={`cell-name-${r.id}`}>{r.employeeName}</td>
+                        <td className="p-3 text-muted-foreground text-xs whitespace-nowrap" data-testid={`cell-code-${r.id}`}>{r.employeeCode}</td>
+                        <td className="p-3 whitespace-nowrap text-muted-foreground">{formatTaiwanDate(r.clockTime)}</td>
+                        <td className="p-3 whitespace-nowrap font-mono text-xs">{formatTaiwanDateTime(r.clockTime)}</td>
+                        <td className="p-3 whitespace-nowrap">
+                          <Badge
+                            variant={r.clockType === "in" ? "default" : "secondary"}
+                            className="text-[11px]"
+                            data-testid={`cell-type-${r.id}`}
+                          >
+                            {clockTypeLabel(r.clockType)}
                           </Badge>
-                        )}
-                        {r.status === "fail" && (
-                          <Badge className="bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20 text-[11px]" data-testid={`cell-status-${r.id}`}>
-                            <XCircle className="h-3 w-3 mr-1" />失敗
-                          </Badge>
-                        )}
-                        {r.status === "warning" && (
-                          <Badge className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20 text-[11px]" data-testid={`cell-status-${r.id}`}>
-                            <AlertTriangle className="h-3 w-3 mr-1" />無排班
-                          </Badge>
-                        )}
-                        {r.status !== "success" && r.status !== "fail" && r.status !== "warning" && (
-                          <Badge variant="outline" className="text-[11px]">{r.status}</Badge>
-                        )}
-                      </td>
-                      <td className="p-3 whitespace-nowrap text-muted-foreground text-xs">
-                        {r.distance !== null ? `${Math.round(r.distance)} m` : "—"}
-                      </td>
-                      <td className="p-3 text-xs max-w-[220px] truncate text-muted-foreground">
-                        {r.failReason || "—"}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="p-3 whitespace-nowrap text-sm">
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+                            {r.venueName || r.matchedVenueName || "—"}
+                          </div>
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          {r.status === "success" && (
+                            <Badge className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20 text-[11px]" data-testid={`cell-status-${r.id}`}>
+                              <CheckCircle className="h-3 w-3 mr-1" />成功
+                            </Badge>
+                          )}
+                          {r.status === "fail" && (
+                            <Badge className="bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20 text-[11px]" data-testid={`cell-status-${r.id}`}>
+                              <XCircle className="h-3 w-3 mr-1" />失敗
+                            </Badge>
+                          )}
+                          {r.status === "warning" && (
+                            <Badge className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20 text-[11px]" data-testid={`cell-status-${r.id}`}>
+                              <AlertTriangle className="h-3 w-3 mr-1" />無排班
+                            </Badge>
+                          )}
+                          {r.status !== "success" && r.status !== "fail" && r.status !== "warning" && (
+                            <Badge variant="outline" className="text-[11px]">{r.status}</Badge>
+                          )}
+                        </td>
+                        <td className="p-3 whitespace-nowrap text-muted-foreground text-xs">
+                          {r.distance !== null ? `${Math.round(r.distance)} m` : "—"}
+                        </td>
+                        <td className="p-3 text-xs whitespace-nowrap text-muted-foreground" data-testid={`cell-note-${r.id}`}>
+                          {note || "—"}
+                        </td>
+                        <td className="p-3 text-xs text-right whitespace-nowrap text-muted-foreground" data-testid={`cell-minutes-${r.id}`}>
+                          {minutes !== null ? minutes : ""}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
