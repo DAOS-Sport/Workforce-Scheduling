@@ -2176,19 +2176,23 @@ export async function registerRoutes(
       if (!startDate || !endDate) {
         return res.status(400).json({ message: "請提供 startDate 和 endDate" });
       }
+      if (String(startDate) > String(endDate)) {
+        return res.status(400).json({ message: "startDate 不可晚於 endDate" });
+      }
 
-      const allRecords = await storage.getClockRecordsByDateRange(String(startDate), String(endDate));
+      const [allRecords, allEmployees, allVenues] = await Promise.all([
+        storage.getClockRecordsByDateRange(String(startDate), String(endDate)),
+        storage.getAllEmployees(),
+        storage.getAllVenues(),
+      ]);
 
-      // Build employee map
-      const employeeIds = [...new Set(allRecords.map((r) => r.employeeId))];
+      // Build employee map (single bulk fetch — no N+1)
       const employeeMap = new Map<number, { name: string; employeeCode: string }>();
-      for (const id of employeeIds) {
-        const emp = await storage.getEmployee(id);
-        if (emp) employeeMap.set(id, { name: emp.name, employeeCode: emp.employeeCode });
+      for (const emp of allEmployees) {
+        employeeMap.set(emp.id, { name: emp.name, employeeCode: emp.employeeCode });
       }
 
       // Build venue map
-      const allVenues = await storage.getAllVenues();
       const venueMap = new Map<number, string>();
       for (const v of allVenues) venueMap.set(v.id, v.name);
 
