@@ -212,11 +212,6 @@ export default function ReportsPage() {
   const outCount = useMemo(() => records.filter((r) => r.clockType === "out").length, [records]);
 
   async function handleExportExcel() {
-    if (records.length === 0) {
-      toast({ title: "無資料可匯出", variant: "destructive" });
-      return;
-    }
-
     setExporting(true);
     try {
       const wb = XLSX.utils.book_new();
@@ -301,8 +296,14 @@ export default function ReportsPage() {
         ? `打卡記錄_${customStart}_${customEnd}.xlsx`
         : `打卡記錄_${format(currentMonth, "yyyy-MM")}.xlsx`;
 
+      const totalRows = clockRows.length + amendRows.length + overtimeRows.length;
+      if (totalRows === 0) {
+        toast({ title: "無資料可匯出", description: "此日期區間內三個分頁均無資料", variant: "destructive" });
+        return;
+      }
+
       XLSX.writeFile(wb, fileName);
-      toast({ title: `已匯出 ${records.length} 筆資料`, description: `${fileName}（共 3 個分頁）` });
+      toast({ title: `已匯出資料`, description: `${fileName}（打卡 ${clockRows.length} 筆 / 補打卡 ${amendRows.length} 筆 / 加班 ${overtimeRows.length} 筆）` });
     } catch (err: unknown) {
       toast({ title: "匯出失敗", description: err instanceof Error ? err.message : "未知錯誤", variant: "destructive" });
     } finally {
@@ -336,7 +337,7 @@ export default function ReportsPage() {
         <Button
           onClick={handleExportExcel}
           className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-          disabled={isLoading || records.length === 0 || exporting}
+          disabled={isLoading || exporting}
           data-testid="button-export-excel"
         >
           <Download className="h-4 w-4" />
