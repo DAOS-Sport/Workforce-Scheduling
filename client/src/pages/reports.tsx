@@ -303,8 +303,8 @@ export default function ReportsPage() {
 
       XLSX.writeFile(wb, fileName);
       toast({ title: `已匯出 ${records.length} 筆資料`, description: `${fileName}（共 3 個分頁）` });
-    } catch (err: any) {
-      toast({ title: "匯出失敗", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "匯出失敗", description: err instanceof Error ? err.message : "未知錯誤", variant: "destructive" });
     } finally {
       setExporting(false);
     }
