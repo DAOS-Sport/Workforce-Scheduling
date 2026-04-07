@@ -242,6 +242,9 @@ export default function ReportsPage() {
         fetch("/api/clock-amendments"),
         fetch("/api/overtime-requests"),
       ]);
+      if (!amendRes.ok || !overtimeRes.ok) {
+        toast({ title: "匯出警告", description: "補打卡或加班申請資料載入失敗，相關分頁可能不完整", variant: "destructive" });
+      }
       const allAmendments: ClockAmendment[] = amendRes.ok ? await amendRes.json() : [];
       const allOvertimes: OvertimeRequest[] = overtimeRes.ok ? await overtimeRes.json() : [];
 
