@@ -2170,6 +2170,61 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/reports/clock-records", async (req, res) => {
+    try {
+      const { startDate, endDate, employeeName, employeeCode, status, clockType, venueId } = req.query;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "請提供 startDate 和 endDate" });
+      }
+
+      const allRecords = await storage.getClockRecordsByDateRange(String(startDate), String(endDate));
+
+      // Build employee map
+      const employeeIds = [...new Set(allRecords.map((r) => r.employeeId))];
+      const employeeMap = new Map<number, { name: string; employeeCode: string }>();
+      for (const id of employeeIds) {
+        const emp = await storage.getEmployee(id);
+        if (emp) employeeMap.set(id, { name: emp.name, employeeCode: emp.employeeCode });
+      }
+
+      // Build venue map
+      const allVenues = await storage.getAllVenues();
+      const venueMap = new Map<number, string>();
+      for (const v of allVenues) venueMap.set(v.id, v.name);
+
+      // Enrich and filter
+      let enriched = allRecords.map((r) => ({
+        ...r,
+        employeeName: employeeMap.get(r.employeeId)?.name || "未知",
+        employeeCode: employeeMap.get(r.employeeId)?.employeeCode || "",
+        venueName: r.venueId ? (venueMap.get(r.venueId) || r.matchedVenueName || "") : (r.matchedVenueName || ""),
+      }));
+
+      if (status && String(status) !== "") {
+        enriched = enriched.filter((r) => r.status === String(status));
+      }
+      if (clockType && String(clockType) !== "") {
+        enriched = enriched.filter((r) => r.clockType === String(clockType));
+      }
+      if (venueId && String(venueId) !== "") {
+        const vid = Number(venueId);
+        enriched = enriched.filter((r) => r.venueId === vid);
+      }
+      if (employeeCode && String(employeeCode).trim() !== "") {
+        const codeQ = String(employeeCode).trim().toLowerCase();
+        enriched = enriched.filter((r) => r.employeeCode.toLowerCase().includes(codeQ));
+      }
+      if (employeeName && String(employeeName).trim() !== "") {
+        const nameQ = String(employeeName).trim().toLowerCase();
+        enriched = enriched.filter((r) => r.employeeName.toLowerCase().includes(nameQ));
+      }
+
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/portal/clock-amendment", async (req, res) => {
     try {
       const { employeeId, clockType, requestedTime, reason, venueId, shiftId } = req.body;
