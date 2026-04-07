@@ -20,7 +20,7 @@ import {
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
   Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft,
   GraduationCap, Award, Briefcase, Monitor, Eye, Clipboard, ClipboardPaste, FileSpreadsheet,
-  CheckCircle2, AlertTriangle
+  CheckCircle2, AlertTriangle, GripVertical, ListOrdered, SquareCheck
 } from "lucide-react";
 import { GoogleSheetsImportDialog } from "@/components/GoogleSheetsImportDialog";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
@@ -310,6 +310,25 @@ export default function SchedulePage() {
   const [dragConfirmTarget, setDragConfirmTarget] = useState<{ shiftId: number; targetDate: string; targetEmpId: number } | null>(null);
   const [sheetsImportOpen, setSheetsImportOpen] = useState(false);
 
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedShiftIds, setSelectedShiftIds] = useState<Set<number>>(new Set());
+  const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false);
+  const [fixedOrder, setFixedOrder] = useState(() => {
+    try { return localStorage.getItem(`schedule_fixed_order_${activeRegion}`) === "true"; } catch { return false; }
+  });
+  const [customEmployeeOrder, setCustomEmployeeOrder] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem(`schedule_employee_order_${activeRegion}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [rowDragEmpId, setRowDragEmpId] = useState<number | null>(null);
+  const [rowDragOverEmpId, setRowDragOverEmpId] = useState<number | null>(null);
+  const rowDragRef = useRef<{ empId: number } | null>(null);
+  const rowDragOverEmpIdRef = useRef<number | null>(null);
+  const activeRegionRef = useRef(activeRegion);
+  useEffect(() => { activeRegionRef.current = activeRegion; }, [activeRegion]);
+
   const monthDates = useMemo(
     () => eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) }),
     [currentMonth]
@@ -338,8 +357,37 @@ export default function SchedulePage() {
         const newWidth = Math.max(52, startWidth + (e.clientX - startX));
         setColWidths(prev => { const next = [...prev]; next[index] = newWidth; return next; });
       }
+      if (rowDragRef.current) {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const rowEl = el?.closest('[data-emp-row-id]') as HTMLElement | null;
+        const hoverId = rowEl ? Number(rowEl.getAttribute('data-emp-row-id')) : null;
+        rowDragOverEmpIdRef.current = hoverId;
+        setRowDragOverEmpId(hoverId);
+      }
     };
     const handleMouseUp = () => {
+      if (rowDragRef.current) {
+        const fromEmpId = rowDragRef.current.empId;
+        const toEmpId = rowDragOverEmpIdRef.current;
+        if (toEmpId !== null && toEmpId !== fromEmpId) {
+          setCustomEmployeeOrder(prev => {
+            const arr = [...prev];
+            const fromIdx = arr.indexOf(fromEmpId);
+            const toIdx = arr.indexOf(toEmpId);
+            if (fromIdx !== -1 && toIdx !== -1) {
+              arr.splice(fromIdx, 1);
+              arr.splice(toIdx, 0, fromEmpId);
+              localStorage.setItem(`schedule_employee_order_${activeRegionRef.current}`, JSON.stringify(arr));
+              return arr;
+            }
+            return prev;
+          });
+        }
+        rowDragRef.current = null;
+        rowDragOverEmpIdRef.current = null;
+        setRowDragEmpId(null);
+        setRowDragOverEmpId(null);
+      }
       resizingRef.current = null;
       resizingLeftRef.current = null;
     };
@@ -932,6 +980,23 @@ export default function SchedulePage() {
     },
   });
 
+  const batchDeleteShiftsByIds = useMutation({
+    mutationFn: async (shiftIds: number[]) => {
+      const res = await apiRequest("POST", "/api/shifts/batch-delete-ids", { shiftIds });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      toast({ title: `已刪除 ${data.deletedCount} 筆班次` });
+      setMultiSelectMode(false);
+      setSelectedShiftIds(new Set());
+      setBatchDeleteConfirmOpen(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "批次刪除失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
   const batchCreateShifts = useMutation({
     mutationFn: async (data: { employeeId: number; venueId: string; startTime: string; endTime: string; role: string; isDispatch: boolean; targetDates: string[] }) => {
       const res = await apiRequest("POST", "/api/shifts/batch", data);
@@ -1276,12 +1341,14 @@ export default function SchedulePage() {
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
+    if (multiSelectMode) return;
     const id = Number(event.active.id);
     if (!isNaN(id)) setDraggedShiftId(id);
-  }, []);
+  }, [multiSelectMode]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     setDraggedShiftId(null);
+    if (multiSelectMode) return;
     const shiftId = Number(event.active.id);
     if (!event.over || isNaN(shiftId)) return;
     const overId = String(event.over.id);
@@ -1344,6 +1411,23 @@ export default function SchedulePage() {
     });
     return counts;
   }, [shifts]);
+
+  const toggleFixedOrder = useCallback(() => {
+    setFixedOrder(prev => {
+      const next = !prev;
+      localStorage.setItem(`schedule_fixed_order_${activeRegionRef.current}`, String(next));
+      if (next) {
+        setCustomEmployeeOrder(prevOrder => {
+          if (prevOrder.length > 0) return prevOrder;
+          const visIds = [...scheduleVisibleEmployeeIds];
+          const initialOrder = visIds.sort((a, b) => (employeeShiftCounts.get(b) || 0) - (employeeShiftCounts.get(a) || 0));
+          localStorage.setItem(`schedule_employee_order_${activeRegionRef.current}`, JSON.stringify(initialOrder));
+          return initialOrder;
+        });
+      }
+      return next;
+    });
+  }, [scheduleVisibleEmployeeIds, employeeShiftCounts]);
 
   return (
     <div className="flex flex-col h-full">
@@ -1432,6 +1516,46 @@ export default function SchedulePage() {
             <FileSpreadsheet className="h-3.5 w-3.5" />
             匯入班表
           </Button>
+
+          <Button
+            variant={fixedOrder ? "default" : "outline"}
+            size="sm"
+            className={`h-7 text-xs gap-1.5 shrink-0 ${fixedOrder ? "bg-blue-600 hover:bg-blue-700 text-white border-blue-600" : ""}`}
+            onClick={toggleFixedOrder}
+            title={fixedOrder ? "固定順序已開啟（點擊關閉）" : "開啟固定人員順序（可手動拖曳排序）"}
+            data-testid="button-toggle-fixed-order"
+          >
+            <ListOrdered className="h-3.5 w-3.5" />
+            {fixedOrder ? "固定排序中" : "固定排序"}
+          </Button>
+
+          <Button
+            variant={multiSelectMode ? "default" : "outline"}
+            size="sm"
+            className={`h-7 text-xs gap-1.5 shrink-0 ${multiSelectMode ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600" : ""}`}
+            onClick={() => {
+              setMultiSelectMode(prev => !prev);
+              setSelectedShiftIds(new Set());
+            }}
+            title={multiSelectMode ? "關閉多選模式" : "開啟多選模式（可一次刪除多班）"}
+            data-testid="button-toggle-multi-select"
+          >
+            <SquareCheck className="h-3.5 w-3.5" />
+            {multiSelectMode ? `多選中 (${selectedShiftIds.size})` : "多選刪除"}
+          </Button>
+
+          {multiSelectMode && selectedShiftIds.size > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-7 text-xs gap-1.5 shrink-0"
+              onClick={() => setBatchDeleteConfirmOpen(true)}
+              data-testid="button-batch-delete-confirm"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              刪除已選 ({selectedShiftIds.size})
+            </Button>
+          )}
 
           <Popover open={empPickerOpen} onOpenChange={setEmpPickerOpen}>
             <PopoverTrigger asChild>
@@ -1909,6 +2033,241 @@ export default function SchedulePage() {
                     { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
                   ];
                   const visibleEmployees = pickerEmployees.filter(e => scheduleVisibleEmployeeIds.has(e.id));
+
+                  const renderShiftCard = (shift: Shift, emp: Employee, d: Date) => {
+                    const venue = venueMap.get(shift.venueId);
+                    const shiftDateStr = format(d, "yyyy-MM-dd");
+                    const slots = slotsByVenueDate.get(`${shift.venueId}-${shiftDateStr}`) || [];
+                    const sStart = shift.startTime.substring(0, 5);
+                    const sEnd = shift.endTime.substring(0, 5);
+                    const isLeave = LEAVE_TYPES.includes(shift.role);
+                    const matchedSlot = slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sl.endTime.substring(0, 5) >= sEnd)
+                      || slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
+                    const shiftRoleVal = isLeave ? shift.role : (shift.role || matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role);
+                    const roleShort = ROLE_SHORT[shiftRoleVal] || shiftRoleVal.slice(0, 1);
+                    const roleColor = isLeave ? null : getRoleColor(shiftRoleVal, shift.isDispatch ?? false);
+                    const cardColor = isLeave ? (LEAVE_COLORS[shift.role] || LEAVE_COLORS["休假"]) : roleColor!.card;
+                    const isDragging = draggedShiftId === shift.id;
+                    const isSelected = selectedShiftIds.has(shift.id);
+
+                    if (multiSelectMode) {
+                      return (
+                        <div
+                          key={shift.id}
+                          className={`rounded-md px-1.5 py-1 text-[10px] cursor-pointer transition-all ${cardColor} ${isSelected ? "ring-2 ring-amber-400 ring-offset-1" : "hover:shadow-sm"}`}
+                          onClick={() => {
+                            setSelectedShiftIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(shift.id)) next.delete(shift.id);
+                              else next.add(shift.id);
+                              return next;
+                            });
+                          }}
+                          data-testid={`shift-${shift.id}`}
+                        >
+                          <div className="flex items-center gap-0.5">
+                            <Checkbox
+                              checked={isSelected}
+                              className="h-3 w-3 shrink-0 pointer-events-none"
+                            />
+                            {isLeave ? (
+                              <span className="font-semibold leading-tight truncate flex-1">{shift.role}</span>
+                            ) : (
+                              <span className="font-semibold leading-tight truncate flex-1">{venue?.shortName || "未知"}</span>
+                            )}
+                          </div>
+                          {!isLeave && <div className="leading-tight text-muted-foreground text-[10px] mt-0.5">{sStart}–{sEnd}</div>}
+                        </div>
+                      );
+                    }
+
+                    if (isLeave) {
+                      return (
+                        <DraggableShiftCard key={shift.id} id={shift.id} isDragging={isDragging}>
+                          <div
+                            className={`rounded-md px-1.5 py-1 text-[10px] cursor-pointer transition-all hover:shadow-sm ${cardColor} ${isDragging ? "opacity-30" : ""}`}
+                            onClick={() => openEditShiftDialog(shift)}
+                            data-testid={`shift-${shift.id}`}
+                          >
+                            <div className="flex items-center justify-between gap-0.5">
+                              <span className="font-semibold leading-tight truncate">{shift.role}</span>
+                              <button
+                                className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
+                                onClick={(e) => { e.stopPropagation(); handleCopyShift(shift); }}
+                                title="複製班卡"
+                                data-testid={`button-copy-shift-${shift.id}`}
+                              >
+                                <Copy className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </DraggableShiftCard>
+                      );
+                    }
+
+                    return (
+                      <DraggableShiftCard key={shift.id} id={shift.id} isDragging={isDragging}>
+                        <div
+                          className={`rounded-md px-1.5 py-1 text-[10px] cursor-pointer transition-all hover:shadow-sm ${cardColor} ${isDragging ? "opacity-30" : ""}`}
+                          onClick={() => openEditShiftDialog(shift)}
+                          data-testid={`shift-${shift.id}`}
+                        >
+                          <div className="flex items-center justify-between gap-0.5 mb-0.5">
+                            <div className="font-semibold leading-tight truncate flex-1 text-[11px]">
+                              {venue?.shortName || "未知"}
+                            </div>
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 ${roleColor!.badge}`}>
+                                {roleShort}
+                              </span>
+                              <button
+                                className="text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
+                                onClick={(e) => { e.stopPropagation(); handleCopyShift(shift); }}
+                                title="複製班卡"
+                                data-testid={`button-copy-shift-${shift.id}`}
+                              >
+                                <Copy className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="leading-tight text-muted-foreground text-[10px]">
+                            {sStart}–{sEnd}
+                          </div>
+                          {shift.isDispatch && (
+                            <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium mt-0.5">派遣</div>
+                          )}
+                        </div>
+                      </DraggableShiftCard>
+                    );
+                  };
+
+                  const renderEmpRow = (emp: Employee) => {
+                    const isDraggedRow = rowDragEmpId === emp.id;
+                    const isDragOverRow = rowDragOverEmpId === emp.id && rowDragEmpId !== null && rowDragEmpId !== emp.id;
+                    return (
+                      <tr
+                        key={emp.id}
+                        className="group"
+                        data-testid={`row-employee-${emp.id}`}
+                        data-emp-row-id={fixedOrder ? String(emp.id) : undefined}
+                        style={isDraggedRow ? { opacity: 0.4 } : isDragOverRow ? { outline: "2px solid #3b82f6", outlineOffset: "-1px" } : undefined}
+                      >
+                        <td
+                          className="px-1.5 py-1 border-b border-r sticky left-0 bg-background z-[5] overflow-hidden"
+                          style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, maxWidth: COL_LEFT_WIDTH }}
+                        >
+                          <div className="flex items-center gap-1">
+                            {fixedOrder && (
+                              <button
+                                className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground/70 cursor-grab active:cursor-grabbing select-none"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  rowDragRef.current = { empId: emp.id };
+                                  setRowDragEmpId(emp.id);
+                                }}
+                                title="拖曳調整順序"
+                                data-testid={`button-row-drag-${emp.id}`}
+                              >
+                                <GripVertical className="h-3 w-3" />
+                              </button>
+                            )}
+                            {emp.role && ROLE_ICON_MAP[emp.role] && (() => {
+                              const Icon = ROLE_ICON_MAP[emp.role!];
+                              return <Icon className="h-3 w-3 text-muted-foreground shrink-0" />;
+                            })()}
+                            <span className="font-medium text-xs truncate" data-testid={`text-employee-name-${emp.id}`}>
+                              {emp.name}
+                            </span>
+                            {neiQinEmployeeIds.has(emp.id) ? (
+                              <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4 shrink-0">內勤</span>
+                            ) : crossRegionEmployeeIds.has(emp.id) && (
+                              <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4 shrink-0">支援</span>
+                            )}
+                          </div>
+                        </td>
+                        {monthDates.map((d, di) => {
+                          const dateStr = format(d, "yyyy-MM-dd");
+                          const cellShifts = shiftsByEmployeeDate.get(`${emp.id}-${dateStr}`) || [];
+                          const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
+                          const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                          const isHoliday = !!TAIWAN_HOLIDAYS[dateStr];
+                          const cellAnnotation = dateAnnotations.get(dateStr);
+                          const cellAnnotationStyle = cellAnnotation ? ANNOTATION_COLORS[cellAnnotation.color] : null;
+                          const dropId = `drop-${emp.id}-${dateStr}`;
+                          const canPaste = !!shiftClipboard && shiftClipboard.employeeId === emp.id;
+
+                          return (
+                            <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
+                              cellAnnotationStyle ? `${cellAnnotationStyle.cell} ${cellAnnotationStyle.border}` :
+                              isToday ? "bg-primary/5" : isHoliday ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
+                            }`} style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
+                              {cellShifts.length > 0 ? (
+                                <div className="space-y-0.5">
+                                  {cellShifts.map((shift) => renderShiftCard(shift, emp, d))}
+                                  {!multiSelectMode && (
+                                    <div className="flex items-center gap-0.5">
+                                      <button
+                                        className="flex-1 flex items-center justify-center py-0.5 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
+                                        onClick={() => openNewShiftDialog(emp.id, dateStr)}
+                                        data-testid={`button-add-shift-${emp.id}-${dateStr}`}
+                                      >
+                                        <Plus className="h-3 w-3" />
+                                      </button>
+                                      {canPaste && (
+                                        <button
+                                          className="flex items-center justify-center py-0.5 px-0.5 text-green-500/60 hover:text-green-600 transition-colors"
+                                          onClick={() => handlePasteShift(emp.id, dateStr)}
+                                          title="貼上班卡"
+                                          data-testid={`button-paste-shift-${emp.id}-${dateStr}`}
+                                        >
+                                          <ClipboardPaste className="h-3 w-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                !multiSelectMode && (
+                                  <div className="flex items-center h-[36px]">
+                                    <button
+                                      className="flex-1 flex items-center justify-center h-full text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-muted/30 transition-colors rounded cursor-pointer"
+                                      onClick={() => openNewShiftDialog(emp.id, dateStr)}
+                                      data-testid={`button-add-shift-${emp.id}-${dateStr}`}
+                                    >
+                                      <Plus className="h-3.5 w-3.5" />
+                                    </button>
+                                    {canPaste && (
+                                      <button
+                                        className="flex items-center justify-center h-full px-0.5 text-green-500/50 hover:text-green-600 transition-colors"
+                                        onClick={() => handlePasteShift(emp.id, dateStr)}
+                                        title="貼上班卡"
+                                        data-testid={`button-paste-shift-${emp.id}-${dateStr}`}
+                                      >
+                                        <ClipboardPaste className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                )
+                              )}
+                            </DroppableCell>
+                          );
+                        })}
+                      </tr>
+                    );
+                  };
+
+                  if (fixedOrder) {
+                    const sortedEmps = [...visibleEmployees].sort((a, b) => {
+                      const ia = customEmployeeOrder.indexOf(a.id);
+                      const ib = customEmployeeOrder.indexOf(b.id);
+                      if (ia === -1 && ib === -1) return 0;
+                      if (ia === -1) return 1;
+                      if (ib === -1) return -1;
+                      return ia - ib;
+                    });
+                    return [...venueRows, ...sortedEmps.map(renderEmpRow)];
+                  }
+
                   return [
                     ...venueRows,
                     ...groups.flatMap(({ key, label, filter }) => {
@@ -1930,171 +2289,9 @@ export default function SchedulePage() {
                           <td key={di} className="border-b border-r bg-muted" style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH }} />
                         ))}
                       </tr>,
-                      ...grouped.map((emp) => (
-                  <tr key={emp.id} className="group" data-testid={`row-employee-${emp.id}`}>
-                    <td
-                      className="px-1.5 py-1 border-b border-r sticky left-0 bg-background z-[5] overflow-hidden"
-                      style={{ minWidth: COL_LEFT_WIDTH, width: COL_LEFT_WIDTH, maxWidth: COL_LEFT_WIDTH }}
-                    >
-                      <div className="flex items-center gap-1">
-                        {emp.role && ROLE_ICON_MAP[emp.role] && (() => {
-                          const Icon = ROLE_ICON_MAP[emp.role!];
-                          return <Icon className="h-3 w-3 text-muted-foreground shrink-0" />;
-                        })()}
-                        <span className="font-medium text-xs truncate" data-testid={`text-employee-name-${emp.id}`}>
-                          {emp.name}
-                        </span>
-                        {neiQinEmployeeIds.has(emp.id) ? (
-                          <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4 shrink-0">內勤</span>
-                        ) : crossRegionEmployeeIds.has(emp.id) && (
-                          <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4 shrink-0">支援</span>
-                        )}
-                      </div>
-                    </td>
-                    {monthDates.map((d, di) => {
-                      const dateStr = format(d, "yyyy-MM-dd");
-                      const cellShifts = shiftsByEmployeeDate.get(`${emp.id}-${dateStr}`) || [];
-                      const isToday = dateStr === format(new Date(), "yyyy-MM-dd");
-                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                      const isHoliday = !!TAIWAN_HOLIDAYS[dateStr];
-                      const cellAnnotation = dateAnnotations.get(dateStr);
-                      const cellAnnotationStyle = cellAnnotation ? ANNOTATION_COLORS[cellAnnotation.color] : null;
-                      const dropId = `drop-${emp.id}-${dateStr}`;
-                      const canPaste = !!shiftClipboard && shiftClipboard.employeeId === emp.id;
-
-                      return (
-                        <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
-                          cellAnnotationStyle ? `${cellAnnotationStyle.cell} ${cellAnnotationStyle.border}` :
-                          isToday ? "bg-primary/5" : isHoliday ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
-                        }`} style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
-                          {cellShifts.length > 0 ? (
-                            <div className="space-y-0.5">
-                              {cellShifts.map((shift) => {
-                                const venue = venueMap.get(shift.venueId);
-                                const shiftDateStr = format(d, "yyyy-MM-dd");
-                                const slots = slotsByVenueDate.get(`${shift.venueId}-${shiftDateStr}`) || [];
-                                const sStart = shift.startTime.substring(0, 5);
-                                const sEnd = shift.endTime.substring(0, 5);
-                                const isLeave = LEAVE_TYPES.includes(shift.role);
-                                const matchedSlot = slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sl.endTime.substring(0, 5) >= sEnd) 
-                                  || slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
-                                const shiftRole = isLeave ? shift.role : (shift.role || matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role);
-                                const roleShort = ROLE_SHORT[shiftRole] || shiftRole.slice(0, 1);
-                                const roleColor = isLeave
-                                  ? null
-                                  : getRoleColor(shiftRole, shift.isDispatch ?? false);
-                                const cardColor = isLeave
-                                  ? (LEAVE_COLORS[shift.role] || LEAVE_COLORS["休假"])
-                                  : roleColor!.card;
-                                const isDragging = draggedShiftId === shift.id;
-
-                                if (isLeave) {
-                                  return (
-                                    <DraggableShiftCard key={shift.id} id={shift.id} isDragging={isDragging}>
-                                      <div
-                                        className={`rounded-md px-1.5 py-1 text-[10px] cursor-pointer transition-all hover:shadow-sm ${cardColor} ${isDragging ? "opacity-30" : ""}`}
-                                        onClick={() => openEditShiftDialog(shift)}
-                                        data-testid={`shift-${shift.id}`}
-                                      >
-                                        <div className="flex items-center justify-between gap-0.5">
-                                          <span className="font-semibold leading-tight truncate">{shift.role}</span>
-                                          <button
-                                            className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
-                                            onClick={(e) => { e.stopPropagation(); handleCopyShift(shift); }}
-                                            title="複製班卡"
-                                            data-testid={`button-copy-shift-${shift.id}`}
-                                          >
-                                            <Copy className="h-2.5 w-2.5" />
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </DraggableShiftCard>
-                                  );
-                                }
-
-                                return (
-                                  <DraggableShiftCard key={shift.id} id={shift.id} isDragging={isDragging}>
-                                    <div
-                                      className={`rounded-md px-1.5 py-1 text-[10px] cursor-pointer transition-all hover:shadow-sm ${cardColor} ${isDragging ? "opacity-30" : ""}`}
-                                      onClick={() => openEditShiftDialog(shift)}
-                                      data-testid={`shift-${shift.id}`}
-                                    >
-                                      <div className="flex items-center justify-between gap-0.5 mb-0.5">
-                                        <div className="font-semibold leading-tight truncate flex-1 text-[11px]">
-                                          {venue?.shortName || "未知"}
-                                        </div>
-                                        <div className="flex items-center gap-0.5 shrink-0">
-                                          <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 ${roleColor!.badge}`}>
-                                            {roleShort}
-                                          </span>
-                                          <button
-                                            className="text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
-                                            onClick={(e) => { e.stopPropagation(); handleCopyShift(shift); }}
-                                            title="複製班卡"
-                                            data-testid={`button-copy-shift-${shift.id}`}
-                                          >
-                                            <Copy className="h-2.5 w-2.5" />
-                                          </button>
-                                        </div>
-                                      </div>
-                                      <div className="leading-tight text-muted-foreground text-[10px]">
-                                        {sStart}–{sEnd}
-                                      </div>
-                                      {shift.isDispatch && (
-                                        <div className="text-[9px] text-purple-600 dark:text-purple-400 font-medium mt-0.5">派遣</div>
-                                      )}
-                                    </div>
-                                  </DraggableShiftCard>
-                                );
-                              })}
-                              <div className="flex items-center gap-0.5">
-                                <button
-                                  className="flex-1 flex items-center justify-center py-0.5 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
-                                  onClick={() => openNewShiftDialog(emp.id, dateStr)}
-                                  data-testid={`button-add-shift-${emp.id}-${dateStr}`}
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </button>
-                                {canPaste && (
-                                  <button
-                                    className="flex items-center justify-center py-0.5 px-0.5 text-green-500/60 hover:text-green-600 transition-colors"
-                                    onClick={() => handlePasteShift(emp.id, dateStr)}
-                                    title="貼上班卡"
-                                    data-testid={`button-paste-shift-${emp.id}-${dateStr}`}
-                                  >
-                                    <ClipboardPaste className="h-3 w-3" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center h-[36px]">
-                              <button
-                                className="flex-1 flex items-center justify-center h-full text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-muted/30 transition-colors rounded cursor-pointer"
-                                onClick={() => openNewShiftDialog(emp.id, dateStr)}
-                                data-testid={`button-add-shift-${emp.id}-${dateStr}`}
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                              </button>
-                              {canPaste && (
-                                <button
-                                  className="flex items-center justify-center h-full px-0.5 text-green-500/50 hover:text-green-600 transition-colors"
-                                  onClick={() => handlePasteShift(emp.id, dateStr)}
-                                  title="貼上班卡"
-                                  data-testid={`button-paste-shift-${emp.id}-${dateStr}`}
-                                >
-                                  <ClipboardPaste className="h-3 w-3" />
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </DroppableCell>
-                      );
-                    })}
-                  </tr>
-                )),
+                      ...grouped.map(renderEmpRow),
                     ];
-                  }),
+                    }),
                   ];
                 })()
               )}
@@ -2290,6 +2487,28 @@ export default function SchedulePage() {
         </div>
 
       </div>
+
+      <Dialog open={batchDeleteConfirmOpen} onOpenChange={setBatchDeleteConfirmOpen}>
+        <DialogContent className="sm:max-w-xs" data-testid="batch-delete-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 dark:text-red-400">批次刪除班次</DialogTitle>
+            <DialogDescription>
+              確定要刪除已選的 <strong>{selectedShiftIds.size}</strong> 筆班次嗎？此操作無法復原。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setBatchDeleteConfirmOpen(false)} disabled={batchDeleteShiftsByIds.isPending}>取消</Button>
+            <Button
+              variant="destructive"
+              disabled={batchDeleteShiftsByIds.isPending}
+              onClick={() => batchDeleteShiftsByIds.mutate(Array.from(selectedShiftIds))}
+              data-testid="button-batch-delete-execute"
+            >
+              {batchDeleteShiftsByIds.isPending ? "刪除中..." : `確認刪除 (${selectedShiftIds.size})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!dragConfirmTarget} onOpenChange={() => setDragConfirmTarget(null)}>
         <DialogContent className="sm:max-w-xs">

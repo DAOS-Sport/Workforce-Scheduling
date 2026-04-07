@@ -422,6 +422,26 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/shifts/batch-delete-ids", async (req, res) => {
+    try {
+      const { shiftIds } = req.body;
+      if (!Array.isArray(shiftIds) || shiftIds.length === 0) {
+        return res.status(400).json({ message: "shiftIds array is required" });
+      }
+      let deletedCount = 0;
+      for (const id of shiftIds) {
+        const numId = Number(id);
+        if (!isNaN(numId)) {
+          await storage.deleteShift(numId);
+          deletedCount++;
+        }
+      }
+      res.json({ success: true, deletedCount });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/shifts/batch", async (req, res) => {
     try {
       const { employeeId, venueId, startTime, endTime, role, isDispatch, targetDates, skipExisting } = req.body;
