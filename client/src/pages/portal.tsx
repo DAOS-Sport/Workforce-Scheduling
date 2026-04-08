@@ -17,6 +17,7 @@ import {
   AlertTriangle, ClipboardCheck, BookOpen, Navigation, Loader2, XCircle,
   Wifi, Signal, Copy, MessageSquareWarning, Camera, X, ImagePlus, Send,
   Menu, Home, LogOut, FileEdit, Briefcase, BarChart2,
+  type LucideIcon,
 } from "lucide-react";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
 
@@ -391,7 +392,7 @@ function SideMenuDrawer({
 }) {
   const categories: Array<{
     label: string;
-    items: Array<{ view: PortalView; label: string; icon: (p: { className?: string }) => JSX.Element; badge?: string }>;
+    items: Array<{ view: PortalView; label: string; icon: LucideIcon; badge?: string }>;
   }> = [
     {
       label: "日常考勤",
@@ -2183,7 +2184,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     setDrawerOpen(false);
   }
 
-  const headerTitle = activeView === "home" ? employee.name : VIEW_TITLES[activeView];
+  const headerTitle = VIEW_TITLES[activeView];
 
   return (
     <div className="min-h-screen bg-juns-surface">

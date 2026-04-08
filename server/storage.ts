@@ -453,7 +453,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateGuideline(id: number, data: Partial<InsertGuideline>): Promise<Guideline | undefined> {
-    const [g] = await db.update(guidelines).set(data).where(eq(guidelines.id, id)).returning();
+    const [g] = await db.update(guidelines).set({ ...data, updatedAt: new Date() }).where(eq(guidelines.id, id)).returning();
     return g;
   }
 

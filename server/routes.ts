@@ -1424,7 +1424,7 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       const partial = insertGuidelineSchema.partial().parse(req.body);
-      const item = await storage.updateGuideline(id, { ...partial, updatedAt: new Date() });
+      const item = await storage.updateGuideline(id, partial);
       if (!item) return res.status(404).json({ message: "守則未找到" });
       res.json(item);
     } catch (err: any) {
@@ -1988,7 +1988,7 @@ export async function registerRoutes(
           hasAnomaly: gpsHasAnomaly,
           leaveType: null,
           shiftInfo,
-          shiftType: dateShifts[0]?.shiftType || null,
+          shiftType: null,
         });
       }
 
@@ -2269,12 +2269,14 @@ export async function registerRoutes(
       const employeeMap = new Map(allEmployees.map(e => [e.id, e]));
       const venueMap = new Map(allVenues.map(v => [v.id, v]));
 
-      const toTaiwanDate = (iso: string | Date): string => {
+      const toTaiwanDate = (iso: string | Date | null): string => {
+        if (!iso) return "unknown";
         const d = new Date(typeof iso === "string" ? iso : iso.toISOString());
         const tw = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
         return `${tw.getFullYear()}-${String(tw.getMonth() + 1).padStart(2, "0")}-${String(tw.getDate()).padStart(2, "0")}`;
       };
-      const toTaiwanHHMM = (iso: string | Date): string => {
+      const toTaiwanHHMM = (iso: string | Date | null): string | null => {
+        if (!iso) return null;
         const d = new Date(typeof iso === "string" ? iso : iso.toISOString());
         const tw = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
         return `${String(tw.getHours()).padStart(2, "0")}:${String(tw.getMinutes()).padStart(2, "0")}`;
@@ -2323,7 +2325,7 @@ export async function registerRoutes(
 
       for (const shift of workShifts) {
         const employee = employeeMap.get(shift.employeeId);
-        if (!employee || !employee.isActive) continue;
+        if (!employee || employee.status !== "active") continue;
         const venue = venueMap.get(shift.venueId);
         const shiftDate = String(shift.date);
         const baseInfo = {
@@ -2354,7 +2356,7 @@ export async function registerRoutes(
             isResolved: bestIn?.status === "approved",
           });
         } else {
-          const earliest = inRecords.sort((a, b) => new Date(a.clockTime).getTime() - new Date(b.clockTime).getTime())[0];
+          const earliest = inRecords.sort((a, b) => new Date(a.clockTime ?? 0).getTime() - new Date(b.clockTime ?? 0).getTime())[0];
           const lateMin = parseLateMinutes(earliest.failReason, "遲到");
           if (lateMin !== null && lateMin > 0) {
             anomalies.push({
@@ -2381,7 +2383,7 @@ export async function registerRoutes(
               isResolved: bestOut?.status === "approved",
             });
           } else {
-            const latest = outRecords.sort((a, b) => new Date(b.clockTime).getTime() - new Date(a.clockTime).getTime())[0];
+            const latest = outRecords.sort((a, b) => new Date(b.clockTime ?? 0).getTime() - new Date(a.clockTime ?? 0).getTime())[0];
             const earlyMin = parseLateMinutes(latest.failReason, "提早");
             if (earlyMin !== null && earlyMin > 0) {
               anomalies.push({
