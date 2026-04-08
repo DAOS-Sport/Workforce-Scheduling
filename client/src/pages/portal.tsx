@@ -142,24 +142,16 @@ const DAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 
 function Watermark({ name, code }: { name: string; code: string }) {
   const text = `${name} ${code}`;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='260' height='130'><text transform='rotate(-30 130 65)' x='10' y='75' font-family='system-ui,sans-serif' font-size='13' font-weight='500' fill='rgba(128,128,128,0.08)'>${text}</text></svg>`;
   return (
-    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden select-none" aria-hidden="true">
-      <div className="absolute inset-0" style={{ transform: "rotate(-30deg)", transformOrigin: "center center" }}>
-        {Array.from({ length: 20 }).map((_, row) => (
-          <div key={row} className="flex whitespace-nowrap" style={{ marginTop: row === 0 ? "-100px" : "60px" }}>
-            {Array.from({ length: 10 }).map((_, col) => (
-              <span
-                key={col}
-                className="text-[14px] font-medium mx-16"
-                style={{ color: "rgba(128,128,128,0.08)" }}
-              >
-                {text}
-              </span>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
+    <div
+      className="fixed inset-0 pointer-events-none z-50 select-none"
+      aria-hidden="true"
+      style={{
+        backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+        backgroundRepeat: "repeat",
+      }}
+    />
   );
 }
 
@@ -640,6 +632,7 @@ function GuidelinesCheckScreen({
 
   const { data, isLoading } = useQuery<{ items: GuidelineItem[]; allAcknowledged: boolean }>({
     queryKey: ["/api/portal/guidelines-check", employee.id],
+    staleTime: 60 * 1000,
   });
 
   useEffect(() => {
@@ -896,6 +889,7 @@ function VenueShiftInfo({ employee, result }: { employee: PortalEmployee; result
   const today = format(new Date(), "yyyy-MM-dd");
   const { data: todayShifts = [] } = useQuery<PortalShift[]>({
     queryKey: ["/api/portal/my-shifts", employee.id, today, today],
+    staleTime: 5 * 60 * 1000,
   });
 
   const matchedVenue = result?.venueName;

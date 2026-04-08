@@ -5,12 +5,13 @@ import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, ins
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
+import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId, formatClockInMessage, sendWeeklySchedulePush, sendWeeklyLateReport, pushPendingGuidelinesIfAny } from "./line-webhook";
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
-import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId, formatClockInMessage, sendWeeklySchedulePush, sendWeeklyLateReport } from "./line-webhook";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import nodemailer from "nodemailer";
+
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
 
 export async function registerRoutes(
   httpServer: Server,
@@ -2106,7 +2107,6 @@ export async function registerRoutes(
       const forcedType = clockType === "in" || clockType === "out" ? clockType : undefined;
       const result = await processClockIn(params, latitude, longitude, forcedType);
 
-      // Push LINE notification back to the employee after portal GPS clock-in
       if (result.status === "success" || result.status === "warning") {
         try {
           let empToNotify = null;
@@ -2118,6 +2118,7 @@ export async function registerRoutes(
           if (empToNotify?.lineId && isValidLineUserId(empToNotify.lineId)) {
             const msg = formatClockInMessage(result);
             await pushToLine(empToNotify.lineId, msg);
+            pushPendingGuidelinesIfAny(empToNotify.id, empToNotify.lineId).catch(() => {});
           }
         } catch (pushErr) {
           console.error("[LIFF] LINE push error:", pushErr);

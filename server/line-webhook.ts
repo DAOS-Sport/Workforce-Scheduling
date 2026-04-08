@@ -6,6 +6,21 @@ import type { Venue, Shift, Employee } from "@shared/schema";
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET || "";
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 
+let _venueCache: { venues: import("@shared/schema").Venue[]; cachedAt: number } | null = null;
+const VENUE_CACHE_TTL = 5 * 60 * 1000;
+
+async function getCachedVenues(): Promise<import("@shared/schema").Venue[]> {
+  const now = Date.now();
+  if (_venueCache && now - _venueCache.cachedAt < VENUE_CACHE_TTL) return _venueCache.venues;
+  const venues = await storage.getAllVenues();
+  _venueCache = { venues, cachedAt: now };
+  return venues;
+}
+
+export function invalidateVenueCache() {
+  _venueCache = null;
+}
+
 export function isValidLineUserId(id: string): boolean {
   return /^U[0-9a-f]{32}$/.test(id);
 }
@@ -170,7 +185,11 @@ export async function processClockIn(
     };
   }
 
-  const recentRecords = await storage.getClockRecordsByEmployee(employee.id, todayStr, todayStr);
+  const [recentRecords, allVenues] = await Promise.all([
+    storage.getClockRecordsByEmployee(employee.id, todayStr, todayStr),
+    getCachedVenues(),
+  ]);
+
   if (recentRecords.length > 0) {
     const lastValidRecord = recentRecords.find(r => r.status === "success" || r.status === "warning");
     if (lastValidRecord?.clockTime) {
@@ -205,7 +224,6 @@ export async function processClockIn(
     }
   }
 
-  const allVenues = await storage.getAllVenues();
   const validVenues = allVenues.filter((v) => v.latitude && v.longitude);
 
   const venueDistances = validVenues.map((v) => ({
@@ -573,6 +591,53 @@ async function handleTextMessage(event: any): Promise<void> {
   );
 }
 
+export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: string): Promise<void> {
+  if (!isValidLineUserId(lineId)) return;
+  try {
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+    const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const monthStart = `${yearMonth}-01`;
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
+
+    const [allGuidelines, acks, empShifts] = await Promise.all([
+      storage.getGuidelines(),
+      storage.getGuidelineAcksByEmployee(employeeId),
+      storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd),
+    ]);
+
+    const myVenueIds = Array.from(new Set(empShifts.map(s => s.venueId)));
+    const thisMonthAckedIds = new Set(
+      acks.filter(a => {
+        if (!a.acknowledgedAt) return false;
+        const d = new Date(a.acknowledgedAt);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      }).map(a => a.guidelineId)
+    );
+
+    const relevant = allGuidelines.filter(g => {
+      if (!g.isActive) return false;
+      if (thisMonthAckedIds.has(g.id)) return false;
+      if (g.category === "fixed") return g.venueId ? myVenueIds.includes(g.venueId) : true;
+      if (g.category === "monthly") return g.yearMonth === yearMonth;
+      if (g.category === "confidentiality") return true;
+      return false;
+    });
+
+    if (relevant.length === 0) return;
+
+    const toPush = relevant.slice(0, 2);
+    const total = relevant.length;
+    const intro = `📋 您有 ${total} 條守則尚未確認\n`;
+    const list = toPush.map(g => `▶ ${g.title}`).join("\n");
+    const suffix = total > 2 ? `\n…等共 ${total} 條` : "";
+    const link = "\n\n請至員工入口「守則」頁面確認閱讀。";
+    await pushToLine(lineId, intro + list + suffix + link);
+  } catch (err) {
+    console.error("[Guidelines Push] Error:", err);
+  }
+}
+
 export async function handleLineWebhook(body: any): Promise<void> {
   const events = body.events || [];
 
@@ -613,6 +678,9 @@ export async function handleLineWebhook(body: any): Promise<void> {
         const result = await processClockIn({ lineUserId }, userLat, userLng);
         const message = formatClockInMessage(result);
         await replyToLine(replyToken, message, lineUserId);
+        if ((result.status === "success" || result.status === "warning") && emp?.id && emp?.lineId) {
+          pushPendingGuidelinesIfAny(emp.id, emp.lineId).catch(() => {});
+        }
         continue;
       }
     } catch (err) {
@@ -789,7 +857,10 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   const currentTimeStr = `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
 
   const allShifts = await storage.getShiftsByDate(todayStr);
-  const workShifts = allShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+  const workShifts = allShifts.filter(s =>
+    !LEAVE_TYPES.includes(s.role) &&
+    s.startTime.substring(0, 5) !== s.endTime.substring(0, 5)
+  );
 
   if (workShifts.length === 0) {
     console.log(`[未打卡提醒] ${todayStr} 無上班班次`);
