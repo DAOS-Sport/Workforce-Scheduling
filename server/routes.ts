@@ -2244,6 +2244,167 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/reports/anomalies", async (req, res) => {
+    try {
+      const yearMonth = String(req.query.yearMonth || "");
+      if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
+        return res.status(400).json({ message: "yearMonth 格式應為 YYYY-MM" });
+      }
+      const [yr, mo] = yearMonth.split("-").map(Number);
+      const monthStart = `${yearMonth}-01`;
+      const lastDay = new Date(yr, mo, 0).getDate();
+      const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
+
+      const [allShifts, clockRecords, allAmendments, allEmployees, allVenues] = await Promise.all([
+        storage.getAllShiftsByDateRange(monthStart, monthEnd),
+        storage.getClockRecordsByDateRange(monthStart, monthEnd),
+        storage.getClockAmendments(),
+        storage.getAllEmployees(),
+        storage.getAllVenues(),
+      ]);
+
+      const LEAVE_ROLES = ["休假", "特休", "病假", "事假", "公假", "喪假", "育嬰", "留職停薪"];
+      const workShifts = allShifts.filter(s => !LEAVE_ROLES.includes(s.role));
+
+      const employeeMap = new Map(allEmployees.map(e => [e.id, e]));
+      const venueMap = new Map(allVenues.map(v => [v.id, v]));
+
+      const toTaiwanDate = (iso: string | Date): string => {
+        const d = new Date(typeof iso === "string" ? iso : iso.toISOString());
+        const tw = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+        return `${tw.getFullYear()}-${String(tw.getMonth() + 1).padStart(2, "0")}-${String(tw.getDate()).padStart(2, "0")}`;
+      };
+      const toTaiwanHHMM = (iso: string | Date): string => {
+        const d = new Date(typeof iso === "string" ? iso : iso.toISOString());
+        const tw = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+        return `${String(tw.getHours()).padStart(2, "0")}:${String(tw.getMinutes()).padStart(2, "0")}`;
+      };
+      const parseLateMinutes = (failReason: string | null, prefix: string): number | null => {
+        if (!failReason) return null;
+        const reHM = new RegExp(`^${prefix}\\s*(\\d+)\\s*小時\\s*(\\d+)\\s*分鐘`);
+        const reH = new RegExp(`^${prefix}\\s*(\\d+)\\s*小時`);
+        const reM = new RegExp(`^${prefix}\\s*(\\d+)\\s*分鐘`);
+        let m = failReason.match(reHM);
+        if (m) return parseInt(m[1]) * 60 + parseInt(m[2]);
+        m = failReason.match(reH);
+        if (m) return parseInt(m[1]) * 60;
+        m = failReason.match(reM);
+        if (m) return parseInt(m[1]);
+        return null;
+      };
+
+      const clockMap = new Map<string, typeof clockRecords>();
+      for (const cr of clockRecords) {
+        const date = toTaiwanDate(cr.clockTime);
+        const key = `${cr.employeeId}:${date}:${cr.clockType}`;
+        if (!clockMap.has(key)) clockMap.set(key, []);
+        clockMap.get(key)!.push(cr);
+      }
+
+      const amendmentMap = new Map<string, typeof allAmendments>();
+      for (const a of allAmendments) {
+        const date = toTaiwanDate(a.requestedTime);
+        const key = `${a.employeeId}:${date}:${a.clockType}`;
+        if (!amendmentMap.has(key)) amendmentMap.set(key, []);
+        amendmentMap.get(key)!.push(a);
+      }
+
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+      const getBestAmendment = (list: typeof allAmendments) => {
+        return list.find(a => a.status === "approved")
+          || list.find(a => a.status === "pending")
+          || list.find(a => a.status === "rejected")
+          || null;
+      };
+
+      const anomalies: any[] = [];
+
+      for (const shift of workShifts) {
+        const employee = employeeMap.get(shift.employeeId);
+        if (!employee || !employee.isActive) continue;
+        const venue = venueMap.get(shift.venueId);
+        const shiftDate = String(shift.date);
+        const baseInfo = {
+          employeeId: shift.employeeId,
+          employeeName: employee.name,
+          employeeCode: employee.employeeCode,
+          date: shiftDate,
+          shiftStart: shift.startTime,
+          shiftEnd: shift.endTime,
+          venueName: venue?.shortName || "",
+        };
+
+        const inRecords = (clockMap.get(`${shift.employeeId}:${shiftDate}:in`) || []).filter(r => r.status === "success" || r.status === "warning");
+        const outRecords = (clockMap.get(`${shift.employeeId}:${shiftDate}:out`) || []).filter(r => r.status === "success" || r.status === "warning");
+        const inAmendments = amendmentMap.get(`${shift.employeeId}:${shiftDate}:in`) || [];
+        const outAmendments = amendmentMap.get(`${shift.employeeId}:${shiftDate}:out`) || [];
+        const bestIn = getBestAmendment(inAmendments);
+        const bestOut = getBestAmendment(outAmendments);
+
+        if (inRecords.length === 0) {
+          anomalies.push({
+            ...baseInfo,
+            anomalyType: "缺打卡上班",
+            anomalyMinutes: null,
+            clockTime: null,
+            amendmentStatus: bestIn?.status || null,
+            amendmentTime: bestIn ? toTaiwanHHMM(bestIn.requestedTime) : null,
+            isResolved: bestIn?.status === "approved",
+          });
+        } else {
+          const earliest = inRecords.sort((a, b) => new Date(a.clockTime).getTime() - new Date(b.clockTime).getTime())[0];
+          const lateMin = parseLateMinutes(earliest.failReason, "遲到");
+          if (lateMin !== null && lateMin > 0) {
+            anomalies.push({
+              ...baseInfo,
+              anomalyType: "遲到",
+              anomalyMinutes: lateMin,
+              clockTime: toTaiwanHHMM(earliest.clockTime),
+              amendmentStatus: bestIn?.status || null,
+              amendmentTime: bestIn ? toTaiwanHHMM(bestIn.requestedTime) : null,
+              isResolved: bestIn?.status === "approved",
+            });
+          }
+        }
+
+        if (shiftDate < todayStr) {
+          if (outRecords.length === 0) {
+            anomalies.push({
+              ...baseInfo,
+              anomalyType: "缺打卡下班",
+              anomalyMinutes: null,
+              clockTime: null,
+              amendmentStatus: bestOut?.status || null,
+              amendmentTime: bestOut ? toTaiwanHHMM(bestOut.requestedTime) : null,
+              isResolved: bestOut?.status === "approved",
+            });
+          } else {
+            const latest = outRecords.sort((a, b) => new Date(b.clockTime).getTime() - new Date(a.clockTime).getTime())[0];
+            const earlyMin = parseLateMinutes(latest.failReason, "提早");
+            if (earlyMin !== null && earlyMin > 0) {
+              anomalies.push({
+                ...baseInfo,
+                anomalyType: "早退",
+                anomalyMinutes: earlyMin,
+                clockTime: toTaiwanHHMM(latest.clockTime),
+                amendmentStatus: bestOut?.status || null,
+                amendmentTime: bestOut ? toTaiwanHHMM(bestOut.requestedTime) : null,
+                isResolved: bestOut?.status === "approved",
+              });
+            }
+          }
+        }
+      }
+
+      anomalies.sort((a, b) => a.date.localeCompare(b.date) || a.employeeCode.localeCompare(b.employeeCode));
+      res.json(anomalies);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/portal/clock-amendment", async (req, res) => {
     try {
       const { employeeId, clockType, requestedTime, reason, venueId, shiftId, isSystemIssue, evidenceImageUrl } = req.body;

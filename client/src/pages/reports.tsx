@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   FileSpreadsheet, ChevronLeft, ChevronRight, Download, Search,
   CheckCircle, XCircle, AlertTriangle, Clock, MapPin, Filter,
+  UserX, UserCheck, Timer,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -66,6 +67,22 @@ interface OvertimeRequest {
   reviewedByName: string | null;
   reviewedAt: string | null;
   reviewNote: string | null;
+}
+
+interface AnomalyRow {
+  employeeId: number;
+  employeeName: string;
+  employeeCode: string;
+  date: string;
+  shiftStart: string;
+  shiftEnd: string;
+  venueName: string;
+  anomalyType: "遲到" | "缺打卡上班" | "缺打卡下班" | "早退";
+  anomalyMinutes: number | null;
+  clockTime: string | null;
+  amendmentStatus: "approved" | "pending" | "rejected" | null;
+  amendmentTime: string | null;
+  isResolved: boolean;
 }
 
 function getTaiwanToday(): string {
@@ -159,6 +176,7 @@ function parseFailReason(failReason: string | null): { note: string; minutes: nu
 export default function ReportsPage() {
   const { toast } = useToast();
   const today = getTaiwanToday();
+  const [activeTab, setActiveTab] = useState<"clock" | "anomaly">("clock");
   const [currentMonth, setCurrentMonth] = useState(() => {
     const d = new Date(today);
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -172,6 +190,9 @@ export default function ReportsPage() {
   const [filterClockType, setFilterClockType] = useState("all");
   const [filterVenueId, setFilterVenueId] = useState("all");
   const [exporting, setExporting] = useState(false);
+  const [anomalyFilterName, setAnomalyFilterName] = useState("");
+  const [anomalyFilterType, setAnomalyFilterType] = useState("all");
+  const [anomalyFilterStatus, setAnomalyFilterStatus] = useState("all");
 
   const startDate = useCustomRange
     ? customStart
@@ -181,6 +202,7 @@ export default function ReportsPage() {
     : format(endOfMonth(currentMonth), "yyyy-MM-dd");
 
   const monthLabel = format(currentMonth, "yyyy 年 M 月", { locale: zhTW });
+  const yearMonth = format(currentMonth, "yyyy-MM");
 
   const { data: venues = [] } = useQuery<Venue[]>({
     queryKey: ["/api/venues-all"],
@@ -204,6 +226,30 @@ export default function ReportsPage() {
       return res.json();
     },
   });
+
+  const { data: rawAnomalies = [], isLoading: anomalyLoading } = useQuery<AnomalyRow[]>({
+    queryKey: ["/api/reports/anomalies", yearMonth],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/anomalies?yearMonth=${yearMonth}`);
+      if (!res.ok) throw new Error("載入失敗");
+      return res.json();
+    },
+    enabled: activeTab === "anomaly",
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const anomalies = useMemo(() => {
+    let rows = rawAnomalies;
+    if (anomalyFilterName.trim()) {
+      const q = anomalyFilterName.trim().toLowerCase();
+      rows = rows.filter(r => r.employeeName.includes(q) || r.employeeCode.toLowerCase().includes(q));
+    }
+    if (anomalyFilterType !== "all") rows = rows.filter(r => r.anomalyType === anomalyFilterType);
+    if (anomalyFilterStatus === "resolved") rows = rows.filter(r => r.isResolved);
+    if (anomalyFilterStatus === "unresolved") rows = rows.filter(r => !r.isResolved);
+    if (anomalyFilterStatus === "pending") rows = rows.filter(r => r.amendmentStatus === "pending");
+    return rows;
+  }, [rawAnomalies, anomalyFilterName, anomalyFilterType, anomalyFilterStatus]);
 
   const successCount = useMemo(() => records.filter((r) => r.status === "success").length, [records]);
   const failCount = useMemo(() => records.filter((r) => r.status === "fail").length, [records]);
@@ -314,6 +360,45 @@ export default function ReportsPage() {
     }
   }
 
+  async function handleExportAnomalyExcel() {
+    setExporting(true);
+    try {
+      const wb = XLSX.utils.book_new();
+      const amendStatusLabel = (s: string | null) => {
+        if (s === "approved") return "已核准";
+        if (s === "pending") return "審核中";
+        if (s === "rejected") return "已拒絕";
+        return "無申請";
+      };
+      const rows = rawAnomalies.map(r => ({
+        "員工編號": r.employeeCode,
+        "員工姓名": r.employeeName,
+        "日期": r.date,
+        "排班時間": `${r.shiftStart}~${r.shiftEnd}`,
+        "場館": r.venueName,
+        "異常類型": r.anomalyType,
+        "異常分鐘數": r.anomalyMinutes ?? "",
+        "實際打卡": r.clockTime ?? "—",
+        "補打卡申請": amendStatusLabel(r.amendmentStatus),
+        "補打卡時間": r.amendmentTime ?? "",
+        "最終狀態": r.isResolved ? "已補正" : (r.amendmentStatus === "pending" ? "審核中" : "異常未補正"),
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
+        { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 14 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "出勤異常");
+      const fileName = `出勤異常_${yearMonth}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      toast({ title: `已匯出`, description: `${fileName}（共 ${rawAnomalies.length} 筆異常）` });
+    } catch (err: unknown) {
+      toast({ title: "匯出失敗", description: err instanceof Error ? err.message : "未知錯誤", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function handleResetFilters() {
     setFilterName("");
     setFilterCode("");
@@ -335,19 +420,39 @@ export default function ReportsPage() {
             <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
             報表匯出
           </h1>
-          <p className="text-sm text-muted-foreground">打卡記錄篩選查詢與 Excel 匯出（含補打卡、加班申請分頁）</p>
+          <p className="text-sm text-muted-foreground">打卡記錄篩選查詢與 Excel 匯出</p>
         </div>
-        <Button
-          onClick={handleExportExcel}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-          disabled={isLoading || exporting}
-          data-testid="button-export-excel"
-        >
-          <Download className="h-4 w-4" />
-          {exporting ? "匯出中..." : `匯出 Excel (${records.length} 筆)`}
-        </Button>
+        {activeTab === "clock" ? (
+          <Button onClick={handleExportExcel} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2" disabled={isLoading || exporting} data-testid="button-export-excel">
+            <Download className="h-4 w-4" />
+            {exporting ? "匯出中..." : `匯出 Excel (${records.length} 筆)`}
+          </Button>
+        ) : (
+          <Button onClick={handleExportAnomalyExcel} className="bg-orange-600 hover:bg-orange-700 text-white gap-2" disabled={anomalyLoading || exporting} data-testid="button-export-anomaly-excel">
+            <Download className="h-4 w-4" />
+            {exporting ? "匯出中..." : `匯出異常報表 (${rawAnomalies.length} 筆)`}
+          </Button>
+        )}
       </div>
 
+      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+        <button
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === "clock" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setActiveTab("clock")}
+          data-testid="tab-clock-records"
+        >
+          <Clock className="h-3.5 w-3.5" /> 打卡記錄
+        </button>
+        <button
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === "anomaly" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setActiveTab("anomaly")}
+          data-testid="tab-anomaly"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" /> 出勤異常
+        </button>
+      </div>
+
+      {activeTab === "clock" && (<>
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -638,6 +743,154 @@ export default function ReportsPage() {
           )}
         </CardContent>
       </Card>
+      </>)}
+
+      {activeTab === "anomaly" && (<>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Filter className="h-4 w-4" /> 月份與篩選
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentMonth(m => subMonths(m, 1))} data-testid="button-anomaly-prev-month">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="font-medium text-sm w-28 text-center" data-testid="text-anomaly-month">{monthLabel}</span>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentMonth(m => addMonths(m, 1))} data-testid="button-anomaly-next-month">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <div className="relative ml-2">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input className="pl-8 h-8 w-44 text-sm" placeholder="員工姓名或編號" value={anomalyFilterName} onChange={e => setAnomalyFilterName(e.target.value)} data-testid="input-anomaly-name" />
+              </div>
+              <Select value={anomalyFilterType} onValueChange={setAnomalyFilterType}>
+                <SelectTrigger className="h-8 w-36 text-sm" data-testid="select-anomaly-type">
+                  <SelectValue placeholder="異常類型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部類型</SelectItem>
+                  <SelectItem value="遲到">遲到</SelectItem>
+                  <SelectItem value="缺打卡上班">缺打卡上班</SelectItem>
+                  <SelectItem value="缺打卡下班">缺打卡下班</SelectItem>
+                  <SelectItem value="早退">早退</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={anomalyFilterStatus} onValueChange={setAnomalyFilterStatus}>
+                <SelectTrigger className="h-8 w-32 text-sm" data-testid="select-anomaly-status">
+                  <SelectValue placeholder="補正狀態" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部狀態</SelectItem>
+                  <SelectItem value="unresolved">未補正</SelectItem>
+                  <SelectItem value="pending">審核中</SelectItem>
+                  <SelectItem value="resolved">已補正</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "總異常筆數", value: rawAnomalies.length, icon: AlertTriangle, color: "text-orange-600" },
+            { label: "未補正", value: rawAnomalies.filter(r => !r.isResolved && r.amendmentStatus !== "pending").length, icon: UserX, color: "text-red-600" },
+            { label: "審核中", value: rawAnomalies.filter(r => r.amendmentStatus === "pending").length, icon: Timer, color: "text-yellow-600" },
+            { label: "已補正", value: rawAnomalies.filter(r => r.isResolved).length, icon: UserCheck, color: "text-green-600" },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <Card key={label}>
+              <CardContent className="p-3 flex items-center gap-3">
+                <Icon className={`h-8 w-8 ${color}`} />
+                <div>
+                  <div className="text-2xl font-bold" data-testid={`stat-anomaly-${label}`}>{value}</div>
+                  <div className="text-xs text-muted-foreground">{label}</div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card>
+          <CardContent className="p-0">
+            {anomalyLoading ? (
+              <div className="p-8 text-center text-muted-foreground">載入中...</div>
+            ) : anomalies.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <UserCheck className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p>本月無出勤異常紀錄</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
+                      <th className="p-3 text-left font-medium">員工</th>
+                      <th className="p-3 text-left font-medium">日期</th>
+                      <th className="p-3 text-left font-medium">排班時間</th>
+                      <th className="p-3 text-left font-medium">場館</th>
+                      <th className="p-3 text-left font-medium">異常類型</th>
+                      <th className="p-3 text-left font-medium">分鐘數</th>
+                      <th className="p-3 text-left font-medium">實際打卡</th>
+                      <th className="p-3 text-left font-medium">補打卡申請</th>
+                      <th className="p-3 text-left font-medium">狀態</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {anomalies.map((r, idx) => (
+                      <tr key={idx} className="hover:bg-muted/30 transition-colors" data-testid={`row-anomaly-${idx}`}>
+                        <td className="p-3 whitespace-nowrap">
+                          <div className="font-medium">{r.employeeName}</div>
+                          <div className="text-xs text-muted-foreground">{r.employeeCode}</div>
+                        </td>
+                        <td className="p-3 whitespace-nowrap text-xs">{r.date}</td>
+                        <td className="p-3 whitespace-nowrap text-xs">{r.shiftStart}～{r.shiftEnd}</td>
+                        <td className="p-3 whitespace-nowrap text-xs">{r.venueName}</td>
+                        <td className="p-3 whitespace-nowrap">
+                          <Badge className={`text-[11px] ${
+                            r.anomalyType === "遲到" ? "bg-yellow-500/10 text-yellow-700 border-yellow-500/20" :
+                            r.anomalyType === "早退" ? "bg-orange-500/10 text-orange-700 border-orange-500/20" :
+                            "bg-red-500/10 text-red-700 border-red-500/20"
+                          }`}>
+                            {r.anomalyType}
+                          </Badge>
+                        </td>
+                        <td className="p-3 whitespace-nowrap text-xs text-muted-foreground">
+                          {r.anomalyMinutes != null ? `${r.anomalyMinutes} 分` : "—"}
+                        </td>
+                        <td className="p-3 whitespace-nowrap text-xs font-mono">
+                          {r.clockTime ? r.clockTime.slice(11, 16) : "—"}
+                        </td>
+                        <td className="p-3 whitespace-nowrap text-xs">
+                          {r.amendmentStatus === "approved" && <Badge className="bg-green-500/10 text-green-700 border-green-500/20 text-[11px]">已核准</Badge>}
+                          {r.amendmentStatus === "pending" && <Badge className="bg-yellow-500/10 text-yellow-700 border-yellow-500/20 text-[11px]">審核中</Badge>}
+                          {r.amendmentStatus === "rejected" && <Badge className="bg-red-500/10 text-red-700 border-red-500/20 text-[11px]">已拒絕</Badge>}
+                          {!r.amendmentStatus && <span className="text-muted-foreground">無申請</span>}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          {r.isResolved ? (
+                            <Badge className="bg-green-500/10 text-green-700 border-green-500/20 text-[11px]">
+                              <CheckCircle className="h-3 w-3 mr-1" />已補正
+                            </Badge>
+                          ) : r.amendmentStatus === "pending" ? (
+                            <Badge className="bg-yellow-500/10 text-yellow-700 border-yellow-500/20 text-[11px]">
+                              <Clock className="h-3 w-3 mr-1" />待審核
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-red-500/10 text-red-700 border-red-500/20 text-[11px]">
+                              <XCircle className="h-3 w-3 mr-1" />未補正
+                            </Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </>)}
     </div>
   );
 }
