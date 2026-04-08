@@ -595,8 +595,6 @@ export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: str
   if (!isValidLineUserId(lineId)) return;
   try {
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-    const todayKey = formatTaiwanDate(now);
-    if (_guidelinePushRecord.get(employeeId) === todayKey) return;
     const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const monthStart = `${yearMonth}-01`;
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -609,11 +607,15 @@ export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: str
     ]);
 
     const myVenueIds = Array.from(new Set(empShifts.map(s => s.venueId)));
+
     const thisMonthAckedIds = new Set(
       acks.filter(a => {
         if (!a.acknowledgedAt) return false;
         const d = new Date(a.acknowledgedAt);
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+        if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) return false;
+        const g = allGuidelines.find(g => g.id === a.guidelineId);
+        if (g?.updatedAt && new Date(g.updatedAt) > d) return false;
+        return true;
       }).map(a => a.guidelineId)
     );
 
@@ -628,6 +630,10 @@ export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: str
 
     if (relevant.length === 0) return;
 
+    const signature = relevant.map(g => `${g.id}:${g.updatedAt?.toISOString() ?? g.createdAt?.toISOString() ?? g.id}`).sort().join("|");
+    const pushKey = `${yearMonth}:${signature}`;
+    if (_guidelinePushRecord.get(employeeId) === pushKey) return;
+
     const toPush = relevant.slice(0, 2);
     const total = relevant.length;
     const intro = `📋 您有 ${total} 條守則尚未確認\n`;
@@ -635,7 +641,7 @@ export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: str
     const suffix = total > 2 ? `\n…等共 ${total} 條` : "";
     const link = "\n\n請至員工入口「守則」頁面確認閱讀。";
     await pushToLine(lineId, intro + list + suffix + link);
-    _guidelinePushRecord.set(employeeId, todayKey);
+    _guidelinePushRecord.set(employeeId, pushKey);
   } catch (err) {
     console.error("[Guidelines Push] Error:", err);
   }

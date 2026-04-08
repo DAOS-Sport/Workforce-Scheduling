@@ -180,9 +180,10 @@ export const guidelines = pgTable("guidelines", {
   isActive: boolean("is_active").notNull().default(true),
   yearMonth: text("year_month"),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertGuidelineSchema = createInsertSchema(guidelines).omit({ id: true, createdAt: true });
+export const insertGuidelineSchema = createInsertSchema(guidelines).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertGuideline = z.infer<typeof insertGuidelineSchema>;
 export type Guideline = typeof guidelines.$inferSelect;
 

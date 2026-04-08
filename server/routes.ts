@@ -1424,7 +1424,7 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       const partial = insertGuidelineSchema.partial().parse(req.body);
-      const item = await storage.updateGuideline(id, partial);
+      const item = await storage.updateGuideline(id, { ...partial, updatedAt: new Date() });
       if (!item) return res.status(404).json({ message: "守則未找到" });
       res.json(item);
     } catch (err: any) {
@@ -1786,14 +1786,18 @@ export async function registerRoutes(
       });
 
       const acks = await storage.getGuidelineAcksByEmployee(employeeId);
-      const ackedIds = new Set(acks.map((a) => a.guidelineId));
 
-      const currentMonthAcks = acks.filter((a) => {
-        if (!a.acknowledgedAt) return false;
-        const ackDate = new Date(a.acknowledgedAt);
-        return ackDate.getFullYear() === now.getFullYear() && ackDate.getMonth() === now.getMonth();
-      });
-      const currentMonthAckedIds = new Set(currentMonthAcks.map((a) => a.guidelineId));
+      const guidelineMap = new Map(relevant.map((g) => [g.id, g]));
+      const currentMonthAckedIds = new Set(
+        acks.filter((a) => {
+          if (!a.acknowledgedAt) return false;
+          const ackDate = new Date(a.acknowledgedAt);
+          if (ackDate.getFullYear() !== now.getFullYear() || ackDate.getMonth() !== now.getMonth()) return false;
+          const g = guidelineMap.get(a.guidelineId);
+          if (g?.updatedAt && new Date(g.updatedAt) > ackDate) return false;
+          return true;
+        }).map((a) => a.guidelineId)
+      );
 
       const venueMap: Record<number, string> = {};
       for (const vid of myVenueIds) {
@@ -1824,10 +1828,16 @@ export async function registerRoutes(
 
       const existingAcks = await storage.getGuidelineAcksByEmployee(employeeId);
       const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const allGuidelines = await storage.getGuidelines();
+      const guidelineMapAck = new Map(allGuidelines.map((g) => [g.id, g]));
+
       const existingThisMonth = existingAcks.filter((a) => {
         if (!a.acknowledgedAt) return false;
         const d = new Date(new Date(a.acknowledgedAt).toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+        if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) return false;
+        const g = guidelineMapAck.get(a.guidelineId);
+        if (g?.updatedAt && new Date(g.updatedAt) > d) return false;
+        return true;
       });
       const alreadyAckedIds = new Set(existingThisMonth.map((a) => a.guidelineId));
 
