@@ -2463,6 +2463,113 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/portal/amendment-eligible-dates/:employeeId/:yearMonth", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.employeeId);
+      const yearMonth = req.params.yearMonth;
+      if (!employeeId || !/^\d{4}-\d{2}$/.test(yearMonth)) {
+        return res.status(400).json({ message: "參數格式錯誤" });
+      }
+      const [yr, mo] = yearMonth.split("-").map(Number);
+      const monthStart = `${yearMonth}-01`;
+      const lastDay = new Date(yr, mo, 0).getDate();
+      const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
+
+      const [empShifts, empClockRecords, allAmendments, allVenues] = await Promise.all([
+        storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd),
+        storage.getClockRecordsByEmployee(employeeId, monthStart, monthEnd),
+        storage.getClockAmendmentsByEmployee(employeeId),
+        storage.getAllVenues(),
+      ]);
+
+      const LEAVE_ROLES = ["休假", "特休", "病假", "事假", "公假", "喪假", "育嬰", "留職停薪"];
+      const workShifts = empShifts.filter(s => !LEAVE_ROLES.includes(s.role));
+      const venueMap = new Map(allVenues.map(v => [v.id, v]));
+
+      const toTaiwanDate = (iso: string | Date | null): string => {
+        if (!iso) return "unknown";
+        const d = new Date(typeof iso === "string" ? iso : iso.toISOString());
+        const tw = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+        return `${tw.getFullYear()}-${String(tw.getMonth() + 1).padStart(2, "0")}-${String(tw.getDate()).padStart(2, "0")}`;
+      };
+
+      const clockMap = new Map<string, typeof empClockRecords>();
+      for (const cr of empClockRecords) {
+        const date = toTaiwanDate(cr.clockTime);
+        const key = `${date}:${cr.clockType}`;
+        if (!clockMap.has(key)) clockMap.set(key, []);
+        clockMap.get(key)!.push(cr);
+      }
+
+      const amendmentMap = new Map<string, typeof allAmendments>();
+      for (const a of allAmendments) {
+        const date = toTaiwanDate(a.requestedTime);
+        const key = `${date}:${a.clockType}`;
+        if (!amendmentMap.has(key)) amendmentMap.set(key, []);
+        amendmentMap.get(key)!.push(a);
+      }
+
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+      const eligible: Array<{
+        date: string;
+        missingClockType: string;
+        shiftStartTime: string;
+        shiftEndTime: string;
+        venueName: string;
+        hasExistingAmendment: boolean;
+        amendmentStatus: string | null;
+      }> = [];
+
+      for (const shift of workShifts) {
+        const shiftDate = String(shift.date);
+        if (shiftDate >= todayStr) continue;
+        const venue = venueMap.get(shift.venueId);
+        const venueName = venue?.shortName || "";
+
+        const inRecords = (clockMap.get(`${shiftDate}:in`) || []).filter(r => r.status === "success" || r.status === "warning");
+        const outRecords = (clockMap.get(`${shiftDate}:out`) || []).filter(r => r.status === "success" || r.status === "warning");
+        const inAmends = amendmentMap.get(`${shiftDate}:in`) || [];
+        const outAmends = amendmentMap.get(`${shiftDate}:out`) || [];
+
+        const getBest = (list: typeof allAmendments) =>
+          list.find(a => a.status === "approved") || list.find(a => a.status === "pending") || null;
+
+        if (inRecords.length === 0) {
+          const best = getBest(inAmends);
+          eligible.push({
+            date: shiftDate,
+            missingClockType: "in",
+            shiftStartTime: shift.startTime,
+            shiftEndTime: shift.endTime,
+            venueName,
+            hasExistingAmendment: !!best,
+            amendmentStatus: best?.status || null,
+          });
+        }
+
+        if (outRecords.length === 0) {
+          const best = getBest(outAmends);
+          eligible.push({
+            date: shiftDate,
+            missingClockType: "out",
+            shiftStartTime: shift.startTime,
+            shiftEndTime: shift.endTime,
+            venueName,
+            hasExistingAmendment: !!best,
+            amendmentStatus: best?.status || null,
+          });
+        }
+      }
+
+      eligible.sort((a, b) => a.date.localeCompare(b.date));
+      res.json(eligible);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/clock-amendments", async (req, res) => {
     try {
       const { status } = req.query;

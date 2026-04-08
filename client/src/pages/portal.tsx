@@ -1533,27 +1533,52 @@ interface ClockAmendmentRecord {
   createdAt: string;
 }
 
+interface EligibleDate {
+  date: string;
+  missingClockType: "in" | "out";
+  shiftStartTime: string;
+  shiftEndTime: string;
+  venueName: string;
+  hasExistingAmendment: boolean;
+  amendmentStatus: string | null;
+}
+
+const AMENDMENT_REASONS = ["漏打卡", "系統異常", "入職開通中", "其他"] as const;
+type AmendmentReason = typeof AMENDMENT_REASONS[number];
+
 function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
-  const [expanded, setExpanded] = useState(false);
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  const thisYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [yr, mo] = thisYearMonth.split("-").map(Number);
+  const firstDayOfMonth = new Date(yr, mo - 1, 1);
+  const daysInMonth = new Date(yr, mo, 0).getDate();
+  const startDow = firstDayOfMonth.getDay();
+
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [clockType, setClockType] = useState<"in" | "out">("in");
-  const [requestedDate, setRequestedDate] = useState(() => {
-    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  });
   const [requestedTime, setRequestedTime] = useState("09:00");
-  const [reason, setReason] = useState("");
-  const [isSystemIssue, setIsSystemIssue] = useState(false);
+  const [reason, setReason] = useState<AmendmentReason>("漏打卡");
+  const [notes, setNotes] = useState("");
   const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
-  const { data: amendments = [], refetch: refetchAmendments } = useQuery<ClockAmendmentRecord[]>({
-    queryKey: ["/api/portal/clock-amendments", employee.id],
-    enabled: expanded,
+
+  const { data: eligibleDates = [], isLoading: eligibleLoading } = useQuery<EligibleDate[]>({
+    queryKey: ["/api/portal/amendment-eligible-dates", employee.id, thisYearMonth],
+    staleTime: 60 * 1000,
   });
 
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-  const thisYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const { data: amendments = [], refetch: refetchAmendments } = useQuery<ClockAmendmentRecord[]>({
+    queryKey: ["/api/portal/clock-amendments", employee.id],
+  });
+
+  const eligibleMap = new Map<string, EligibleDate[]>();
+  for (const e of eligibleDates) {
+    if (!eligibleMap.has(e.date)) eligibleMap.set(e.date, []);
+    eligibleMap.get(e.date)!.push(e);
+  }
+
   const monthlyUsed = amendments.filter(a => {
     const created = a.createdAt ? new Date(a.createdAt) : null;
     if (!created) return false;
@@ -1561,6 +1586,25 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
     return ym === thisYearMonth && a.status !== "rejected" && !a.isSystemIssue;
   }).length;
   const monthlyRemaining = Math.max(0, 3 - monthlyUsed);
+  const isSystemIssue = reason === "系統異常";
+
+  const handleDateClick = (dateStr: string) => {
+    const entries = eligibleMap.get(dateStr) || [];
+    const clickable = entries.filter(e => e.amendmentStatus !== "approved");
+    if (!clickable.length) return;
+    const e = clickable.find(ent => ent.missingClockType === "in") || clickable[0];
+    setSelectedDate(dateStr);
+    setClockType(e.missingClockType);
+    setRequestedTime(e.missingClockType === "in" ? e.shiftStartTime.substring(0, 5) : e.shiftEndTime.substring(0, 5));
+  };
+
+  const handleClockTypeChange = (type: "in" | "out") => {
+    setClockType(type);
+    if (selectedDate) {
+      const e = (eligibleMap.get(selectedDate) || []).find(ent => ent.missingClockType === type);
+      if (e) setRequestedTime(type === "in" ? e.shiftStartTime.substring(0, 5) : e.shiftEndTime.substring(0, 5));
+    }
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1572,26 +1616,33 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
   };
 
   const handleSubmit = async () => {
-    if (!reason.trim()) {
-      toast({ title: "請輸入補打卡原因", variant: "destructive" });
+    if (!selectedDate) {
+      toast({ title: "請選擇補打卡日期", variant: "destructive" });
+      return;
+    }
+    if (!evidencePreview) {
+      toast({ title: "請上傳與主管的同意對話截圖", variant: "destructive" });
       return;
     }
     setSubmitting(true);
     try {
-      const fullTime = `${requestedDate}T${requestedTime}:00+08:00`;
+      const fullTime = `${selectedDate}T${requestedTime}:00+08:00`;
+      const fullReason = notes.trim() ? `${reason}：${notes.trim()}` : reason;
       await apiRequest("POST", "/api/portal/clock-amendment", {
         employeeId: employee.id,
         clockType,
         requestedTime: fullTime,
-        reason: reason.trim(),
+        reason: fullReason,
         isSystemIssue,
-        evidenceImageUrl: evidencePreview || null,
+        evidenceImageUrl: evidencePreview,
       });
       toast({ title: "補打卡申請已送出" });
-      setReason("");
-      setIsSystemIssue(false);
+      setSelectedDate(null);
+      setReason("漏打卡");
+      setNotes("");
       setEvidencePreview(null);
       refetchAmendments();
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/amendment-eligible-dates", employee.id, thisYearMonth] });
     } catch (err: any) {
       toast({ title: err.message || "送出失敗", variant: "destructive" });
     } finally {
@@ -1599,162 +1650,258 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
     }
   };
 
-  const statusLabel = (s: string) => {
-    if (s === "pending") return "待審核";
-    if (s === "approved") return "已批准";
-    if (s === "rejected") return "已駁回";
-    return s;
-  };
+  const statusLabel = (s: string) => s === "pending" ? "待審核" : s === "approved" ? "已批准" : s === "rejected" ? "已駁回" : s;
+  const statusColor = (s: string) => s === "pending" ? "bg-orange-500/10 text-orange-600 border-orange-500/20" : s === "approved" ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-red-500/10 text-red-600 border-red-500/20";
 
-  const statusColor = (s: string) => {
-    if (s === "pending") return "bg-orange-500/10 text-orange-600 border-orange-500/20";
-    if (s === "approved") return "bg-green-500/10 text-green-600 border-green-500/20";
-    if (s === "rejected") return "bg-red-500/10 text-red-600 border-red-500/20";
-    return "";
+  const getDayCellStyle = (dateStr: string) => {
+    const entries = eligibleMap.get(dateStr) || [];
+    const isSelected = selectedDate === dateStr;
+    if (!entries.length) return { cls: "text-slate-300 cursor-default", label: null, clickable: false };
+    const allApproved = entries.every(e => e.amendmentStatus === "approved");
+    if (allApproved) return {
+      cls: `bg-green-100 text-green-700 cursor-default${isSelected ? " ring-2 ring-green-400" : ""}`,
+      label: "已處理", clickable: false,
+    };
+    const hasMissingIn = entries.some(e => e.missingClockType === "in" && e.amendmentStatus !== "approved");
+    const hasMissingOut = entries.some(e => e.missingClockType === "out" && e.amendmentStatus !== "approved");
+    const anyPending = entries.some(e => e.amendmentStatus === "pending");
+    let cls = hasMissingIn
+      ? "bg-amber-100 text-amber-700 border border-amber-300 cursor-pointer hover:bg-amber-200"
+      : "bg-blue-100 text-blue-700 border border-blue-300 cursor-pointer hover:bg-blue-200";
+    if (anyPending) cls += " opacity-70";
+    if (isSelected) cls += " ring-2 ring-offset-1 ring-juns-teal";
+    const label = hasMissingIn && hasMissingOut ? "上下" : hasMissingIn ? "上班" : "下班";
+    return { cls, label, clickable: true };
   };
 
   return (
-    <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-clock-amendment">
-      <button
-        className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors"
-        onClick={() => setExpanded(!expanded)}
-        data-testid="button-toggle-amendment"
-      >
-        <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-juns-teal" />
-          <span className="text-sm font-semibold text-juns-navy">補打卡申請</span>
+    <div className="space-y-4" data-testid="section-clock-amendment">
+      {/* Rules notice */}
+      <div className="border border-amber-200 rounded-xl bg-amber-50 p-4">
+        <p className="text-xs font-semibold text-amber-700 mb-2.5">補打卡申請規範</p>
+        <ul className="space-y-1.5 text-xs text-amber-700">
+          <li className="flex items-start gap-1.5">
+            <span className="shrink-0 font-bold text-amber-500 mt-0.5">①</span>
+            <span>每月上限 <strong>3 次</strong>（本月剩餘 <strong className={monthlyRemaining === 0 ? "text-red-600" : ""}>{monthlyRemaining}</strong> 次）</span>
+          </li>
+          <li className="flex items-start gap-1.5">
+            <span className="shrink-0 font-bold text-amber-500 mt-0.5">②</span>
+            <span>必須附上與主管的<strong>同意對話截圖</strong>，否則無法送出</span>
+          </li>
+          <li className="flex items-start gap-1.5">
+            <span className="shrink-0 font-bold text-amber-500 mt-0.5">③</span>
+            <span>選「系統異常」者<strong>不列入次數額度</strong>，仍須主管確認截圖</span>
+          </li>
+        </ul>
+      </div>
+
+      {/* Calendar */}
+      <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="calendar-amendment">
+        <div className="px-4 py-3 border-b border-juns-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-juns-teal" />
+            <span className="text-sm font-semibold text-juns-navy">
+              {now.getFullYear()} 年 {now.getMonth() + 1} 月 — 選擇補卡日
+            </span>
+          </div>
+          {eligibleLoading && <Loader2 className="h-4 w-4 text-slate-400 animate-spin" />}
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${monthlyRemaining === 0 ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-500"}`} data-testid="text-amendment-remaining">
-            本月剩餘 {monthlyRemaining}/3
-          </span>
-          <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        <div className="p-3">
+          <div className="grid grid-cols-7 mb-1.5">
+            {["日","一","二","三","四","五","六"].map(d => (
+              <div key={d} className="text-center text-[11px] font-medium text-slate-400 py-1">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-0.5">
+            {Array.from({ length: startDow }).map((_, i) => (
+              <div key={`pad-${i}`} />
+            ))}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const dayNum = i + 1;
+              const dateStr = `${thisYearMonth}-${String(dayNum).padStart(2, "0")}`;
+              const { cls, label, clickable } = getDayCellStyle(dateStr);
+              return (
+                <button
+                  key={dateStr}
+                  onClick={() => clickable && handleDateClick(dateStr)}
+                  disabled={!clickable}
+                  className={`rounded-lg p-1 flex flex-col items-center min-h-[3rem] transition-all disabled:cursor-default ${cls}`}
+                  data-testid={`cell-day-${dayNum}`}
+                >
+                  <span className="text-[13px] font-semibold leading-tight">{dayNum}</span>
+                  {label && <span className="text-[9px] leading-tight mt-0.5">{label}</span>}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </button>
-      {expanded && (
-        <div className="border-t border-juns-border p-4 space-y-4">
-          {monthlyRemaining === 0 && !isSystemIssue && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-100">
-              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-600">本月補打卡申請已達上限（3次）。如屬系統問題，請勾選下方「系統問題」選項後申請。</p>
+        <div className="px-3 pb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-100 border border-amber-300 inline-block" />缺上班打卡</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-100 border border-blue-300 inline-block" />缺下班打卡</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-100 inline-block" />已處理</span>
+        </div>
+        {eligibleDates.length === 0 && !eligibleLoading && (
+          <div className="px-4 pb-4 text-center text-xs text-slate-400">本月無缺打卡異常記錄</div>
+        )}
+      </div>
+
+      {/* Form — shown after date selection */}
+      {selectedDate && (
+        <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-amendment-form">
+          <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
+            <FileEdit className="h-4 w-4 text-juns-teal" />
+            <span className="text-sm font-semibold text-juns-navy">
+              {selectedDate.replace(/^\d{4}-(\d{2})-(\d{2})$/, "$1/$2")} 補打卡申請
+            </span>
+          </div>
+          <div className="p-4 space-y-4">
+            {monthlyRemaining === 0 && !isSystemIssue && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-100">
+                <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-600">本月額度已用完。如為系統問題，請在下方原因選「系統異常」後送出（不佔額度）。</p>
+              </div>
+            )}
+
+            {/* Clock type toggle — show only options that are missing */}
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1.5">補卡類型</p>
+              <div className="flex gap-2">
+                {(eligibleMap.get(selectedDate) || [])
+                  .filter(e => e.amendmentStatus !== "approved")
+                  .map(e => (
+                    <button
+                      key={e.missingClockType}
+                      onClick={() => handleClockTypeChange(e.missingClockType)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        clockType === e.missingClockType ? "bg-juns-teal text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                      data-testid={`button-amendment-type-${e.missingClockType}`}
+                    >
+                      {e.missingClockType === "in" ? "補打上班" : "補打下班"}
+                    </button>
+                  ))}
+              </div>
             </div>
-          )}
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              <button
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${clockType === "in" ? "bg-juns-teal text-white" : "bg-slate-100 text-slate-600"}`}
-                onClick={() => setClockType("in")}
-                data-testid="button-amendment-type-in"
-              >
-                上班
-              </button>
-              <button
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${clockType === "out" ? "bg-juns-teal text-white" : "bg-slate-100 text-slate-600"}`}
-                onClick={() => setClockType("out")}
-                data-testid="button-amendment-type-out"
-              >
-                下班
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="date"
-                value={requestedDate}
-                onChange={(e) => setRequestedDate(e.target.value)}
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-base font-medium bg-white"
-                data-testid="input-amendment-date"
-              />
+
+            {/* Time */}
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1.5">補卡時間（可調整）</p>
               <input
                 type="time"
                 value={requestedTime}
                 onChange={(e) => setRequestedTime(e.target.value)}
-                className="w-32 border border-slate-200 rounded-lg px-3 py-2 text-base font-medium bg-white"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base font-medium bg-white"
                 data-testid="input-amendment-time"
               />
             </div>
-            <textarea
-              placeholder="請輸入補打卡原因（例：忘記打卡）"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white resize-none"
-              rows={2}
-              data-testid="input-amendment-reason"
-            />
-            <label className="flex items-center gap-2.5 cursor-pointer select-none" data-testid="toggle-system-issue">
-              <input
-                type="checkbox"
-                checked={isSystemIssue}
-                onChange={(e) => setIsSystemIssue(e.target.checked)}
-                className="w-4 h-4 accent-juns-teal"
-              />
-              <span className="text-sm text-slate-600">系統問題（不列入當月 3 次額度，仍須主管確認）</span>
-            </label>
+
+            {/* Reason dropdown */}
             <div>
-              <p className="text-xs text-slate-500 mb-1.5">附上與主管的同意對話截圖（選填）</p>
-              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-600 hover:bg-slate-100 cursor-pointer active:scale-[0.98] transition-all">
-                <Camera className="h-3.5 w-3.5" />
-                上傳截圖
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} data-testid="input-amendment-evidence" />
-              </label>
-              {evidencePreview && (
-                <div className="mt-2 relative inline-block">
-                  <img src={evidencePreview} className="h-20 w-auto rounded-lg border border-slate-200 object-cover" alt="截圖預覽" />
-                  <button
-                    className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5"
-                    onClick={() => setEvidencePreview(null)}
-                    data-testid="button-remove-evidence"
-                  >
+              <p className="text-xs font-medium text-slate-500 mb-1.5">補卡原因</p>
+              <select
+                value={reason}
+                onChange={(e) => setReason(e.target.value as AmendmentReason)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-medium bg-white"
+                data-testid="select-amendment-reason"
+              >
+                {AMENDMENT_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+              {isSystemIssue && (
+                <p className="text-[11px] text-blue-600 mt-1">✓ 系統異常不列入每月 3 次額度</p>
+              )}
+            </div>
+
+            {/* Notes */}
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1.5">備註說明<span className="text-slate-400">（選填）</span></p>
+              <textarea
+                placeholder="可補充說明詳情..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white resize-none"
+                data-testid="input-amendment-notes"
+              />
+            </div>
+
+            {/* Screenshot required */}
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1.5">
+                主管同意截圖 <span className="text-red-500 font-semibold">*必填</span>
+              </p>
+              {!evidencePreview ? (
+                <label className="flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl py-4 cursor-pointer hover:border-juns-teal hover:bg-slate-50 transition-colors" data-testid="label-upload-evidence">
+                  <Camera className="h-5 w-5 text-slate-400" />
+                  <span className="text-sm text-slate-500">點此上傳截圖</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} data-testid="input-amendment-evidence" />
+                </label>
+              ) : (
+                <div className="relative inline-block">
+                  <img src={evidencePreview} className="h-28 w-auto rounded-lg border border-slate-200 object-cover" alt="截圖預覽" />
+                  <button className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5" onClick={() => setEvidencePreview(null)} data-testid="button-remove-evidence">
                     <X className="h-3 w-3" />
                   </button>
                 </div>
               )}
+              {!evidencePreview && (
+                <p className="text-[11px] text-red-500 mt-1">請上傳與主管的同意對話截圖，否則無法送出</p>
+              )}
             </div>
+
             <button
               onClick={handleSubmit}
-              disabled={submitting || (monthlyRemaining === 0 && !isSystemIssue)}
-              className="w-full py-2.5 bg-juns-navy text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-juns-navy/90 transition-colors"
+              disabled={submitting || !evidencePreview || (monthlyRemaining === 0 && !isSystemIssue)}
+              className="w-full py-3 bg-juns-navy text-white rounded-xl text-sm font-semibold disabled:opacity-50 hover:bg-juns-navy/90 active:scale-[0.99] transition-all"
               data-testid="button-submit-amendment"
             >
-              {submitting ? "送出中..." : "送出申請"}
+              {submitting ? "送出中..." : "送出補打卡申請"}
+            </button>
+            <button
+              className="w-full py-2 border border-slate-200 rounded-xl text-sm text-slate-500 hover:bg-slate-50 transition-colors"
+              onClick={() => setSelectedDate(null)}
+              data-testid="button-cancel-amendment"
+            >
+              取消選擇
             </button>
           </div>
+        </div>
+      )}
 
-          {amendments.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-slate-500">申請記錄</p>
-              {amendments.map((a) => (
-                <div key={a.id} className="flex items-start gap-3 p-3 rounded-lg bg-slate-50" data-testid={`row-amendment-${a.id}`}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge className={statusColor(a.status)} data-testid={`badge-status-${a.id}`}>
-                        {statusLabel(a.status)}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {a.clockType === "in" ? "上班" : "下班"}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-juns-navy">
-                      {new Date(a.requestedTime).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-0.5">{a.reason}</p>
-                    {a.reviewedByName && a.reviewedAt && (
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        審核主管：{a.reviewedByName} | {new Date(a.reviewedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    )}
-                    {a.reviewNote && (
-                      <p className="text-xs text-slate-400 mt-0.5">審核備註：{a.reviewNote}</p>
-                    )}
+      {/* Records list */}
+      {amendments.length > 0 && (
+        <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+          <div className="px-4 py-3 border-b border-juns-border">
+            <span className="text-sm font-semibold text-juns-navy">申請記錄</span>
+          </div>
+          <div className="divide-y divide-juns-border">
+            {amendments.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(a => (
+              <div key={a.id} className="px-4 py-3 flex items-start gap-3" data-testid={`row-amendment-${a.id}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                    <Badge className={statusColor(a.status)} data-testid={`badge-status-${a.id}`}>{statusLabel(a.status)}</Badge>
+                    <Badge variant="outline" className="text-xs">{a.clockType === "in" ? "上班" : "下班"}</Badge>
+                    {a.isSystemIssue && <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">系統異常</Badge>}
                   </div>
+                  <p className="text-sm text-juns-navy">
+                    {new Date(a.requestedTime).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">{a.reason}</p>
+                  {a.reviewedByName && a.reviewedAt && (
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      審核：{a.reviewedByName} | {new Date(a.reviewedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  )}
+                  {a.reviewNote && <p className="text-xs text-slate-400 mt-0.5">備註：{a.reviewNote}</p>}
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 }
+
 
 interface OvertimeRequestRecord {
   id: number;
