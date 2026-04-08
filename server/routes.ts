@@ -5,7 +5,7 @@ import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, ins
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
-import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId, formatClockInMessage, sendWeeklySchedulePush, sendWeeklyLateReport, pushPendingGuidelinesIfAny } from "./line-webhook";
+import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId, formatClockInMessage, sendWeeklySchedulePush, sendWeeklyLateReport, pushPendingGuidelinesIfAny, invalidateVenueCache } from "./line-webhook";
 
 import multer from "multer";
 import ExcelJS from "exceljs";
@@ -228,6 +228,7 @@ export async function registerRoutes(
     try {
       const parsed = insertVenueSchema.parse(req.body);
       const venue = await storage.createVenue(parsed);
+      invalidateVenueCache();
       res.json(venue);
     } catch (err: any) {
       if (err.name === "ZodError") {
@@ -243,6 +244,7 @@ export async function registerRoutes(
       const partial = insertVenueSchema.partial().parse(req.body);
       const venue = await storage.updateVenue(id, partial);
       if (!venue) return res.status(404).json({ message: "Venue not found" });
+      invalidateVenueCache();
       res.json(venue);
     } catch (err: any) {
       if (err.name === "ZodError") {

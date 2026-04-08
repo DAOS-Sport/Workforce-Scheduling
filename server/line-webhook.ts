@@ -185,10 +185,7 @@ export async function processClockIn(
     };
   }
 
-  const [recentRecords, allVenues] = await Promise.all([
-    storage.getClockRecordsByEmployee(employee.id, todayStr, todayStr),
-    getCachedVenues(),
-  ]);
+  const recentRecords = await storage.getClockRecordsByEmployee(employee.id, todayStr, todayStr);
 
   if (recentRecords.length > 0) {
     const lastValidRecord = recentRecords.find(r => r.status === "success" || r.status === "warning");
@@ -224,6 +221,7 @@ export async function processClockIn(
     }
   }
 
+  const allVenues = await getCachedVenues();
   const validVenues = allVenues.filter((v) => v.latitude && v.longitude);
 
   const venueDistances = validVenues.map((v) => ({
@@ -591,10 +589,14 @@ async function handleTextMessage(event: any): Promise<void> {
   );
 }
 
+const _guidelinePushRecord = new Map<number, string>();
+
 export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: string): Promise<void> {
   if (!isValidLineUserId(lineId)) return;
   try {
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+    const todayKey = formatTaiwanDate(now);
+    if (_guidelinePushRecord.get(employeeId) === todayKey) return;
     const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const monthStart = `${yearMonth}-01`;
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -633,6 +635,7 @@ export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: str
     const suffix = total > 2 ? `\n…等共 ${total} 條` : "";
     const link = "\n\n請至員工入口「守則」頁面確認閱讀。";
     await pushToLine(lineId, intro + list + suffix + link);
+    _guidelinePushRecord.set(employeeId, todayKey);
   } catch (err) {
     console.error("[Guidelines Push] Error:", err);
   }
