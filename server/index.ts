@@ -8,6 +8,7 @@ import { sendShiftReminders, checkMissingClockIn, resetMissingClockInTracker, se
 import { ensureWeeklyPushTable } from "./storage";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import { pool } from "./db";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -31,10 +32,23 @@ declare module "express-session" {
   }
 }
 
+async function ensureSessionTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "session" (
+      "sid" varchar NOT NULL COLLATE "default",
+      "sess" json NOT NULL,
+      "expire" timestamp(6) NOT NULL,
+      CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
+    ) WITH (OIDS=FALSE)
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire")`);
+}
+ensureSessionTable().catch((err) => console.error("[session] 建立 session 表失敗:", err));
+
 const PgStore = connectPgSimple(session);
 app.use(
   session({
-    store: new PgStore({ conString: process.env.DATABASE_URL, createTableIfMissing: true }),
+    store: new PgStore({ conString: process.env.DATABASE_URL }),
     secret: process.env.SESSION_SECRET || "fallback-secret-key",
     resave: false,
     saveUninitialized: false,
