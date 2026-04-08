@@ -2170,6 +2170,10 @@ function HomeView({
         </div>
       </div>
 
+      <div className="px-4 mb-3">
+        <LocationMap lat={userPos?.lat ?? null} lng={userPos?.lng ?? null} />
+      </div>
+
       <div className="px-4 mb-4">
         <RadarClockIn
           employee={employee}
