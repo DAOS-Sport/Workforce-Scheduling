@@ -15,7 +15,8 @@ import {
   ChevronLeft, ChevronRight, Calendar, List,
   Video, FileText, CheckCircle2, Lock, UserCheck,
   AlertTriangle, ClipboardCheck, BookOpen, Navigation, Loader2, XCircle,
-  Wifi, Signal, Copy, MessageSquareWarning, Camera, X, ImagePlus, Send
+  Wifi, Signal, Copy, MessageSquareWarning, Camera, X, ImagePlus, Send,
+  Menu, Home, LogOut, FileEdit, Briefcase, BarChart2,
 } from "lucide-react";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
 
@@ -320,38 +321,199 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
   );
 }
 
-function JunsHeader({ employee, showBack, onBack }: { employee?: PortalEmployee; showBack?: boolean; onBack?: () => void }) {
+function JunsHeader({
+  employee, showBack, onBack, pageTitle, onMenuOpen,
+}: {
+  employee?: PortalEmployee;
+  showBack?: boolean;
+  onBack?: () => void;
+  pageTitle?: string;
+  onMenuOpen?: () => void;
+}) {
   return (
     <div className="sticky top-0 z-40 bg-juns-navy text-white">
       <div className="px-4 py-3 flex items-center gap-3">
-        <img
-          src={junsLogo}
-          alt="駿斯運動"
-          className="h-9 w-9 rounded-lg object-cover shrink-0"
-          data-testid="img-juns-logo"
-        />
+        {onMenuOpen ? (
+          <button
+            onClick={onMenuOpen}
+            className="p-1.5 -ml-1 rounded-md hover:bg-white/10 active:bg-white/20 transition-colors shrink-0"
+            data-testid="button-open-menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        ) : showBack && onBack ? (
+          <button
+            onClick={onBack}
+            className="p-1.5 -ml-1 rounded-md hover:bg-white/10 active:bg-white/20 transition-colors shrink-0"
+            data-testid="button-back"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        ) : null}
         <div className="flex-1 min-w-0">
-          {employee ? (
-            <>
-              <h1 className="text-sm font-semibold truncate" data-testid="text-portal-main-title">
-                {employee.name}
-              </h1>
-              <p className="text-[11px] text-white/60">
-                {employee.employeeCode} · {ROLE_LABELS[employee.role] || employee.role}
-              </p>
-            </>
-          ) : (
-            <h1 className="text-sm font-semibold">駿斯運動事業</h1>
-          )}
+          <h1 className="text-base font-semibold truncate" data-testid="text-portal-main-title">
+            {pageTitle || (employee ? employee.name : "駿斯運動事業")}
+          </h1>
         </div>
         {employee && (
-          <div className="flex items-center gap-1 text-[11px] text-juns-green shrink-0">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            已驗證
+          <div className="flex items-center gap-1 text-[11px] bg-juns-green/20 text-juns-green px-2 py-1 rounded-full shrink-0">
+            <div className="w-1.5 h-1.5 rounded-full bg-juns-green animate-pulse" />
+            已連線
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "guidelines";
+
+const VIEW_TITLES: Record<PortalView, string> = {
+  home: "打卡首頁",
+  outing: "外出簽到",
+  attendance: "本月出缺勤統計",
+  schedule: "我的班表",
+  coworkers: "今日工作夥伴",
+  amendment: "補打卡申請",
+  overtime: "加班申請",
+  guidelines: "員工守則",
+};
+
+function SideMenuDrawer({
+  employee, activeView, amendmentRemaining, onNavigate, onClose, onLogout,
+}: {
+  employee: PortalEmployee;
+  activeView: PortalView;
+  amendmentRemaining: number;
+  onNavigate: (view: PortalView) => void;
+  onClose: () => void;
+  onLogout: () => void;
+}) {
+  const categories: Array<{
+    label: string;
+    items: Array<{ view: PortalView; label: string; icon: (p: { className?: string }) => JSX.Element; badge?: string }>;
+  }> = [
+    {
+      label: "日常考勤",
+      items: [
+        { view: "home", label: "打卡首頁", icon: Home },
+        { view: "outing", label: "外出簽到", icon: Navigation },
+        { view: "attendance", label: "本月出缺勤統計", icon: BarChart2 },
+      ],
+    },
+    {
+      label: "排班協作",
+      items: [
+        { view: "schedule", label: "我的班表", icon: CalendarDays },
+        { view: "coworkers", label: "今日工作夥伴", icon: Users },
+      ],
+    },
+    {
+      label: "表單申請",
+      items: [
+        { view: "amendment", label: "補打卡申請", icon: FileEdit, badge: `剩餘 ${amendmentRemaining} 次` },
+        { view: "overtime", label: "加班申請", icon: Briefcase },
+      ],
+    },
+    {
+      label: "系統資訊",
+      items: [
+        { view: "guidelines", label: "員工守則", icon: BookOpen },
+      ],
+    },
+  ];
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-black/40 z-40 backdrop-blur-[2px]"
+        onClick={onClose}
+        data-testid="overlay-side-menu"
+      />
+      <div
+        className="fixed left-0 top-0 bottom-0 w-72 bg-white z-50 shadow-2xl flex flex-col"
+        data-testid="drawer-side-menu"
+        style={{ animation: "slideInLeft 0.22s ease-out" }}
+      >
+        <div className="bg-juns-navy px-4 py-4 flex items-center justify-between">
+          <span className="text-white font-semibold text-base">系統選單</span>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md hover:bg-white/10 text-white transition-colors"
+            data-testid="button-close-menu"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-juns-teal/20 flex items-center justify-center shrink-0">
+              <span className="text-juns-teal font-bold text-base">{employee.name.charAt(0)}</span>
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-juns-navy text-sm truncate">{employee.name}</p>
+              <p className="text-[11px] text-slate-400">{employee.employeeCode} · {ROLE_LABELS[employee.role] || employee.role}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-2">
+          {categories.map((cat) => (
+            <div key={cat.label} className="mb-1">
+              <div className="px-4 pt-3 pb-1.5 border-b border-slate-100">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">{cat.label}</p>
+              </div>
+              {cat.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeView === item.view;
+                return (
+                  <button
+                    key={item.view}
+                    onClick={() => onNavigate(item.view)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-juns-teal/10 text-juns-teal border-r-2 border-juns-teal"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                    data-testid={`menu-item-${item.view}`}
+                  >
+                    <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-juns-teal" : "text-slate-400"}`} />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    {item.badge && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        amendmentRemaining === 0
+                          ? "bg-red-100 text-red-600"
+                          : "bg-juns-teal/15 text-juns-teal"
+                      }`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-slate-100 px-4 py-3">
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+            data-testid="button-logout"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            登出系統
+          </button>
+        </div>
+      </div>
+      <style>{`
+        @keyframes slideInLeft {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(0); }
+        }
+      `}</style>
+    </>
   );
 }
 
@@ -939,13 +1101,14 @@ const LATE_DEPARTURE_REASONS = [
 
 const CLOCK_LOCK_MS = 60 * 60 * 1000;
 
-function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, todayClockIn, todayClockOut }: {
+function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, todayClockIn, todayClockOut, hideCard }: {
   employee: PortalEmployee;
   onPositionUpdate?: (lat: number, lng: number) => void;
   onResult?: (r: ClockInResult) => void;
   todayLatestClock?: { clockType: string; clockTime: string } | null;
   todayClockIn?: { clockTime: string } | null;
   todayClockOut?: { clockTime: string } | null;
+  hideCard?: boolean;
 }) {
   const [stage, setStage] = useState<"idle" | "scanning" | "submitting" | "done" | "error">("idle");
   const [result, setResult] = useState<ClockInResult | null>(null);
@@ -1094,14 +1257,8 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     }
   }, [employee.id, storageKey]);
 
-  return (
-    <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-gps-clock-in">
-      <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
-        <Signal className="h-4 w-4 text-juns-teal" />
-        <span className="text-sm font-semibold text-juns-navy">GPS 定位打卡</span>
-      </div>
-
-      <div className="p-4">
+  const clockContent = (
+    <div className={hideCard ? "" : "p-4"}>
         {stage === "idle" && (() => {
           const serverInTime = todayClockIn?.clockTime
             ? new Date(todayClockIn.clockTime).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false })
@@ -1113,41 +1270,43 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
           const clockOutLocked = !!(todayClockOut || lockedClock?.clockType === "out");
           const clockInTime = serverInTime || (lockedClock?.clockType === "in" ? lockedClock.timeStr : null);
           const clockOutTime = serverOutTime || (lockedClock?.clockType === "out" ? lockedClock.timeStr : null);
+          const btnH = hideCard ? "h-20" : "h-14";
+          const btnHDone = hideCard ? "h-20" : "h-14";
 
           return (
             <div className="grid grid-cols-2 gap-3">
               {clockInLocked ? (
-                <button disabled className="h-14 rounded-lg bg-emerald-100 border-2 border-emerald-400 text-emerald-700 font-semibold text-sm flex flex-col items-center justify-center gap-0.5 cursor-not-allowed" data-testid="button-clock-in">
+                <button disabled className={`${btnHDone} rounded-xl bg-emerald-100 border-2 border-emerald-400 text-emerald-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-in">
                   <div className="flex items-center gap-1">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>上班已打卡</span>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span className={hideCard ? "text-base" : "text-sm"}>上班已打卡</span>
                   </div>
-                  {clockInTime && <span className="text-xs font-bold">{clockInTime}</span>}
+                  {clockInTime && <span className={`font-bold ${hideCard ? "text-lg" : "text-xs"}`}>{clockInTime}</span>}
                 </button>
               ) : (
                 <button
-                  className="h-12 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                  className={`${btnH} rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all`}
                   onClick={() => handleClockIn("in")}
                   data-testid="button-clock-in"
                 >
-                  ↑ 上班
+                  <span className={hideCard ? "text-lg" : "text-base"}>↑ 上班</span>
                 </button>
               )}
               {clockOutLocked ? (
-                <button disabled className="h-14 rounded-lg bg-blue-100 border-2 border-blue-400 text-blue-700 font-semibold text-sm flex flex-col items-center justify-center gap-0.5 cursor-not-allowed" data-testid="button-clock-out">
+                <button disabled className={`${btnHDone} rounded-xl bg-blue-100 border-2 border-blue-400 text-blue-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-out">
                   <div className="flex items-center gap-1">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>下班已打卡</span>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span className={hideCard ? "text-base" : "text-sm"}>下班已打卡</span>
                   </div>
-                  {clockOutTime && <span className="text-xs font-bold">{clockOutTime}</span>}
+                  {clockOutTime && <span className={`font-bold ${hideCard ? "text-lg" : "text-xs"}`}>{clockOutTime}</span>}
                 </button>
               ) : (
                 <button
-                  className="h-12 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                  className={`${btnH} rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all`}
                   onClick={() => handleClockIn("out")}
                   data-testid="button-clock-out"
                 >
-                  ↓ 下班
+                  <span className={hideCard ? "text-lg" : "text-base"}>↓ 下班</span>
                 </button>
               )}
             </div>
@@ -1344,6 +1503,16 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
           </div>
         )}
       </div>
+  );
+
+  if (hideCard) return clockContent;
+  return (
+    <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-gps-clock-in">
+      <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
+        <Signal className="h-4 w-4 text-juns-teal" />
+        <span className="text-sm font-semibold text-juns-navy">GPS 定位打卡</span>
+      </div>
+      {clockContent}
     </div>
   );
 }
@@ -1789,13 +1958,134 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
   );
 }
 
+function HomeView({
+  employee, attendance, attendanceLoading, todayShifts, userPos, clockInResult, setClockInResult, setUserPos,
+}: {
+  employee: PortalEmployee;
+  attendance: AttendanceSummary | undefined;
+  attendanceLoading: boolean;
+  todayShifts: PortalShift[];
+  userPos: { lat: number; lng: number } | null;
+  clockInResult: ClockInResult | null;
+  setClockInResult: (r: ClockInResult | null) => void;
+  setUserPos: (pos: { lat: number; lng: number }) => void;
+}) {
+  const [time, setTime] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const dateStr = format(time, "yyyy年M月d日（EEE）", { locale: zhTW });
+  const timeHM = time.toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false });
+  const timeSS = time.toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", second: "2-digit", hour12: false }).slice(-2);
+
+  const todayVenueShortName = todayShifts[0]?.venue?.shortName;
+  const todayShiftDisplay = todayShifts.length > 0
+    ? `${todayShifts[0].startTime.slice(0, 5)} ~ ${todayShifts[0].endTime.slice(0, 5)}`
+    : null;
+
+  const todayClockIn = attendance?.todayClockIn;
+  const todayClockOut = attendance?.todayClockOut;
+  const todayClockInStr = todayClockIn?.clockTime
+    ? new Date(todayClockIn.clockTime).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false })
+    : null;
+  const todayClockOutStr = todayClockOut?.clockTime
+    ? new Date(todayClockOut.clockTime).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false })
+    : null;
+
+  return (
+    <div className="max-w-lg mx-auto">
+      <div className="flex justify-center pt-5 pb-2">
+        <div className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white border border-juns-border shadow-sm" data-testid="pill-venue-location">
+          <MapPin className="h-3.5 w-3.5 text-juns-teal" />
+          <span className="text-sm text-juns-navy font-medium">{todayVenueShortName || "尚未定位"}</span>
+        </div>
+      </div>
+
+      <div className="text-center py-4 px-4">
+        <p className="text-sm text-slate-400 mb-1" data-testid="text-today-date">{dateStr}</p>
+        <div className="flex items-baseline justify-center gap-1">
+          <span className="text-6xl font-bold text-juns-navy font-mono tracking-tight" data-testid="text-live-clock">{timeHM}</span>
+          <span className="text-2xl font-bold text-slate-300 font-mono tracking-tight">{timeSS}</span>
+        </div>
+        <div className="mt-2 flex items-center justify-center gap-1.5">
+          {todayShiftDisplay ? (
+            <>
+              <div className="w-1.5 h-1.5 rounded-full bg-juns-teal animate-pulse" />
+              <span className="text-sm text-slate-500" data-testid="text-today-shift">今日班次 {todayShiftDisplay}</span>
+            </>
+          ) : (
+            <span className="text-sm text-slate-400">今日無排班</span>
+          )}
+        </div>
+      </div>
+
+      <div className="px-4 mb-4">
+        <RadarClockIn
+          employee={employee}
+          hideCard
+          onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })}
+          onResult={(result) => {
+            setClockInResult(result);
+            if (result.status === "success" || result.status === "warning") {
+              queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", employee.id] });
+              queryClient.invalidateQueries({ queryKey: ["/api/portal/today-coworkers", employee.id] });
+            }
+          }}
+          todayLatestClock={attendance?.todayLatestClock}
+          todayClockIn={todayClockIn}
+          todayClockOut={todayClockOut}
+        />
+      </div>
+
+      <div className="px-4 pb-4">
+        <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-today-attendance">
+          <div className="px-4 py-2.5 border-b border-juns-border flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-juns-teal" />
+            <span className="text-sm font-semibold text-juns-navy">今日出勤狀況</span>
+          </div>
+          <div className="grid grid-cols-2 divide-x divide-juns-border">
+            <div className="px-4 py-3 text-center">
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-xs text-slate-400">上班打卡</span>
+              </div>
+              {attendanceLoading ? (
+                <div className="h-5 bg-slate-100 rounded animate-pulse mx-auto w-16" />
+              ) : todayClockInStr ? (
+                <span className="text-base font-bold font-mono text-emerald-700" data-testid="text-today-clock-in">{todayClockInStr}</span>
+              ) : (
+                <span className="text-sm text-slate-300 italic">未打卡</span>
+              )}
+            </div>
+            <div className="px-4 py-3 text-center">
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <div className="w-2 h-2 rounded-full bg-blue-500" />
+                <span className="text-xs text-slate-400">下班打卡</span>
+              </div>
+              {attendanceLoading ? (
+                <div className="h-5 bg-slate-100 rounded animate-pulse mx-auto w-16" />
+              ) : todayClockOutStr ? (
+                <span className="text-base font-bold font-mono text-blue-700" data-testid="text-today-clock-out">{todayClockOutStr}</span>
+              ) : (
+                <span className="text-sm text-slate-300 italic">未打卡</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PortalMain({ employee }: { employee: PortalEmployee }) {
+  const [activeView, setActiveView] = useState<PortalView>("home");
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [showGuidelines, setShowGuidelines] = useState(false);
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [clockInResult, setClockInResult] = useState<ClockInResult | null>(null);
-  const { toast } = useToast();
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -1830,9 +2120,27 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
 
   const { data: guidelinesData } = useQuery<{ items: GuidelineItem[]; allAcknowledged: boolean }>({
     queryKey: ["/api/portal/guidelines-check", employee.id],
-    enabled: showGuidelines && !!employee?.id,
+    enabled: activeView === "guidelines" && !!employee?.id,
     staleTime: 60 * 1000,
   });
+
+  const { data: amendments = [] } = useQuery<ClockAmendmentRecord[]>({
+    queryKey: ["/api/portal/clock-amendments", employee.id],
+    staleTime: 30 * 1000,
+  });
+
+  const amendmentRemaining = useMemo(() => {
+    const now = new Date();
+    const thisYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const usedThisMonth = amendments.filter((a) => {
+      if (a.isSystemIssue) return false;
+      if (a.status === "rejected") return false;
+      const d = new Date(a.requestedTime);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      return ym === thisYearMonth;
+    }).length;
+    return Math.max(0, 3 - usedThisMonth);
+  }, [amendments]);
 
   const shiftsByDate = useMemo(() => {
     const map = new Map<string, PortalShift[]>();
@@ -1843,6 +2151,9 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     });
     return map;
   }, [myShifts]);
+
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const todayShifts = shiftsByDate.get(todayStr) || [];
 
   function prevMonth() {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
@@ -1861,44 +2172,149 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     return [...padding, ...days];
   }, [currentMonth]);
 
+  function handleLogout() {
+    localStorage.removeItem("portal_employee");
+    localStorage.removeItem("portal_line_user_id");
+    window.location.reload();
+  }
+
+  function handleNavigate(view: PortalView) {
+    setActiveView(view);
+    setDrawerOpen(false);
+  }
+
+  const headerTitle = activeView === "home" ? employee.name : VIEW_TITLES[activeView];
+
   return (
-    <div className="min-h-screen bg-juns-surface pb-8">
-      <JunsHeader employee={employee} />
+    <div className="min-h-screen bg-juns-surface">
+      <JunsHeader employee={employee} pageTitle={headerTitle} onMenuOpen={() => setDrawerOpen(true)} />
       <Watermark name={employee.name} code={employee.employeeCode} />
 
-      <div className="max-w-lg mx-auto p-4 space-y-4">
-        <LiveClock />
-        <LocationMap lat={userPos?.lat ?? null} lng={userPos?.lng ?? null} />
-        <VenueShiftInfo employee={employee} result={clockInResult} />
-        <RadarClockIn
+      {drawerOpen && (
+        <SideMenuDrawer
           employee={employee}
-          onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })}
-          onResult={(result) => {
-            setClockInResult(result);
-            if (result.status === "success" || result.status === "warning") {
-              queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", employee.id] });
-              queryClient.invalidateQueries({ queryKey: ["/api/portal/today-coworkers", employee.id] });
-            }
-          }}
-          todayLatestClock={attendance?.todayLatestClock}
-          todayClockIn={attendance?.todayClockIn}
-          todayClockOut={attendance?.todayClockOut}
+          activeView={activeView}
+          amendmentRemaining={amendmentRemaining}
+          onNavigate={handleNavigate}
+          onClose={() => setDrawerOpen(false)}
+          onLogout={handleLogout}
         />
+      )}
 
-        <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-outing-signin">
-          <button
-            className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors"
-            data-testid="button-outing-signin"
-            onClick={() => toast({ title: "外出/簽到功能即將推出", description: "此功能尚未開放，敬請期待" })}
-          >
-            <span className="text-sm font-semibold text-juns-navy">外出/簽到</span>
-            <ChevronRight className="h-4 w-4 text-slate-400" />
-          </button>
+      {activeView === "home" && (
+        <HomeView
+          employee={employee}
+          attendance={attendance}
+          attendanceLoading={attendanceLoading}
+          todayShifts={todayShifts}
+          userPos={userPos}
+          clockInResult={clockInResult}
+          setClockInResult={setClockInResult}
+          setUserPos={setUserPos}
+        />
+      )}
+
+      {activeView === "outing" && (
+        <div className="max-w-lg mx-auto p-4 pt-6">
+          <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+            <div className="px-4 py-10 flex flex-col items-center gap-3 text-center">
+              <Navigation className="h-10 w-10 text-slate-300" />
+              <p className="text-sm font-semibold text-slate-500">外出/簽到功能即將推出</p>
+              <p className="text-xs text-slate-400">此功能尚未開放，敬請期待</p>
+            </div>
+          </div>
         </div>
+      )}
 
-        <ClockAmendmentSection employee={employee} />
-        <OvertimeRequestSection employee={employee} />
+      {activeView === "attendance" && (
+        <div className="max-w-lg mx-auto p-4 pb-8">
+          <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-attendance-summary">
+            <div className="p-4">
+              {attendanceLoading ? (
+                <div className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+              ) : !attendance || attendance.records.length === 0 ? (
+                <p className="text-sm text-center text-slate-400 py-3">本月尚無出勤紀錄</p>
+              ) : (
+                <div>
+                  <div className="grid grid-cols-4 gap-2 mb-4">
+                    {[
+                      { label: "出勤天數", value: attendance.total, warn: false },
+                      { label: "遲到", value: attendance.late, warn: attendance.late > 0 },
+                      { label: "早退", value: attendance.earlyLeave, warn: attendance.earlyLeave > 0 },
+                      { label: "異常", value: attendance.anomaly, warn: attendance.anomaly > 0 },
+                    ].map((item) => (
+                      <div key={item.label} className="text-center p-2 rounded-lg border border-juns-border">
+                        <div className={`text-lg font-bold font-mono ${item.warn ? "text-red-500" : "text-juns-navy"}`}>
+                          {item.value}
+                        </div>
+                        <div className="text-[10px] text-slate-400">{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    {attendance.records.map((r, idx) => {
+                      const d = parseISO(r.date);
+                      const tags: string[] = [];
+                      if (r.isLate) tags.push("遲到");
+                      if (r.isEarlyLeave) tags.push("早退");
+                      if (r.hasAnomaly) tags.push("異常");
+                      return (
+                        <div key={idx} className="rounded-lg border border-juns-border overflow-hidden">
+                          <div className="px-3 py-1.5 bg-slate-50 border-b border-juns-border flex items-center justify-between">
+                            <span className="text-xs font-semibold text-juns-navy font-mono">
+                              {format(d, "M月d日")}（{format(d, "EEE", { locale: zhTW })}）
+                            </span>
+                            {r.shiftInfo && (
+                              <span className="text-[10px] text-slate-400">{r.shiftInfo}</span>
+                            )}
+                          </div>
+                          <div className="divide-y divide-juns-border">
+                            <div className="flex items-center gap-2.5 px-3 py-2">
+                              <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                              <span className="text-[11px] text-slate-400 w-12">上班打卡</span>
+                              {r.clockIn ? (
+                                <span className="text-sm font-mono font-semibold text-green-700">{r.clockIn}</span>
+                              ) : (
+                                <span className="text-xs text-slate-300 italic">未打卡</span>
+                              )}
+                              {r.isLate && (
+                                <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">遲到</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2.5 px-3 py-2">
+                              <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                              <span className="text-[11px] text-slate-400 w-12">下班打卡</span>
+                              {r.clockOut ? (
+                                <span className="text-sm font-mono font-semibold text-blue-700">{r.clockOut}</span>
+                              ) : (
+                                <span className="text-xs text-slate-300 italic">未打卡</span>
+                              )}
+                              {r.isEarlyLeave && (
+                                <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-500">早退</span>
+                              )}
+                              {r.hasAnomaly && !r.isEarlyLeave && (
+                                <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">異常</span>
+                              )}
+                            </div>
+                            {tags.length === 0 && r.clockIn && r.clockOut && (
+                              <div className="px-3 py-1 flex justify-end">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-600">正常</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
+      {activeView === "schedule" && (
+        <div className="max-w-lg mx-auto p-4 pb-8">
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
           <div className="px-4 py-3 border-b border-juns-border flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -2017,7 +2433,11 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
             )}
           </div>
         </div>
+        </div>
+      )}
 
+      {activeView === "coworkers" && (
+        <div className="max-w-lg mx-auto p-4 pb-8">
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
           <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
             <Users className="h-4 w-4 text-juns-teal" />
@@ -2098,129 +2518,42 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
             )}
           </div>
         </div>
+        </div>
+      )}
 
-        <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-attendance-summary">
+      {activeView === "amendment" && (
+        <div className="max-w-lg mx-auto p-4 pb-8">
+          <ClockAmendmentSection employee={employee} />
+        </div>
+      )}
+
+      {activeView === "overtime" && (
+        <div className="max-w-lg mx-auto p-4 pb-8">
+          <OvertimeRequestSection employee={employee} />
+        </div>
+      )}
+
+      {activeView === "guidelines" && (
+        <div className="max-w-lg mx-auto p-4 pb-8">
+        <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-guidelines-review">
           <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
-            <ClipboardCheck className="h-4 w-4 text-juns-teal" />
-            <span className="text-sm font-semibold text-juns-navy">本月出缺勤</span>
+            <BookOpen className="h-4 w-4 text-juns-teal" />
+            <span className="text-sm font-semibold text-juns-navy">員工守則</span>
           </div>
-          <div className="p-4">
-            {attendanceLoading ? (
-              <div className="h-16 bg-slate-100 rounded-lg animate-pulse" />
-            ) : !attendance || attendance.records.length === 0 ? (
-              <p className="text-sm text-center text-slate-400 py-3">本月尚無出勤紀錄</p>
+          <div className="p-4 space-y-2">
+            {!guidelinesData ? (
+              <div className="h-24 bg-slate-100 rounded-lg animate-pulse" />
+            ) : guidelinesData.items.length === 0 ? (
+              <p className="text-sm text-center text-slate-400 py-3">目前沒有守則</p>
             ) : (
-              <div>
-                <div className="grid grid-cols-4 gap-2 mb-4">
-                  {[
-                    { label: "出勤天數", value: attendance.total, warn: false },
-                    { label: "遲到", value: attendance.late, warn: attendance.late > 0 },
-                    { label: "早退", value: attendance.earlyLeave, warn: attendance.earlyLeave > 0 },
-                    { label: "異常", value: attendance.anomaly, warn: attendance.anomaly > 0 },
-                  ].map((item) => (
-                    <div key={item.label} className="text-center p-2 rounded-lg border border-juns-border">
-                      <div className={`text-lg font-bold font-mono ${item.warn ? "text-red-500" : "text-juns-navy"}`}>
-                        {item.value}
-                      </div>
-                      <div className="text-[10px] text-slate-400">{item.label}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-2">
-                  {attendance.records.map((r, idx) => {
-                    const d = parseISO(r.date);
-                    const tags: string[] = [];
-                    if (r.isLate) tags.push("遲到");
-                    if (r.isEarlyLeave) tags.push("早退");
-                    if (r.hasAnomaly) tags.push("異常");
-                    return (
-                      <div key={idx} className="rounded-lg border border-juns-border overflow-hidden">
-                        <div className="px-3 py-1.5 bg-slate-50 border-b border-juns-border flex items-center justify-between">
-                          <span className="text-xs font-semibold text-juns-navy font-mono">
-                            {format(d, "M月d日")}（{format(d, "EEE", { locale: zhTW })}）
-                          </span>
-                          {r.shiftInfo && (
-                            <span className="text-[10px] text-slate-400">{r.shiftInfo}</span>
-                          )}
-                        </div>
-                        <div className="divide-y divide-juns-border">
-                          <div className="flex items-center gap-2.5 px-3 py-2">
-                            <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-                            <span className="text-[11px] text-slate-400 w-12">上班打卡</span>
-                            {r.clockIn ? (
-                              <span className="text-sm font-mono font-semibold text-green-700">{r.clockIn}</span>
-                            ) : (
-                              <span className="text-xs text-slate-300 italic">未打卡</span>
-                            )}
-                            {r.isLate && (
-                              <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">遲到</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2.5 px-3 py-2">
-                            <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                            <span className="text-[11px] text-slate-400 w-12">下班打卡</span>
-                            {r.clockOut ? (
-                              <span className="text-sm font-mono font-semibold text-blue-700">{r.clockOut}</span>
-                            ) : (
-                              <span className="text-xs text-slate-300 italic">未打卡</span>
-                            )}
-                            {r.isEarlyLeave && (
-                              <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-500">早退</span>
-                            )}
-                            {r.hasAnomaly && !r.isEarlyLeave && (
-                              <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">異常</span>
-                            )}
-                          </div>
-                          {tags.length === 0 && r.clockIn && r.clockOut && (
-                            <div className="px-3 py-1 flex justify-end">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-600">正常</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              guidelinesData.items.map((item) => (
+                <GuidelineItemCard key={item.id} item={item} />
+              ))
             )}
           </div>
         </div>
-
-        <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-guidelines-review">
-          <div className="px-4 py-3 border-b border-juns-border flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <BookOpen className="h-4 w-4 text-juns-teal" />
-              <span className="text-sm font-semibold text-juns-navy">員工守則</span>
-            </div>
-            <button
-              className="text-xs px-3 py-1.5 rounded-md border border-juns-border text-slate-500 hover:bg-slate-50 active:scale-[0.98] transition-all"
-              onClick={() => setShowGuidelines(!showGuidelines)}
-              data-testid="button-toggle-guidelines"
-            >
-              {showGuidelines ? "收合" : "查看守則"}
-            </button>
-          </div>
-          {showGuidelines && (
-            <div className="p-4 space-y-2">
-              {!guidelinesData ? (
-                <div className="h-24 bg-slate-100 rounded-lg animate-pulse" />
-              ) : guidelinesData.items.length === 0 ? (
-                <p className="text-sm text-center text-slate-400 py-3">目前沒有守則</p>
-              ) : (
-                guidelinesData.items.map((item) => (
-                  <GuidelineItemCard key={item.id} item={item} />
-                ))
-              )}
-            </div>
-          )}
         </div>
-
-        <div className="px-1">
-          <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-50 rounded-lg px-3 py-2">
-            line＠通知訊息僅做日常提醒叮嚀使用，實際班別/課表請以系統公告之，不得主張因未收到line＠提醒而導致遲到、早退、曠班、曠課等一切未依班表或課表出席。
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
