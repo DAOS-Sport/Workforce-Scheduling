@@ -1354,6 +1354,8 @@ interface ClockAmendmentRecord {
   clockType: string;
   requestedTime: string;
   reason: string;
+  isSystemIssue: boolean;
+  evidenceImageUrl: string | null;
   status: string;
   reviewedByName: string | null;
   reviewedAt: string | null;
@@ -1370,6 +1372,8 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
   });
   const [requestedTime, setRequestedTime] = useState("09:00");
   const [reason, setReason] = useState("");
+  const [isSystemIssue, setIsSystemIssue] = useState(false);
+  const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -1377,6 +1381,25 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
     queryKey: ["/api/portal/clock-amendments", employee.id],
     enabled: expanded,
   });
+
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  const thisYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthlyUsed = amendments.filter(a => {
+    const created = a.createdAt ? new Date(a.createdAt) : null;
+    if (!created) return false;
+    const ym = `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, "0")}`;
+    return ym === thisYearMonth && a.status !== "rejected" && !a.isSystemIssue;
+  }).length;
+  const monthlyRemaining = Math.max(0, 3 - monthlyUsed);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setEvidencePreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   const handleSubmit = async () => {
     if (!reason.trim()) {
@@ -1391,9 +1414,13 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
         clockType,
         requestedTime: fullTime,
         reason: reason.trim(),
+        isSystemIssue,
+        evidenceImageUrl: evidencePreview || null,
       });
       toast({ title: "補打卡申請已送出" });
       setReason("");
+      setIsSystemIssue(false);
+      setEvidencePreview(null);
       refetchAmendments();
     } catch (err: any) {
       toast({ title: err.message || "送出失敗", variant: "destructive" });
@@ -1427,10 +1454,21 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
           <Clock className="h-4 w-4 text-juns-teal" />
           <span className="text-sm font-semibold text-juns-navy">補打卡申請</span>
         </div>
-        <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${monthlyRemaining === 0 ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-500"}`} data-testid="text-amendment-remaining">
+            本月剩餘 {monthlyRemaining}/3
+          </span>
+          <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        </div>
       </button>
       {expanded && (
         <div className="border-t border-juns-border p-4 space-y-4">
+          {monthlyRemaining === 0 && !isSystemIssue && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-100">
+              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-600">本月補打卡申請已達上限（3次）。如屬系統問題，請勾選下方「系統問題」選項後申請。</p>
+            </div>
+          )}
           <div className="space-y-3">
             <div className="flex gap-2">
               <button
@@ -1453,14 +1491,14 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
                 type="date"
                 value={requestedDate}
                 onChange={(e) => setRequestedDate(e.target.value)}
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-base font-medium bg-white"
                 data-testid="input-amendment-date"
               />
               <input
                 type="time"
                 value={requestedTime}
                 onChange={(e) => setRequestedTime(e.target.value)}
-                className="w-28 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                className="w-32 border border-slate-200 rounded-lg px-3 py-2 text-base font-medium bg-white"
                 data-testid="input-amendment-time"
               />
             </div>
@@ -1472,9 +1510,38 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
               rows={2}
               data-testid="input-amendment-reason"
             />
+            <label className="flex items-center gap-2.5 cursor-pointer select-none" data-testid="toggle-system-issue">
+              <input
+                type="checkbox"
+                checked={isSystemIssue}
+                onChange={(e) => setIsSystemIssue(e.target.checked)}
+                className="w-4 h-4 accent-juns-teal"
+              />
+              <span className="text-sm text-slate-600">系統問題（不列入當月 3 次額度，仍須主管確認）</span>
+            </label>
+            <div>
+              <p className="text-xs text-slate-500 mb-1.5">附上與主管的同意對話截圖（選填）</p>
+              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-600 hover:bg-slate-100 cursor-pointer active:scale-[0.98] transition-all">
+                <Camera className="h-3.5 w-3.5" />
+                上傳截圖
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} data-testid="input-amendment-evidence" />
+              </label>
+              {evidencePreview && (
+                <div className="mt-2 relative inline-block">
+                  <img src={evidencePreview} className="h-20 w-auto rounded-lg border border-slate-200 object-cover" alt="截圖預覽" />
+                  <button
+                    className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5"
+                    onClick={() => setEvidencePreview(null)}
+                    data-testid="button-remove-evidence"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || (monthlyRemaining === 0 && !isSystemIssue)}
               className="w-full py-2.5 bg-juns-navy text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-juns-navy/90 transition-colors"
               data-testid="button-submit-amendment"
             >
@@ -1526,6 +1593,7 @@ interface OvertimeRequestRecord {
   startTime: string;
   endTime: string;
   reason: string;
+  evidenceImageUrl: string | null;
   status: string;
   reviewedByName: string | null;
   reviewedAt: string | null;
@@ -1542,6 +1610,7 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
   const [startTime, setStartTime] = useState("18:00");
   const [endTime, setEndTime] = useState("19:00");
   const [reason, setReason] = useState("");
+  const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -1549,6 +1618,15 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
     queryKey: ["/api/portal/overtime-requests", employee.id],
     enabled: expanded,
   });
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setEvidencePreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   const handleSubmit = async () => {
     if (!reason.trim()) {
@@ -1567,9 +1645,11 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
         startTime,
         endTime,
         reason: reason.trim(),
+        evidenceImageUrl: evidencePreview || null,
       });
       toast({ title: "加班申請已送出" });
       setReason("");
+      setEvidencePreview(null);
       refetch();
     } catch (err: any) {
       toast({ title: err.message || "送出失敗", variant: "destructive" });
@@ -1612,7 +1692,7 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-base font-medium bg-white"
               data-testid="input-overtime-date"
             />
             <div className="flex gap-2">
@@ -1622,7 +1702,7 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-base font-medium bg-white"
                   data-testid="input-overtime-start"
                 />
               </div>
@@ -1632,7 +1712,7 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
                   type="time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-base font-medium bg-white"
                   data-testid="input-overtime-end"
                 />
               </div>
@@ -1645,6 +1725,26 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
               rows={2}
               data-testid="input-overtime-reason"
             />
+            <div>
+              <p className="text-xs text-slate-500 mb-1.5">附上與主管的同意對話截圖（選填）</p>
+              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-600 hover:bg-slate-100 cursor-pointer active:scale-[0.98] transition-all">
+                <Camera className="h-3.5 w-3.5" />
+                上傳截圖
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} data-testid="input-overtime-evidence" />
+              </label>
+              {evidencePreview && (
+                <div className="mt-2 relative inline-block">
+                  <img src={evidencePreview} className="h-20 w-auto rounded-lg border border-slate-200 object-cover" alt="截圖預覽" />
+                  <button
+                    className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5"
+                    onClick={() => setEvidencePreview(null)}
+                    data-testid="button-remove-overtime-evidence"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={handleSubmit}
               disabled={submitting}

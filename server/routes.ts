@@ -2234,18 +2234,38 @@ export async function registerRoutes(
 
   app.post("/api/portal/clock-amendment", async (req, res) => {
     try {
-      const { employeeId, clockType, requestedTime, reason, venueId, shiftId } = req.body;
+      const { employeeId, clockType, requestedTime, reason, venueId, shiftId, isSystemIssue, evidenceImageUrl } = req.body;
       if (!employeeId || !clockType || !requestedTime || !reason) {
         return res.status(400).json({ message: "缺少必要欄位" });
       }
       const emp = await storage.getEmployee(employeeId);
       if (!emp) return res.status(404).json({ message: "找不到員工" });
 
+      if (!isSystemIssue) {
+        const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+        const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const monthStart = new Date(`${yearMonth}-01T00:00:00+08:00`);
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const monthEnd = new Date(`${yearMonth}-${String(lastDay).padStart(2, "0")}T23:59:59+08:00`);
+        const allAmendments = await storage.getClockAmendmentsByEmployee(employeeId);
+        const monthlyCount = allAmendments.filter(a => {
+          const created = a.createdAt ? new Date(a.createdAt) : null;
+          return created && created >= monthStart && created <= monthEnd
+            && a.status !== "rejected"
+            && !a.isSystemIssue;
+        }).length;
+        if (monthlyCount >= 3) {
+          return res.status(400).json({ message: "本月補打卡申請已達上限（3次），如有特殊情況請標記「系統問題」或聯繫主管。" });
+        }
+      }
+
       const record = await storage.createClockAmendment({
         employeeId,
         clockType,
         requestedTime: new Date(requestedTime),
         reason,
+        isSystemIssue: !!isSystemIssue,
+        evidenceImageUrl: evidenceImageUrl || null,
         venueId: venueId || null,
         shiftId: shiftId || null,
         status: "pending",
@@ -2402,7 +2422,7 @@ export async function registerRoutes(
 
   app.post("/api/portal/overtime-request", async (req, res) => {
     try {
-      const { employeeId, date, startTime, endTime, reason } = req.body;
+      const { employeeId, date, startTime, endTime, reason, evidenceImageUrl } = req.body;
       if (!employeeId || !date || !startTime || !endTime || !reason) {
         return res.status(400).json({ message: "缺少必要欄位" });
       }
@@ -2415,6 +2435,7 @@ export async function registerRoutes(
         startTime,
         endTime,
         reason,
+        evidenceImageUrl: evidenceImageUrl || null,
         status: "pending",
         reviewedBy: null,
         reviewedByName: null,
