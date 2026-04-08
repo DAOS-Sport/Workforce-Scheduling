@@ -1566,6 +1566,7 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
 
   const { data: eligibleDates = [], isLoading: eligibleLoading } = useQuery<EligibleDate[]>({
     queryKey: ["/api/portal/amendment-eligible-dates", employee.id, thisYearMonth],
+    queryFn: () => fetch(`/api/portal/amendment-eligible-dates?employeeId=${employee.id}&yearMonth=${thisYearMonth}`, { credentials: "include" }).then(r => r.json()),
     staleTime: 60 * 1000,
   });
 

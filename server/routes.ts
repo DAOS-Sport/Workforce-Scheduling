@@ -2463,10 +2463,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/portal/amendment-eligible-dates/:employeeId/:yearMonth", async (req, res) => {
+  app.get("/api/portal/amendment-eligible-dates", async (req, res) => {
     try {
-      const employeeId = parseInt(req.params.employeeId);
-      const yearMonth = req.params.yearMonth;
+      const employeeId = parseInt(String(req.query.employeeId || "0"));
+      const yearMonth = String(req.query.yearMonth || "");
       if (!employeeId || !/^\d{4}-\d{2}$/.test(yearMonth)) {
         return res.status(400).json({ message: "參數格式錯誤" });
       }
