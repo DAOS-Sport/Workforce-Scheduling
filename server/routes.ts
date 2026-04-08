@@ -2130,7 +2130,9 @@ export async function registerRoutes(
           if (empToNotify?.lineId && isValidLineUserId(empToNotify.lineId)) {
             const msg = formatClockInMessage(result);
             await pushToLine(empToNotify.lineId, msg);
-            pushPendingGuidelinesIfAny(empToNotify.id, empToNotify.lineId).catch(() => {});
+            if (result.clockType === "in") {
+              pushPendingGuidelinesIfAny(empToNotify.id, empToNotify.lineId).catch(() => {});
+            }
           }
         } catch (pushErr) {
           console.error("[LIFF] LINE push error:", pushErr);

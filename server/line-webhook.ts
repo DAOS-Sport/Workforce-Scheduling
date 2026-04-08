@@ -687,7 +687,7 @@ export async function handleLineWebhook(body: any): Promise<void> {
         const result = await processClockIn({ lineUserId }, userLat, userLng);
         const message = formatClockInMessage(result);
         await replyToLine(replyToken, message, lineUserId);
-        if ((result.status === "success" || result.status === "warning") && emp?.id && emp?.lineId) {
+        if ((result.status === "success" || result.status === "warning") && result.clockType === "in" && emp?.id && emp?.lineId) {
           pushPendingGuidelinesIfAny(emp.id, emp.lineId).catch(() => {});
         }
         continue;
