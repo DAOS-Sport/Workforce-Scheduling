@@ -2434,6 +2434,21 @@ export async function registerRoutes(
         }
       }
 
+      const toTaipeiDate = (d: Date) => {
+        const tw = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+        return `${tw.getFullYear()}-${String(tw.getMonth() + 1).padStart(2, "0")}-${String(tw.getDate()).padStart(2, "0")}`;
+      };
+      const allAmendmentsForDupe = await storage.getClockAmendmentsByEmployee(employeeId);
+      const requestedDate = toTaipeiDate(new Date(requestedTime));
+      const hasDuplicate = allAmendmentsForDupe.some(a => {
+        if (a.status === "rejected") return false;
+        const aDate = toTaipeiDate(a.requestedTime instanceof Date ? a.requestedTime : new Date(a.requestedTime as string));
+        return aDate === requestedDate && a.clockType === clockType;
+      });
+      if (hasDuplicate) {
+        return res.status(400).json({ message: "該日期同類型已有待審核或已批准的補卡申請，無法重複送出。" });
+      }
+
       const record = await storage.createClockAmendment({
         employeeId,
         clockType,
@@ -2518,6 +2533,7 @@ export async function registerRoutes(
         shiftStartTime: string;
         shiftEndTime: string;
         venueName: string;
+        shiftId: number;
         hasExistingAmendment: boolean;
         amendmentStatus: string | null;
       }> = [];
@@ -2544,6 +2560,7 @@ export async function registerRoutes(
             shiftStartTime: shift.startTime,
             shiftEndTime: shift.endTime,
             venueName,
+            shiftId: shift.id,
             hasExistingAmendment: !!best,
             amendmentStatus: best?.status || null,
           });
@@ -2557,6 +2574,7 @@ export async function registerRoutes(
             shiftStartTime: shift.startTime,
             shiftEndTime: shift.endTime,
             venueName,
+            shiftId: shift.id,
             hasExistingAmendment: !!best,
             amendmentStatus: best?.status || null,
           });

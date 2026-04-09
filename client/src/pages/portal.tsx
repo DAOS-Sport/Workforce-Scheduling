@@ -1539,6 +1539,7 @@ interface EligibleDate {
   shiftStartTime: string;
   shiftEndTime: string;
   venueName: string;
+  shiftId: number;
   hasExistingAmendment: boolean;
   amendmentStatus: string | null;
 }
@@ -1591,7 +1592,7 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
 
   const handleDateClick = (dateStr: string) => {
     const entries = eligibleMap.get(dateStr) || [];
-    const clickable = entries.filter(e => e.amendmentStatus !== "approved");
+    const clickable = entries.filter(e => e.amendmentStatus !== "approved" && e.amendmentStatus !== "pending");
     if (!clickable.length) return;
     const e = clickable.find(ent => ent.missingClockType === "in") || clickable[0];
     setSelectedDate(dateStr);
@@ -1625,6 +1626,11 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
       toast({ title: "請上傳與主管的同意對話截圖", variant: "destructive" });
       return;
     }
+    const selectedEntry = (eligibleMap.get(selectedDate) || []).find(e => e.missingClockType === clockType);
+    if (selectedEntry?.amendmentStatus === "pending" || selectedEntry?.amendmentStatus === "approved") {
+      toast({ title: "該日期同類型已有申請，無法重複送出", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
     try {
       const fullTime = `${selectedDate}T${requestedTime}:00+08:00`;
@@ -1636,6 +1642,7 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
         reason: fullReason,
         isSystemIssue,
         evidenceImageUrl: evidencePreview,
+        shiftId: selectedEntry?.shiftId ?? null,
       });
       toast({ title: "補打卡申請已送出" });
       setSelectedDate(null);
@@ -1665,11 +1672,14 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
     };
     const hasMissingIn = entries.some(e => e.missingClockType === "in" && e.amendmentStatus !== "approved");
     const hasMissingOut = entries.some(e => e.missingClockType === "out" && e.amendmentStatus !== "approved");
-    const anyPending = entries.some(e => e.amendmentStatus === "pending");
+    const allPending = entries.filter(e => e.amendmentStatus !== "approved").every(e => e.amendmentStatus === "pending");
+    if (allPending) return {
+      cls: `bg-slate-100 text-slate-400 cursor-default opacity-70${isSelected ? " ring-2 ring-offset-1 ring-slate-300" : ""}`,
+      label: "待審核", clickable: false,
+    };
     let cls = hasMissingIn
       ? "bg-amber-100 text-amber-700 border border-amber-300 cursor-pointer hover:bg-amber-200"
       : "bg-blue-100 text-blue-700 border border-blue-300 cursor-pointer hover:bg-blue-200";
-    if (anyPending) cls += " opacity-70";
     if (isSelected) cls += " ring-2 ring-offset-1 ring-juns-teal";
     const label = hasMissingIn && hasMissingOut ? "上下" : hasMissingIn ? "上班" : "下班";
     return { cls, label, clickable: true };
@@ -1769,18 +1779,27 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
               <div className="flex gap-2">
                 {(eligibleMap.get(selectedDate) || [])
                   .filter(e => e.amendmentStatus !== "approved")
-                  .map(e => (
-                    <button
-                      key={e.missingClockType}
-                      onClick={() => handleClockTypeChange(e.missingClockType)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        clockType === e.missingClockType ? "bg-juns-teal text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
-                      data-testid={`button-amendment-type-${e.missingClockType}`}
-                    >
-                      {e.missingClockType === "in" ? "補打上班" : "補打下班"}
-                    </button>
-                  ))}
+                  .map(e => {
+                    const isPending = e.amendmentStatus === "pending";
+                    return (
+                      <button
+                        key={e.missingClockType}
+                        onClick={() => !isPending && handleClockTypeChange(e.missingClockType)}
+                        disabled={isPending}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isPending
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed opacity-60"
+                            : clockType === e.missingClockType
+                              ? "bg-juns-teal text-white"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                        data-testid={`button-amendment-type-${e.missingClockType}`}
+                      >
+                        {e.missingClockType === "in" ? "補打上班" : "補打下班"}
+                        {isPending && <span className="ml-1 text-[10px]">（待審核）</span>}
+                      </button>
+                    );
+                  })}
               </div>
             </div>
 
@@ -2288,8 +2307,9 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     const usedThisMonth = amendments.filter((a) => {
       if (a.isSystemIssue) return false;
       if (a.status === "rejected") return false;
-      const d = new Date(a.requestedTime);
-      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const created = a.createdAt ? new Date(a.createdAt) : null;
+      if (!created) return false;
+      const ym = `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, "0")}`;
       return ym === thisYearMonth;
     }).length;
     return Math.max(0, 3 - usedThisMonth);
