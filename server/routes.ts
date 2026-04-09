@@ -2384,7 +2384,7 @@ export async function registerRoutes(
             });
           } else {
             const latest = outRecords.sort((a, b) => new Date(b.clockTime ?? 0).getTime() - new Date(a.clockTime ?? 0).getTime())[0];
-            const earlyMin = parseLateMinutes(latest.failReason, "提早");
+            const earlyMin = parseLateMinutes(latest.failReason, "早退");
             if (earlyMin !== null && earlyMin > 0) {
               anomalies.push({
                 ...baseInfo,

@@ -161,6 +161,9 @@ function parseFailReason(failReason: string | null): { note: string; minutes: nu
   let result = withHoursAndMins("遲到", "遲到");
   if (result) return result;
 
+  result = withHoursAndMins("早退", "早退");
+  if (result) return result;
+
   result = withHoursAndMins("提早", "提早到");
   if (result) return result;
 
