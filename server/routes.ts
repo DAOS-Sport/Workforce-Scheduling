@@ -1683,6 +1683,23 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/portal/shifts/:shiftId/certificate", async (req, res) => {
+    try {
+      const shiftId = parseInt(req.params.shiftId);
+      const { employeeId, certificateImageUrl } = req.body;
+      if (!employeeId || !shiftId) return res.status(400).json({ message: "缺少必要欄位" });
+
+      const shift = await storage.getShift(shiftId);
+      if (!shift) return res.status(404).json({ message: "班次不存在" });
+      if (shift.employeeId !== parseInt(employeeId)) return res.status(403).json({ message: "無權限" });
+
+      const updated = await storage.updateShift(shiftId, { certificateImageUrl: certificateImageUrl || null });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/portal/today-coworkers/:employeeId", async (req, res) => {
     try {
       const employeeId = parseInt(req.params.employeeId);

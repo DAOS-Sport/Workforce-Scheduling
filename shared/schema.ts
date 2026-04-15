@@ -62,6 +62,7 @@ export const shifts = pgTable("shifts", {
   dispatchCompany: text("dispatch_company"),
   dispatchName: text("dispatch_name"),
   dispatchPhone: text("dispatch_phone"),
+  certificateImageUrl: text("certificate_image_url"),
 });
 
 export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true });

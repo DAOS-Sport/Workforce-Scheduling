@@ -248,6 +248,7 @@ export default function SchedulePage() {
   const [shiftTemplateId, setShiftTemplateId] = useState<string>("custom");
   const [shiftSelectedEmployeeIds, setShiftSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
+  const [shiftCertificate, setShiftCertificate] = useState<string | null>(null);
   const [scheduleVisibleEmployeeIds, setScheduleVisibleEmployeeIds] = useState<Set<number>>(() => {
     try {
       const saved = localStorage.getItem(`schedule_visible_${activeRegion}`);
@@ -1171,6 +1172,7 @@ export default function SchedulePage() {
     setShiftTemplateId("custom");
     setShiftSelectedEmployeeIds(new Set([employeeId]));
     setEmployeeDropdownOpen(false);
+    setShiftCertificate(null);
     setShiftDialogOpen(true);
   };
 
@@ -1184,6 +1186,7 @@ export default function SchedulePage() {
     setShiftIsDispatch(shift.isDispatch || false);
     setShiftRole(shift.role || "救生");
     setShiftTemplateId("custom");
+    setShiftCertificate((shift as any).certificateImageUrl || null);
     setShiftDialogOpen(true);
   };
 
@@ -1222,6 +1225,7 @@ export default function SchedulePage() {
           endTime: effectiveEnd,
           role: shiftRole,
           isDispatch: isLeave ? false : shiftIsDispatch,
+          certificateImageUrl: shiftCertificate || undefined,
         });
       }
       setShiftDialogOpen(false);
@@ -1257,6 +1261,7 @@ export default function SchedulePage() {
             endTime: effectiveEnd,
             role: shiftRole,
             isDispatch: dispatch,
+            certificateImageUrl: shiftCertificate || undefined,
           });
         }
       }
@@ -2115,14 +2120,19 @@ export default function SchedulePage() {
                           >
                             <div className="flex items-center justify-between gap-0.5">
                               <span className="font-semibold leading-tight truncate">{shift.role}</span>
-                              <button
-                                className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
-                                onClick={(e) => { e.stopPropagation(); handleCopyShift(shift); }}
-                                title="複製班卡"
-                                data-testid={`button-copy-shift-${shift.id}`}
-                              >
-                                <Copy className="h-2.5 w-2.5" />
-                              </button>
+                              <div className="flex items-center gap-0.5 shrink-0">
+                                {(shift as any).certificateImageUrl && (
+                                  <span title="已附證明文件" className="text-[8px] opacity-70">📎</span>
+                                )}
+                                <button
+                                  className="text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
+                                  onClick={(e) => { e.stopPropagation(); handleCopyShift(shift); }}
+                                  title="複製班卡"
+                                  data-testid={`button-copy-shift-${shift.id}`}
+                                >
+                                  <Copy className="h-2.5 w-2.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </DraggableShiftCard>
@@ -2141,6 +2151,9 @@ export default function SchedulePage() {
                               {venue?.shortName || "未知"}
                             </div>
                             <div className="flex items-center gap-0.5 shrink-0">
+                              {(shift as any).certificateImageUrl && (
+                                <span title="已附證明文件" className="text-[8px] opacity-70">📎</span>
+                              )}
                               <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 ${roleColor!.badge}`}>
                                 {roleShort}
                               </span>
@@ -3254,6 +3267,45 @@ export default function SchedulePage() {
                 </div>
               );
             })()}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">證明文件（選填，任何班別皆可附上）</Label>
+              {shiftCertificate ? (
+                <div className="relative w-fit">
+                  <img src={shiftCertificate} alt="證明文件" className="h-20 w-auto rounded-lg border object-contain" />
+                  <button
+                    type="button"
+                    className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:opacity-80"
+                    onClick={() => setShiftCertificate(null)}
+                    data-testid="button-remove-certificate"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-muted-foreground/40 px-3 py-2 text-xs text-muted-foreground hover:bg-muted/30 transition-colors w-fit" data-testid="label-upload-certificate">
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const img = new Image();
+                    const url = URL.createObjectURL(file);
+                    img.onload = () => {
+                      const MAX = 1024;
+                      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+                      const canvas = document.createElement("canvas");
+                      canvas.width = img.width * scale;
+                      canvas.height = img.height * scale;
+                      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                      setShiftCertificate(canvas.toDataURL("image/jpeg", 0.7));
+                      URL.revokeObjectURL(url);
+                    };
+                    img.src = url;
+                    e.target.value = "";
+                  }} />
+                  <span>📎 點擊上傳圖片</span>
+                </label>
+              )}
+            </div>
 
             {shiftClipboard && (
               <div className="flex items-center gap-2 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-2">

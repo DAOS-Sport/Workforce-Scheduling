@@ -38,6 +38,7 @@ interface PortalShift {
   isDispatch: boolean;
   venue: { id: number; name: string; shortName: string } | null;
   assignedRole: string | null;
+  certificateImageUrl?: string | null;
 }
 
 interface CoworkerGroup {
@@ -2564,6 +2565,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [clockInResult, setClockInResult] = useState<ClockInResult | null>(null);
+  const [certShiftId, setCertShiftId] = useState<number | null>(null);
+  const [certPreviewShiftId, setCertPreviewShiftId] = useState<number | null>(null);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -2605,6 +2608,20 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const { data: amendments = [] } = useQuery<ClockAmendmentRecord[]>({
     queryKey: ["/api/portal/clock-amendments", employee.id],
     staleTime: 30 * 1000,
+  });
+
+  const uploadCertMutation = useMutation({
+    mutationFn: async ({ shiftId, imageUrl }: { shiftId: number; imageUrl: string | null }) => {
+      const res = await apiRequest("PATCH", `/api/portal/shifts/${shiftId}/certificate`, {
+        employeeId: employee.id,
+        certificateImageUrl: imageUrl,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/my-shifts", employee.id, monthStart, monthEnd] });
+      setCertShiftId(null);
+    },
   });
 
   const amendmentRemaining = useMemo(() => {
@@ -2879,31 +2896,84 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                       const d = parseISO(s.date);
                       const dayLabel = DAY_LABELS[getDay(d)];
                       const rd = getRoleDisplay(s.assignedRole);
+                      const hasCert = !!s.certificateImageUrl;
                       return (
-                        <div
-                          key={s.id}
-                          className={`flex items-center gap-2.5 py-1.5 px-3 rounded-lg border border-juns-border ${
-                            isToday(d) ? "border-juns-teal bg-juns-teal/5" : "bg-white"
-                          }`}
-                          data-testid={`shift-row-${s.id}`}
-                        >
-                          <div className="text-center min-w-[40px] shrink-0">
-                            <div className="text-xs text-slate-500 font-mono leading-none">{format(d, "M/d")}</div>
-                            <div className={`text-[11px] leading-none mt-0.5 ${dayLabel === "日" || dayLabel === "六" ? "text-red-400" : "text-slate-400"}`}>
-                              ({dayLabel})
+                        <div key={s.id} className="space-y-1">
+                          <div
+                            className={`flex items-center gap-2.5 py-1.5 px-3 rounded-lg border border-juns-border ${
+                              isToday(d) ? "border-juns-teal bg-juns-teal/5" : "bg-white"
+                            }`}
+                            data-testid={`shift-row-${s.id}`}
+                          >
+                            <div className="text-center min-w-[40px] shrink-0">
+                              <div className="text-xs text-slate-500 font-mono leading-none">{format(d, "M/d")}</div>
+                              <div className={`text-[11px] leading-none mt-0.5 ${dayLabel === "日" || dayLabel === "六" ? "text-red-400" : "text-slate-400"}`}>
+                                ({dayLabel})
+                              </div>
                             </div>
+                            <div className={`w-0.5 h-6 rounded-full shrink-0`} style={{ backgroundColor: rd.color }} />
+                            <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden">
+                              <span className="text-sm font-medium text-juns-navy shrink-0">{s.venue?.shortName || "未知"}</span>
+                              <span className="text-slate-300 shrink-0">·</span>
+                              <span className={`text-xs shrink-0 ${rd.textClass}`}>{rd.label}</span>
+                              <span className="text-slate-300 shrink-0">·</span>
+                              <span className="text-xs text-slate-400 font-mono truncate">
+                                {s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}
+                              </span>
+                              {s.isDispatch && <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-600 shrink-0 ml-1">派遣</span>}
+                            </div>
+                            {hasCert ? (
+                              <button
+                                type="button"
+                                className="shrink-0 h-8 w-8 rounded-md overflow-hidden border border-juns-border"
+                                onClick={() => setCertPreviewShiftId(certPreviewShiftId === s.id ? null : s.id)}
+                                data-testid={`button-view-cert-${s.id}`}
+                                title="查看證明文件"
+                              >
+                                <img src={s.certificateImageUrl!} alt="證明" className="h-full w-full object-cover" />
+                              </button>
+                            ) : (
+                              <label
+                                className="shrink-0 h-8 w-8 rounded-md border border-dashed border-slate-300 flex items-center justify-center cursor-pointer hover:bg-slate-50 transition-colors"
+                                title="上傳證明文件"
+                                data-testid={`label-upload-cert-${s.id}`}
+                              >
+                                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const img = new Image();
+                                  const url = URL.createObjectURL(file);
+                                  img.onload = () => {
+                                    const MAX = 1024;
+                                    const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+                                    const canvas = document.createElement("canvas");
+                                    canvas.width = img.width * scale;
+                                    canvas.height = img.height * scale;
+                                    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                    uploadCertMutation.mutate({ shiftId: s.id, imageUrl: canvas.toDataURL("image/jpeg", 0.7) });
+                                    URL.revokeObjectURL(url);
+                                  };
+                                  img.src = url;
+                                  e.target.value = "";
+                                }} />
+                                <span className="text-slate-400 text-base leading-none">📎</span>
+                              </label>
+                            )}
                           </div>
-                          <div className={`w-0.5 h-6 rounded-full shrink-0`} style={{ backgroundColor: rd.color }} />
-                          <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden">
-                            <span className="text-sm font-medium text-juns-navy shrink-0">{s.venue?.shortName || "未知"}</span>
-                            <span className="text-slate-300 shrink-0">·</span>
-                            <span className={`text-xs shrink-0 ${rd.textClass}`}>{rd.label}</span>
-                            <span className="text-slate-300 shrink-0">·</span>
-                            <span className="text-xs text-slate-400 font-mono truncate">
-                              {s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}
-                            </span>
-                            {s.isDispatch && <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-600 shrink-0 ml-1">派遣</span>}
-                          </div>
+                          {certPreviewShiftId === s.id && hasCert && (
+                            <div className="px-3 pb-1">
+                              <div className="relative rounded-lg border border-juns-border overflow-hidden bg-slate-50">
+                                <img src={s.certificateImageUrl!} alt="證明文件" className="w-full max-h-48 object-contain" />
+                                <button
+                                  type="button"
+                                  className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white text-xs flex items-center justify-center hover:bg-red-600 transition-colors"
+                                  onClick={() => uploadCertMutation.mutate({ shiftId: s.id, imageUrl: null })}
+                                  data-testid={`button-remove-cert-${s.id}`}
+                                  title="移除證明文件"
+                                >✕</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })
