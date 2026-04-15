@@ -367,7 +367,7 @@ function JunsHeader({
   );
 }
 
-type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "guidelines";
+type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "leave" | "guidelines";
 
 const VIEW_TITLES: Record<PortalView, string> = {
   home: "打卡首頁",
@@ -377,6 +377,7 @@ const VIEW_TITLES: Record<PortalView, string> = {
   coworkers: "今日工作夥伴",
   amendment: "補打卡申請",
   overtime: "加班申請",
+  leave: "請假申請",
   guidelines: "員工守則",
 };
 
@@ -414,6 +415,7 @@ function SideMenuDrawer({
       items: [
         { view: "amendment", label: "補打卡申請", icon: FileEdit, badge: `剩餘 ${amendmentRemaining} 次` },
         { view: "overtime", label: "加班申請", icon: Briefcase },
+        { view: "leave", label: "請假申請", icon: CalendarDays },
       ],
     },
     {
@@ -2172,6 +2174,264 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
   );
 }
 
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"] as const;
+const CERTIFICATE_REQUIRED = ["病假", "生理假"];
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: "審核中",
+  approved: "已核准",
+  rejected: "已拒絕",
+};
+const STATUS_COLOR: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-800",
+  approved: "bg-emerald-100 text-emerald-800",
+  rejected: "bg-red-100 text-red-800",
+};
+
+interface LeaveRequestRecord {
+  id: number;
+  employeeId: number;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  reason: string | null;
+  certificateImageUrl: string | null;
+  status: string;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+}
+
+function LeaveRequestSection({ employee }: { employee: PortalEmployee }) {
+  const [expanded, setExpanded] = useState(false);
+  const todayStr = (() => {
+    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  const [leaveType, setLeaveType] = useState<string>("特休");
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
+  const [reason, setReason] = useState("");
+  const [certPreview, setCertPreview] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const { data: requests = [], refetch } = useQuery<LeaveRequestRecord[]>({
+    queryKey: ["/api/portal/leave-requests", employee.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/leave-requests/${employee.id}`);
+      if (!res.ok) throw new Error("載入失敗");
+      return res.json();
+    },
+  });
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const MAX = 1024;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else { width = Math.round(width * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("canvas context unavailable");
+          ctx.drawImage(img, 0, 0, width, height);
+          setCertPreview(canvas.toDataURL("image/jpeg", 0.7));
+        } catch {
+          toast({ title: "圖片處理失敗，請重新選擇", variant: "destructive" });
+        }
+      };
+      img.onerror = () => toast({ title: "圖片讀取失敗，請重新選擇", variant: "destructive" });
+      img.src = ev.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async () => {
+    if (startDate > endDate) {
+      toast({ title: "結束日期必須在開始日期之後", variant: "destructive" });
+      return;
+    }
+    if (CERTIFICATE_REQUIRED.includes(leaveType) && !certPreview) {
+      toast({ title: `${leaveType}請附上證明文件照片`, variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await apiRequest("POST", "/api/portal/leave-request", {
+        employeeId: employee.id,
+        leaveType,
+        startDate,
+        endDate,
+        reason: reason.trim() || null,
+        certificateImageUrl: certPreview || null,
+      });
+      toast({ title: "請假申請已送出" });
+      setReason("");
+      setCertPreview(null);
+      setLeaveType("特休");
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+      refetch();
+    } catch (err: any) {
+      toast({ title: err.message || "送出失敗", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const needsCert = CERTIFICATE_REQUIRED.includes(leaveType);
+
+  return (
+    <div className="space-y-4">
+      {/* Submit form */}
+      <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+        <button
+          className="w-full px-4 py-3 flex items-center justify-between"
+          onClick={() => setExpanded((v) => !v)}
+          data-testid="button-toggle-leave-form"
+        >
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-juns-teal" />
+            <span className="text-sm font-semibold text-juns-navy">新增請假申請</span>
+          </div>
+          <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        </button>
+
+        {expanded && (
+          <div className="px-4 pb-4 border-t border-juns-border space-y-3 pt-3">
+            {/* Leave type */}
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">假別</label>
+              <Select value={leaveType} onValueChange={setLeaveType}>
+                <SelectTrigger className="h-9 text-sm" data-testid="select-leave-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LEAVE_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>{t}{CERTIFICATE_REQUIRED.includes(t) ? " *需附證明" : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">開始日期</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full h-9 border border-slate-200 rounded-md px-2 text-sm text-juns-navy"
+                  data-testid="input-leave-start"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">結束日期</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full h-9 border border-slate-200 rounded-md px-2 text-sm text-juns-navy"
+                  data-testid="input-leave-end"
+                />
+              </div>
+            </div>
+
+            {/* Reason */}
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">原因（選填）</label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="請輸入請假原因..."
+                rows={2}
+                className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm text-juns-navy resize-none"
+                data-testid="textarea-leave-reason"
+              />
+            </div>
+
+            {/* Certificate photo */}
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">
+                證明文件{needsCert ? <span className="text-red-500 ml-1">*必填</span> : "（選填）"}
+              </label>
+              {certPreview ? (
+                <div className="relative inline-block">
+                  <img src={certPreview} alt="證明文件" className="h-24 w-auto rounded-lg border" />
+                  <button
+                    onClick={() => setCertPreview(null)}
+                    className="absolute -top-1.5 -right-1.5 bg-white rounded-full shadow p-0.5"
+                    data-testid="button-remove-cert"
+                  >
+                    <X className="h-3.5 w-3.5 text-slate-500" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 w-fit" data-testid="label-upload-cert">
+                  <Camera className="h-4 w-4 text-slate-400" />
+                  <span className="text-sm text-slate-500">上傳照片</span>
+                  <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                </label>
+              )}
+            </div>
+
+            <Button
+              className="w-full"
+              onClick={handleSubmit}
+              disabled={submitting}
+              data-testid="button-submit-leave"
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+              送出申請
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* History */}
+      <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+        <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
+          <FileText className="h-4 w-4 text-juns-teal" />
+          <span className="text-sm font-semibold text-juns-navy">請假紀錄</span>
+        </div>
+        {requests.length === 0 ? (
+          <p className="text-sm text-center text-slate-400 py-4">尚無請假紀錄</p>
+        ) : (
+          <div className="divide-y divide-juns-border">
+            {requests.map((r) => (
+              <div key={r.id} className="px-4 py-3 space-y-1" data-testid={`card-leave-${r.id}`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-juns-navy">{r.leaveType}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[r.status] || "bg-slate-100 text-slate-600"}`}>
+                    {STATUS_LABEL[r.status] || r.status}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">{r.startDate} ～ {r.endDate}</p>
+                {r.reason && <p className="text-xs text-slate-400">{r.reason}</p>}
+                {r.reviewNote && (
+                  <p className="text-xs text-slate-500 bg-slate-50 rounded px-2 py-1">審核備註：{r.reviewNote}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HomeView({
   employee, attendance, attendanceLoading, todayShifts, userPos, clockInResult, setClockInResult, setUserPos,
 }: {
@@ -2749,6 +3009,12 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
       {activeView === "overtime" && (
         <div className="max-w-lg mx-auto p-4 pb-8">
           <OvertimeRequestSection employee={employee} />
+        </div>
+      )}
+
+      {activeView === "leave" && (
+        <div className="max-w-lg mx-auto p-4 pb-8">
+          <LeaveRequestSection employee={employee} />
         </div>
       )}
 

@@ -15,6 +15,7 @@ import {
   systemConfigs,
   missingClockNotifications,
   weeklyPushNotifications,
+  leaveRequests,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -36,6 +37,7 @@ import {
   type SystemConfig,
   type MissingClockNotification,
   type WeeklyPushNotification,
+  type LeaveRequest, type InsertLeaveRequest,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -166,6 +168,13 @@ export interface IStorage {
   hasWeeklyPushNotification(weekStartDate: string, employeeId: number, pushType: string): Promise<boolean>;
   createWeeklyPushNotification(weekStartDate: string, employeeId: number, pushType: string): Promise<void>;
   clearOldWeeklyPushNotifications(beforeWeekStart: string): Promise<void>;
+
+  // Leave requests
+  createLeaveRequest(data: InsertLeaveRequest): Promise<LeaveRequest>;
+  getLeaveRequests(status?: string): Promise<LeaveRequest[]>;
+  getLeaveRequestsByEmployee(employeeId: number): Promise<LeaveRequest[]>;
+  getLeaveRequest(id: number): Promise<LeaveRequest | undefined>;
+  updateLeaveRequestStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<LeaveRequest | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -860,9 +869,59 @@ export class DatabaseStorage implements IStorage {
     await db.delete(weeklyPushNotifications)
       .where(lte(weeklyPushNotifications.weekStartDate, beforeWeekStart));
   }
+
+  async createLeaveRequest(data: InsertLeaveRequest): Promise<LeaveRequest> {
+    const [row] = await db.insert(leaveRequests).values(data).returning();
+    return row;
+  }
+
+  async getLeaveRequests(status?: string): Promise<LeaveRequest[]> {
+    if (status) {
+      return db.select().from(leaveRequests).where(eq(leaveRequests.status, status)).orderBy(desc(leaveRequests.createdAt));
+    }
+    return db.select().from(leaveRequests).orderBy(desc(leaveRequests.createdAt));
+  }
+
+  async getLeaveRequestsByEmployee(employeeId: number): Promise<LeaveRequest[]> {
+    return db.select().from(leaveRequests).where(eq(leaveRequests.employeeId, employeeId)).orderBy(desc(leaveRequests.createdAt));
+  }
+
+  async getLeaveRequest(id: number): Promise<LeaveRequest | undefined> {
+    const [row] = await db.select().from(leaveRequests).where(eq(leaveRequests.id, id));
+    return row;
+  }
+
+  async updateLeaveRequestStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<LeaveRequest | undefined> {
+    const [row] = await db.update(leaveRequests)
+      .set({ status, reviewedBy, reviewedByName, reviewNote: reviewNote || null, reviewedAt: new Date() })
+      .where(eq(leaveRequests.id, id))
+      .returning();
+    return row;
+  }
 }
 
 export const storage = new DatabaseStorage();
+
+export async function ensureLeaveRequestsTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS leave_requests (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL,
+      leave_type TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      reason TEXT,
+      certificate_image_url TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      reviewed_by INTEGER,
+      reviewed_by_name TEXT,
+      reviewed_at TIMESTAMP,
+      review_note TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  console.log("[db] leave_requests 表格確認完成");
+}
 
 /**
  * Ensures the weekly_push_notifications table exists with the required unique constraint.

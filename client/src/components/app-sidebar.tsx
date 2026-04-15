@@ -1,4 +1,4 @@
-import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet } from "lucide-react";
+import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +27,7 @@ const toolItems = [
   { title: "打卡異常", url: "/anomaly-reports", icon: ShieldAlert },
   { title: "週報打卡", url: "/weekly-attendance", icon: CalendarCheck },
   { title: "工時總表", url: "/salary-report", icon: Clock },
+  { title: "請假管理", url: "/leave-requests", icon: CalendarOff },
   { title: "守則管理", url: "/guidelines", icon: BookOpen },
 ];
 

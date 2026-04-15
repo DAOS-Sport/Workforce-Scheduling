@@ -457,6 +457,26 @@ export const insertWeeklyPushNotificationSchema = createInsertSchema(weeklyPushN
 export type InsertWeeklyPushNotification = z.infer<typeof insertWeeklyPushNotificationSchema>;
 export type WeeklyPushNotification = typeof weeklyPushNotifications.$inferSelect;
 
+export const leaveRequests = pgTable("leave_requests", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  leaveType: text("leave_type").notNull(),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  reason: text("reason"),
+  certificateImageUrl: text("certificate_image_url"),
+  status: text("status").notNull().default("pending"),
+  reviewedBy: integer("reviewed_by"),
+  reviewedByName: text("reviewed_by_name"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLeaveRequestSchema = createInsertSchema(leaveRequests).omit({ id: true, createdAt: true, reviewedAt: true });
+export type InsertLeaveRequest = z.infer<typeof insertLeaveRequestSchema>;
+export type LeaveRequest = typeof leaveRequests.$inferSelect;
+
 export interface VacancyInfo {
   venueId: number;
   venueName: string;
