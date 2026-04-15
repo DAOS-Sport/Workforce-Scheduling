@@ -50,7 +50,7 @@ export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
 
   const toolItems = [
     { title: "考勤稽核", url: "/attendance", icon: ClipboardCheck },
-    { title: "GPS 打卡", url: "/clock-records", icon: MapPin, badge: pendingCounts?.clockAmendments },
+    { title: "GPS 打卡", url: "/clock-records", icon: MapPin, badge: (pendingCounts?.clockAmendments ?? 0) + (pendingCounts?.overtimeRequests ?? 0) || undefined },
     { title: "打卡異常", url: "/anomaly-reports", icon: ShieldAlert, badge: pendingCounts?.anomalyReports },
     { title: "週報打卡", url: "/weekly-attendance", icon: CalendarCheck },
     { title: "工時總表", url: "/salary-report", icon: Clock },
