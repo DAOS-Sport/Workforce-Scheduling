@@ -63,6 +63,7 @@ export const shifts = pgTable("shifts", {
   dispatchName: text("dispatch_name"),
   dispatchPhone: text("dispatch_phone"),
   certificateImageUrl: text("certificate_image_url"),
+  notes: text("notes"),
 });
 
 export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true });
@@ -457,6 +458,20 @@ export const weeklyPushNotifications = pgTable("weekly_push_notifications", {
 export const insertWeeklyPushNotificationSchema = createInsertSchema(weeklyPushNotifications).omit({ id: true, sentAt: true });
 export type InsertWeeklyPushNotification = z.infer<typeof insertWeeklyPushNotificationSchema>;
 export type WeeklyPushNotification = typeof weeklyPushNotifications.$inferSelect;
+
+export const announcements = pgTable("announcements", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  targetRegion: text("target_region"),
+  publishedAt: timestamp("published_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  createdBy: integer("created_by"),
+});
+
+export const insertAnnouncementSchema = createInsertSchema(announcements).omit({ id: true, publishedAt: true });
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+export type Announcement = typeof announcements.$inferSelect;
 
 export const leaveRequests = pgTable("leave_requests", {
   id: serial("id").primaryKey(),

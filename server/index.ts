@@ -11,7 +11,7 @@ import {
   sendWeeklySchedulePush,
   sendWeeklyLateReport,
 } from "./line-webhook";
-import { ensureWeeklyPushTable, ensureLeaveRequestsTable } from "./storage";
+import { ensureWeeklyPushTable, ensureLeaveRequestsTable, ensureAnnouncementsTable } from "./storage";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
@@ -143,6 +143,13 @@ app.use((req, res, next) => {
     await ensureLeaveRequestsTable();
   } catch (err: any) {
     log(`leave_requests 表格建立失敗: ${err.message}`, "db");
+  }
+
+  // Ensure announcements table exists
+  try {
+    await ensureAnnouncementsTable();
+  } catch (err: any) {
+    log(`announcements 表格建立失敗: ${err.message}`, "db");
   }
 
   await registerRoutes(httpServer, app);

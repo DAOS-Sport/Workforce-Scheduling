@@ -249,6 +249,7 @@ export default function SchedulePage() {
   const [shiftSelectedEmployeeIds, setShiftSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
   const [shiftCertificate, setShiftCertificate] = useState<string | null>(null);
+  const [shiftNotes, setShiftNotes] = useState<string>("");
   const [scheduleVisibleEmployeeIds, setScheduleVisibleEmployeeIds] = useState<Set<number>>(() => {
     try {
       const saved = localStorage.getItem(`schedule_visible_${activeRegion}`);
@@ -1173,6 +1174,7 @@ export default function SchedulePage() {
     setShiftSelectedEmployeeIds(new Set([employeeId]));
     setEmployeeDropdownOpen(false);
     setShiftCertificate(null);
+    setShiftNotes("");
     setShiftDialogOpen(true);
   };
 
@@ -1187,6 +1189,7 @@ export default function SchedulePage() {
     setShiftRole(shift.role || "救生");
     setShiftTemplateId("custom");
     setShiftCertificate((shift as any).certificateImageUrl || null);
+    setShiftNotes((shift as any).notes || "");
     setShiftDialogOpen(true);
   };
 
@@ -1226,6 +1229,7 @@ export default function SchedulePage() {
           role: shiftRole,
           isDispatch: isLeave ? false : shiftIsDispatch,
           certificateImageUrl: shiftCertificate || undefined,
+          notes: shiftNotes || undefined,
         });
       }
       setShiftDialogOpen(false);
@@ -1262,6 +1266,7 @@ export default function SchedulePage() {
             role: shiftRole,
             isDispatch: dispatch,
             certificateImageUrl: shiftCertificate || undefined,
+            notes: shiftNotes || undefined,
           });
         }
       }
@@ -3267,6 +3272,18 @@ export default function SchedulePage() {
                 </div>
               );
             })()}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">班次備註（員工Portal可見）</Label>
+              <textarea
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                rows={2}
+                placeholder="例如：本日使用補修，晚到2小時（選填）"
+                value={shiftNotes}
+                onChange={(e) => setShiftNotes(e.target.value)}
+                data-testid="input-shift-notes"
+              />
+            </div>
 
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">證明文件（選填，任何班別皆可附上）</Label>

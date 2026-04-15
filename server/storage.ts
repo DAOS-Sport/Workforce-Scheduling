@@ -902,6 +902,21 @@ export class DatabaseStorage implements IStorage {
 
 export const storage = new DatabaseStorage();
 
+export async function ensureAnnouncementsTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS announcements (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      target_region TEXT,
+      published_at TIMESTAMP DEFAULT NOW(),
+      expires_at TIMESTAMP,
+      created_by INTEGER
+    )
+  `);
+  console.log("[db] announcements 表格確認完成");
+}
+
 export async function ensureLeaveRequestsTable(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS leave_requests (

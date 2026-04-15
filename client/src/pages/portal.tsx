@@ -39,6 +39,16 @@ interface PortalShift {
   venue: { id: number; name: string; shortName: string } | null;
   assignedRole: string | null;
   certificateImageUrl?: string | null;
+  notes?: string | null;
+}
+
+interface AnnouncementItem {
+  id: number;
+  title: string;
+  content: string;
+  targetRegion: string | null;
+  publishedAt: string;
+  expiresAt: string | null;
 }
 
 interface CoworkerGroup {
@@ -2610,6 +2620,12 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     staleTime: 30 * 1000,
   });
 
+  const [expandedAnnouncementId, setExpandedAnnouncementId] = useState<number | null>(null);
+  const { data: activeAnnouncements = [] } = useQuery<AnnouncementItem[]>({
+    queryKey: ["/api/announcements/active"],
+    staleTime: 5 * 60 * 1000,
+  });
+
   const uploadCertMutation = useMutation({
     mutationFn: async ({ shiftId, imageUrl }: { shiftId: number; imageUrl: string | null }) => {
       const res = await apiRequest("PATCH", `/api/portal/shifts/${shiftId}/certificate`, {
@@ -2811,6 +2827,30 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
 
       {activeView === "schedule" && (
         <div className="max-w-lg mx-auto p-4 pb-8">
+        {activeAnnouncements.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {activeAnnouncements.map((ann) => (
+              <div
+                key={ann.id}
+                className="bg-blue-50 border border-blue-100 rounded-lg p-3 cursor-pointer"
+                onClick={() => setExpandedAnnouncementId(expandedAnnouncementId === ann.id ? null : ann.id)}
+                data-testid={`announcement-card-${ann.id}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-blue-800">{ann.title}</p>
+                    {expandedAnnouncementId === ann.id && (
+                      <p className="text-xs text-blue-700 mt-1 leading-relaxed whitespace-pre-wrap">{ann.content}</p>
+                    )}
+                  </div>
+                  <span className="text-xs text-blue-400 shrink-0">
+                    {format(parseISO(ann.publishedAt), "M/d")}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
           <div className="px-4 py-3 border-b border-juns-border flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -2972,6 +3012,12 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                   title="移除證明文件"
                                 >✕</button>
                               </div>
+                            </div>
+                          )}
+                          {s.notes && (
+                            <div className="mx-3 mb-1 pt-2 pb-2 border-t border-blue-100 flex items-start gap-1.5" data-testid={`shift-notes-${s.id}`}>
+                              <span className="text-blue-400 text-xs mt-0.5">📋</span>
+                              <p className="text-xs text-blue-700 leading-relaxed">{s.notes}</p>
                             </div>
                           )}
                         </div>
