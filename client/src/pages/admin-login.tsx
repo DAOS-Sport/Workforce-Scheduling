@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ShieldCheck, Loader2, Lock } from "lucide-react";
+import { ShieldCheck, Loader2, Lock, Zap } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+
+const IS_DEV = import.meta.env.DEV;
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
@@ -30,6 +32,22 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
       }
     } catch (err: any) {
       setError(err.message || "登入失敗");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  async function handleDevLogin() {
+    setProcessing(true);
+    setError("");
+    try {
+      const res = await apiRequest("POST", "/api/admin/dev-login", {});
+      const data = await res.json();
+      if (data.id !== undefined) {
+        onLoginSuccess();
+      }
+    } catch (err: any) {
+      setError(err.message || "快速登入失敗");
     } finally {
       setProcessing(false);
     }
@@ -81,6 +99,23 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
             )}
           </Button>
         </form>
+
+        {IS_DEV && (
+          <div className="mt-4 pt-4 border-t border-border/50">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-10 text-sm gap-2 text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-950/30"
+              onClick={handleDevLogin}
+              disabled={processing}
+              data-testid="button-dev-login"
+            >
+              <Zap className="h-4 w-4" />
+              開發環境快速登入
+            </Button>
+            <p className="text-[11px] text-center text-muted-foreground mt-2">僅限沙盒環境使用，正式站不可用</p>
+          </div>
+        )}
 
         <p className="mt-4 text-xs text-center text-muted-foreground">
           僅限管理員登入

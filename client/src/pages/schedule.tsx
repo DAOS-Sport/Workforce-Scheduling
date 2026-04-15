@@ -1439,66 +1439,82 @@ export default function SchedulePage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="sticky top-0 z-50 bg-background border-b border-border/50 flex items-center gap-2 px-4 py-2 flex-wrap">
-        <div className="flex items-center gap-2 shrink-0">
-          <h1 className="text-sm font-bold tracking-tight" data-testid="text-page-title">排班編輯器</h1>
-          <span className="text-muted-foreground/40">|</span>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7"
-            onClick={() => setCurrentMonth((prev) => subMonths(prev, 1))}
-            data-testid="button-prev-month"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </Button>
-          <span className="text-sm font-medium" data-testid="text-month-range">
-            {format(currentMonth, "yyyy年 M月", { locale: zhTW })}
-          </span>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7"
-            onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
-            data-testid="button-next-month"
-          >
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setCurrentMonth(startOfMonth(new Date()))}
-            data-testid="button-today"
-          >
-            本月
-          </Button>
-        </div>
-        <div className="flex-1 flex justify-center">
-          <RegionTabs />
-        </div>
-        <div className="flex items-start gap-2">
+      <div className="sticky top-0 z-50 bg-background border-b border-border/50">
+        {/* Main toolbar row — never wraps */}
+        <div className="flex items-center gap-1.5 px-3 py-2 min-w-0 overflow-hidden">
+          {/* Left: title + month nav */}
+          <div className="flex items-center gap-1 shrink-0">
+            <h1 className="text-sm font-bold tracking-tight hidden sm:block" data-testid="text-page-title">排班編輯器</h1>
+            <span className="text-muted-foreground/40 hidden sm:block">|</span>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              onClick={() => setCurrentMonth((prev) => subMonths(prev, 1))}
+              data-testid="button-prev-month"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="text-sm font-medium whitespace-nowrap" data-testid="text-month-range">
+              {format(currentMonth, "yyyy年 M月", { locale: zhTW })}
+            </span>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
+              data-testid="button-next-month"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs hidden sm:flex"
+              onClick={() => setCurrentMonth(startOfMonth(new Date()))}
+              data-testid="button-today"
+            >
+              本月
+            </Button>
+          </div>
+
+          {/* Center: RegionTabs */}
+          <div className="flex-1 flex justify-center min-w-0 overflow-hidden">
+            <RegionTabs />
+          </div>
+
+          {/* Right: compact action buttons */}
+          {/* 缺班 popover — compact single button */}
           {shortageDates.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
-              <span className="text-[10px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1 shrink-0">
-                <AlertCircle className="h-3 w-3" />
-                缺班快跳
-              </span>
-              {shortageDates.map((d) => (
+            <Popover>
+              <PopoverTrigger asChild>
                 <button
-                  key={d}
-                  className="text-[10px] px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors cursor-pointer font-medium"
-                  onClick={() => {
-                    const el = scrollRef.current?.querySelector(`[data-date-col="${d}"]`);
-                    if (el) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-                  }}
-                  title={`跳至 ${d} (缺班)`}
-                  data-testid={`button-jump-shortage-${d}`}
+                  className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors font-medium shrink-0"
+                  data-testid="button-shortage-popover"
                 >
-                  {format(new Date(d), "M/d")}
+                  <AlertCircle className="h-3 w-3" />
+                  缺班 {shortageDates.length} 日
                 </button>
-              ))}
-            </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-2" align="end">
+                <p className="text-[10px] text-muted-foreground font-medium mb-2 px-1">點擊日期快速跳至該欄</p>
+                <div className="flex flex-wrap gap-1">
+                  {shortageDates.map((d) => (
+                    <button
+                      key={d}
+                      className="text-[10px] px-2 py-1 rounded-md bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors font-medium"
+                      onClick={() => {
+                        const el = scrollRef.current?.querySelector(`[data-date-col="${d}"]`);
+                        if (el) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+                      }}
+                      data-testid={`button-jump-shortage-${d}`}
+                    >
+                      {format(new Date(d), "M/d")}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
           )}
 
           {shiftClipboard && (

@@ -110,6 +110,25 @@ export async function registerRoutes(
     });
   });
 
+  app.post("/api/admin/dev-login", async (req, res) => {
+    if (process.env.REPLIT_DEPLOYMENT === "1") {
+      return res.status(403).json({ message: "此功能僅限開發環境使用" });
+    }
+    try {
+      const allEmployees = await storage.getAllEmployees();
+      const admin = allEmployees.find((e: any) => e.isAdmin);
+      req.session.adminId = admin?.id || 1;
+      req.session.adminName = admin?.name || "管理員";
+      req.session.adminLineId = "";
+      req.session.save((err) => {
+        if (err) return res.status(500).json({ message: "登入失敗" });
+        res.json({ id: req.session.adminId, name: req.session.adminName });
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   function requireAdmin(req: Request, res: Response, next: Function) {
     if (req.session.adminId) return next();
     return res.status(401).json({ message: "請先登入管理後台" });
