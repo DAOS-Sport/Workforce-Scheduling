@@ -6,13 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { MapPin, Clock, CheckCircle, XCircle, AlertTriangle, ChevronLeft, ChevronRight, FileEdit, ClipboardCheck, Timer } from "lucide-react";
+import { MapPin, Clock, CheckCircle, XCircle, AlertTriangle, ChevronLeft, ChevronRight, FileEdit, ClipboardCheck, Timer, ImageIcon } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ClockRecord {
   id: number;
@@ -41,6 +47,7 @@ interface ClockAmendment {
   clockType: string;
   requestedTime: string;
   reason: string;
+  evidenceImageUrl: string | null;
   status: string;
   reviewedBy: number | null;
   reviewedByName: string | null;
@@ -106,6 +113,7 @@ export default function ClockRecordsPage() {
   const [reviewNote, setReviewNote] = useState("");
   const [otReviewingId, setOtReviewingId] = useState<number | null>(null);
   const [otReviewNote, setOtReviewNote] = useState("");
+  const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: records = [], isLoading } = useQuery<ClockRecord[]>({
@@ -561,6 +569,31 @@ export default function ClockRecordsPage() {
                           <div className="text-xs text-muted-foreground mt-1">
                             送出時間：{new Date(a.createdAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                           </div>
+                          {a.evidenceImageUrl ? (
+                            <div className="mt-2">
+                              <button
+                                className="flex items-center gap-1.5 group"
+                                onClick={() => setViewingImageUrl(a.evidenceImageUrl)}
+                                data-testid={`button-view-evidence-${a.id}`}
+                                title="點擊查看截圖"
+                              >
+                                <img
+                                  src={a.evidenceImageUrl}
+                                  alt="主管同意截圖"
+                                  className="h-16 w-16 object-cover rounded-md border border-slate-200 group-hover:border-juns-teal transition-colors"
+                                />
+                                <span className="text-xs text-slate-400 group-hover:text-juns-teal transition-colors flex items-center gap-1">
+                                  <ImageIcon className="h-3 w-3" />
+                                  查看截圖
+                                </span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="mt-1 text-xs text-red-400 flex items-center gap-1">
+                              <ImageIcon className="h-3 w-3" />
+                              未附主管同意截圖
+                            </div>
+                          )}
                         </div>
 
                         {a.status === "pending" && (
@@ -783,6 +816,24 @@ export default function ClockRecordsPage() {
           </Card>
         </>
       )}
+      {/* Evidence Image Viewer Dialog */}
+      <Dialog open={!!viewingImageUrl} onOpenChange={(open) => { if (!open) setViewingImageUrl(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>主管同意截圖</DialogTitle>
+          </DialogHeader>
+          {viewingImageUrl && (
+            <div className="flex justify-center">
+              <img
+                src={viewingImageUrl}
+                alt="主管同意截圖"
+                className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                data-testid="img-evidence-full"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
