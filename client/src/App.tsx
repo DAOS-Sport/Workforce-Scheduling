@@ -22,7 +22,7 @@ import WeeklyAttendancePage from "@/pages/weekly-attendance";
 import SalaryReportPage from "@/pages/salary-report";
 import ReportsPage from "@/pages/reports";
 import LeaveRequestsPage from "@/pages/leave-requests";
-import AnnouncementsPage from "@/pages/announcements";
+import { Redirect } from "wouter";
 import PortalPage from "@/pages/portal";
 import LiffClockInPage from "@/pages/liff-clock-in";
 import AdminLoginPage from "@/pages/admin-login";
@@ -43,7 +43,7 @@ function AdminRouter() {
       <Route path="/salary-report" component={SalaryReportPage} />
       <Route path="/reports" component={ReportsPage} />
       <Route path="/leave-requests" component={LeaveRequestsPage} />
-      <Route path="/announcements" component={AnnouncementsPage} />
+      <Route path="/announcements">{() => <Redirect to="/guidelines" />}</Route>
       <Route component={NotFound} />
     </Switch>
   );
