@@ -3253,7 +3253,7 @@ function isLineInAppBrowser(): boolean {
 }
 
 export default function PortalPage() {
-  if (!isLineInAppBrowser()) {
+  if (!isLineInAppBrowser() && !import.meta.env.DEV) {
     return <NotLineBrowser />;
   }
   return <PortalPageInner />;
