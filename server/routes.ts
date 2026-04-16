@@ -1634,11 +1634,12 @@ export async function registerRoutes(
     try {
       const employeeId = parseInt(req.params.employeeId);
       const { startDate, endDate } = req.params;
-      const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, startDate, endDate);
+      const [myShifts, myDispatchShifts] = await Promise.all([
+        storage.getShiftsByEmployeeAndDateRange(employeeId, startDate, endDate),
+        storage.getDispatchShiftsByLinkedEmployee(employeeId, startDate, endDate),
+      ]);
 
       const emp = await storage.getEmployee(employeeId);
-      // Canonical role map — handles both English legacy keys and all Chinese DB variants.
-      // 櫃台 / 櫃檯 / 櫃臺 are all treated as the same.
       const empRoleMap: Record<string, string> = {
         lifeguard: "救生", counter: "櫃檯", cleaning: "清潔", manager: "管理",
         救生: "救生", 守望: "守望",
@@ -1648,9 +1649,12 @@ export async function registerRoutes(
         資訊班: "資訊", 在校實習: "無職",
       };
 
-      const venueIds = Array.from(new Set(myShifts.map((s) => s.venueId)));
+      const allVenueIds = Array.from(new Set([
+        ...myShifts.map((s) => s.venueId),
+        ...myDispatchShifts.filter((ds) => ds.venueId != null).map((ds) => ds.venueId as number),
+      ]));
       const venueMap: Record<number, any> = {};
-      for (const vid of venueIds) {
+      for (const vid of allVenueIds) {
         const v = await storage.getVenue(vid);
         if (v) venueMap[vid] = { id: v.id, name: v.name, shortName: v.shortName };
       }
@@ -1664,7 +1668,7 @@ export async function registerRoutes(
         return slotsCache[key];
       };
 
-      const enriched = await Promise.all(myShifts.map(async (s) => {
+      const enrichedRegular = await Promise.all(myShifts.map(async (s) => {
         const slots = await getSlotsForVenueDate(s.venueId, s.date);
         const shiftStart = s.startTime.slice(0, 5);
         const shiftEnd = s.endTime.slice(0, 5);
@@ -1678,9 +1682,28 @@ export async function registerRoutes(
           ...s,
           venue: venueMap[s.venueId] || null,
           assignedRole,
+          _isDispatchRecord: false,
         };
       }));
-      res.json(enriched);
+
+      const enrichedDispatch = myDispatchShifts.map((ds) => ({
+        id: -(ds.id),
+        employeeId,
+        venueId: ds.venueId,
+        shiftId: null,
+        date: ds.date,
+        startTime: ds.startTime,
+        endTime: ds.endTime,
+        role: ds.role,
+        notes: ds.notes || null,
+        isDispatch: true,
+        certificateImageUrl: null,
+        venue: ds.venueId ? (venueMap[ds.venueId] || null) : null,
+        assignedRole: empRoleMap[ds.role] || ds.role || null,
+        _isDispatchRecord: true,
+      }));
+
+      res.json([...enrichedRegular, ...enrichedDispatch]);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

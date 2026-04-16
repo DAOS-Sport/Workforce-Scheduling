@@ -40,6 +40,7 @@ interface PortalShift {
   assignedRole: string | null;
   certificateImageUrl?: string | null;
   notes?: string | null;
+  _isDispatchRecord?: boolean;
 }
 
 interface AnnouncementItem {
@@ -2962,7 +2963,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                               </span>
                               {s.isDispatch && <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-600 shrink-0 ml-1">派遣</span>}
                             </div>
-                            {hasCert ? (
+                            {!s._isDispatchRecord && hasCert ? (
                               <button
                                 type="button"
                                 className="shrink-0 h-8 w-8 rounded-md overflow-hidden border border-juns-border"
@@ -2972,7 +2973,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                               >
                                 <img src={s.certificateImageUrl!} alt="證明" className="h-full w-full object-cover" />
                               </button>
-                            ) : (
+                            ) : !s._isDispatchRecord ? (
                               <label
                                 className="shrink-0 h-8 w-8 rounded-md border border-dashed border-slate-300 flex items-center justify-center cursor-pointer hover:bg-slate-50 transition-colors"
                                 title="上傳證明文件"
@@ -2998,7 +2999,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 }} />
                                 <span className="text-slate-400 text-base leading-none">📎</span>
                               </label>
-                            )}
+                            ) : null}
                           </div>
                           {certPreviewShiftId === s.id && hasCert && (
                             <div className="px-3 pb-1">

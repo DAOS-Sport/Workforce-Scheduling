@@ -128,6 +128,7 @@ export interface IStorage {
   batchCreateDispatchShifts(data: InsertDispatchShift[]): Promise<DispatchShift[]>;
   getDispatchShifts(regionId: number, startDate: string, endDate: string): Promise<DispatchShift[]>;
   getDispatchShiftsByDate(date: string): Promise<DispatchShift[]>;
+  getDispatchShiftsByLinkedEmployee(employeeId: number, startDate: string, endDate: string): Promise<DispatchShift[]>;
   getDispatchShift(id: number): Promise<DispatchShift | undefined>;
   updateDispatchShift(id: number, data: Partial<InsertDispatchShift>): Promise<DispatchShift | undefined>;
   deleteDispatchShift(id: number): Promise<void>;
@@ -631,6 +632,16 @@ export class DatabaseStorage implements IStorage {
 
   async getDispatchShiftsByDate(date: string): Promise<DispatchShift[]> {
     return db.select().from(dispatchShifts).where(eq(dispatchShifts.date, date));
+  }
+
+  async getDispatchShiftsByLinkedEmployee(employeeId: number, startDate: string, endDate: string): Promise<DispatchShift[]> {
+    return db.select().from(dispatchShifts).where(
+      and(
+        eq(dispatchShifts.linkedEmployeeId, employeeId),
+        gte(dispatchShifts.date, startDate),
+        lte(dispatchShifts.date, endDate),
+      )
+    );
   }
 
   async getDispatchShift(id: number): Promise<DispatchShift | undefined> {
