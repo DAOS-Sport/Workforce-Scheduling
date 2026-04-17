@@ -1859,8 +1859,10 @@ export async function registerRoutes(
           // 任一方是真正全天班（00:00-24:00）→ 視為有重疊
           overlaps = true;
         } else {
+          // 使用包含邊界（<=, >=）：相鄰班次頭尾相接時（如 14:00-14:00）視為有重疊
+          // 確保早晚班交接時段的人員能互相看到對方
           overlaps = myEffectiveShifts.some(my =>
-            cwStart < my.endTime.slice(0, 5) && cwEnd > my.startTime.slice(0, 5)
+            cwStart <= my.endTime.slice(0, 5) && cwEnd >= my.startTime.slice(0, 5)
           );
         }
 
@@ -1887,7 +1889,7 @@ export async function registerRoutes(
           overlaps = true;
         } else {
           overlaps = myEffectiveShifts.some(my =>
-            cwStart < my.endTime.slice(0, 5) && cwEnd > my.startTime.slice(0, 5)
+            cwStart <= my.endTime.slice(0, 5) && cwEnd >= my.startTime.slice(0, 5)
           );
         }
 
