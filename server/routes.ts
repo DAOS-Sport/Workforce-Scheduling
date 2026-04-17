@@ -1741,23 +1741,39 @@ export async function registerRoutes(
         資訊班: "資訊", 在校實習: "無職",
       };
 
+      // ── 輔助函式（必須先定義，後續所有邏輯都依賴）
+      // 休假標記：start = end = "00:00" 代表當天休假，不是實際工作班次
+      const isDayOff = (start: string, end: string) =>
+        start.slice(0, 5) === "00:00" && end.slice(0, 5) === "00:00";
+      // 全天班：僅 00:00-24:00 視為整天在場
+      const isAllDay = (start: string, end: string) =>
+        start.slice(0, 5) === "00:00" && end.slice(0, 5) === "24:00";
+
       const emp = await storage.getEmployee(employeeId);
       if (!emp) return res.json([]);
 
-      // ── Bug fix ①：以「今天實際上班場館的所屬區域」決定查哪個區
-      //   先查本人歸屬區域的班次；若無則掃描所有區域（跨區派遣情況）
+      // ── 破例員工（isException=true）即使今天無班次也能看到同區夥伴
+      const isException = !!(emp as any).isException;
+
+      // ── 以「今天實際上班場館的所屬區域」決定查哪個區
+      //   myShifts 只含實際工作班次（排除休假標記 00:00-00:00）
       const empRegionShifts = await storage.getShiftsByRegionAndDateRange(emp.regionId, today, today);
-
-      let myShifts = empRegionShifts.filter(s => s.employeeId === employeeId);
+      let myShifts = empRegionShifts.filter(
+        s => s.employeeId === employeeId && !isDayOff(s.startTime, s.endTime)
+      );
       let regionShifts = empRegionShifts;
-      let resolvedRegionId = emp.regionId; // 追蹤實際解析到的區域
+      let resolvedRegionId = emp.regionId;
 
+      // 若本人本區無實際班次，掃描其他區域（跨區調度情況）
       if (myShifts.length === 0) {
         const allRegions = await storage.getRegions();
         for (const region of allRegions) {
           if (region.id === emp.regionId) continue;
           const otherRegionShifts = await storage.getShiftsByRegionAndDateRange(region.id, today, today);
-          const myShiftsInOtherRegion = otherRegionShifts.filter(s => s.employeeId === employeeId);
+          // 只接受非休假的班次
+          const myShiftsInOtherRegion = otherRegionShifts.filter(
+            s => s.employeeId === employeeId && !isDayOff(s.startTime, s.endTime)
+          );
           if (myShiftsInOtherRegion.length > 0) {
             myShifts = myShiftsInOtherRegion;
             regionShifts = otherRegionShifts;
@@ -1767,36 +1783,36 @@ export async function registerRoutes(
         }
       }
 
-      // ── Bug fix ②：破例員工（isException=true）即使今天無班次也能看到同區夥伴
-      const isException = !!(emp as any).isException;
-
-      // ── 取得今日同一解析區域的派遣班次（與 regionShifts 同區）
+      // ── 取得今日同一解析區域的派遣班次
       let regionDispatchShifts = await storage.getDispatchShifts(resolvedRegionId, today, today);
-      // 本人的派遣班次（本人為 linked_employee_id 的情況，即本人是派遣員工）
-      let myDispatchShifts = regionDispatchShifts.filter(ds => ds.linkedEmployeeId === employeeId);
+      // 本人的派遣班次（linkedEmployeeId = employeeId，且非休假）
+      let myDispatchShifts = regionDispatchShifts.filter(
+        ds => ds.linkedEmployeeId === employeeId && !isDayOff(ds.startTime, ds.endTime)
+      );
 
-      // ── 若無一般班次也無派遣班次，再掃描其他區域找本人的派遣班次（跨區派遣員工）
+      // ── 若仍無任何實際班次，掃描其他區域找本人的跨區派遣班次
       if (myShifts.length === 0 && myDispatchShifts.length === 0) {
         const allDispatchToday = await storage.getDispatchShiftsByLinkedEmployee(employeeId, today, today);
-        if (allDispatchToday.length > 0) {
-          // 找到跨區派遣班次，改用該班次所在的區域
-          const dispatchRegionId = allDispatchToday[0].regionId;
+        // 同樣只接受非休假的派遣班次
+        const realDispatch = allDispatchToday.filter(ds => !isDayOff(ds.startTime, ds.endTime));
+        if (realDispatch.length > 0) {
+          const dispatchRegionId = realDispatch[0].regionId;
           if (dispatchRegionId !== resolvedRegionId) {
             regionDispatchShifts = await storage.getDispatchShifts(dispatchRegionId, today, today);
             regionShifts = await storage.getShiftsByRegionAndDateRange(dispatchRegionId, today, today);
             resolvedRegionId = dispatchRegionId;
           }
-          myDispatchShifts = regionDispatchShifts.filter(ds => ds.linkedEmployeeId === employeeId);
+          myDispatchShifts = regionDispatchShifts.filter(
+            ds => ds.linkedEmployeeId === employeeId && !isDayOff(ds.startTime, ds.endTime)
+          );
         }
       }
 
+      // 今天無實際工作且非破例員工 → 直接回傳空（含純休假班次的情況）
       if (myShifts.length === 0 && myDispatchShifts.length === 0 && !isException) return res.json([]);
       if (regionShifts.length === 0 && regionDispatchShifts.length === 0) return res.json([]);
 
       // ── Task #35：確保派遣員工能看到同場館夥伴（跨區場館情況）
-      // 當派遣班次的場館所屬員工來自不同區域（venue 的員工 region_id ≠ resolvedRegionId），
-      // getShiftsByRegionAndDateRange 只查本區員工，會漏掉同場館其他區的員工。
-      // 修法：改用 getShiftsByVenueAndDate 直接查場館，補充進 regionShifts。
       if (myDispatchShifts.length > 0) {
         const myDispatchVenueIds = [...new Set(
           myDispatchShifts.filter(ds => ds.venueId != null).map(ds => ds.venueId as number)
@@ -1814,37 +1830,21 @@ export async function registerRoutes(
         }
       }
 
-      // ── 輔助函式
-      // 休假標記：start = end = "00:00" 表示當天休假，不是實際工作班次
-      const isDayOff = (start: string, end: string) =>
-        start.slice(0, 5) === "00:00" && end.slice(0, 5) === "00:00";
-
-      // 全天班：僅 00:00-24:00 視為整天在場
-      const isAllDay = (start: string, end: string) =>
-        start.slice(0, 5) === "00:00" && end.slice(0, 5) === "24:00";
-
-      // 本人有效班次（一般 + 派遣），排除休假標記，用來計算時段重疊
+      // ── 本人有效班次（一般 + 派遣，均已排除休假）
       const myEffectiveShifts = [
-        ...myShifts
-          .filter(s => !isDayOff(s.startTime, s.endTime))
-          .map(s => ({ startTime: s.startTime, endTime: s.endTime })),
-        ...myDispatchShifts
-          .filter(ds => !isDayOff(ds.startTime, ds.endTime))
-          .map(ds => ({ startTime: ds.startTime, endTime: ds.endTime })),
+        ...myShifts.map(s => ({ startTime: s.startTime, endTime: s.endTime })),
+        ...myDispatchShifts.map(ds => ({ startTime: ds.startTime, endTime: ds.endTime })),
       ];
 
-      // 如果本人今天只有休假班次（無實際工作），且不是破例員工 → 看不到夥伴
-      const myHasRealShift = myEffectiveShifts.length > 0;
-      if (!myHasRealShift && !isException) return res.json([]);
-
       // 本人若有全天班（00:00-24:00），視為整天在場
-      const myIsAllDay = myHasRealShift && myEffectiveShifts.every(s => isAllDay(s.startTime, s.endTime));
+      const myIsAllDay = myEffectiveShifts.length > 0 &&
+        myEffectiveShifts.every(s => isAllDay(s.startTime, s.endTime));
 
-      // 依場館分組（排除自己，排除休假班次，只保留與本人班次時段有重疊的）
+      // ── 依場館分組（排除自己、排除夥伴休假班次、只留與本人時段重疊的）
       const venueMap = new Map<number, typeof regionShifts>();
       for (const s of regionShifts) {
         if (s.employeeId === employeeId) continue;
-        // 跳過夥伴的休假班次——休假者不應出現在列表中
+        // 夥伴若是休假標記，跳過——休假者不應出現在列表中
         if (isDayOff(s.startTime, s.endTime)) continue;
 
         const cwStart = s.startTime.slice(0, 5);
@@ -1852,11 +1852,11 @@ export async function registerRoutes(
         const cwIsAllDay = isAllDay(s.startTime, s.endTime);
 
         let overlaps: boolean;
-        if (isException && !myHasRealShift) {
-          // 破例員工且無實際班次：看到所有同區有實際班次的夥伴
+        if (isException && myEffectiveShifts.length === 0) {
+          // 破例員工且本人無班次：看到所有同區有實際班次的夥伴
           overlaps = true;
         } else if (myIsAllDay || cwIsAllDay) {
-          // 任一方是真正全天班（00:00-24:00）→ 直接視為有重疊
+          // 任一方是真正全天班（00:00-24:00）→ 視為有重疊
           overlaps = true;
         } else {
           overlaps = myEffectiveShifts.some(my =>
@@ -1869,19 +1869,19 @@ export async function registerRoutes(
         venueMap.get(s.venueId)!.push(s);
       }
 
-      // ── 派遣夥伴分組（排除本人的派遣班次、排除休假，只保留時段重疊的）
+      // ── 派遣夥伴分組（排除自己、排除休假，只保留時段重疊的）
       const dispatchVenueMap = new Map<number, typeof regionDispatchShifts>();
       for (const ds of regionDispatchShifts) {
-        if (ds.linkedEmployeeId === employeeId) continue; // 排除自己
+        if (ds.linkedEmployeeId === employeeId) continue;
         if (!ds.venueId) continue;
-        if (isDayOff(ds.startTime, ds.endTime)) continue; // 排除休假標記
+        if (isDayOff(ds.startTime, ds.endTime)) continue;
 
         const cwStart = ds.startTime.slice(0, 5);
         const cwEnd = ds.endTime.slice(0, 5);
         const cwIsAllDay = isAllDay(ds.startTime, ds.endTime);
 
         let overlaps: boolean;
-        if (isException && !myHasRealShift) {
+        if (isException && myEffectiveShifts.length === 0) {
           overlaps = true;
         } else if (myIsAllDay || cwIsAllDay) {
           overlaps = true;
