@@ -1750,6 +1750,7 @@ export async function registerRoutes(
 
       let myShifts = empRegionShifts.filter(s => s.employeeId === employeeId);
       let regionShifts = empRegionShifts;
+      let resolvedRegionId = emp.regionId; // 追蹤實際解析到的區域
 
       if (myShifts.length === 0) {
         const allRegions = await storage.getRegions();
@@ -1760,6 +1761,7 @@ export async function registerRoutes(
           if (myShiftsInOtherRegion.length > 0) {
             myShifts = myShiftsInOtherRegion;
             regionShifts = otherRegionShifts;
+            resolvedRegionId = region.id;
             break;
           }
         }
@@ -1767,8 +1769,29 @@ export async function registerRoutes(
 
       // ── Bug fix ②：破例員工（isException=true）即使今天無班次也能看到同區夥伴
       const isException = !!(emp as any).isException;
-      if (myShifts.length === 0 && !isException) return res.json([]);
-      if (regionShifts.length === 0) return res.json([]);
+
+      // ── 取得今日同一解析區域的派遣班次（與 regionShifts 同區）
+      let regionDispatchShifts = await storage.getDispatchShifts(resolvedRegionId, today, today);
+      // 本人的派遣班次（本人為 linked_employee_id 的情況，即本人是派遣員工）
+      let myDispatchShifts = regionDispatchShifts.filter(ds => ds.linkedEmployeeId === employeeId);
+
+      // ── 若無一般班次也無派遣班次，再掃描其他區域找本人的派遣班次（跨區派遣員工）
+      if (myShifts.length === 0 && myDispatchShifts.length === 0) {
+        const allDispatchToday = await storage.getDispatchShiftsByLinkedEmployee(employeeId, today, today);
+        if (allDispatchToday.length > 0) {
+          // 找到跨區派遣班次，改用該班次所在的區域
+          const dispatchRegionId = allDispatchToday[0].regionId;
+          if (dispatchRegionId !== resolvedRegionId) {
+            regionDispatchShifts = await storage.getDispatchShifts(dispatchRegionId, today, today);
+            regionShifts = await storage.getShiftsByRegionAndDateRange(dispatchRegionId, today, today);
+            resolvedRegionId = dispatchRegionId;
+          }
+          myDispatchShifts = regionDispatchShifts.filter(ds => ds.linkedEmployeeId === employeeId);
+        }
+      }
+
+      if (myShifts.length === 0 && myDispatchShifts.length === 0 && !isException) return res.json([]);
+      if (regionShifts.length === 0 && regionDispatchShifts.length === 0) return res.json([]);
 
       // ── 判斷是否為「全天班」的輔助函式
       // Bug fix ③：00:00:00-00:00:00 視為全天班（任何時段都有重疊）
@@ -1776,8 +1799,14 @@ export async function registerRoutes(
         (start.slice(0, 5) === "00:00" && end.slice(0, 5) === "00:00") ||
         (start.slice(0, 5) === "00:00" && end.slice(0, 5) === "24:00");
 
+      // 本人有效班次（一般 + 派遣）合併，用來計算時段重疊
+      const myEffectiveShifts = [
+        ...myShifts.map(s => ({ startTime: s.startTime, endTime: s.endTime })),
+        ...myDispatchShifts.map(ds => ({ startTime: ds.startTime, endTime: ds.endTime })),
+      ];
+
       // 本人若是全天班，視為整天在場
-      const myIsAllDay = myShifts.length > 0 && myShifts.every(s => isAllDay(s.startTime, s.endTime));
+      const myIsAllDay = myEffectiveShifts.length > 0 && myEffectiveShifts.every(s => isAllDay(s.startTime, s.endTime));
 
       // 依場館分組（排除自己，只保留與本人班次時段有重疊的）
       const venueMap = new Map<number, typeof regionShifts>();
@@ -1789,14 +1818,14 @@ export async function registerRoutes(
         const cwIsAllDay = isAllDay(s.startTime, s.endTime);
 
         let overlaps: boolean;
-        if (isException && myShifts.length === 0) {
+        if (isException && myEffectiveShifts.length === 0) {
           // 破例員工且無班次：看到所有同區夥伴
           overlaps = true;
         } else if (myIsAllDay || cwIsAllDay) {
           // Bug fix ③：任一方是全天班 → 直接視為有重疊
           overlaps = true;
         } else {
-          overlaps = myShifts.some(my =>
+          overlaps = myEffectiveShifts.some(my =>
             cwStart < my.endTime.slice(0, 5) && cwEnd > my.startTime.slice(0, 5)
           );
         }
@@ -1806,19 +1835,49 @@ export async function registerRoutes(
         venueMap.get(s.venueId)!.push(s);
       }
 
-      if (venueMap.size === 0) return res.json([]);
+      // ── 派遣夥伴分組（排除本人的派遣班次，只保留時段重疊的）
+      const dispatchVenueMap = new Map<number, typeof regionDispatchShifts>();
+      for (const ds of regionDispatchShifts) {
+        if (ds.linkedEmployeeId === employeeId) continue; // 排除自己
+        if (!ds.venueId) continue;
 
-      // 預先載入所有需要的員工資料
+        const cwStart = ds.startTime.slice(0, 5);
+        const cwEnd = ds.endTime.slice(0, 5);
+        const cwIsAllDay = isAllDay(ds.startTime, ds.endTime);
+
+        let overlaps: boolean;
+        if (isException && myEffectiveShifts.length === 0) {
+          overlaps = true;
+        } else if (myIsAllDay || cwIsAllDay) {
+          overlaps = true;
+        } else {
+          overlaps = myEffectiveShifts.some(my =>
+            cwStart < my.endTime.slice(0, 5) && cwEnd > my.startTime.slice(0, 5)
+          );
+        }
+
+        if (!overlaps) continue;
+        if (!dispatchVenueMap.has(ds.venueId)) dispatchVenueMap.set(ds.venueId, []);
+        dispatchVenueMap.get(ds.venueId)!.push(ds);
+      }
+
+      if (venueMap.size === 0 && dispatchVenueMap.size === 0) return res.json([]);
+
+      // ── 預先載入所有需要的員工資料
       const allEmpIds = Array.from(new Set(regionShifts.filter(s => s.employeeId !== employeeId).map(s => s.employeeId)));
       const allEmps = await Promise.all(allEmpIds.map(id => storage.getEmployee(id)));
       const empById = new Map(allEmps.filter(Boolean).map(e => [e!.id, e!]));
 
+      // 合併所有場館 ID（一般 + 派遣）
+      const allVenueIds = new Set([...venueMap.keys(), ...dispatchVenueMap.keys()]);
+
       const result: any[] = [];
-      for (const [venueId, venueShifts] of venueMap) {
+      for (const venueId of allVenueIds) {
         const venue = await storage.getVenue(venueId);
         const slots = await storage.getScheduleSlotsByVenueAndDate(venueId, today);
 
-        const coworkers = venueShifts.map((s) => {
+        const venueShifts = venueMap.get(venueId) ?? [];
+        const regularCoworkers = venueShifts.map((s) => {
           const coworker = empById.get(s.employeeId);
           if (!coworker) return null;
           let shiftRole = empRoleMap[coworker.role] || coworker.role;
@@ -1841,9 +1900,29 @@ export async function registerRoutes(
             role: coworker.role,
             shiftRole,
             shiftTime: displayTime,
+            isDispatch: false,
           };
         }).filter(Boolean);
 
+        // ── 派遣夥伴
+        const dispatchShiftsForVenue = dispatchVenueMap.get(venueId) ?? [];
+        const dispatchCoworkers = dispatchShiftsForVenue.map((ds) => {
+          const cwStart = ds.startTime.slice(0, 5);
+          const cwEnd = ds.endTime.slice(0, 5);
+          const displayTime = isAllDay(ds.startTime, ds.endTime) ? "全天" : `${cwStart}-${cwEnd}`;
+          const shiftRole = empRoleMap[ds.role] || ds.role;
+          return {
+            id: -(ds.id),
+            name: ds.dispatchName,
+            phone: ds.dispatchPhone ?? null,
+            role: ds.role,
+            shiftRole,
+            shiftTime: displayTime,
+            isDispatch: true,
+          };
+        });
+
+        const coworkers = [...regularCoworkers, ...dispatchCoworkers];
         if (coworkers.length === 0) continue;
 
         result.push({

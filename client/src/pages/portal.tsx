@@ -54,7 +54,7 @@ interface AnnouncementItem {
 
 interface CoworkerGroup {
   venue: { id: number; shortName: string } | null;
-  coworkers: { id: number; name: string; phone: string | null; role: string; shiftRole: string; shiftTime: string | null }[];
+  coworkers: { id: number; name: string; phone: string | null; role: string; shiftRole: string; shiftTime: string | null; isDispatch?: boolean }[];
 }
 
 interface AttendanceSummary {
@@ -3088,6 +3088,9 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                     >
                                       <div className="flex items-center gap-2 min-w-0">
                                         <span className="text-sm text-juns-navy truncate">{cw.name}</span>
+                                        {cw.isDispatch && (
+                                          <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-600 shrink-0">派遣</span>
+                                        )}
                                         {cw.shiftTime && (
                                           <span className="text-[10px] text-slate-400 font-mono shrink-0">{cw.shiftTime}</span>
                                         )}
