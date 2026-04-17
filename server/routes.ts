@@ -1793,6 +1793,27 @@ export async function registerRoutes(
       if (myShifts.length === 0 && myDispatchShifts.length === 0 && !isException) return res.json([]);
       if (regionShifts.length === 0 && regionDispatchShifts.length === 0) return res.json([]);
 
+      // ── Task #35：確保派遣員工能看到同場館夥伴（跨區場館情況）
+      // 當派遣班次的場館所屬員工來自不同區域（venue 的員工 region_id ≠ resolvedRegionId），
+      // getShiftsByRegionAndDateRange 只查本區員工，會漏掉同場館其他區的員工。
+      // 修法：改用 getShiftsByVenueAndDate 直接查場館，補充進 regionShifts。
+      if (myDispatchShifts.length > 0) {
+        const myDispatchVenueIds = [...new Set(
+          myDispatchShifts.filter(ds => ds.venueId != null).map(ds => ds.venueId as number)
+        )];
+        if (myDispatchVenueIds.length > 0) {
+          const venueShiftsArrays = await Promise.all(
+            myDispatchVenueIds.map(vId => storage.getShiftsByVenueAndDate(vId, today))
+          );
+          const allVenueShifts = venueShiftsArrays.flat();
+          const existingIds = new Set(regionShifts.map(s => s.id));
+          const newShifts = allVenueShifts.filter(s => !existingIds.has(s.id));
+          if (newShifts.length > 0) {
+            regionShifts = [...regionShifts, ...newShifts];
+          }
+        }
+      }
+
       // ── 判斷是否為「全天班」的輔助函式
       // Bug fix ③：00:00:00-00:00:00 視為全天班（任何時段都有重疊）
       const isAllDay = (start: string, end: string) =>
