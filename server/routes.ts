@@ -1830,26 +1830,13 @@ export async function registerRoutes(
         }
       }
 
-      // ── 本人今日工作的場館 ID（一般班 + 派遣班，均已排除休假）
-      const myVenueIds = new Set<number>([
-        ...myShifts.map(s => s.venueId).filter((v): v is number => v != null),
-        ...myDispatchShifts.filter(ds => ds.venueId != null).map(ds => ds.venueId as number),
-      ]);
-
-      // 破例員工且本人今日無任何班次
-      const isExceptionWithNoShifts = isException && myShifts.length === 0 && myDispatchShifts.length === 0;
-
-      // 三蘆戰區（region ID=1）：全區所有場館互相可見
-      const isSanluRegion = resolvedRegionId === 1;
-
-      // ── 依場館分組：
-      //   三蘆區 → 全區當天有排班（非休假）皆為夥伴
-      //   其他區 → 同場館當天有排班（非休假）才是夥伴
+      // ── 依場館分組：同區域、當天有排班（非休假）皆為夥伴
+      //   邏輯：排班編輯器 → 選區域 → 選日期 → 所有有班人員
+      //   不限場館、不限時段重疊，純粹以「區域 + 日期」決定可見範圍
       const venueMap = new Map<number, typeof regionShifts>();
       for (const s of regionShifts) {
         if (s.employeeId === employeeId) continue;
         if (isDayOff(s.startTime, s.endTime)) continue;
-        if (!isSanluRegion && !isExceptionWithNoShifts && !myVenueIds.has(s.venueId)) continue;
         if (!venueMap.has(s.venueId)) venueMap.set(s.venueId, []);
         venueMap.get(s.venueId)!.push(s);
       }
@@ -1860,7 +1847,6 @@ export async function registerRoutes(
         if (ds.linkedEmployeeId === employeeId) continue;
         if (!ds.venueId) continue;
         if (isDayOff(ds.startTime, ds.endTime)) continue;
-        if (!isSanluRegion && !isExceptionWithNoShifts && !myVenueIds.has(ds.venueId)) continue;
         if (!dispatchVenueMap.has(ds.venueId)) dispatchVenueMap.set(ds.venueId, []);
         dispatchVenueMap.get(ds.venueId)!.push(ds);
       }
