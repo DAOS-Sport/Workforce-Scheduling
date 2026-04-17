@@ -44,6 +44,7 @@ export const employees = pgTable("employees", {
   employmentType: text("employment_type").notNull().default("full_time"),
   isAdmin: boolean("is_admin").default(false),
   department: text("department"),
+  isException: boolean("is_exception").default(false),
 });
 
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true });

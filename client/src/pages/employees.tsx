@@ -13,7 +13,7 @@ import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, UserPlus, Phone, Mail, Edit2, RefreshCw, Download, Trash2, ShieldCheck } from "lucide-react";
+import { Plus, Search, UserPlus, Phone, Mail, Edit2, RefreshCw, Download, Trash2, ShieldCheck, StarOff, Star } from "lucide-react";
 import type { Employee } from "@shared/schema";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -57,6 +57,7 @@ export default function EmployeesPage() {
     role: "救生",
     employmentType: "full_time",
     regionId: 0,
+    isException: false,
   });
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number; skipped: number; deactivated: number; errors: string[]; skipReasons?: Record<string, number>; totalFetched?: number } | null>(null);
 
@@ -138,6 +139,20 @@ export default function EmployeesPage() {
     },
   });
 
+  const toggleException = useMutation({
+    mutationFn: async ({ id, isException }: { id: number; isException: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/employees/${id}`, { isException });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      toast({ title: (data as any).isException ? "已設為破例員工" : "已取消破例員工" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "操作失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
   const ragicSync = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/ragic-sync");
@@ -160,7 +175,7 @@ export default function EmployeesPage() {
   });
 
   const resetForm = () => {
-    setForm({ name: "", employeeCode: "", phone: "", email: "", lineId: "", status: "active", role: "救生", employmentType: "full_time", regionId: regionId });
+    setForm({ name: "", employeeCode: "", phone: "", email: "", lineId: "", status: "active", role: "救生", employmentType: "full_time", regionId: regionId, isException: false });
     setEditingEmployee(null);
   };
 
@@ -181,6 +196,7 @@ export default function EmployeesPage() {
       role: emp.role,
       employmentType: emp.employmentType || "full_time",
       regionId: emp.regionId,
+      isException: !!(emp as any).isException,
     });
     setDialogOpen(true);
   };
@@ -340,6 +356,16 @@ export default function EmployeesPage() {
                           <Button
                             size="icon"
                             variant="ghost"
+                            className={(emp as any).isException ? "text-amber-500 hover:text-amber-600 hover:bg-amber-500/10" : "text-muted-foreground hover:text-foreground"}
+                            onClick={() => toggleException.mutate({ id: emp.id, isException: !(emp as any).isException })}
+                            title={(emp as any).isException ? "取消破例（恢復需有班次才看夥伴）" : "設為破例員工（無班次也能看今日夥伴）"}
+                            data-testid={`button-toggle-exception-${emp.id}`}
+                          >
+                            {(emp as any).isException ? <Star className="h-3.5 w-3.5" /> : <StarOff className="h-3.5 w-3.5" />}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
                             className={emp.isAdmin ? "text-blue-500 hover:text-blue-600 hover:bg-blue-500/10" : "text-muted-foreground hover:text-foreground"}
                             onClick={() => toggleAdmin.mutate({ id: emp.id, isAdmin: !emp.isAdmin })}
                             title={emp.isAdmin ? "取消管理員" : "設為管理員"}
@@ -482,6 +508,19 @@ export default function EmployeesPage() {
                 </Select>
               </div>
             </div>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <input
+              type="checkbox"
+              id="isException"
+              checked={form.isException}
+              onChange={(e) => setForm({ ...form, isException: e.target.checked })}
+              className="w-4 h-4 accent-amber-500"
+              data-testid="checkbox-employee-exception"
+            />
+            <Label htmlFor="isException" className="text-sm cursor-pointer">
+              破例員工（無排班也能查看今日工作夥伴）
+            </Label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} data-testid="button-cancel-employee">

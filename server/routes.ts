@@ -1732,8 +1732,6 @@ export async function registerRoutes(
       const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
       const today = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
 
-      // Map both English and Chinese DB role values to the canonical display string.
-      // 櫃台 / 櫃檯 / 櫃臺 are all treated as the same.
       const empRoleMap: Record<string, string> = {
         lifeguard: "救生", counter: "櫃檯", cleaning: "清潔", manager: "管理",
         救生: "救生", 守望: "守望",
@@ -1746,22 +1744,63 @@ export async function registerRoutes(
       const emp = await storage.getEmployee(employeeId);
       if (!emp) return res.json([]);
 
-      // 取同區域今日所有班次
-      const regionShifts = await storage.getShiftsByRegionAndDateRange(emp.regionId, today, today);
+      // ── Bug fix ①：以「今天實際上班場館的所屬區域」決定查哪個區
+      //   先查本人歸屬區域的班次；若無則掃描所有區域（跨區派遣情況）
+      const empRegionShifts = await storage.getShiftsByRegionAndDateRange(emp.regionId, today, today);
+
+      let myShifts = empRegionShifts.filter(s => s.employeeId === employeeId);
+      let regionShifts = empRegionShifts;
+
+      if (myShifts.length === 0) {
+        const allRegions = await storage.getRegions();
+        for (const region of allRegions) {
+          if (region.id === emp.regionId) continue;
+          const otherRegionShifts = await storage.getShiftsByRegionAndDateRange(region.id, today, today);
+          const myShiftsInOtherRegion = otherRegionShifts.filter(s => s.employeeId === employeeId);
+          if (myShiftsInOtherRegion.length > 0) {
+            myShifts = myShiftsInOtherRegion;
+            regionShifts = otherRegionShifts;
+            break;
+          }
+        }
+      }
+
+      // ── Bug fix ②：破例員工（isException=true）即使今天無班次也能看到同區夥伴
+      const isException = !!(emp as any).isException;
+      if (myShifts.length === 0 && !isException) return res.json([]);
       if (regionShifts.length === 0) return res.json([]);
 
-      // 取出本人班次用於時段重疊過濾
-      const myShifts = regionShifts.filter(s => s.employeeId === employeeId);
+      // ── 判斷是否為「全天班」的輔助函式
+      // Bug fix ③：00:00:00-00:00:00 視為全天班（任何時段都有重疊）
+      const isAllDay = (start: string, end: string) =>
+        (start.slice(0, 5) === "00:00" && end.slice(0, 5) === "00:00") ||
+        (start.slice(0, 5) === "00:00" && end.slice(0, 5) === "24:00");
+
+      // 本人若是全天班，視為整天在場
+      const myIsAllDay = myShifts.length > 0 && myShifts.every(s => isAllDay(s.startTime, s.endTime));
 
       // 依場館分組（排除自己，只保留與本人班次時段有重疊的）
       const venueMap = new Map<number, typeof regionShifts>();
       for (const s of regionShifts) {
         if (s.employeeId === employeeId) continue;
+
         const cwStart = s.startTime.slice(0, 5);
         const cwEnd = s.endTime.slice(0, 5);
-        const overlaps = myShifts.some(my =>
-          cwStart < my.endTime.slice(0, 5) && cwEnd > my.startTime.slice(0, 5)
-        );
+        const cwIsAllDay = isAllDay(s.startTime, s.endTime);
+
+        let overlaps: boolean;
+        if (isException && myShifts.length === 0) {
+          // 破例員工且無班次：看到所有同區夥伴
+          overlaps = true;
+        } else if (myIsAllDay || cwIsAllDay) {
+          // Bug fix ③：任一方是全天班 → 直接視為有重疊
+          overlaps = true;
+        } else {
+          overlaps = myShifts.some(my =>
+            cwStart < my.endTime.slice(0, 5) && cwEnd > my.startTime.slice(0, 5)
+          );
+        }
+
         if (!overlaps) continue;
         if (!venueMap.has(s.venueId)) venueMap.set(s.venueId, []);
         venueMap.get(s.venueId)!.push(s);
@@ -1785,8 +1824,6 @@ export async function registerRoutes(
           let shiftRole = empRoleMap[coworker.role] || coworker.role;
           const cwStart = s.startTime.slice(0, 5);
           const cwEnd = s.endTime.slice(0, 5);
-          // Only let schedule-slot roles override lifeguard-type employees.
-          // Counter / cleaning / manager employees always keep their own role.
           const isLifeguardType = ["lifeguard", "救生", "守望"].includes(coworker.role);
           if (isLifeguardType) {
             const matchedSlot = slots.find((sl) =>
@@ -1796,13 +1833,14 @@ export async function registerRoutes(
             );
             if (matchedSlot) shiftRole = matchedSlot.role;
           }
+          const displayTime = isAllDay(s.startTime, s.endTime) ? "全天" : `${cwStart}-${cwEnd}`;
           return {
             id: coworker.id,
             name: coworker.name,
             phone: coworker.phone,
             role: coworker.role,
             shiftRole,
-            shiftTime: `${cwStart}-${cwEnd}`,
+            shiftTime: displayTime,
           };
         }).filter(Boolean);
 
