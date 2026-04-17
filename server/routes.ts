@@ -1830,70 +1830,33 @@ export async function registerRoutes(
         }
       }
 
-      // ── 本人有效班次（一般 + 派遣，均已排除休假）
-      const myEffectiveShifts = [
-        ...myShifts.map(s => ({ startTime: s.startTime, endTime: s.endTime })),
-        ...myDispatchShifts.map(ds => ({ startTime: ds.startTime, endTime: ds.endTime })),
-      ];
+      // ── 本人今日工作的場館 ID（一般班 + 派遣班，均已排除休假）
+      const myVenueIds = new Set<number>([
+        ...myShifts.map(s => s.venueId).filter((v): v is number => v != null),
+        ...myDispatchShifts.filter(ds => ds.venueId != null).map(ds => ds.venueId as number),
+      ]);
 
-      // 本人若有全天班（00:00-24:00），視為整天在場
-      const myIsAllDay = myEffectiveShifts.length > 0 &&
-        myEffectiveShifts.every(s => isAllDay(s.startTime, s.endTime));
+      // 破例員工且本人今日無任何班次
+      const isExceptionWithNoShifts = isException && myShifts.length === 0 && myDispatchShifts.length === 0;
 
-      // ── 依場館分組（排除自己、排除夥伴休假班次、只留與本人時段重疊的）
+      // ── 依場館分組：同場館當天有排班（非休假）即為夥伴，不限時段重疊
       const venueMap = new Map<number, typeof regionShifts>();
       for (const s of regionShifts) {
         if (s.employeeId === employeeId) continue;
-        // 夥伴若是休假標記，跳過——休假者不應出現在列表中
         if (isDayOff(s.startTime, s.endTime)) continue;
-
-        const cwStart = s.startTime.slice(0, 5);
-        const cwEnd = s.endTime.slice(0, 5);
-        const cwIsAllDay = isAllDay(s.startTime, s.endTime);
-
-        let overlaps: boolean;
-        if (isException && myEffectiveShifts.length === 0) {
-          // 破例員工且本人無班次：看到所有同區有實際班次的夥伴
-          overlaps = true;
-        } else if (myIsAllDay || cwIsAllDay) {
-          // 任一方是真正全天班（00:00-24:00）→ 視為有重疊
-          overlaps = true;
-        } else {
-          // 使用包含邊界（<=, >=）：相鄰班次頭尾相接時（如 14:00-14:00）視為有重疊
-          // 確保早晚班交接時段的人員能互相看到對方
-          overlaps = myEffectiveShifts.some(my =>
-            cwStart <= my.endTime.slice(0, 5) && cwEnd >= my.startTime.slice(0, 5)
-          );
-        }
-
-        if (!overlaps) continue;
+        // 破例員工無班時，看整個區域所有有班人員；否則必須同場館
+        if (!isExceptionWithNoShifts && !myVenueIds.has(s.venueId)) continue;
         if (!venueMap.has(s.venueId)) venueMap.set(s.venueId, []);
         venueMap.get(s.venueId)!.push(s);
       }
 
-      // ── 派遣夥伴分組（排除自己、排除休假，只保留時段重疊的）
+      // ── 派遣夥伴分組：同場館當天有排班（非休假）即為夥伴
       const dispatchVenueMap = new Map<number, typeof regionDispatchShifts>();
       for (const ds of regionDispatchShifts) {
         if (ds.linkedEmployeeId === employeeId) continue;
         if (!ds.venueId) continue;
         if (isDayOff(ds.startTime, ds.endTime)) continue;
-
-        const cwStart = ds.startTime.slice(0, 5);
-        const cwEnd = ds.endTime.slice(0, 5);
-        const cwIsAllDay = isAllDay(ds.startTime, ds.endTime);
-
-        let overlaps: boolean;
-        if (isException && myEffectiveShifts.length === 0) {
-          overlaps = true;
-        } else if (myIsAllDay || cwIsAllDay) {
-          overlaps = true;
-        } else {
-          overlaps = myEffectiveShifts.some(my =>
-            cwStart <= my.endTime.slice(0, 5) && cwEnd >= my.startTime.slice(0, 5)
-          );
-        }
-
-        if (!overlaps) continue;
+        if (!isExceptionWithNoShifts && !myVenueIds.has(ds.venueId)) continue;
         if (!dispatchVenueMap.has(ds.venueId)) dispatchVenueMap.set(ds.venueId, []);
         dispatchVenueMap.get(ds.venueId)!.push(ds);
       }
