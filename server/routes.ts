@@ -1780,9 +1780,153 @@ export async function registerRoutes(
     }
   });
 
-  // Task #51: privacy-respecting workmates endpoint.
-  // Rules: same date (Asia/Taipei), same venue(s), same shift band (early/late), excludes self,
-  // excludes day-off markers, only status='active' shifts, time window today..today+7.
+  // Task #51: privacy-respecting workmates service.
+  // Rules: same date (Asia/Taipei), same venue, same shift band (early/late) AND
+  // overlapping intervals (cross-day handled), excludes self, excludes day-off markers,
+  // only status='active' shifts.
+  // Used by both new /api/portal/workmates and legacy /api/portal/today-coworkers.
+  async function computeWorkmates(employeeId: number, date: string) {
+    const isDayOff = (s: string, e: string) => s.slice(0, 5) === "00:00" && e.slice(0, 5) === "00:00";
+    const isAllDay = (s: string, e: string) => s.slice(0, 5) === "00:00" && e.slice(0, 5) === "24:00";
+    const shiftBand = (start: string): "early" | "late" => start.slice(0, 5) < "12:00" ? "early" : "late";
+    // Convert (date, startTime, endTime) into [startAt, endAt] millisecond timestamps.
+    // If endTime <= startTime → endAt rolls to date+1 (cross-day shift, e.g. 22:00-06:00).
+    // 24:00 endTime is treated as next day 00:00.
+    const toInterval = (d: string, st: string, et: string): [number, number] => {
+      const startStr = st.slice(0, 5);
+      const endStr = et.slice(0, 5);
+      const startAt = new Date(`${d}T${startStr}:00+08:00`).getTime();
+      let endAt: number;
+      if (endStr === "24:00" || endStr <= startStr) {
+        const next = new Date(d + "T00:00:00+08:00");
+        next.setUTCDate(next.getUTCDate() + 1);
+        const nd = next.toISOString().slice(0, 10);
+        endAt = new Date(`${nd}T${endStr === "24:00" ? "00:00" : endStr}:00+08:00`).getTime();
+      } else {
+        endAt = new Date(`${d}T${endStr}:00+08:00`).getTime();
+      }
+      return [startAt, endAt];
+    };
+    const overlaps = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[0] < a[1];
+
+    const baseEmpty = { date, timezone: "Asia/Taipei", myShift: null as any, coworkers: [] as any[], message: "當日無排班" };
+
+    const emp = await storage.getEmployee(employeeId);
+    if (!emp) return baseEmpty;
+
+    // Locate my real shift on `date` (regular preferred, otherwise dispatch).
+    const myRegularAll = await storage.getShiftsByEmployeeAndDateRange(employeeId, date, date);
+    const myRegular = myRegularAll.filter(s => !isDayOff(s.startTime, s.endTime));
+    const myDispatchAll = await storage.getDispatchShiftsByLinkedEmployee(employeeId, date, date);
+    const myDispatch = myDispatchAll.filter(ds => !isDayOff(ds.startTime, ds.endTime));
+
+    if (myRegular.length === 0 && myDispatch.length === 0) return baseEmpty;
+
+    // Spec: derive venue scope from the SELECTED myShift only — do not widen
+    // to all of the employee's same-day shifts.
+    let myShift: any;
+    let myVenueId: number | null;
+    let myInterval: [number, number];
+    if (myRegular.length > 0) {
+      const s = myRegular[0];
+      const venue = await storage.getVenue(s.venueId);
+      myVenueId = s.venueId;
+      myInterval = toInterval(date, s.startTime, s.endTime);
+      myShift = {
+        id: s.id,
+        venueId: s.venueId,
+        venueName: venue?.shortName ?? null,
+        role: s.role,
+        startTime: s.startTime.slice(0, 5),
+        endTime: s.endTime.slice(0, 5),
+        shiftBand: shiftBand(s.startTime),
+        isDispatch: false,
+      };
+    } else {
+      const ds = myDispatch[0];
+      const venue = ds.venueId ? await storage.getVenue(ds.venueId) : null;
+      myVenueId = ds.venueId;
+      myInterval = toInterval(date, ds.startTime, ds.endTime);
+      myShift = {
+        id: -ds.id,
+        venueId: ds.venueId,
+        venueName: venue?.shortName ?? null,
+        role: ds.role,
+        startTime: ds.startTime.slice(0, 5),
+        endTime: ds.endTime.slice(0, 5),
+        shiftBand: shiftBand(ds.startTime),
+        isDispatch: true,
+      };
+    }
+    const myBand = myShift.shiftBand;
+
+    if (!myVenueId) return { ...baseEmpty, myShift, message: "無法判定場館" };
+
+    // Pull shifts at MY venue only.
+    const venueShifts = await storage.getShiftsByVenueAndDate(myVenueId, date);
+    const myVenue = await storage.getVenue(myVenueId);
+    // Pull dispatch shifts via my venue's region, filtered to my venue.
+    const venueRegionId = myVenue?.regionId;
+    const allDispatchAtRegion = venueRegionId
+      ? await storage.getDispatchShifts(venueRegionId, date, date)
+      : [];
+    const dispatchAtMyVenue = allDispatchAtRegion.filter(ds => ds.venueId === myVenueId);
+
+    // Pre-load coworker employee records.
+    const coworkerEmpIds = Array.from(new Set(
+      venueShifts
+        .filter(s => s.employeeId !== employeeId && !isDayOff(s.startTime, s.endTime) && shiftBand(s.startTime) === myBand)
+        .map(s => s.employeeId)
+    ));
+    const coworkerEmps = await Promise.all(coworkerEmpIds.map(id => storage.getEmployee(id)));
+    const empById = new Map(coworkerEmps.filter(Boolean).map(e => [e!.id, e!]));
+
+    const coworkers: any[] = [];
+    for (const s of venueShifts) {
+      if (s.employeeId === employeeId) continue;
+      if (isDayOff(s.startTime, s.endTime)) continue;
+      if (shiftBand(s.startTime) !== myBand) continue;
+      // Cross-day-safe overlap check (also satisfies spec step 6).
+      if (!overlaps(toInterval(date, s.startTime, s.endTime), myInterval)) continue;
+      const co = empById.get(s.employeeId);
+      if (!co) continue;
+      const cwStart = s.startTime.slice(0, 5);
+      const cwEnd = s.endTime.slice(0, 5);
+      coworkers.push({
+        employeeId: co.id,
+        name: co.name,
+        phone: co.phone,
+        role: s.role,
+        startTime: cwStart,
+        endTime: cwEnd,
+        shiftTime: isAllDay(s.startTime, s.endTime) ? "全天" : `${cwStart}-${cwEnd}`,
+        venueName: myVenue?.shortName ?? null,
+        isDispatch: false,
+      });
+    }
+    for (const ds of dispatchAtMyVenue) {
+      if (ds.linkedEmployeeId === employeeId) continue;
+      if (isDayOff(ds.startTime, ds.endTime)) continue;
+      if (shiftBand(ds.startTime) !== myBand) continue;
+      if (!overlaps(toInterval(date, ds.startTime, ds.endTime), myInterval)) continue;
+      const cwStart = ds.startTime.slice(0, 5);
+      const cwEnd = ds.endTime.slice(0, 5);
+      coworkers.push({
+        employeeId: -ds.id,
+        name: ds.dispatchName,
+        phone: ds.dispatchPhone ?? null,
+        role: ds.role,
+        startTime: cwStart,
+        endTime: cwEnd,
+        shiftTime: isAllDay(ds.startTime, ds.endTime) ? "全天" : `${cwStart}-${cwEnd}`,
+        venueName: myVenue?.shortName ?? null,
+        isDispatch: true,
+      });
+    }
+
+    return { date, timezone: "Asia/Taipei", myShift, coworkers };
+  }
+
   app.get("/api/portal/workmates", async (req, res) => {
     try {
       const employeeId = parseInt(String(req.query.employeeId || ""));
@@ -1802,136 +1946,23 @@ export async function registerRoutes(
       const emp = await storage.getEmployee(employeeId);
       if (!emp) return res.status(404).json({ message: "員工不存在" });
 
-      const isDayOff = (s: string, e: string) => s.slice(0, 5) === "00:00" && e.slice(0, 5) === "00:00";
-      const shiftBand = (start: string): "early" | "late" => start.slice(0, 5) < "12:00" ? "early" : "late";
-
-      const baseEmpty = { date, timezone: "Asia/Taipei", myShift: null, coworkers: [] as any[], message: "當日無排班" };
-
-      // Locate my real shift on `date` (regular preferred, then dispatch).
-      const myRegularAll = await storage.getShiftsByEmployeeAndDateRange(employeeId, date, date);
-      const myRegular = myRegularAll.filter(s => !isDayOff(s.startTime, s.endTime));
-      const myDispatchAll = await storage.getDispatchShiftsByLinkedEmployee(employeeId, date, date);
-      const myDispatch = myDispatchAll.filter(ds => !isDayOff(ds.startTime, ds.endTime));
-
-      if (myRegular.length === 0 && myDispatch.length === 0) {
-        return res.json(baseEmpty);
-      }
-
-      const myVenueIds = new Set<number>();
-      let myShiftDescriptor: any = null;
-      if (myRegular.length > 0) {
-        const s = myRegular[0];
-        myVenueIds.add(s.venueId);
-        for (const r of myRegular) myVenueIds.add(r.venueId);
-        const venue = await storage.getVenue(s.venueId);
-        myShiftDescriptor = {
-          id: s.id,
-          venueId: s.venueId,
-          venueName: venue?.shortName ?? null,
-          role: s.role,
-          startTime: s.startTime.slice(0, 5),
-          endTime: s.endTime.slice(0, 5),
-          shiftBand: shiftBand(s.startTime),
-          isDispatch: false,
-        };
-      } else {
-        const ds = myDispatch[0];
-        if (ds.venueId) myVenueIds.add(ds.venueId);
-        for (const d of myDispatch) if (d.venueId) myVenueIds.add(d.venueId);
-        const venue = ds.venueId ? await storage.getVenue(ds.venueId) : null;
-        myShiftDescriptor = {
-          id: -ds.id,
-          venueId: ds.venueId,
-          venueName: venue?.shortName ?? null,
-          role: ds.role,
-          startTime: ds.startTime.slice(0, 5),
-          endTime: ds.endTime.slice(0, 5),
-          shiftBand: shiftBand(ds.startTime),
-          isDispatch: true,
-        };
-      }
-      const myBand = myShiftDescriptor.shiftBand;
-
-      if (myVenueIds.size === 0) {
-        return res.json({ ...baseEmpty, myShift: myShiftDescriptor, message: "無法判定場館" });
-      }
-
-      // Pull all shifts at my venue(s) for that date.
-      const venueIdArr = Array.from(myVenueIds);
-      const venueShiftsArrays = await Promise.all(venueIdArr.map(vId => storage.getShiftsByVenueAndDate(vId, date)));
-      const allRegularShifts = venueShiftsArrays.flat();
-
-      // Pull dispatch shifts via region(s) of those venues, then filter to my venue(s).
-      const venueRegionIds = new Set<number>();
-      for (const vId of venueIdArr) {
-        const v = await storage.getVenue(vId);
-        if (v?.regionId) venueRegionIds.add(v.regionId);
-      }
-      const regionDispatchArrays = await Promise.all(Array.from(venueRegionIds).map(rId => storage.getDispatchShifts(rId, date, date)));
-      const allDispatchShifts = regionDispatchArrays.flat().filter(ds => ds.venueId && myVenueIds.has(ds.venueId));
-
-      // Pre-load coworker employee records.
-      const coworkerEmpIds = Array.from(new Set(
-        allRegularShifts
-          .filter(s => s.employeeId !== employeeId && !isDayOff(s.startTime, s.endTime) && shiftBand(s.startTime) === myBand)
-          .map(s => s.employeeId)
-      ));
-      const coworkerEmps = await Promise.all(coworkerEmpIds.map(id => storage.getEmployee(id)));
-      const empById = new Map(coworkerEmps.filter(Boolean).map(e => [e!.id, e!]));
-
-      const venueCache = new Map<number, any>();
-      for (const vId of venueIdArr) {
-        const v = await storage.getVenue(vId);
-        if (v) venueCache.set(vId, v);
-      }
-
-      const coworkers: any[] = [];
-      for (const s of allRegularShifts) {
-        if (s.employeeId === employeeId) continue;
-        if (isDayOff(s.startTime, s.endTime)) continue;
-        if (shiftBand(s.startTime) !== myBand) continue;
-        const co = empById.get(s.employeeId);
-        if (!co) continue;
-        const venue = venueCache.get(s.venueId);
-        coworkers.push({
-          employeeId: co.id,
-          name: co.name,
-          phone: co.phone,
-          role: s.role,
-          startTime: s.startTime.slice(0, 5),
-          endTime: s.endTime.slice(0, 5),
-          venueName: venue?.shortName ?? null,
-          isDispatch: false,
-        });
-      }
-      for (const ds of allDispatchShifts) {
-        if (ds.linkedEmployeeId === employeeId) continue;
-        if (isDayOff(ds.startTime, ds.endTime)) continue;
-        if (shiftBand(ds.startTime) !== myBand) continue;
-        const venue = ds.venueId ? venueCache.get(ds.venueId) : null;
-        coworkers.push({
-          employeeId: -ds.id,
-          name: ds.dispatchName,
-          phone: ds.dispatchPhone ?? null,
-          role: ds.role,
-          startTime: ds.startTime.slice(0, 5),
-          endTime: ds.endTime.slice(0, 5),
-          venueName: venue?.shortName ?? null,
-          isDispatch: true,
-        });
-      }
-
-      res.json({ date, timezone: "Asia/Taipei", myShift: myShiftDescriptor, coworkers });
+      const result = await computeWorkmates(employeeId, date);
+      return res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
   });
 
+  // Legacy endpoint: now routed through computeWorkmates so it follows the new
+  // privacy rules (same venue + same band + cross-day overlap). Response shape
+  // preserved for backward compatibility with existing portal UI.
+  // Deprecation header points clients to /api/portal/workmates (Task #57 will remove).
   app.get("/api/portal/today-coworkers/:employeeId", async (req, res) => {
     res.setHeader("Deprecation", "true");
     res.setHeader("Link", '</api/portal/workmates>; rel="successor-version"');
     try {
       const employeeId = parseInt(req.params.employeeId);
+      if (!employeeId) return res.json([]);
       const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
       const today = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
 
@@ -1944,187 +1975,27 @@ export async function registerRoutes(
         資訊班: "資訊", 在校實習: "無職",
       };
 
-      // ── 輔助函式（必須先定義，後續所有邏輯都依賴）
-      // 休假標記：start = end = "00:00" 代表當天休假，不是實際工作班次
-      const isDayOff = (start: string, end: string) =>
-        start.slice(0, 5) === "00:00" && end.slice(0, 5) === "00:00";
-      // 全天班：僅 00:00-24:00 視為整天在場
-      const isAllDay = (start: string, end: string) =>
-        start.slice(0, 5) === "00:00" && end.slice(0, 5) === "24:00";
+      const result = await computeWorkmates(employeeId, today);
+      if (!result.myShift || result.coworkers.length === 0) return res.json([]);
 
-      const emp = await storage.getEmployee(employeeId);
-      if (!emp) return res.json([]);
-
-      // ── 破例員工（isException=true）即使今天無班次也能看到同區夥伴
-      const isException = !!(emp as any).isException;
-
-      // ── 以「今天實際上班場館的所屬區域」決定查哪個區
-      //   myShifts 只含實際工作班次（排除休假標記 00:00-00:00）
-      const empRegionShifts = await storage.getShiftsByRegionAndDateRange(emp.regionId, today, today);
-      let myShifts = empRegionShifts.filter(
-        s => s.employeeId === employeeId && !isDayOff(s.startTime, s.endTime)
-      );
-      let regionShifts = empRegionShifts;
-      let resolvedRegionId = emp.regionId;
-
-      // 若本人本區無實際班次，掃描其他區域（跨區調度情況）
-      if (myShifts.length === 0) {
-        const allRegions = await storage.getRegions();
-        for (const region of allRegions) {
-          if (region.id === emp.regionId) continue;
-          const otherRegionShifts = await storage.getShiftsByRegionAndDateRange(region.id, today, today);
-          // 只接受非休假的班次
-          const myShiftsInOtherRegion = otherRegionShifts.filter(
-            s => s.employeeId === employeeId && !isDayOff(s.startTime, s.endTime)
-          );
-          if (myShiftsInOtherRegion.length > 0) {
-            myShifts = myShiftsInOtherRegion;
-            regionShifts = otherRegionShifts;
-            resolvedRegionId = region.id;
-            break;
-          }
-        }
-      }
-
-      // ── 取得今日同一解析區域的派遣班次
-      let regionDispatchShifts = await storage.getDispatchShifts(resolvedRegionId, today, today);
-      // 本人的派遣班次（linkedEmployeeId = employeeId，且非休假）
-      let myDispatchShifts = regionDispatchShifts.filter(
-        ds => ds.linkedEmployeeId === employeeId && !isDayOff(ds.startTime, ds.endTime)
-      );
-
-      // ── 若仍無任何實際班次，掃描其他區域找本人的跨區派遣班次
-      if (myShifts.length === 0 && myDispatchShifts.length === 0) {
-        const allDispatchToday = await storage.getDispatchShiftsByLinkedEmployee(employeeId, today, today);
-        // 同樣只接受非休假的派遣班次
-        const realDispatch = allDispatchToday.filter(ds => !isDayOff(ds.startTime, ds.endTime));
-        if (realDispatch.length > 0) {
-          const dispatchRegionId = realDispatch[0].regionId;
-          if (dispatchRegionId !== resolvedRegionId) {
-            regionDispatchShifts = await storage.getDispatchShifts(dispatchRegionId, today, today);
-            regionShifts = await storage.getShiftsByRegionAndDateRange(dispatchRegionId, today, today);
-            resolvedRegionId = dispatchRegionId;
-          }
-          myDispatchShifts = regionDispatchShifts.filter(
-            ds => ds.linkedEmployeeId === employeeId && !isDayOff(ds.startTime, ds.endTime)
-          );
-        }
-      }
-
-      // 今天無實際工作且非破例員工 → 直接回傳空（含純休假班次的情況）
-      if (myShifts.length === 0 && myDispatchShifts.length === 0 && !isException) return res.json([]);
-      if (regionShifts.length === 0 && regionDispatchShifts.length === 0) return res.json([]);
-
-      // ── Task #35：確保派遣員工能看到同場館夥伴（跨區場館情況）
-      if (myDispatchShifts.length > 0) {
-        const myDispatchVenueIds = [...new Set(
-          myDispatchShifts.filter(ds => ds.venueId != null).map(ds => ds.venueId as number)
-        )];
-        if (myDispatchVenueIds.length > 0) {
-          const venueShiftsArrays = await Promise.all(
-            myDispatchVenueIds.map(vId => storage.getShiftsByVenueAndDate(vId, today))
-          );
-          const allVenueShifts = venueShiftsArrays.flat();
-          const existingIds = new Set(regionShifts.map(s => s.id));
-          const newShifts = allVenueShifts.filter(s => !existingIds.has(s.id));
-          if (newShifts.length > 0) {
-            regionShifts = [...regionShifts, ...newShifts];
-          }
-        }
-      }
-
-      // ── 依場館分組：同區域、當天有排班（非休假）皆為夥伴
-      //   邏輯：排班編輯器 → 選區域 → 選日期 → 所有有班人員
-      //   不限場館、不限時段重疊，純粹以「區域 + 日期」決定可見範圍
-      const venueMap = new Map<number, typeof regionShifts>();
-      for (const s of regionShifts) {
-        if (s.employeeId === employeeId) continue;
-        if (isDayOff(s.startTime, s.endTime)) continue;
-        if (!venueMap.has(s.venueId)) venueMap.set(s.venueId, []);
-        venueMap.get(s.venueId)!.push(s);
-      }
-
-      // ── 派遣夥伴分組（同上邏輯）
-      const dispatchVenueMap = new Map<number, typeof regionDispatchShifts>();
-      for (const ds of regionDispatchShifts) {
-        if (ds.linkedEmployeeId === employeeId) continue;
-        if (!ds.venueId) continue;
-        if (isDayOff(ds.startTime, ds.endTime)) continue;
-        if (!dispatchVenueMap.has(ds.venueId)) dispatchVenueMap.set(ds.venueId, []);
-        dispatchVenueMap.get(ds.venueId)!.push(ds);
-      }
-
-      if (venueMap.size === 0 && dispatchVenueMap.size === 0) return res.json([]);
-
-      // ── 預先載入所有需要的員工資料
-      const allEmpIds = Array.from(new Set(regionShifts.filter(s => s.employeeId !== employeeId).map(s => s.employeeId)));
-      const allEmps = await Promise.all(allEmpIds.map(id => storage.getEmployee(id)));
-      const empById = new Map(allEmps.filter(Boolean).map(e => [e!.id, e!]));
-
-      // 合併所有場館 ID（一般 + 派遣）
-      const allVenueIds = new Set([...venueMap.keys(), ...dispatchVenueMap.keys()]);
-
-      const result: any[] = [];
-      for (const venueId of allVenueIds) {
-        const venue = await storage.getVenue(venueId);
-        const slots = await storage.getScheduleSlotsByVenueAndDate(venueId, today);
-
-        const venueShifts = venueMap.get(venueId) ?? [];
-        const regularCoworkers = venueShifts.map((s) => {
-          const coworker = empById.get(s.employeeId);
-          if (!coworker) return null;
-          let shiftRole = empRoleMap[coworker.role] || coworker.role;
-          const cwStart = s.startTime.slice(0, 5);
-          const cwEnd = s.endTime.slice(0, 5);
-          const isLifeguardType = ["lifeguard", "救生", "守望"].includes(coworker.role);
-          if (isLifeguardType) {
-            const matchedSlot = slots.find((sl) =>
-              sl.startTime.slice(0, 5) <= cwStart && sl.endTime.slice(0, 5) >= cwEnd
-            ) || slots.find((sl) =>
-              sl.startTime.slice(0, 5) <= cwStart && cwStart < sl.endTime.slice(0, 5)
-            );
-            if (matchedSlot) shiftRole = matchedSlot.role;
-          }
-          const displayTime = isAllDay(s.startTime, s.endTime) ? "全天" : `${cwStart}-${cwEnd}`;
-          return {
-            id: coworker.id,
-            name: coworker.name,
-            phone: coworker.phone,
-            role: coworker.role,
-            shiftRole,
-            shiftTime: displayTime,
-            isDispatch: false,
-          };
-        }).filter(Boolean);
-
-        // ── 派遣夥伴
-        const dispatchShiftsForVenue = dispatchVenueMap.get(venueId) ?? [];
-        const dispatchCoworkers = dispatchShiftsForVenue.map((ds) => {
-          const cwStart = ds.startTime.slice(0, 5);
-          const cwEnd = ds.endTime.slice(0, 5);
-          const displayTime = isAllDay(ds.startTime, ds.endTime) ? "全天" : `${cwStart}-${cwEnd}`;
-          const shiftRole = empRoleMap[ds.role] || ds.role;
-          return {
-            id: -(ds.id),
-            name: ds.dispatchName,
-            phone: ds.dispatchPhone ?? null,
-            role: ds.role,
-            shiftRole,
-            shiftTime: displayTime,
-            isDispatch: true,
-          };
-        });
-
-        const coworkers = [...regularCoworkers, ...dispatchCoworkers];
-        if (coworkers.length === 0) continue;
-
-        result.push({
-          venue: venue ? { id: venue.id, shortName: venue.shortName } : null,
-          coworkers,
-        });
-      }
-
-      res.json(result);
+      // Re-shape to legacy: [{ venue: { id, shortName }, coworkers: [...] }]
+      // The new logic only returns one venue (= myShift.venueId), so produce one group.
+      const venue = result.myShift.venueId
+        ? await storage.getVenue(result.myShift.venueId)
+        : null;
+      const coworkers = result.coworkers.map((c: any) => ({
+        id: c.employeeId,
+        name: c.name,
+        phone: c.phone,
+        role: c.role,
+        shiftRole: empRoleMap[c.role] || c.role,
+        shiftTime: c.shiftTime,
+        isDispatch: c.isDispatch,
+      }));
+      res.json([{
+        venue: venue ? { id: venue.id, shortName: venue.shortName } : null,
+        coworkers,
+      }]);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
