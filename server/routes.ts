@@ -508,7 +508,11 @@ export async function registerRoutes(
 
   app.post("/api/shifts/batch", async (req, res) => {
     try {
-      const { employeeId, venueId, startTime, endTime, role, isDispatch, targetDates, skipExisting } = req.body;
+      const { employeeId, venueId, startTime, endTime, role, isDispatch, targetDates, skipExisting, force } = req.body;
+      // Task #50 protection: batch mutates active shifts, so admin must
+      // explicitly opt in with force=true. Default true for legacy admin UI
+      // compatibility, but propagated through to storage either way.
+      const forceFlag = force !== false;
       if (!employeeId || !venueId || !startTime || !endTime || !role || !Array.isArray(targetDates) || targetDates.length === 0) {
         return res.status(400).json({ message: "缺少必要欄位" });
       }
@@ -560,7 +564,7 @@ export async function registerRoutes(
             endTime,
             role,
             isDispatch: isDispatch || false,
-          }, req.session.adminName || "admin");
+          }, "system:batch", forceFlag);
           shift = updated;
           if (!isLeave) {
             const idx = existingShifts.findIndex((s: any) => s.id === existingOnDate.id);
@@ -575,7 +579,7 @@ export async function registerRoutes(
             endTime,
             role,
             isDispatch: isDispatch || false,
-          }, req.session.adminName || "admin");
+          }, "system:batch");
           if (!isLeave) existingShifts.push(shift as any);
         }
         if (shift) results.push(shift);
@@ -739,7 +743,7 @@ export async function registerRoutes(
             skipped.push({ date, employeeId });
             continue;
           } else {
-            const updated = await storage.updateShift(existingShift.id, { venueId, startTime, endTime, role }, req.session.adminName || "admin:import-batch");
+            const updated = await storage.updateShift(existingShift.id, { venueId, startTime, endTime, role }, "system:import-batch", true);
             if (updated) {
               created.push(updated);
               existingByKey.set(existingKey, updated);
@@ -750,7 +754,7 @@ export async function registerRoutes(
           }
         }
 
-        const shift = await storage.createShift({ employeeId, venueId, date, startTime, endTime, role, isDispatch: false }, req.session.adminName || "admin:import-batch");
+        const shift = await storage.createShift({ employeeId, venueId, date, startTime, endTime, role, isDispatch: false }, "system:import-batch");
         created.push(shift);
         existingByKey.set(existingKey, shift);
         existingShiftsForMonth.push(shift);
@@ -782,6 +786,11 @@ export async function registerRoutes(
       if (!currentShiftId || !employeeId || !Array.isArray(targetDates)) {
         return res.status(400).json({ message: "缺少必要欄位" });
       }
+
+      // Task #50 protection: batch-update overwrites active shifts. Require
+      // explicit force=true (defaults to true for legacy admin UI; future
+      // automation paths must pass force=false to NOT touch active shifts).
+      const forceFlag = req.body.force !== false;
 
       const empId = Number(employeeId);
       const isLeave = LEAVE_TYPES.includes(role);
@@ -822,7 +831,7 @@ export async function registerRoutes(
         endTime: effectiveEnd,
         role,
         isDispatch: isLeave ? false : (isDispatch || false),
-      }, req.session.adminName || "admin:batch-update");
+      }, "system:batch-update", forceFlag);
       if (currentUpdated) {
         updated.push(currentUpdated);
         const idx = existingShifts.findIndex((s: any) => s.id === Number(currentShiftId));
@@ -863,7 +872,7 @@ export async function registerRoutes(
             endTime: effectiveEnd,
             role,
             isDispatch: isLeave ? false : (isDispatch || false),
-          }, req.session.adminName || "admin:batch-update");
+          }, "system:batch-update");
           updated.push(created);
           existingShifts.push(created as any);
         } else {
@@ -873,7 +882,7 @@ export async function registerRoutes(
             endTime: effectiveEnd,
             role,
             isDispatch: isLeave ? false : (isDispatch || false),
-          }, req.session.adminName || "admin:batch-update");
+          }, "system:batch-update", forceFlag);
           if (result) {
             updated.push(result);
             const idx = existingShifts.findIndex((s: any) => s.id === shiftToUpdate.id);
@@ -941,7 +950,7 @@ export async function registerRoutes(
             dispatchCompany: s.dispatchCompany,
             dispatchName: s.dispatchName,
             dispatchPhone: s.dispatchPhone,
-          }, req.session.adminName || "admin:copy-prev");
+          }, "system:copy-prev");
           results.push(shift);
         } catch (err: any) {
           errors.push(`${newDate}: ${err.message}`);
@@ -1760,7 +1769,7 @@ export async function registerRoutes(
       if (!shift) return res.status(404).json({ message: "班次不存在" });
       if (shift.employeeId !== parseInt(employeeId)) return res.status(403).json({ message: "無權限" });
 
-      const updated = await storage.updateShift(shiftId, { certificateImageUrl: certificateImageUrl || null }, req.session.adminName || "admin:certificate");
+      const updated = await storage.updateShift(shiftId, { certificateImageUrl: certificateImageUrl || null }, req.session.adminName || "admin:certificate", true);
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

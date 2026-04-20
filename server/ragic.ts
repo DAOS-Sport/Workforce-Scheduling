@@ -1,5 +1,11 @@
 import { storage } from "./storage";
 
+// Task #50 NOTE: This module currently only syncs employees + venues.
+// If shift sync is ever added here, all writes MUST:
+//   1. Pass actor='system:ragic-sync' to storage.create/update/deleteShift
+//   2. Pass force=false (or omit) so active shifts are never silently overwritten
+// The storage guard will throw on (non-admin actor + active shift + !force).
+
 const RAGIC_API_URL = "https://ap7.ragic.com/xinsheng/ragicforms4/20004";
 const PAGE_SIZE = 1000;
 const MAX_RETRIES = 3;
