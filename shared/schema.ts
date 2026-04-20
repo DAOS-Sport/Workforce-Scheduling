@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, date, time, serial, timestamp, real, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, date, time, serial, timestamp, real, unique, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -65,11 +65,32 @@ export const shifts = pgTable("shifts", {
   dispatchPhone: text("dispatch_phone"),
   certificateImageUrl: text("certificate_image_url"),
   notes: text("notes"),
+  status: text("status").notNull().default("active"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledBy: text("cancelled_by"),
+  cancelReason: text("cancel_reason"),
 });
 
-export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true });
+export const insertShiftSchema = createInsertSchema(shifts).omit({
+  id: true,
+  status: true,
+  cancelledAt: true,
+  cancelledBy: true,
+  cancelReason: true,
+});
 export type InsertShift = z.infer<typeof insertShiftSchema>;
 export type Shift = typeof shifts.$inferSelect;
+
+export const shiftAuditLog = pgTable("shift_audit_log", {
+  id: serial("id").primaryKey(),
+  shiftId: integer("shift_id").notNull(),
+  action: text("action").notNull(),
+  actor: text("actor").notNull(),
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ShiftAuditLog = typeof shiftAuditLog.$inferSelect;
 
 export const venueRequirements = pgTable("venue_requirements", {
   id: serial("id").primaryKey(),

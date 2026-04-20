@@ -356,7 +356,8 @@ export async function registerRoutes(
         warnings = errors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
       }
 
-      const shift = await storage.createShift(parsed);
+      const actor = req.session.adminName || "admin";
+      const shift = await storage.createShift(parsed, actor);
       res.json({ ...shift, warnings });
     } catch (err: any) {
       if (err.name === "ZodError") {
@@ -403,7 +404,8 @@ export async function registerRoutes(
         warnings = errors.filter((e: ShiftValidationError) => e.type === "rest_11h" || e.type === "four_week_160h");
       }
 
-      const shift = await storage.updateShift(id, partial);
+      const actor = req.session.adminName || "admin";
+      const shift = await storage.updateShift(id, partial, actor);
       res.json({ ...shift, warnings });
     } catch (err: any) {
       if (err.name === "ZodError") {
@@ -415,18 +417,43 @@ export async function registerRoutes(
 
   app.delete("/api/shifts/:id", async (req, res) => {
     const id = parseInt(req.params.id);
-    const deleted = await storage.deleteShift(id);
-    if (!deleted) return res.status(404).json({ message: "Shift not found" });
+    const actor = req.session.adminName || "admin";
+    const reason = typeof req.body?.reason === "string" ? req.body.reason : undefined;
+    const deleted = await storage.deleteShift(id, actor, reason);
+    if (!deleted) return res.status(404).json({ message: "Shift not found or already cancelled" });
     res.json({ success: true });
+  });
+
+  app.post("/api/shifts/:id/restore", async (req, res) => {
+    const id = parseInt(req.params.id);
+    const actor = req.session.adminName || "admin";
+    const restored = await storage.restoreShift(id, actor);
+    if (!restored) return res.status(404).json({ message: "Shift not found or not cancelled" });
+    res.json(restored);
+  });
+
+  app.get("/api/shifts/:id/audit", async (req, res) => {
+    const id = parseInt(req.params.id);
+    const log = await storage.getShiftAuditLog(id);
+    res.json(log);
+  });
+
+  app.get("/api/shifts-cancelled/:regionCode/:startDate/:endDate", async (req, res) => {
+    const { regionCode, startDate, endDate } = req.params;
+    const region = await storage.getRegionByCode(regionCode);
+    if (!region) return res.json([]);
+    const cancelled = await storage.getCancelledShiftsByRegionAndDateRange(region.id, startDate, endDate);
+    res.json(cancelled);
   });
 
   app.post("/api/shifts/batch-delete", async (req, res) => {
     try {
-      const { employeeId, venueId, startTime, endTime, role, targetDates } = req.body;
+      const { employeeId, venueId, startTime, endTime, role, targetDates, reason } = req.body;
       const empId = Number(employeeId);
       if (!empId || !Array.isArray(targetDates) || targetDates.length === 0) {
         return res.status(400).json({ message: "employeeId and targetDates are required" });
       }
+      const actor = req.session.adminName || "admin";
       let deletedCount = 0;
       for (const date of targetDates) {
         const shifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
@@ -437,7 +464,7 @@ export async function registerRoutes(
           (!role || s.role === role)
         );
         for (const s of matching) {
-          await storage.deleteShift(s.id);
+          await storage.deleteShift(s.id, actor, reason);
           deletedCount++;
         }
       }
@@ -449,14 +476,15 @@ export async function registerRoutes(
 
   app.post("/api/shifts/batch-delete-ids", async (req, res) => {
     try {
-      const { shiftIds } = req.body;
+      const { shiftIds, reason } = req.body;
       if (!Array.isArray(shiftIds) || shiftIds.length === 0) {
         return res.status(400).json({ message: "shiftIds array is required" });
       }
+      const actor = req.session.adminName || "admin";
       const uniqueIds = [...new Set(shiftIds.map(Number).filter(n => Number.isInteger(n) && n > 0))];
       let deletedCount = 0;
       for (const numId of uniqueIds) {
-        const ok = await storage.deleteShift(numId);
+        const ok = await storage.deleteShift(numId, actor, reason);
         if (ok) deletedCount++;
       }
       res.json({ success: true, deletedCount });
@@ -519,7 +547,7 @@ export async function registerRoutes(
             endTime,
             role,
             isDispatch: isDispatch || false,
-          });
+          }, req.session.adminName || "admin");
           shift = updated;
           if (!isLeave) {
             const idx = existingShifts.findIndex((s: any) => s.id === existingOnDate.id);
@@ -534,7 +562,7 @@ export async function registerRoutes(
             endTime,
             role,
             isDispatch: isDispatch || false,
-          });
+          }, req.session.adminName || "admin");
           if (!isLeave) existingShifts.push(shift as any);
         }
         if (shift) results.push(shift);
@@ -698,7 +726,7 @@ export async function registerRoutes(
             skipped.push({ date, employeeId });
             continue;
           } else {
-            const updated = await storage.updateShift(existingShift.id, { venueId, startTime, endTime, role });
+            const updated = await storage.updateShift(existingShift.id, { venueId, startTime, endTime, role }, req.session.adminName || "admin:import-batch");
             if (updated) {
               created.push(updated);
               existingByKey.set(existingKey, updated);
@@ -709,7 +737,7 @@ export async function registerRoutes(
           }
         }
 
-        const shift = await storage.createShift({ employeeId, venueId, date, startTime, endTime, role, isDispatch: false });
+        const shift = await storage.createShift({ employeeId, venueId, date, startTime, endTime, role, isDispatch: false }, req.session.adminName || "admin:import-batch");
         created.push(shift);
         existingByKey.set(existingKey, shift);
         existingShiftsForMonth.push(shift);
@@ -781,7 +809,7 @@ export async function registerRoutes(
         endTime: effectiveEnd,
         role,
         isDispatch: isLeave ? false : (isDispatch || false),
-      });
+      }, req.session.adminName || "admin:batch-update");
       if (currentUpdated) {
         updated.push(currentUpdated);
         const idx = existingShifts.findIndex((s: any) => s.id === Number(currentShiftId));
@@ -822,7 +850,7 @@ export async function registerRoutes(
             endTime: effectiveEnd,
             role,
             isDispatch: isLeave ? false : (isDispatch || false),
-          });
+          }, req.session.adminName || "admin:batch-update");
           updated.push(created);
           existingShifts.push(created as any);
         } else {
@@ -832,7 +860,7 @@ export async function registerRoutes(
             endTime: effectiveEnd,
             role,
             isDispatch: isLeave ? false : (isDispatch || false),
-          });
+          }, req.session.adminName || "admin:batch-update");
           if (result) {
             updated.push(result);
             const idx = existingShifts.findIndex((s: any) => s.id === shiftToUpdate.id);
@@ -900,7 +928,7 @@ export async function registerRoutes(
             dispatchCompany: s.dispatchCompany,
             dispatchName: s.dispatchName,
             dispatchPhone: s.dispatchPhone,
-          });
+          }, req.session.adminName || "admin:copy-prev");
           results.push(shift);
         } catch (err: any) {
           errors.push(`${newDate}: ${err.message}`);
@@ -1719,7 +1747,7 @@ export async function registerRoutes(
       if (!shift) return res.status(404).json({ message: "班次不存在" });
       if (shift.employeeId !== parseInt(employeeId)) return res.status(403).json({ message: "無權限" });
 
-      const updated = await storage.updateShift(shiftId, { certificateImageUrl: certificateImageUrl || null });
+      const updated = await storage.updateShift(shiftId, { certificateImageUrl: certificateImageUrl || null }, req.session.adminName || "admin:certificate");
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

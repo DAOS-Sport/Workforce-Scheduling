@@ -1,7 +1,7 @@
 import { db, pool } from "./db";
 import { eq, and, gte, lte, inArray, desc, or, isNull } from "drizzle-orm";
 import {
-  regions, venues, employees, shifts, venueRequirements,
+  regions, venues, employees, shifts, shiftAuditLog, venueRequirements,
   scheduleSlots, venueShiftTemplates,
   attendanceUploads, attendanceRecords,
   guidelines, guidelineAcknowledgments,
@@ -38,6 +38,7 @@ import {
   type MissingClockNotification,
   type WeeklyPushNotification,
   type LeaveRequest, type InsertLeaveRequest,
+  type ShiftAuditLog,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -263,7 +264,8 @@ export class DatabaseStorage implements IStorage {
       and(
         inArray(shifts.employeeId, empIds),
         gte(shifts.date, startDate),
-        lte(shifts.date, endDate)
+        lte(shifts.date, endDate),
+        eq(shifts.status, "active")
       )
     );
   }
@@ -278,26 +280,32 @@ export class DatabaseStorage implements IStorage {
         inArray(shifts.venueId, venueIds),
         eq(shifts.isDispatch, true),
         gte(shifts.date, startDate),
-        lte(shifts.date, endDate)
+        lte(shifts.date, endDate),
+        eq(shifts.status, "active")
       )
     );
   }
 
   async getShiftsByDate(date: string): Promise<Shift[]> {
-    return db.select().from(shifts).where(eq(shifts.date, date));
+    return db.select().from(shifts).where(
+      and(eq(shifts.date, date), eq(shifts.status, "active"))
+    );
   }
 
   async getAllShiftsByDateRange(startDate: string, endDate: string): Promise<Shift[]> {
     return db.select().from(shifts).where(
       and(
         gte(shifts.date, startDate),
-        lte(shifts.date, endDate)
+        lte(shifts.date, endDate),
+        eq(shifts.status, "active")
       )
     );
   }
 
   async getShiftsByEmployee(employeeId: number): Promise<Shift[]> {
-    return db.select().from(shifts).where(eq(shifts.employeeId, employeeId));
+    return db.select().from(shifts).where(
+      and(eq(shifts.employeeId, employeeId), eq(shifts.status, "active"))
+    );
   }
 
   async getShift(id: number): Promise<Shift | undefined> {
@@ -305,19 +313,106 @@ export class DatabaseStorage implements IStorage {
     return shift;
   }
 
-  async createShift(data: InsertShift): Promise<Shift> {
+  async createShift(data: InsertShift, actor: string = "system"): Promise<Shift> {
     const [shift] = await db.insert(shifts).values(data).returning();
+    if (shift) {
+      try {
+        await db.insert(shiftAuditLog).values({
+          shiftId: shift.id,
+          action: "create",
+          actor,
+          payload: { after: shift },
+        });
+      } catch (e) {
+        console.error("[shift-audit] create log failed", e);
+      }
+    }
     return shift;
   }
 
-  async updateShift(id: number, data: Partial<InsertShift>): Promise<Shift | undefined> {
+  async updateShift(id: number, data: Partial<InsertShift>, actor: string = "system"): Promise<Shift | undefined> {
+    const before = await this.getShift(id);
     const [shift] = await db.update(shifts).set(data).where(eq(shifts.id, id)).returning();
+    if (shift) {
+      try {
+        await db.insert(shiftAuditLog).values({
+          shiftId: id,
+          action: "update",
+          actor,
+          payload: { before, after: shift, changes: data },
+        });
+      } catch (e) {
+        console.error("[shift-audit] update log failed", e);
+      }
+    }
     return shift;
   }
 
-  async deleteShift(id: number): Promise<boolean> {
-    const result = await db.delete(shifts).where(eq(shifts.id, id)).returning();
-    return result.length > 0;
+  async deleteShift(id: number, actor: string = "system", reason?: string): Promise<boolean> {
+    const before = await this.getShift(id);
+    if (!before || before.status === "cancelled") return false;
+    const [shift] = await db.update(shifts).set({
+      status: "cancelled",
+      cancelledAt: new Date(),
+      cancelledBy: actor,
+      cancelReason: reason ?? null,
+    }).where(and(eq(shifts.id, id), eq(shifts.status, "active"))).returning();
+    if (!shift) return false;
+    try {
+      await db.insert(shiftAuditLog).values({
+        shiftId: id,
+        action: "cancel",
+        actor,
+        payload: { before, reason: reason ?? null },
+      });
+    } catch (e) {
+      console.error("[shift-audit] cancel log failed", e);
+    }
+    return true;
+  }
+
+  async restoreShift(id: number, actor: string = "system"): Promise<Shift | undefined> {
+    const before = await this.getShift(id);
+    if (!before || before.status !== "cancelled") return undefined;
+    const [shift] = await db.update(shifts).set({
+      status: "active",
+      cancelledAt: null,
+      cancelledBy: null,
+      cancelReason: null,
+    }).where(eq(shifts.id, id)).returning();
+    if (shift) {
+      try {
+        await db.insert(shiftAuditLog).values({
+          shiftId: id,
+          action: "restore",
+          actor,
+          payload: { before, after: shift },
+        });
+      } catch (e) {
+        console.error("[shift-audit] restore log failed", e);
+      }
+    }
+    return shift;
+  }
+
+  async getShiftAuditLog(shiftId: number): Promise<ShiftAuditLog[]> {
+    return db.select().from(shiftAuditLog)
+      .where(eq(shiftAuditLog.shiftId, shiftId))
+      .orderBy(desc(shiftAuditLog.createdAt));
+  }
+
+  async getCancelledShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<Shift[]> {
+    const regionEmployees = await this.getEmployeesByRegion(regionId);
+    const empIds = regionEmployees.map((e) => e.id);
+    if (empIds.length === 0) return [];
+    return db.select().from(shifts).where(
+      and(
+        inArray(shifts.employeeId, empIds),
+        gte(shifts.date, startDate),
+        lte(shifts.date, endDate),
+        eq(shifts.status, "cancelled")
+      )
+    );
   }
 
   async getVenueRequirementsByRegion(regionId: number): Promise<VenueRequirement[]> {
