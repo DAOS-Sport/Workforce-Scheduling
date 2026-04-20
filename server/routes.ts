@@ -1847,9 +1847,14 @@ export async function registerRoutes(
       const startAt = new Date(`${d}T${startStr}:00+08:00`).getTime();
       let endAt: number;
       if (endStr === "24:00" || endStr <= startStr) {
-        const next = new Date(d + "T00:00:00+08:00");
-        next.setUTCDate(next.getUTCDate() + 1);
-        const nd = next.toISOString().slice(0, 10);
+        // Compute next calendar date from YYYY-MM-DD parts (TZ-safe). Date.UTC
+        // handles month/year rollover. We then re-format as YYYY-MM-DD.
+        const [Y, M, D] = d.split("-").map(Number);
+        const nextUtc = new Date(Date.UTC(Y, M - 1, D + 1));
+        const nd =
+          `${nextUtc.getUTCFullYear()}-` +
+          `${String(nextUtc.getUTCMonth() + 1).padStart(2, "0")}-` +
+          `${String(nextUtc.getUTCDate()).padStart(2, "0")}`;
         endAt = new Date(`${nd}T${endStr === "24:00" ? "00:00" : endStr}:00+08:00`).getTime();
       } else {
         endAt = new Date(`${d}T${endStr}:00+08:00`).getTime();
@@ -2045,7 +2050,7 @@ export async function registerRoutes(
       const venue = result.myShift.venueId
         ? await storage.getVenue(result.myShift.venueId)
         : null;
-      const coworkers = result.coworkers.map((c: any) => ({
+      const coworkers = result.coworkers.map((c) => ({
         id: c.employeeId,
         name: c.name,
         phone: c.phone,
