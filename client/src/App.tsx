@@ -26,6 +26,7 @@ import { Redirect } from "wouter";
 import PortalPage from "@/pages/portal";
 import LiffClockInPage from "@/pages/liff-clock-in";
 import AdminLoginPage from "@/pages/admin-login";
+import MobileHrPage from "@/pages/mobile-hr";
 import { Loader2 } from "lucide-react";
 
 function AdminRouter() {
@@ -111,6 +112,7 @@ function AppRouter() {
   const [location] = useLocation();
   const isPortal = location.startsWith("/portal");
   const isLiff = location.startsWith("/liff");
+  const isMobileHr = location.startsWith("/mobile-hr");
   const isAdminCallback = location.startsWith("/admin/callback");
 
   if (isPortal) {
@@ -119,6 +121,10 @@ function AppRouter() {
 
   if (isLiff) {
     return <LiffClockInPage />;
+  }
+
+  if (isMobileHr) {
+    return <MobileHrPage />;
   }
 
   return <AdminGuard />;
