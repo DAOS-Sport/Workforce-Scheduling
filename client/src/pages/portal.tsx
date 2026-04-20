@@ -807,17 +807,34 @@ function GuidelinesCheckScreen({
 }) {
   const { toast } = useToast();
   const [confirmed, setConfirmed] = useState(false);
+  const [loadTimeout, setLoadTimeout] = useState(false);
 
-  const { data, isLoading } = useQuery<{ items: GuidelineItem[]; allAcknowledged: boolean }>({
+  const { data, isLoading, isError } = useQuery<{ items: GuidelineItem[]; allAcknowledged: boolean }>({
     queryKey: ["/api/portal/guidelines-check", employee.id],
     staleTime: 60 * 1000,
+    retry: 1,
   });
 
+  // Auto-advance when all guidelines are already acknowledged
   useEffect(() => {
     if (data?.allAcknowledged) {
       onComplete();
     }
   }, [data?.allAcknowledged, onComplete]);
+
+  // Fail-open: if the API errors, don't block the employee
+  useEffect(() => {
+    if (isError) {
+      onComplete();
+    }
+  }, [isError, onComplete]);
+
+  // Loading timeout: show a manual bypass button after 8 s
+  useEffect(() => {
+    if (!isLoading) return;
+    const t = setTimeout(() => setLoadTimeout(true), 8000);
+    return () => clearTimeout(t);
+  }, [isLoading]);
 
   const ackMutation = useMutation({
     mutationFn: async () => {
@@ -848,6 +865,15 @@ function GuidelinesCheckScreen({
             <div className="h-8 w-48 bg-slate-200 rounded animate-pulse" />
             <div className="h-40 w-full bg-slate-200 rounded animate-pulse" />
             <div className="h-40 w-full bg-slate-200 rounded animate-pulse" />
+            {loadTimeout && (
+              <button
+                onClick={onComplete}
+                className="w-full py-2.5 rounded-lg border border-slate-300 text-sm text-slate-500 hover:bg-slate-50 transition-colors"
+                data-testid="button-skip-guidelines-timeout"
+              >
+                載入逾時，直接進入
+              </button>
+            )}
           </div>
         </div>
       </div>
