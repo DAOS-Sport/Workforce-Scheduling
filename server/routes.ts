@@ -567,7 +567,7 @@ export async function registerRoutes(
             endTime,
             role,
             isDispatch: isDispatch || false,
-          }, "system:batch", forceFlag);
+          }, `system:batch|by:${req.session.adminName || "admin"}`, forceFlag);
           shift = updated;
           if (!isLeave) {
             const idx = existingShifts.findIndex((s: any) => s.id === existingOnDate.id);
@@ -582,7 +582,7 @@ export async function registerRoutes(
             endTime,
             role,
             isDispatch: isDispatch || false,
-          }, "system:batch");
+          }, `system:batch|by:${req.session.adminName || "admin"}`);
           if (!isLeave) existingShifts.push(shift as any);
         }
         if (shift) results.push(shift);
@@ -746,7 +746,7 @@ export async function registerRoutes(
             skipped.push({ date, employeeId });
             continue;
           } else {
-            const updated = await storage.updateShift(existingShift.id, { venueId, startTime, endTime, role }, "system:import-batch", true);
+            const updated = await storage.updateShift(existingShift.id, { venueId, startTime, endTime, role }, `system:import-batch|by:${req.session.adminName || "admin"}`, true);
             if (updated) {
               created.push(updated);
               existingByKey.set(existingKey, updated);
@@ -757,7 +757,7 @@ export async function registerRoutes(
           }
         }
 
-        const shift = await storage.createShift({ employeeId, venueId, date, startTime, endTime, role, isDispatch: false }, "system:import-batch");
+        const shift = await storage.createShift({ employeeId, venueId, date, startTime, endTime, role, isDispatch: false }, `system:import-batch|by:${req.session.adminName || "admin"}`);
         created.push(shift);
         existingByKey.set(existingKey, shift);
         existingShiftsForMonth.push(shift);
@@ -835,7 +835,7 @@ export async function registerRoutes(
         endTime: effectiveEnd,
         role,
         isDispatch: isLeave ? false : (isDispatch || false),
-      }, "system:batch-update", forceFlag);
+      }, `system:batch-update|by:${req.session.adminName || "admin"}`, forceFlag);
       if (currentUpdated) {
         updated.push(currentUpdated);
         const idx = existingShifts.findIndex((s: any) => s.id === Number(currentShiftId));
@@ -876,7 +876,7 @@ export async function registerRoutes(
             endTime: effectiveEnd,
             role,
             isDispatch: isLeave ? false : (isDispatch || false),
-          }, "system:batch-update");
+          }, `system:batch-update|by:${req.session.adminName || "admin"}`);
           updated.push(created);
           existingShifts.push(created as any);
         } else {
@@ -886,7 +886,7 @@ export async function registerRoutes(
             endTime: effectiveEnd,
             role,
             isDispatch: isLeave ? false : (isDispatch || false),
-          }, "system:batch-update", forceFlag);
+          }, `system:batch-update|by:${req.session.adminName || "admin"}`, forceFlag);
           if (result) {
             updated.push(result);
             const idx = existingShifts.findIndex((s: any) => s.id === shiftToUpdate.id);
@@ -954,7 +954,7 @@ export async function registerRoutes(
             dispatchCompany: s.dispatchCompany,
             dispatchName: s.dispatchName,
             dispatchPhone: s.dispatchPhone,
-          }, "system:copy-prev");
+          }, `system:copy-prev|by:${req.session.adminName || "admin"}`);
           results.push(shift);
         } catch (err: any) {
           errors.push(`${newDate}: ${err.message}`);
