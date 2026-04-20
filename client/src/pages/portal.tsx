@@ -812,7 +812,6 @@ function GuidelinesCheckScreen({
   const { data, isLoading, isError } = useQuery<{ items: GuidelineItem[]; allAcknowledged: boolean }>({
     queryKey: ["/api/portal/guidelines-check", employee.id],
     staleTime: 60 * 1000,
-    retry: 1,
   });
 
   // Auto-advance when all guidelines are already acknowledged
@@ -829,9 +828,12 @@ function GuidelinesCheckScreen({
     }
   }, [isError, onComplete]);
 
-  // Loading timeout: show a manual bypass button after 8 s
+  // Loading timeout: show a manual bypass button after 8 s; reset when loading clears
   useEffect(() => {
-    if (!isLoading) return;
+    if (!isLoading) {
+      setLoadTimeout(false);
+      return;
+    }
     const t = setTimeout(() => setLoadTimeout(true), 8000);
     return () => clearTimeout(t);
   }, [isLoading]);
