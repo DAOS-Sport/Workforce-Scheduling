@@ -906,7 +906,7 @@ function GuidelinesCheckScreen({
               <FileText className="h-3.5 w-3.5" /> 場館守則
             </h3>
             {fixedItems.map((item) => (
-              <GuidelineItemCard key={item.id} item={item} />
+              <GuidelineItemCard key={item.id} item={item} employeeId={employee.id} />
             ))}
           </div>
         )}
@@ -917,7 +917,7 @@ function GuidelinesCheckScreen({
               <CalendarDays className="h-3.5 w-3.5" /> 本月公告
             </h3>
             {monthlyItems.map((item) => (
-              <GuidelineItemCard key={item.id} item={item} />
+              <GuidelineItemCard key={item.id} item={item} employeeId={employee.id} />
             ))}
           </div>
         )}
@@ -928,7 +928,7 @@ function GuidelinesCheckScreen({
               <Lock className="h-3.5 w-3.5" /> 保密同意書
             </h3>
             {confidentialityItems.map((item) => (
-              <GuidelineItemCard key={item.id} item={item} />
+              <GuidelineItemCard key={item.id} item={item} employeeId={employee.id} />
             ))}
           </div>
         )}
@@ -970,8 +970,19 @@ function GuidelinesCheckScreen({
   );
 }
 
-function GuidelineItemCard({ item }: { item: GuidelineItem }) {
+function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employeeId?: number }) {
   const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
+
+  const { data: fullItem } = useQuery<GuidelineItem>({
+    queryKey: ["/api/portal/guidelines", item.id, employeeId],
+    queryFn: async () => {
+      const url = `/api/portal/guidelines/${item.id}?employeeId=${employeeId}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: item.contentType === "image" && !!employeeId,
+  });
 
   return (
     <>
@@ -1020,9 +1031,10 @@ function GuidelineItemCard({ item }: { item: GuidelineItem }) {
               </a>
             )}
             {item.contentType === "image" && (() => {
-              const urls = (item.imageUrls && item.imageUrls.length > 0)
-                ? item.imageUrls
-                : item.imageUrl ? [item.imageUrl] : [];
+              const source = fullItem || item;
+              const urls = (source.imageUrls && source.imageUrls.length > 0)
+                ? source.imageUrls
+                : source.imageUrl ? [source.imageUrl] : [];
               return urls.length > 0 ? (
                 <div className="mt-2 space-y-2">
                   {urls.map((url, idx) => (
@@ -3305,7 +3317,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
               <p className="text-sm text-center text-slate-400 py-3">目前沒有守則</p>
             ) : (
               guidelinesData.items.map((item) => (
-                <GuidelineItemCard key={item.id} item={item} />
+                <GuidelineItemCard key={item.id} item={item} employeeId={employee?.id} />
               ))
             )}
           </div>

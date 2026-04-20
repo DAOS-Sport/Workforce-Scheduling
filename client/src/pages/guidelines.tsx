@@ -15,8 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit2, Trash2, FileText, Video, Image, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin, Megaphone, Globe, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Edit2, Trash2, FileText, Video, Image, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin, Megaphone, Globe, X, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import type { Guideline, GuidelineAck, Employee, Venue, Shift } from "@shared/schema";
+
+type GuidelineListItem = Omit<Guideline, "imageUrl" | "imageUrls"> & { imageCount: number };
 
 type GuidelineCategory = "fixed" | "monthly" | "confidentiality";
 type ActiveTab = GuidelineCategory | "announcements";
@@ -71,9 +73,10 @@ export default function GuidelinesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Guideline | null>(null);
   const [viewAckDialogOpen, setViewAckDialogOpen] = useState(false);
-  const [viewingGuideline, setViewingGuideline] = useState<Guideline | null>(null);
+  const [viewingGuideline, setViewingGuideline] = useState<GuidelineListItem | null>(null);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<Guideline | null>(null);
+  const [fetchingItemId, setFetchingItemId] = useState<number | null>(null);
 
   const [form, setForm] = useState({
     title: "",
@@ -94,7 +97,7 @@ export default function GuidelinesPage() {
   const [annTargetRegion, setAnnTargetRegion] = useState<string>("all");
   const [annExpiresAt, setAnnExpiresAt] = useState<string>("");
 
-  const { data: allGuidelines = [], isLoading } = useQuery<Guideline[]>({
+  const { data: allGuidelines = [], isLoading } = useQuery<GuidelineListItem[]>({
     queryKey: ["/api/guidelines"],
   });
 
@@ -229,26 +232,6 @@ export default function GuidelinesPage() {
     setDialogOpen(true);
   }
 
-  function openEdit(item: Guideline) {
-    setEditingItem(item);
-    let imageUrls: string[] = [];
-    if (item.imageUrls && item.imageUrls.length > 0) {
-      imageUrls = item.imageUrls;
-    } else if (item.imageUrl) {
-      imageUrls = [item.imageUrl];
-    }
-    setForm({
-      title: item.title, content: item.content,
-      contentType: item.contentType as "text" | "video" | "image",
-      videoUrl: item.videoUrl || "",
-      imageUrls,
-      venueId: item.venueId,
-      sortOrder: item.sortOrder, isActive: item.isActive,
-      yearMonth: item.yearMonth || getCurrentYearMonth(),
-    });
-    setDialogOpen(true);
-  }
-
   function handleSave() {
     const payload: any = {
       category: activeTab,
@@ -280,14 +263,46 @@ export default function GuidelinesPage() {
     });
   }
 
-  function openAckView(guideline: Guideline) {
+  function openAckView(guideline: GuidelineListItem) {
     setViewingGuideline(guideline);
     setViewAckDialogOpen(true);
   }
 
-  function openPreview(item: Guideline) {
-    setPreviewItem(item);
-    setPreviewDialogOpen(true);
+  async function openEdit(item: GuidelineListItem) {
+    setFetchingItemId(item.id);
+    try {
+      const fullItem: Guideline = await fetch(`/api/guidelines/${item.id}`).then(r => r.json());
+      setEditingItem(fullItem);
+      let imageUrls: string[] = [];
+      if (fullItem.imageUrls && fullItem.imageUrls.length > 0) {
+        imageUrls = fullItem.imageUrls;
+      } else if (fullItem.imageUrl) {
+        imageUrls = [fullItem.imageUrl];
+      }
+      setForm({
+        title: fullItem.title, content: fullItem.content,
+        contentType: fullItem.contentType as "text" | "video" | "image",
+        videoUrl: fullItem.videoUrl || "",
+        imageUrls,
+        venueId: fullItem.venueId,
+        sortOrder: fullItem.sortOrder, isActive: fullItem.isActive,
+        yearMonth: fullItem.yearMonth || getCurrentYearMonth(),
+      });
+      setDialogOpen(true);
+    } finally {
+      setFetchingItemId(null);
+    }
+  }
+
+  async function openPreview(item: GuidelineListItem) {
+    setFetchingItemId(item.id);
+    try {
+      const fullItem: Guideline = await fetch(`/api/guidelines/${item.id}`).then(r => r.json());
+      setPreviewItem(fullItem);
+      setPreviewDialogOpen(true);
+    } finally {
+      setFetchingItemId(null);
+    }
   }
 
   const ackedEmployeeIds = new Set(acks.map((a) => a.employeeId));
@@ -372,6 +387,7 @@ export default function GuidelinesPage() {
                       onViewAck={() => openAckView(item)}
                       onPreview={() => openPreview(item)}
                       isDeleting={deleteMutation.isPending}
+                      isFetching={fetchingItemId === item.id}
                     />
                   ))}
               </div>
@@ -876,12 +892,12 @@ export default function GuidelinesPage() {
 }
 
 function GuidelineCard({
-  item, venueName, onEdit, onDelete, onViewAck, onPreview, isDeleting,
+  item, venueName, onEdit, onDelete, onViewAck, onPreview, isDeleting, isFetching,
 }: {
-  item: Guideline; venueName?: string;
+  item: GuidelineListItem; venueName?: string;
   onEdit: () => void; onDelete: () => void;
   onViewAck: () => void; onPreview: () => void;
-  isDeleting: boolean;
+  isDeleting: boolean; isFetching?: boolean;
 }) {
   return (
     <Card className="p-4" data-testid={`card-guideline-${item.id}`}>
@@ -898,7 +914,7 @@ function GuidelineCard({
             {item.contentType === "image" && (
               <Badge variant="outline" className="text-xs">
                 <Image className="h-3 w-3 mr-1" />
-                {(item.imageUrls && item.imageUrls.length > 1) ? `${item.imageUrls.length}張圖片` : "圖片"}
+                {item.imageCount > 1 ? `${item.imageCount}張圖片` : "圖片"}
               </Badge>
             )}
             {venueName && (
@@ -915,14 +931,14 @@ function GuidelineCard({
           <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.content || "(無內容)"}</p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Button size="icon" variant="ghost" onClick={onPreview} data-testid={`button-preview-${item.id}`}>
-            <Eye className="h-4 w-4" />
+          <Button size="icon" variant="ghost" onClick={onPreview} disabled={isFetching} data-testid={`button-preview-${item.id}`}>
+            {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
           </Button>
           <Button size="icon" variant="ghost" onClick={onViewAck} data-testid={`button-view-ack-${item.id}`}>
             <Users className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" onClick={onEdit} data-testid={`button-edit-guideline-${item.id}`}>
-            <Edit2 className="h-4 w-4" />
+          <Button size="icon" variant="ghost" onClick={onEdit} disabled={isFetching} data-testid={`button-edit-guideline-${item.id}`}>
+            {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit2 className="h-4 w-4" />}
           </Button>
           <Button
             size="icon" variant="ghost"

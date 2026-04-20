@@ -1473,7 +1473,11 @@ export async function registerRoutes(
   app.get("/api/guidelines", async (req, res) => {
     const { category } = req.query;
     const items = await storage.getGuidelines(category ? String(category) : undefined);
-    res.json(items);
+    const stripped = items.map(({ imageUrl, imageUrls, ...rest }) => ({
+      ...rest,
+      imageCount: (imageUrls && imageUrls.length > 0) ? imageUrls.length : (imageUrl ? 1 : 0),
+    }));
+    res.json(stripped);
   });
 
   app.get("/api/guidelines/:id", async (req, res) => {
@@ -2115,7 +2119,7 @@ export async function registerRoutes(
         if (v) venueMap[vid] = v.shortName;
       }
 
-      const items = relevant.map((g) => ({
+      const items = relevant.map(({ imageUrl, imageUrls, ...g }) => ({
         ...g,
         venueName: g.venueId ? venueMap[g.venueId] || null : null,
         acknowledged: currentMonthAckedIds.has(g.id),
@@ -2124,6 +2128,40 @@ export async function registerRoutes(
       const allAcknowledged = items.every((i) => i.acknowledged);
 
       res.json({ items, allAcknowledged });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/portal/guidelines/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const employeeId = parseInt(req.query.employeeId as string);
+      if (!employeeId || isNaN(employeeId)) {
+        return res.status(400).json({ message: "employeeId 為必填" });
+      }
+
+      const item = await storage.getGuideline(id);
+      if (!item || !item.isActive) return res.status(404).json({ message: "守則未找到" });
+
+      // Validate that this guideline is in the employee's relevant set
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const monthStart = `${yearMonth}-01`;
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
+
+      const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
+      const myVenueIds = Array.from(new Set(myShifts.map((s) => s.venueId)));
+
+      const isRelevant =
+        (item.category === "fixed" && (!item.venueId || myVenueIds.includes(item.venueId))) ||
+        (item.category === "monthly" && item.yearMonth === yearMonth) ||
+        item.category === "confidentiality";
+
+      if (!isRelevant) return res.status(403).json({ message: "無權存取此守則" });
+
+      res.json(item);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
