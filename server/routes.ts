@@ -1780,7 +1780,156 @@ export async function registerRoutes(
     }
   });
 
+  // Task #51: privacy-respecting workmates endpoint.
+  // Rules: same date (Asia/Taipei), same venue(s), same shift band (early/late), excludes self,
+  // excludes day-off markers, only status='active' shifts, time window today..today+7.
+  app.get("/api/portal/workmates", async (req, res) => {
+    try {
+      const employeeId = parseInt(String(req.query.employeeId || ""));
+      const date = String(req.query.date || "");
+      if (!employeeId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ message: "employeeId 與 date (YYYY-MM-DD) 為必填" });
+      }
+
+      const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const today = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
+      const dDate = new Date(date + "T00:00:00Z").getTime();
+      const dToday = new Date(today + "T00:00:00Z").getTime();
+      const diffDays = Math.round((dDate - dToday) / 86400000);
+      if (diffDays < 0) return res.status(403).json({ code: "PAST_FORBIDDEN", message: "不可查詢過去日期" });
+      if (diffDays > 7) return res.status(403).json({ code: "OUT_OF_WINDOW", message: "僅可查詢今日起 7 天內" });
+
+      const emp = await storage.getEmployee(employeeId);
+      if (!emp) return res.status(404).json({ message: "員工不存在" });
+
+      const isDayOff = (s: string, e: string) => s.slice(0, 5) === "00:00" && e.slice(0, 5) === "00:00";
+      const shiftBand = (start: string): "early" | "late" => start.slice(0, 5) < "12:00" ? "early" : "late";
+
+      const baseEmpty = { date, timezone: "Asia/Taipei", myShift: null, coworkers: [] as any[], message: "當日無排班" };
+
+      // Locate my real shift on `date` (regular preferred, then dispatch).
+      const myRegularAll = await storage.getShiftsByEmployeeAndDateRange(employeeId, date, date);
+      const myRegular = myRegularAll.filter(s => !isDayOff(s.startTime, s.endTime));
+      const myDispatchAll = await storage.getDispatchShiftsByLinkedEmployee(employeeId, date, date);
+      const myDispatch = myDispatchAll.filter(ds => !isDayOff(ds.startTime, ds.endTime));
+
+      if (myRegular.length === 0 && myDispatch.length === 0) {
+        return res.json(baseEmpty);
+      }
+
+      const myVenueIds = new Set<number>();
+      let myShiftDescriptor: any = null;
+      if (myRegular.length > 0) {
+        const s = myRegular[0];
+        myVenueIds.add(s.venueId);
+        for (const r of myRegular) myVenueIds.add(r.venueId);
+        const venue = await storage.getVenue(s.venueId);
+        myShiftDescriptor = {
+          id: s.id,
+          venueId: s.venueId,
+          venueName: venue?.shortName ?? null,
+          role: s.role,
+          startTime: s.startTime.slice(0, 5),
+          endTime: s.endTime.slice(0, 5),
+          shiftBand: shiftBand(s.startTime),
+          isDispatch: false,
+        };
+      } else {
+        const ds = myDispatch[0];
+        if (ds.venueId) myVenueIds.add(ds.venueId);
+        for (const d of myDispatch) if (d.venueId) myVenueIds.add(d.venueId);
+        const venue = ds.venueId ? await storage.getVenue(ds.venueId) : null;
+        myShiftDescriptor = {
+          id: -ds.id,
+          venueId: ds.venueId,
+          venueName: venue?.shortName ?? null,
+          role: ds.role,
+          startTime: ds.startTime.slice(0, 5),
+          endTime: ds.endTime.slice(0, 5),
+          shiftBand: shiftBand(ds.startTime),
+          isDispatch: true,
+        };
+      }
+      const myBand = myShiftDescriptor.shiftBand;
+
+      if (myVenueIds.size === 0) {
+        return res.json({ ...baseEmpty, myShift: myShiftDescriptor, message: "無法判定場館" });
+      }
+
+      // Pull all shifts at my venue(s) for that date.
+      const venueIdArr = Array.from(myVenueIds);
+      const venueShiftsArrays = await Promise.all(venueIdArr.map(vId => storage.getShiftsByVenueAndDate(vId, date)));
+      const allRegularShifts = venueShiftsArrays.flat();
+
+      // Pull dispatch shifts via region(s) of those venues, then filter to my venue(s).
+      const venueRegionIds = new Set<number>();
+      for (const vId of venueIdArr) {
+        const v = await storage.getVenue(vId);
+        if (v?.regionId) venueRegionIds.add(v.regionId);
+      }
+      const regionDispatchArrays = await Promise.all(Array.from(venueRegionIds).map(rId => storage.getDispatchShifts(rId, date, date)));
+      const allDispatchShifts = regionDispatchArrays.flat().filter(ds => ds.venueId && myVenueIds.has(ds.venueId));
+
+      // Pre-load coworker employee records.
+      const coworkerEmpIds = Array.from(new Set(
+        allRegularShifts
+          .filter(s => s.employeeId !== employeeId && !isDayOff(s.startTime, s.endTime) && shiftBand(s.startTime) === myBand)
+          .map(s => s.employeeId)
+      ));
+      const coworkerEmps = await Promise.all(coworkerEmpIds.map(id => storage.getEmployee(id)));
+      const empById = new Map(coworkerEmps.filter(Boolean).map(e => [e!.id, e!]));
+
+      const venueCache = new Map<number, any>();
+      for (const vId of venueIdArr) {
+        const v = await storage.getVenue(vId);
+        if (v) venueCache.set(vId, v);
+      }
+
+      const coworkers: any[] = [];
+      for (const s of allRegularShifts) {
+        if (s.employeeId === employeeId) continue;
+        if (isDayOff(s.startTime, s.endTime)) continue;
+        if (shiftBand(s.startTime) !== myBand) continue;
+        const co = empById.get(s.employeeId);
+        if (!co) continue;
+        const venue = venueCache.get(s.venueId);
+        coworkers.push({
+          employeeId: co.id,
+          name: co.name,
+          phone: co.phone,
+          role: s.role,
+          startTime: s.startTime.slice(0, 5),
+          endTime: s.endTime.slice(0, 5),
+          venueName: venue?.shortName ?? null,
+          isDispatch: false,
+        });
+      }
+      for (const ds of allDispatchShifts) {
+        if (ds.linkedEmployeeId === employeeId) continue;
+        if (isDayOff(ds.startTime, ds.endTime)) continue;
+        if (shiftBand(ds.startTime) !== myBand) continue;
+        const venue = ds.venueId ? venueCache.get(ds.venueId) : null;
+        coworkers.push({
+          employeeId: -ds.id,
+          name: ds.dispatchName,
+          phone: ds.dispatchPhone ?? null,
+          role: ds.role,
+          startTime: ds.startTime.slice(0, 5),
+          endTime: ds.endTime.slice(0, 5),
+          venueName: venue?.shortName ?? null,
+          isDispatch: true,
+        });
+      }
+
+      res.json({ date, timezone: "Asia/Taipei", myShift: myShiftDescriptor, coworkers });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/portal/today-coworkers/:employeeId", async (req, res) => {
+    res.setHeader("Deprecation", "true");
+    res.setHeader("Link", '</api/portal/workmates>; rel="successor-version"');
     try {
       const employeeId = parseInt(req.params.employeeId);
       const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
