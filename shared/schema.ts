@@ -178,6 +178,7 @@ export const guidelines = pgTable("guidelines", {
   content: text("content").notNull().default(""),
   contentType: text("content_type").notNull().default("text"),
   videoUrl: text("video_url"),
+  imageUrl: text("image_url"),
   venueId: integer("venue_id"),
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),

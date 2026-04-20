@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit2, Trash2, FileText, Video, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin, Megaphone, Globe } from "lucide-react";
+import { Plus, Edit2, Trash2, FileText, Video, Image, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin, Megaphone, Globe } from "lucide-react";
 import type { Guideline, GuidelineAck, Employee, Venue, Shift } from "@shared/schema";
 
 type GuidelineCategory = "fixed" | "monthly" | "confidentiality";
@@ -78,8 +78,9 @@ export default function GuidelinesPage() {
   const [form, setForm] = useState({
     title: "",
     content: "",
-    contentType: "text" as "text" | "video",
+    contentType: "text" as "text" | "video" | "image",
     videoUrl: "",
+    imageUrl: "",
     venueId: null as number | null,
     sortOrder: 0,
     isActive: true,
@@ -221,7 +222,7 @@ export default function GuidelinesPage() {
   function openCreate() {
     setEditingItem(null);
     setForm({
-      title: "", content: "", contentType: "text", videoUrl: "",
+      title: "", content: "", contentType: "text", videoUrl: "", imageUrl: "",
       venueId: null, sortOrder: filtered.length, isActive: true,
       yearMonth: getCurrentYearMonth(),
     });
@@ -232,8 +233,10 @@ export default function GuidelinesPage() {
     setEditingItem(item);
     setForm({
       title: item.title, content: item.content,
-      contentType: item.contentType as "text" | "video",
-      videoUrl: item.videoUrl || "", venueId: item.venueId,
+      contentType: item.contentType as "text" | "video" | "image",
+      videoUrl: item.videoUrl || "",
+      imageUrl: item.imageUrl || "",
+      venueId: item.venueId,
       sortOrder: item.sortOrder, isActive: item.isActive,
       yearMonth: item.yearMonth || getCurrentYearMonth(),
     });
@@ -245,7 +248,8 @@ export default function GuidelinesPage() {
       category: activeTab,
       title: form.title, content: form.content,
       contentType: form.contentType,
-      videoUrl: form.videoUrl || null,
+      videoUrl: form.contentType === "video" ? form.videoUrl || null : null,
+      imageUrl: form.contentType === "image" ? form.imageUrl || null : null,
       venueId: activeTab === "fixed" ? form.venueId : null,
       sortOrder: form.sortOrder, isActive: form.isActive,
       yearMonth: activeTab === "monthly" ? form.yearMonth : null,
@@ -511,7 +515,7 @@ export default function GuidelinesPage() {
               <Label>內容類型</Label>
               <Select
                 value={form.contentType}
-                onValueChange={(v) => setForm({ ...form, contentType: v as "text" | "video" })}
+                onValueChange={(v) => setForm({ ...form, contentType: v as "text" | "video" | "image" })}
               >
                 <SelectTrigger data-testid="select-content-type">
                   <SelectValue />
@@ -522,6 +526,9 @@ export default function GuidelinesPage() {
                   </SelectItem>
                   <SelectItem value="video">
                     <div className="flex items-center gap-1"><Video className="h-3 w-3" /> 影片</div>
+                  </SelectItem>
+                  <SelectItem value="image">
+                    <div className="flex items-center gap-1"><Image className="h-3 w-3" /> 圖片</div>
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -547,6 +554,68 @@ export default function GuidelinesPage() {
                   placeholder="https://youtube.com/..."
                   data-testid="input-guideline-video-url"
                 />
+              </div>
+            )}
+
+            {form.contentType === "image" && (
+              <div className="space-y-2">
+                <Label>上傳圖片</Label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  id="guideline-image-upload"
+                  data-testid="input-guideline-image"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const img = new window.Image();
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      img.onload = () => {
+                        const MAX = 1024;
+                        let { width, height } = img;
+                        if (width > MAX || height > MAX) {
+                          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+                          else { width = Math.round((width * MAX) / height); height = MAX; }
+                        }
+                        const canvas = document.createElement("canvas");
+                        canvas.width = width; canvas.height = height;
+                        const ctx = canvas.getContext("2d")!;
+                        ctx.drawImage(img, 0, 0, width, height);
+                        const base64 = canvas.toDataURL("image/jpeg", 0.7);
+                        setForm((f) => ({ ...f, imageUrl: base64 }));
+                      };
+                      img.src = ev.target?.result as string;
+                    };
+                    reader.readAsDataURL(file);
+                    e.target.value = "";
+                  }}
+                />
+                <label
+                  htmlFor="guideline-image-upload"
+                  className="flex items-center justify-center gap-2 h-10 px-4 rounded-md border border-dashed border-border cursor-pointer hover:bg-muted text-sm text-muted-foreground transition-colors"
+                >
+                  <Image className="h-4 w-4" />
+                  選擇圖片
+                </label>
+                {form.imageUrl && (
+                  <div className="relative mt-2">
+                    <img
+                      src={form.imageUrl}
+                      alt="預覽"
+                      className="w-full max-h-48 object-contain rounded-md border border-border"
+                      data-testid="img-guideline-preview"
+                    />
+                    <button
+                      type="button"
+                      className="absolute top-1 right-1 bg-background border border-border rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-destructive"
+                      onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
+                    >
+                      移除
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -715,6 +784,16 @@ export default function GuidelinesPage() {
                 </a>
               </div>
             )}
+            {previewItem?.contentType === "image" && previewItem?.imageUrl && (
+              <div className="space-y-2">
+                <img
+                  src={previewItem.imageUrl}
+                  alt={previewItem.title}
+                  className="w-full max-h-80 object-contain rounded-md border border-border"
+                  data-testid="img-preview-guideline"
+                />
+              </div>
+            )}
             <div className="whitespace-pre-wrap text-sm leading-relaxed" data-testid="text-preview-content">
               {previewItem?.content}
             </div>
@@ -744,6 +823,11 @@ function GuidelineCard({
             {item.contentType === "video" && (
               <Badge variant="outline" className="text-xs">
                 <Video className="h-3 w-3 mr-1" />影片
+              </Badge>
+            )}
+            {item.contentType === "image" && (
+              <Badge variant="outline" className="text-xs">
+                <Image className="h-3 w-3 mr-1" />圖片
               </Badge>
             )}
             {venueName && (

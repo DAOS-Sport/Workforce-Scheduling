@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   CalendarDays, Phone, MapPin, Clock, Users, ShieldCheck,
   ChevronLeft, ChevronRight, Calendar, List,
-  Video, FileText, CheckCircle2, Lock, UserCheck,
+  Video, FileText, Image as ImageIcon, CheckCircle2, Lock, UserCheck,
   AlertTriangle, ClipboardCheck, BookOpen, Navigation, Loader2, XCircle,
   Wifi, Signal, Copy, MessageSquareWarning, Camera, X, ImagePlus, Send,
   Menu, Home, LogOut, FileEdit, Briefcase, BarChart2,
@@ -86,6 +86,7 @@ interface GuidelineItem {
   content: string;
   contentType: string;
   videoUrl: string | null;
+  imageUrl: string | null;
   venueName: string | null;
   acknowledged: boolean;
 }
@@ -959,6 +960,12 @@ function GuidelineItemCard({ item }: { item: GuidelineItem }) {
                 影片
               </span>
             )}
+            {item.contentType === "image" && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-juns-border">
+                <ImageIcon className="h-2.5 w-2.5 inline mr-0.5" />
+                圖片
+              </span>
+            )}
             {item.acknowledged && (
               <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-juns-green/10 text-juns-green">
                 <CheckCircle2 className="h-2.5 w-2.5 inline mr-0.5" />
@@ -966,7 +973,9 @@ function GuidelineItemCard({ item }: { item: GuidelineItem }) {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500 whitespace-pre-wrap">{item.content}</p>
+          {item.contentType !== "image" && (
+            <p className="text-xs text-slate-500 whitespace-pre-wrap">{item.content}</p>
+          )}
           {item.contentType === "video" && item.videoUrl && (
             <a
               href={item.videoUrl}
@@ -977,6 +986,14 @@ function GuidelineItemCard({ item }: { item: GuidelineItem }) {
             >
               觀看影片
             </a>
+          )}
+          {item.contentType === "image" && item.imageUrl && (
+            <img
+              src={item.imageUrl}
+              alt={item.title}
+              className="mt-2 w-full max-h-64 object-contain rounded-lg border border-juns-border"
+              data-testid={`img-portal-guideline-${item.id}`}
+            />
           )}
         </div>
       </div>
