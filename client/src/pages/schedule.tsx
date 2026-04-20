@@ -1450,7 +1450,7 @@ export default function SchedulePage() {
   return (
     <div className="flex flex-col h-full">
       <div className="sticky top-0 z-50 bg-background border-b border-border/50">
-        {/* Main toolbar row — never wraps */}
+        {/* Row 1: Month nav + RegionTabs */}
         <div className="flex items-center gap-1.5 px-3 py-2 min-w-0 overflow-hidden">
           {/* Left: title + month nav */}
           <div className="flex items-center gap-1 shrink-0">
@@ -1492,8 +1492,10 @@ export default function SchedulePage() {
           <div className="flex-1 flex justify-center min-w-0 overflow-hidden">
             <RegionTabs />
           </div>
+        </div>
 
-          {/* Right: compact action buttons */}
+        {/* Row 2: Action buttons — horizontally scrollable on mobile */}
+        <div className="flex items-center gap-1.5 px-3 pb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
           {/* 缺班 popover — compact single button */}
           {shortageDates.length > 0 && (
             <Popover>
@@ -1508,7 +1510,7 @@ export default function SchedulePage() {
               </PopoverTrigger>
               <PopoverContent className="w-56 p-2" align="end">
                 <p className="text-[10px] text-muted-foreground font-medium mb-2 px-1">點擊日期快速跳至該欄</p>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1 max-h-[50svh] overflow-y-auto">
                   {shortageDates.map((d) => (
                     <button
                       key={d}
