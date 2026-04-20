@@ -2676,10 +2676,19 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     queryKey: ["/api/portal/my-shifts", employee.id, monthStart, monthEnd],
   });
 
+  const portalLineUserId = employee.lineUserId || (typeof window !== "undefined" ? localStorage.getItem("portal_line_user_id") : null) || "";
   const { data: todayCoworkers = [], isLoading: coworkersLoading } = useQuery<CoworkerGroup[]>({
     queryKey: ["/api/portal/today-coworkers", employee.id],
-    enabled: !!employee?.id,
+    enabled: !!employee?.id && !!portalLineUserId,
     staleTime: 60 * 1000,
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/today-coworkers/${employee.id}`, {
+        headers: { "x-line-user-id": portalLineUserId },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
   });
 
   const { data: attendance, isLoading: attendanceLoading } = useQuery<AttendanceSummary>({

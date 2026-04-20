@@ -1785,7 +1785,56 @@ export async function registerRoutes(
   // overlapping intervals (cross-day handled), excludes self, excludes day-off markers,
   // only status='active' shifts.
   // Used by both new /api/portal/workmates and legacy /api/portal/today-coworkers.
-  async function computeWorkmates(employeeId: number, date: string) {
+  type WorkmateMyShift = {
+    id: number;
+    venueId: number | null;
+    venueName: string | null;
+    role: string;
+    startTime: string;
+    endTime: string;
+    shiftBand: "early" | "late";
+    isDispatch: boolean;
+  };
+  type WorkmateCoworker = {
+    employeeId: number;
+    name: string;
+    phone: string | null;
+    role: string;
+    startTime: string;
+    endTime: string;
+    shiftTime: string;
+    venueName: string | null;
+    isDispatch: boolean;
+  };
+  type WorkmatesResult = {
+    date: string;
+    timezone: "Asia/Taipei";
+    myShift: WorkmateMyShift | null;
+    coworkers: WorkmateCoworker[];
+    message?: string;
+  };
+
+  // Resolve the calling employee's identity from `lineUserId` (LIFF) and verify
+  // it matches the requested `employeeId`. Returns `{ ok, status, code, message }`.
+  // Strict bind: the only supported caller proof today is the LIFF lineUserId.
+  async function verifyPortalCaller(
+    requestedEmployeeId: number,
+    lineUserId: string | undefined,
+  ): Promise<{ ok: boolean; status: number; code?: string; message?: string }> {
+    if (!lineUserId) {
+      return { ok: false, status: 401, code: "UNAUTHENTICATED", message: "需要 LINE 身份識別" };
+    }
+    const me = await storage.getEmployeeByLineId(lineUserId);
+    if (!me) {
+      return { ok: false, status: 401, code: "UNKNOWN_LINE_ID", message: "LINE 帳號未綁定員工" };
+    }
+    if (me.id !== requestedEmployeeId) {
+      return { ok: false, status: 403, code: "IDENTITY_MISMATCH", message: "不可查詢他人資料" };
+    }
+    return { ok: true, status: 200 };
+  }
+
+  async function computeWorkmates(employeeId: number, date: string): Promise<WorkmatesResult> {
     const isDayOff = (s: string, e: string) => s.slice(0, 5) === "00:00" && e.slice(0, 5) === "00:00";
     const isAllDay = (s: string, e: string) => s.slice(0, 5) === "00:00" && e.slice(0, 5) === "24:00";
     const shiftBand = (start: string): "early" | "late" => start.slice(0, 5) < "12:00" ? "early" : "late";
@@ -1809,7 +1858,7 @@ export async function registerRoutes(
     };
     const overlaps = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[0] < a[1];
 
-    const baseEmpty = { date, timezone: "Asia/Taipei", myShift: null as any, coworkers: [] as any[], message: "當日無排班" };
+    const baseEmpty: WorkmatesResult = { date, timezone: "Asia/Taipei", myShift: null, coworkers: [], message: "當日無排班" };
 
     const emp = await storage.getEmployee(employeeId);
     if (!emp) return baseEmpty;
@@ -1824,7 +1873,7 @@ export async function registerRoutes(
 
     // Spec: derive venue scope from the SELECTED myShift only — do not widen
     // to all of the employee's same-day shifts.
-    let myShift: any;
+    let myShift: WorkmateMyShift;
     let myVenueId: number | null;
     let myInterval: [number, number];
     if (myRegular.length > 0) {
@@ -1881,7 +1930,7 @@ export async function registerRoutes(
     const coworkerEmps = await Promise.all(coworkerEmpIds.map(id => storage.getEmployee(id)));
     const empById = new Map(coworkerEmps.filter(Boolean).map(e => [e!.id, e!]));
 
-    const coworkers: any[] = [];
+    const coworkers: WorkmateCoworker[] = [];
     for (const s of venueShifts) {
       if (s.employeeId === employeeId) continue;
       if (isDayOff(s.startTime, s.endTime)) continue;
@@ -1935,6 +1984,13 @@ export async function registerRoutes(
         return res.status(400).json({ message: "employeeId 與 date (YYYY-MM-DD) 為必填" });
       }
 
+      // Identity binding: caller must prove they are `employeeId` via LIFF lineUserId.
+      const lineUserId =
+        (req.header("x-line-user-id") as string | undefined) ??
+        (typeof req.query.lineUserId === "string" ? req.query.lineUserId : undefined);
+      const auth = await verifyPortalCaller(employeeId, lineUserId);
+      if (!auth.ok) return res.status(auth.status).json({ code: auth.code, message: auth.message });
+
       const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
       const today = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
       const dDate = new Date(date + "T00:00:00Z").getTime();
@@ -1943,13 +1999,11 @@ export async function registerRoutes(
       if (diffDays < 0) return res.status(403).json({ code: "PAST_FORBIDDEN", message: "不可查詢過去日期" });
       if (diffDays > 7) return res.status(403).json({ code: "OUT_OF_WINDOW", message: "僅可查詢今日起 7 天內" });
 
-      const emp = await storage.getEmployee(employeeId);
-      if (!emp) return res.status(404).json({ message: "員工不存在" });
-
       const result = await computeWorkmates(employeeId, date);
       return res.json(result);
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "未知錯誤";
+      res.status(500).json({ message });
     }
   });
 
@@ -1963,6 +2017,14 @@ export async function registerRoutes(
     try {
       const employeeId = parseInt(req.params.employeeId);
       if (!employeeId) return res.json([]);
+
+      // Identity binding: caller must prove they are `employeeId` via LIFF lineUserId.
+      const lineUserId =
+        (req.header("x-line-user-id") as string | undefined) ??
+        (typeof req.query.lineUserId === "string" ? req.query.lineUserId : undefined);
+      const auth = await verifyPortalCaller(employeeId, lineUserId);
+      if (!auth.ok) return res.status(auth.status).json({ code: auth.code, message: auth.message });
+
       const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
       const today = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
 
