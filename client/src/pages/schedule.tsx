@@ -3022,7 +3022,7 @@ export default function SchedulePage() {
       </Dialog>
 
       <Dialog open={shiftDialogOpen} onOpenChange={setShiftDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md flex flex-col max-h-[90svh]">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold">
               {employees.find((e) => e.id === shiftEmployeeId)?.name} <span className="text-sm font-normal text-muted-foreground">— {shiftDate ? format(new Date(shiftDate), "M月d日 (E)", { locale: zhTW }) : ""}</span>
@@ -3033,7 +3033,7 @@ export default function SchedulePage() {
             </div>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-4 pr-0.5">
             {!editingShift && (
               <div className="space-y-2">
                 <Label>排班人員</Label>
@@ -3480,18 +3480,18 @@ export default function SchedulePage() {
                 );
               })()}
             </div>
-          </div>
 
-          {fourWeekDialogWarnings.length > 0 && (
-            <div className="rounded-lg border p-3 space-y-1" data-testid="four-week-dialog-warnings">
-              {fourWeekDialogWarnings.map((w, i) => (
-                <div key={i} className={`flex items-start gap-2 text-xs ${w.type === "four_week_176h" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                  <span>{w.message}</span>
-                </div>
-              ))}
-            </div>
-          )}
+            {fourWeekDialogWarnings.length > 0 && (
+              <div className="rounded-lg border p-3 space-y-1" data-testid="four-week-dialog-warnings">
+                {fourWeekDialogWarnings.map((w, i) => (
+                  <div key={i} className={`flex items-start gap-2 text-xs ${w.type === "four_week_176h" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>{w.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <DialogFooter className="flex-row gap-2 justify-between sm:justify-between">
             <div className="flex gap-2">
