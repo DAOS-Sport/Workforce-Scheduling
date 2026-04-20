@@ -1039,6 +1039,7 @@ function GuidelineItemCard({ item }: { item: GuidelineItem }) {
               ) : null;
             })()}
           </div>
+        </div>
       </div>
 
       {zoomedUrl && (
