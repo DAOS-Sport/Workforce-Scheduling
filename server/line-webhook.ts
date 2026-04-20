@@ -187,20 +187,44 @@ export async function processClockIn(
 
   const recentRecords = await storage.getClockRecordsByEmployee(employee.id, todayStr, todayStr);
 
+  // Dedup window: 5 minutes (was 60). Only "success" records count — warnings
+  // (e.g. "no shift / outside window") MUST NOT block a subsequent legitimate
+  // attempt that has now entered the shift window. See Task #49.
+  const DEDUP_WINDOW_MIN = 5;
   if (recentRecords.length > 0) {
-    const lastValidRecord = recentRecords.find(r => r.status === "success" || r.status === "warning");
+    const lastValidRecord = recentRecords.find(r => r.status === "success");
     if (lastValidRecord?.clockTime) {
       const lastTime = new Date(lastValidRecord.clockTime).getTime();
       const nowTime = now.getTime();
       const diffMinutes = (nowTime - lastTime) / (1000 * 60);
-      if (diffMinutes < 60) {
-        // Only block if trying to repeat the same clock type within 60 minutes.
+      if (diffMinutes < DEDUP_WINDOW_MIN) {
+        // Only block if trying to repeat the same clock type.
         // Switching direction (in→out or out→in) is always allowed.
         const expectedNextType: "in" | "out" = lastValidRecord.clockType === "in" ? "out" : "in";
         const intendedType = forcedClockType ?? expectedNextType;
         if (intendedType === lastValidRecord.clockType) {
-          const remaining = Math.ceil(60 - diffMinutes);
+          const remaining = Math.ceil(DEDUP_WINDOW_MIN - diffMinutes);
           const lastType = lastValidRecord.clockType === "in" ? "上班" : "下班";
+          const failReason = `重複打卡：距上次${lastType}打卡不足 ${DEDUP_WINDOW_MIN} 分鐘（還需等待 ${remaining} 分鐘）`;
+          // Persist an audit-only fail record so admins can see the employee
+          // actually tried to clock in but was blocked by the dedup rule.
+          // Without this the attempt vanishes from the DB entirely.
+          try {
+            await storage.createClockRecord({
+              employeeId: employee.id,
+              venueId: lastValidRecord.venueId ?? null,
+              shiftId: null,
+              clockType: forcedClockType || lastValidRecord.clockType,
+              latitude: lat,
+              longitude: lng,
+              distance: null,
+              status: "fail",
+              failReason,
+              matchedVenueName: lastValidRecord.matchedVenueName || null,
+            });
+          } catch (err) {
+            console.error("[clock] failed to write dedup audit record", err);
+          }
           return {
             status: "fail",
             clockType: forcedClockType || lastValidRecord.clockType,
@@ -209,7 +233,7 @@ export async function processClockIn(
             time: timeStr,
             date: todayStr,
             shiftInfo: null,
-            failReason: `重複打卡：距上次${lastType}打卡不足 60 分鐘（還需等待 ${remaining} 分鐘）`,
+            failReason,
             employeeName: employee.name,
             radius: null,
             nearbyVenues: [],
