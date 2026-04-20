@@ -508,6 +508,13 @@ export function formatClockInMessage(result: ClockInResult): string {
   }
 
   if (result.status === "fail") {
+    // Distinguish dedup / generic fails from GPS-out-of-range so the user
+    // sees the actual reason instead of always "you are not in GPS range".
+    const isOutOfRange = result.distance != null && result.radius != null;
+    if (!isOutOfRange) {
+      const reason = result.failReason || "打卡失敗";
+      return `❌ ${reason}\n\n時間：${result.time}\n如有問題請聯繫管理員。${liffHint}`;
+    }
     const distText = result.venueName
       ? `\n最近場館：${result.venueName}（距離 ${result.distance}m，需在 ${result.radius}m 內）`
       : "";
