@@ -87,6 +87,7 @@ interface GuidelineItem {
   contentType: string;
   videoUrl: string | null;
   imageUrl: string | null;
+  imageUrls: string[] | null;
   venueName: string | null;
   acknowledged: boolean;
 }
@@ -1018,17 +1019,26 @@ function GuidelineItemCard({ item }: { item: GuidelineItem }) {
                 觀看影片
               </a>
             )}
-            {item.contentType === "image" && item.imageUrl && (
-              <img
-                src={item.imageUrl}
-                alt={item.title}
-                className="mt-2 w-full max-h-64 object-contain rounded-lg border border-juns-border cursor-zoom-in active:opacity-80"
-                onClick={() => setZoomedUrl(item.imageUrl!)}
-                data-testid={`img-portal-guideline-${item.id}`}
-              />
-            )}
+            {item.contentType === "image" && (() => {
+              const urls = (item.imageUrls && item.imageUrls.length > 0)
+                ? item.imageUrls
+                : item.imageUrl ? [item.imageUrl] : [];
+              return urls.length > 0 ? (
+                <div className="mt-2 space-y-2">
+                  {urls.map((url, idx) => (
+                    <img
+                      key={idx}
+                      src={url}
+                      alt={`${item.title} ${idx + 1}`}
+                      className="w-full max-h-64 object-contain rounded-lg border border-juns-border cursor-zoom-in active:opacity-80"
+                      onClick={() => setZoomedUrl(url)}
+                      data-testid={`img-portal-guideline-${item.id}-${idx}`}
+                    />
+                  ))}
+                </div>
+              ) : null;
+            })()}
           </div>
-        </div>
       </div>
 
       {zoomedUrl && (

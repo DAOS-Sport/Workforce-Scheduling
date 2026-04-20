@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit2, Trash2, FileText, Video, Image, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin, Megaphone, Globe } from "lucide-react";
+import { Plus, Edit2, Trash2, FileText, Video, Image, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin, Megaphone, Globe, X, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Guideline, GuidelineAck, Employee, Venue, Shift } from "@shared/schema";
 
 type GuidelineCategory = "fixed" | "monthly" | "confidentiality";
@@ -80,7 +80,7 @@ export default function GuidelinesPage() {
     content: "",
     contentType: "text" as "text" | "video" | "image",
     videoUrl: "",
-    imageUrl: "",
+    imageUrls: [] as string[],
     venueId: null as number | null,
     sortOrder: 0,
     isActive: true,
@@ -222,7 +222,7 @@ export default function GuidelinesPage() {
   function openCreate() {
     setEditingItem(null);
     setForm({
-      title: "", content: "", contentType: "text", videoUrl: "", imageUrl: "",
+      title: "", content: "", contentType: "text", videoUrl: "", imageUrls: [],
       venueId: null, sortOrder: filtered.length, isActive: true,
       yearMonth: getCurrentYearMonth(),
     });
@@ -231,11 +231,17 @@ export default function GuidelinesPage() {
 
   function openEdit(item: Guideline) {
     setEditingItem(item);
+    let imageUrls: string[] = [];
+    if (item.imageUrls && item.imageUrls.length > 0) {
+      imageUrls = item.imageUrls;
+    } else if (item.imageUrl) {
+      imageUrls = [item.imageUrl];
+    }
     setForm({
       title: item.title, content: item.content,
       contentType: item.contentType as "text" | "video" | "image",
       videoUrl: item.videoUrl || "",
-      imageUrl: item.imageUrl || "",
+      imageUrls,
       venueId: item.venueId,
       sortOrder: item.sortOrder, isActive: item.isActive,
       yearMonth: item.yearMonth || getCurrentYearMonth(),
@@ -249,7 +255,8 @@ export default function GuidelinesPage() {
       title: form.title, content: form.content,
       contentType: form.contentType,
       videoUrl: form.contentType === "video" ? form.videoUrl || null : null,
-      imageUrl: form.contentType === "image" ? form.imageUrl || null : null,
+      imageUrl: form.contentType === "image" ? (form.imageUrls[0] || null) : null,
+      imageUrls: form.contentType === "image" ? (form.imageUrls.length > 0 ? form.imageUrls : null) : null,
       venueId: activeTab === "fixed" ? form.venueId : null,
       sortOrder: form.sortOrder, isActive: form.isActive,
       yearMonth: activeTab === "monthly" ? form.yearMonth : null,
@@ -559,61 +566,116 @@ export default function GuidelinesPage() {
 
             {form.contentType === "image" && (
               <div className="space-y-2">
-                <Label>上傳圖片</Label>
+                <div className="flex items-center justify-between">
+                  <Label>上傳圖片</Label>
+                  <span className="text-xs text-muted-foreground">{form.imageUrls.length}/5 張</span>
+                </div>
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   className="hidden"
                   id="guideline-image-upload"
                   data-testid="input-guideline-image"
                   onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const img = new window.Image();
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      img.onload = () => {
-                        const MAX = 1024;
-                        let { width, height } = img;
-                        if (width > MAX || height > MAX) {
-                          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
-                          else { width = Math.round((width * MAX) / height); height = MAX; }
-                        }
-                        const canvas = document.createElement("canvas");
-                        canvas.width = width; canvas.height = height;
-                        const ctx = canvas.getContext("2d")!;
-                        ctx.drawImage(img, 0, 0, width, height);
-                        const base64 = canvas.toDataURL("image/jpeg", 0.7);
-                        setForm((f) => ({ ...f, imageUrl: base64 }));
+                    const files = Array.from(e.target.files || []);
+                    const remaining = 5 - form.imageUrls.length;
+                    const toProcess = files.slice(0, remaining);
+                    if (toProcess.length === 0) { e.target.value = ""; return; }
+                    const slots = new Array<string>(toProcess.length);
+                    let processed = 0;
+                    toProcess.forEach((file, fileIdx) => {
+                      const img = new window.Image();
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        img.onload = () => {
+                          const MAX = 1024;
+                          let { width, height } = img;
+                          if (width > MAX || height > MAX) {
+                            if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+                            else { width = Math.round((width * MAX) / height); height = MAX; }
+                          }
+                          const canvas = document.createElement("canvas");
+                          canvas.width = width; canvas.height = height;
+                          const ctx = canvas.getContext("2d")!;
+                          ctx.drawImage(img, 0, 0, width, height);
+                          slots[fileIdx] = canvas.toDataURL("image/jpeg", 0.7);
+                          processed++;
+                          if (processed === toProcess.length) {
+                            setForm((f) => ({ ...f, imageUrls: [...f.imageUrls, ...slots] }));
+                          }
+                        };
+                        img.src = ev.target?.result as string;
                       };
-                      img.src = ev.target?.result as string;
-                    };
-                    reader.readAsDataURL(file);
+                      reader.readAsDataURL(file);
+                    });
                     e.target.value = "";
                   }}
                 />
-                <label
-                  htmlFor="guideline-image-upload"
-                  className="flex items-center justify-center gap-2 h-10 px-4 rounded-md border border-dashed border-border cursor-pointer hover:bg-muted text-sm text-muted-foreground transition-colors"
-                >
-                  <Image className="h-4 w-4" />
-                  選擇圖片
-                </label>
-                {form.imageUrl && (
-                  <div className="relative mt-2">
-                    <img
-                      src={form.imageUrl}
-                      alt="預覽"
-                      className="w-full max-h-48 object-contain rounded-md border border-border"
-                      data-testid="img-guideline-preview"
-                    />
-                    <button
-                      type="button"
-                      className="absolute top-1 right-1 bg-background border border-border rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-destructive"
-                      onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
-                    >
-                      移除
-                    </button>
+                {form.imageUrls.length < 5 && (
+                  <label
+                    htmlFor="guideline-image-upload"
+                    className="flex items-center justify-center gap-2 h-10 px-4 rounded-md border border-dashed border-border cursor-pointer hover:bg-muted text-sm text-muted-foreground transition-colors"
+                  >
+                    <Image className="h-4 w-4" />
+                    新增圖片（可多選）
+                  </label>
+                )}
+                {form.imageUrls.length > 0 && (
+                  <div className="space-y-2 mt-2">
+                    {form.imageUrls.map((url, idx) => (
+                      <div key={idx} className="relative" data-testid={`img-guideline-preview-${idx}`}>
+                        <img
+                          src={url}
+                          alt={`圖片 ${idx + 1}`}
+                          className="w-full max-h-40 object-contain rounded-md border border-border"
+                        />
+                        <div className="absolute top-1 right-1 flex gap-1">
+                          {idx > 0 && (
+                            <button
+                              type="button"
+                              className="bg-background border border-border rounded-md p-0.5 text-muted-foreground hover:text-foreground"
+                              onClick={() => setForm((f) => {
+                                const arr = [...f.imageUrls];
+                                [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                return { ...f, imageUrls: arr };
+                              })}
+                              data-testid={`button-move-image-up-${idx}`}
+                              title="向上移動"
+                            >
+                              <ChevronLeft className="h-3 w-3" />
+                            </button>
+                          )}
+                          {idx < form.imageUrls.length - 1 && (
+                            <button
+                              type="button"
+                              className="bg-background border border-border rounded-md p-0.5 text-muted-foreground hover:text-foreground"
+                              onClick={() => setForm((f) => {
+                                const arr = [...f.imageUrls];
+                                [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                                return { ...f, imageUrls: arr };
+                              })}
+                              data-testid={`button-move-image-down-${idx}`}
+                              title="向下移動"
+                            >
+                              <ChevronRight className="h-3 w-3" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="bg-background border border-border rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5"
+                            onClick={() => setForm((f) => ({ ...f, imageUrls: f.imageUrls.filter((_, i) => i !== idx) }))}
+                            data-testid={`button-remove-guideline-image-${idx}`}
+                          >
+                            <X className="h-3 w-3" />
+                            移除
+                          </button>
+                        </div>
+                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
+                          {idx + 1}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -784,16 +846,24 @@ export default function GuidelinesPage() {
                 </a>
               </div>
             )}
-            {previewItem?.contentType === "image" && previewItem?.imageUrl && (
-              <div className="space-y-2">
-                <img
-                  src={previewItem.imageUrl}
-                  alt={previewItem.title}
-                  className="w-full max-h-80 object-contain rounded-md border border-border"
-                  data-testid="img-preview-guideline"
-                />
-              </div>
-            )}
+            {previewItem?.contentType === "image" && (() => {
+              const urls = (previewItem.imageUrls && previewItem.imageUrls.length > 0)
+                ? previewItem.imageUrls
+                : previewItem.imageUrl ? [previewItem.imageUrl] : [];
+              return urls.length > 0 ? (
+                <div className="space-y-2">
+                  {urls.map((url, idx) => (
+                    <img
+                      key={idx}
+                      src={url}
+                      alt={`${previewItem.title} ${idx + 1}`}
+                      className="w-full max-h-80 object-contain rounded-md border border-border"
+                      data-testid={`img-preview-guideline-${idx}`}
+                    />
+                  ))}
+                </div>
+              ) : null;
+            })()}
             <div className="whitespace-pre-wrap text-sm leading-relaxed" data-testid="text-preview-content">
               {previewItem?.content}
             </div>
@@ -827,7 +897,8 @@ function GuidelineCard({
             )}
             {item.contentType === "image" && (
               <Badge variant="outline" className="text-xs">
-                <Image className="h-3 w-3 mr-1" />圖片
+                <Image className="h-3 w-3 mr-1" />
+                {(item.imageUrls && item.imageUrls.length > 1) ? `${item.imageUrls.length}張圖片` : "圖片"}
               </Badge>
             )}
             {venueName && (
