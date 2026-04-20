@@ -970,62 +970,83 @@ function GuidelinesCheckScreen({
 }
 
 function GuidelineItemCard({ item }: { item: GuidelineItem }) {
+  const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
+
   return (
-    <div className="border border-juns-border rounded-xl bg-white p-3" data-testid={`card-portal-guideline-${item.id}`}>
-      <div className="flex items-start gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap mb-1">
-            <span className="text-sm font-medium text-juns-navy">{item.title}</span>
-            {item.venueName && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-juns-border">
-                <MapPin className="h-2.5 w-2.5 inline mr-0.5" />
-                {item.venueName}
-              </span>
+    <>
+      <div className="border border-juns-border rounded-xl bg-white p-3" data-testid={`card-portal-guideline-${item.id}`}>
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+              <span className="text-sm font-medium text-juns-navy">{item.title}</span>
+              {item.venueName && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-juns-border">
+                  <MapPin className="h-2.5 w-2.5 inline mr-0.5" />
+                  {item.venueName}
+                </span>
+              )}
+              {item.contentType === "video" && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-juns-border">
+                  <Video className="h-2.5 w-2.5 inline mr-0.5" />
+                  影片
+                </span>
+              )}
+              {item.contentType === "image" && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-juns-border">
+                  <ImageIcon className="h-2.5 w-2.5 inline mr-0.5" />
+                  圖片
+                </span>
+              )}
+              {item.acknowledged && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-juns-green/10 text-juns-green">
+                  <CheckCircle2 className="h-2.5 w-2.5 inline mr-0.5" />
+                  已確認
+                </span>
+              )}
+            </div>
+            {item.content && (
+              <p className="text-xs text-slate-500 whitespace-pre-wrap">{item.content}</p>
             )}
-            {item.contentType === "video" && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-juns-border">
-                <Video className="h-2.5 w-2.5 inline mr-0.5" />
-                影片
-              </span>
+            {item.contentType === "video" && item.videoUrl && (
+              <a
+                href={item.videoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-juns-teal underline mt-1 inline-block"
+                data-testid={`link-video-${item.id}`}
+              >
+                觀看影片
+              </a>
             )}
-            {item.contentType === "image" && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-juns-border">
-                <ImageIcon className="h-2.5 w-2.5 inline mr-0.5" />
-                圖片
-              </span>
-            )}
-            {item.acknowledged && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-juns-green/10 text-juns-green">
-                <CheckCircle2 className="h-2.5 w-2.5 inline mr-0.5" />
-                已確認
-              </span>
+            {item.contentType === "image" && item.imageUrl && (
+              <img
+                src={item.imageUrl}
+                alt={item.title}
+                className="mt-2 w-full max-h-64 object-contain rounded-lg border border-juns-border cursor-zoom-in active:opacity-80"
+                onClick={() => setZoomedUrl(item.imageUrl!)}
+                data-testid={`img-portal-guideline-${item.id}`}
+              />
             )}
           </div>
-          {item.contentType !== "image" && (
-            <p className="text-xs text-slate-500 whitespace-pre-wrap">{item.content}</p>
-          )}
-          {item.contentType === "video" && item.videoUrl && (
-            <a
-              href={item.videoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-juns-teal underline mt-1 inline-block"
-              data-testid={`link-video-${item.id}`}
-            >
-              觀看影片
-            </a>
-          )}
-          {item.contentType === "image" && item.imageUrl && (
-            <img
-              src={item.imageUrl}
-              alt={item.title}
-              className="mt-2 w-full max-h-64 object-contain rounded-lg border border-juns-border"
-              data-testid={`img-portal-guideline-${item.id}`}
-            />
-          )}
         </div>
       </div>
-    </div>
+
+      {zoomedUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+          onClick={() => setZoomedUrl(null)}
+          data-testid="overlay-image-zoom"
+        >
+          <img
+            src={zoomedUrl}
+            alt="放大檢視"
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+            data-testid="img-zoomed"
+          />
+          <span className="absolute top-4 right-5 text-white/70 text-xs">點擊任意處關閉</span>
+        </div>
+      )}
+    </>
   );
 }
 
