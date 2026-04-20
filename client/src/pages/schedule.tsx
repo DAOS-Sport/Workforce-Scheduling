@@ -1450,8 +1450,8 @@ export default function SchedulePage() {
   return (
     <div className="flex flex-col h-full">
       <div className="sticky top-0 z-50 bg-background border-b border-border/50">
-        {/* Row 1: Month nav + RegionTabs */}
-        <div className="flex items-center gap-1.5 px-3 py-2 min-w-0 overflow-hidden">
+        {/* Toolbar — single scrollable row */}
+        <div className="flex items-center gap-1.5 px-3 py-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
           {/* Left: title + month nav */}
           <div className="flex items-center gap-1 shrink-0">
             <h1 className="text-sm font-bold tracking-tight hidden sm:block" data-testid="text-page-title">排班編輯器</h1>
@@ -1489,13 +1489,11 @@ export default function SchedulePage() {
           </div>
 
           {/* Center: RegionTabs */}
-          <div className="flex-1 flex justify-center min-w-0 overflow-hidden">
+          <div className="shrink-0">
             <RegionTabs />
           </div>
-        </div>
 
-        {/* Row 2: Action buttons — horizontally scrollable on mobile */}
-        <div className="flex items-center gap-1.5 px-3 pb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+          {/* Right: action buttons */}
           {/* 缺班 popover — compact single button */}
           {shortageDates.length > 0 && (
             <Popover>
