@@ -11,7 +11,7 @@ import {
   sendWeeklySchedulePush,
   sendWeeklyLateReport,
 } from "./line-webhook";
-import { ensureWeeklyPushTable, ensureLeaveRequestsTable, ensureAnnouncementsTable } from "./storage";
+import { ensureWeeklyPushTable, ensureLeaveRequestsTable, ensureAnnouncementsTable, ensureShiftsSoftDelete } from "./storage";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
@@ -143,6 +143,13 @@ app.use((req, res, next) => {
     await ensureLeaveRequestsTable();
   } catch (err: any) {
     log(`leave_requests 表格建立失敗: ${err.message}`, "db");
+  }
+
+  // Ensure shifts soft-delete columns + shift_audit_log table exist (Task #50)
+  try {
+    await ensureShiftsSoftDelete();
+  } catch (err: any) {
+    log(`shifts soft-delete schema 建立失敗: ${err.message}`, "db");
   }
 
   // Ensure announcements table exists

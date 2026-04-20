@@ -446,6 +446,19 @@ export async function registerRoutes(
     res.json(cancelled);
   });
 
+  // Spec'd endpoint per Task #50: returns active shifts by default; includes
+  // cancelled rows when ?includeCancelled=1 is passed.
+  app.get("/api/shifts/:regionCode/:startDate/:endDate/all", async (req, res) => {
+    const { regionCode, startDate, endDate } = req.params;
+    const includeCancelled = req.query.includeCancelled === "1" || req.query.includeCancelled === "true";
+    const region = await storage.getRegionByCode(regionCode);
+    if (!region) return res.json([]);
+    const active = await storage.getShiftsByRegionAndDateRange(region.id, startDate, endDate);
+    if (!includeCancelled) return res.json(active);
+    const cancelled = await storage.getCancelledShiftsByRegionAndDateRange(region.id, startDate, endDate);
+    res.json([...active, ...cancelled]);
+  });
+
   app.post("/api/shifts/batch-delete", async (req, res) => {
     try {
       const { employeeId, venueId, startTime, endTime, role, targetDates, reason } = req.body;

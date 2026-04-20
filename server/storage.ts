@@ -330,8 +330,13 @@ export class DatabaseStorage implements IStorage {
     return shift;
   }
 
-  async updateShift(id: number, data: Partial<InsertShift>, actor: string = "system"): Promise<Shift | undefined> {
+  async updateShift(id: number, data: Partial<InsertShift>, actor: string = "system", force: boolean = false): Promise<Shift | undefined> {
     const before = await this.getShift(id);
+    // Protect active shifts from non-admin (system / ragic-sync / batch automation) actors
+    // unless they explicitly opt in with force=true. Admin actors always pass.
+    if (before?.status === "active" && !actor.startsWith("admin") && !force) {
+      throw new Error(`actor '${actor}' refused to mutate active shift ${id} without force=true (Task #50 protection)`);
+    }
     const [shift] = await db.update(shifts).set(data).where(eq(shifts.id, id)).returning();
     if (shift) {
       try {
@@ -348,9 +353,13 @@ export class DatabaseStorage implements IStorage {
     return shift;
   }
 
-  async deleteShift(id: number, actor: string = "system", reason?: string): Promise<boolean> {
+  async deleteShift(id: number, actor: string = "system", reason?: string, force: boolean = false): Promise<boolean> {
     const before = await this.getShift(id);
     if (!before || before.status === "cancelled") return false;
+    // Same protection as updateShift: non-admin actors must pass force=true.
+    if (!actor.startsWith("admin") && !force) {
+      throw new Error(`actor '${actor}' refused to cancel active shift ${id} without force=true (Task #50 protection)`);
+    }
     const [shift] = await db.update(shifts).set({
       status: "cancelled",
       cancelledAt: new Date(),
@@ -591,7 +600,8 @@ export class DatabaseStorage implements IStorage {
       and(
         eq(shifts.employeeId, employeeId),
         gte(shifts.date, startDate),
-        lte(shifts.date, endDate)
+        lte(shifts.date, endDate),
+        eq(shifts.status, "active")
       )
     );
   }
@@ -602,7 +612,8 @@ export class DatabaseStorage implements IStorage {
       and(
         inArray(shifts.employeeId, employeeIds),
         gte(shifts.date, startDate),
-        lte(shifts.date, endDate)
+        lte(shifts.date, endDate),
+        eq(shifts.status, "active")
       )
     );
   }
@@ -611,7 +622,8 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(shifts).where(
       and(
         eq(shifts.venueId, venueId),
-        eq(shifts.date, date)
+        eq(shifts.date, date),
+        eq(shifts.status, "active")
       )
     );
   }
@@ -620,7 +632,8 @@ export class DatabaseStorage implements IStorage {
     const venueShifts = await db.select().from(shifts).where(
       and(
         eq(shifts.venueId, venueId),
-        eq(shifts.date, date)
+        eq(shifts.date, date),
+        eq(shifts.status, "active")
       )
     );
     const coworkerIds = venueShifts
@@ -1007,6 +1020,29 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+export async function ensureShiftsSoftDelete(): Promise<void> {
+  await pool.query(`
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS cancelled_by TEXT;
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
+
+    CREATE TABLE IF NOT EXISTS shift_audit_log (
+      id SERIAL PRIMARY KEY,
+      shift_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      payload JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_shift_audit_shift ON shift_audit_log (shift_id);
+    CREATE INDEX IF NOT EXISTS idx_shift_audit_created ON shift_audit_log (created_at);
+    CREATE INDEX IF NOT EXISTS idx_shifts_status ON shifts (status);
+  `);
+  console.log("[db] shifts soft-delete schema 確認完成");
+}
 
 export async function ensureAnnouncementsTable(): Promise<void> {
   await pool.query(`
