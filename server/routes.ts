@@ -405,7 +405,8 @@ export async function registerRoutes(
       }
 
       const actor = req.session.adminName || "admin";
-      const shift = await storage.updateShift(id, partial, actor);
+      // Admin direct edit through the UI is an explicit, authorized action.
+      const shift = await storage.updateShift(id, partial, actor, true);
       res.json({ ...shift, warnings });
     } catch (err: any) {
       if (err.name === "ZodError") {
@@ -419,7 +420,8 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     const actor = req.session.adminName || "admin";
     const reason = typeof req.body?.reason === "string" ? req.body.reason : undefined;
-    const deleted = await storage.deleteShift(id, actor, reason);
+    // Admin direct delete through the UI is an explicit, authorized action.
+    const deleted = await storage.deleteShift(id, actor, reason, true);
     if (!deleted) return res.status(404).json({ message: "Shift not found or already cancelled" });
     res.json({ success: true });
   });
@@ -477,7 +479,7 @@ export async function registerRoutes(
           (!role || s.role === role)
         );
         for (const s of matching) {
-          await storage.deleteShift(s.id, actor, reason);
+          await storage.deleteShift(s.id, actor, reason, true);
           deletedCount++;
         }
       }
@@ -497,7 +499,7 @@ export async function registerRoutes(
       const uniqueIds = [...new Set(shiftIds.map(Number).filter(n => Number.isInteger(n) && n > 0))];
       let deletedCount = 0;
       for (const numId of uniqueIds) {
-        const ok = await storage.deleteShift(numId, actor, reason);
+        const ok = await storage.deleteShift(numId, actor, reason, true);
         if (ok) deletedCount++;
       }
       res.json({ success: true, deletedCount });
@@ -509,9 +511,10 @@ export async function registerRoutes(
   app.post("/api/shifts/batch", async (req, res) => {
     try {
       const { employeeId, venueId, startTime, endTime, role, isDispatch, targetDates, skipExisting, force } = req.body;
-      // Task #50 protection: batch mutates active shifts, so admin must
-      // explicitly opt in with force=true. Default true for legacy admin UI
-      // compatibility, but propagated through to storage either way.
+      // Task #50 protection: batch mutates active shifts. Admin UI calls this
+      // route to bulk-replace shifts and is treated as explicit user intent,
+      // so force defaults to true here. Set body.force=false from automation
+      // (e.g. ragic sync) to make active shifts read-only.
       const forceFlag = force !== false;
       if (!employeeId || !venueId || !startTime || !endTime || !role || !Array.isArray(targetDates) || targetDates.length === 0) {
         return res.status(400).json({ message: "缺少必要欄位" });
@@ -787,9 +790,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "缺少必要欄位" });
       }
 
-      // Task #50 protection: batch-update overwrites active shifts. Require
-      // explicit force=true (defaults to true for legacy admin UI; future
-      // automation paths must pass force=false to NOT touch active shifts).
+      // Task #50 protection: batch-update overwrites active shifts. This
+      // endpoint is the admin "apply to multiple dates" UI button — treated
+      // as explicit user intent so force defaults to true. Automation
+      // callers must pass body.force=false to keep active shifts read-only.
       const forceFlag = req.body.force !== false;
 
       const empId = Number(employeeId);

@@ -332,9 +332,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateShift(id: number, data: Partial<InsertShift>, actor: string = "system", force: boolean = false): Promise<Shift | undefined> {
     const before = await this.getShift(id);
-    // Protect active shifts from non-admin (system / ragic-sync / batch automation) actors
-    // unless they explicitly opt in with force=true. Admin actors always pass.
-    if (before?.status === "active" && !actor.startsWith("admin") && !force) {
+    // Task #50 protection: any caller mutating an active shift MUST explicitly
+    // opt in with force=true. Admin UI routes set force=true (admin chose to
+    // edit). Automation paths (ragic-sync etc.) default to force=false so they
+    // cannot silently overwrite admin-confirmed shifts.
+    if (before?.status === "active" && !force) {
       throw new Error(`actor '${actor}' refused to mutate active shift ${id} without force=true (Task #50 protection)`);
     }
     const [shift] = await db.update(shifts).set(data).where(eq(shifts.id, id)).returning();
@@ -356,8 +358,8 @@ export class DatabaseStorage implements IStorage {
   async deleteShift(id: number, actor: string = "system", reason?: string, force: boolean = false): Promise<boolean> {
     const before = await this.getShift(id);
     if (!before || before.status === "cancelled") return false;
-    // Same protection as updateShift: non-admin actors must pass force=true.
-    if (!actor.startsWith("admin") && !force) {
+    // Task #50 protection: explicit force=true required to cancel any active shift.
+    if (!force) {
       throw new Error(`actor '${actor}' refused to cancel active shift ${id} without force=true (Task #50 protection)`);
     }
     const [shift] = await db.update(shifts).set({
