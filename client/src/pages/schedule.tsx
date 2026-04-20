@@ -2579,7 +2579,7 @@ export default function SchedulePage() {
       </Dialog>
 
       <Dialog open={dispatchDialogOpen} onOpenChange={setDispatchDialogOpen}>
-        <DialogContent className="sm:max-w-md" data-testid="dispatch-shift-dialog">
+        <DialogContent className="sm:max-w-md flex flex-col max-h-[90svh]" data-testid="dispatch-shift-dialog">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-purple-700 dark:text-purple-400">
               {editingDispatch
@@ -2591,7 +2591,7 @@ export default function SchedulePage() {
               不受勞基法限制；時間與場館依實際安排填入。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-4 pr-0.5">
             <div className="space-y-2">
               <Label>派遣人員姓名 *</Label>
               <Input
@@ -3037,85 +3037,83 @@ export default function SchedulePage() {
             {!editingShift && (
               <div className="space-y-2">
                 <Label>排班人員</Label>
-                <Popover open={employeeDropdownOpen} onOpenChange={setEmployeeDropdownOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent hover:text-accent-foreground"
-                      data-testid="button-select-employees"
-                    >
-                      <span className="truncate">
-                        {shiftSelectedEmployeeIds.size === 0
-                          ? "選擇人員"
-                          : shiftSelectedEmployeeIds.size === 1
-                            ? pickerEmployees.find(e => shiftSelectedEmployeeIds.has(e.id))?.name || "1 人"
-                            : `已選 ${shiftSelectedEmployeeIds.size} 人`}
-                      </span>
-                      <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[280px] p-0" align="start">
-                    <div className="max-h-[300px] overflow-auto p-1">
-                      {[
-                        { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
-                        { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
-                        { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
-                        { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
-                        { key: "ft-manager", label: "正職主管職", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "主管職" },
-                        { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
-                        { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
-                        { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
-                        { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
-                        { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
-                      ].map(group => {
-                        const groupEmps = pickerEmployees.filter(group.filter);
-                        if (groupEmps.length === 0) return null;
-                        const allSelected = groupEmps.every(e => shiftSelectedEmployeeIds.has(e.id));
-                        return (
-                          <div key={group.key} className="mb-1">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => setEmployeeDropdownOpen(v => !v)}
+                  data-testid="button-select-employees"
+                >
+                  <span className="truncate">
+                    {shiftSelectedEmployeeIds.size === 0
+                      ? "選擇人員"
+                      : shiftSelectedEmployeeIds.size === 1
+                        ? pickerEmployees.find(e => shiftSelectedEmployeeIds.has(e.id))?.name || "1 人"
+                        : `已選 ${shiftSelectedEmployeeIds.size} 人`}
+                  </span>
+                  <ChevronDown className={`h-4 w-4 opacity-50 shrink-0 transition-transform duration-150 ${employeeDropdownOpen ? "rotate-180" : ""}`} />
+                </button>
+                {employeeDropdownOpen && (
+                  <div className="rounded-md border border-input bg-background max-h-[240px] overflow-y-auto p-1">
+                    {[
+                      { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
+                      { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
+                      { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
+                      { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
+                      { key: "ft-manager", label: "正職主管職", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "主管職" },
+                      { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                      { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
+                      { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
+                      { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
+                      { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
+                    ].map(group => {
+                      const groupEmps = pickerEmployees.filter(group.filter);
+                      if (groupEmps.length === 0) return null;
+                      const allSelected = groupEmps.every(e => shiftSelectedEmployeeIds.has(e.id));
+                      return (
+                        <div key={group.key} className="mb-1">
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-sm"
+                            onClick={() => {
+                              const next = new Set(shiftSelectedEmployeeIds);
+                              if (allSelected) {
+                                groupEmps.forEach(e => next.delete(e.id));
+                              } else {
+                                groupEmps.forEach(e => next.add(e.id));
+                              }
+                              setShiftSelectedEmployeeIds(next);
+                            }}
+                          >
+                            <Checkbox checked={allSelected} className="h-3.5 w-3.5" />
+                            {group.label} ({groupEmps.length})
+                          </button>
+                          {groupEmps.map(emp => (
                             <button
+                              key={emp.id}
                               type="button"
-                              className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-sm"
+                              className="w-full flex items-center gap-2 pl-6 pr-2 py-1.5 text-sm hover:bg-muted rounded-sm"
                               onClick={() => {
                                 const next = new Set(shiftSelectedEmployeeIds);
-                                if (allSelected) {
-                                  groupEmps.forEach(e => next.delete(e.id));
-                                } else {
-                                  groupEmps.forEach(e => next.add(e.id));
-                                }
+                                if (next.has(emp.id)) next.delete(emp.id);
+                                else next.add(emp.id);
                                 setShiftSelectedEmployeeIds(next);
                               }}
+                              data-testid={`checkbox-employee-${emp.id}`}
                             >
-                              <Checkbox checked={allSelected} className="h-3.5 w-3.5" />
-                              {group.label} ({groupEmps.length})
+                              <Checkbox checked={shiftSelectedEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
+                              <span className="text-foreground">{emp.name}</span>
+                              {neiQinEmployeeIds.has(emp.id) ? (
+                                <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4">內勤</span>
+                              ) : crossRegionEmployeeIds.has(emp.id) && (
+                                <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4">支援</span>
+                              )}
                             </button>
-                            {groupEmps.map(emp => (
-                              <button
-                                key={emp.id}
-                                type="button"
-                                className="w-full flex items-center gap-2 pl-6 pr-2 py-1.5 text-sm hover:bg-muted rounded-sm"
-                                onClick={() => {
-                                  const next = new Set(shiftSelectedEmployeeIds);
-                                  if (next.has(emp.id)) next.delete(emp.id);
-                                  else next.add(emp.id);
-                                  setShiftSelectedEmployeeIds(next);
-                                }}
-                                data-testid={`checkbox-employee-${emp.id}`}
-                              >
-                                <Checkbox checked={shiftSelectedEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
-                                <span className="text-foreground">{emp.name}</span>
-                                {neiQinEmployeeIds.has(emp.id) ? (
-                                  <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4">內勤</span>
-                                ) : crossRegionEmployeeIds.has(emp.id) && (
-                                  <span className="text-[9px] px-1 py-0 rounded bg-orange-500/15 text-orange-500 leading-4">支援</span>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
