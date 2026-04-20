@@ -511,11 +511,11 @@ export async function registerRoutes(
   app.post("/api/shifts/batch", async (req, res) => {
     try {
       const { employeeId, venueId, startTime, endTime, role, isDispatch, targetDates, skipExisting, force } = req.body;
-      // Task #50 protection: batch mutates active shifts. Admin UI calls this
-      // route to bulk-replace shifts and is treated as explicit user intent,
-      // so force defaults to true here. Set body.force=false from automation
-      // (e.g. ragic sync) to make active shifts read-only.
-      const forceFlag = force !== false;
+      // Task #50 protection: safe-by-default. Active shifts are NEVER
+      // overwritten unless caller explicitly sets force=true. Admin UI sends
+      // force:true on bulk-replace buttons; automation (ragic sync etc.)
+      // omits force and will be blocked at storage layer with a clear error.
+      const forceFlag = force === true;
       if (!employeeId || !venueId || !startTime || !endTime || !role || !Array.isArray(targetDates) || targetDates.length === 0) {
         return res.status(400).json({ message: "缺少必要欄位" });
       }
@@ -790,11 +790,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: "缺少必要欄位" });
       }
 
-      // Task #50 protection: batch-update overwrites active shifts. This
-      // endpoint is the admin "apply to multiple dates" UI button — treated
-      // as explicit user intent so force defaults to true. Automation
-      // callers must pass body.force=false to keep active shifts read-only.
-      const forceFlag = req.body.force !== false;
+      // Task #50 protection: safe-by-default. Active shifts are NEVER
+      // overwritten unless caller explicitly sets force=true. Admin UI sends
+      // force:true on the "apply to multiple dates" button; automation
+      // (ragic sync etc.) is blocked at storage layer with a clear error.
+      const forceFlag = req.body.force === true;
 
       const empId = Number(employeeId);
       const isLeave = LEAVE_TYPES.includes(role);

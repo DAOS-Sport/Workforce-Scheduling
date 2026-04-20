@@ -1009,7 +1009,7 @@ export default function SchedulePage() {
 
   const batchCreateShifts = useMutation({
     mutationFn: async (data: { employeeId: number; venueId: string; startTime: string; endTime: string; role: string; isDispatch: boolean; targetDates: string[] }) => {
-      const res = await apiRequest("POST", "/api/shifts/batch", data);
+      const res = await apiRequest("POST", "/api/shifts/batch", { ...data, force: true });
       return res.json();
     },
     onSuccess: (data: any) => {
@@ -1044,7 +1044,7 @@ export default function SchedulePage() {
       matchEndTime: string;
       matchRole: string;
     }) => {
-      const res = await apiRequest("POST", "/api/shifts/batch-update", data);
+      const res = await apiRequest("POST", "/api/shifts/batch-update", { ...data, force: true });
       return res.json();
     },
     onSuccess: (data: any) => {
