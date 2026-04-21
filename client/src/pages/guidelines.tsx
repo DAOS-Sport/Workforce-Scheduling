@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, parseISO } from "date-fns";
 import { zhTW } from "date-fns/locale";
@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit2, Trash2, FileText, Video, Image, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin, Megaphone, Globe, X, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Plus, Edit2, Trash2, FileText, Video, Image, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin, Megaphone, Globe, X, ChevronLeft, ChevronRight, Loader2, GripVertical } from "lucide-react";
 import type { Guideline, GuidelineAck, Employee, Venue, Shift } from "@shared/schema";
 
 type GuidelineListItem = Omit<Guideline, "imageUrl" | "imageUrls"> & { imageCount: number };
@@ -65,6 +65,137 @@ function getYearMonthOptions() {
     options.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }
   return options;
+}
+
+function SortableImageList({ urls, onReorder, onRemove }: {
+  urls: string[];
+  onReorder: (next: string[]) => void;
+  onRemove: (idx: number) => void;
+}) {
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const startY = useRef(0);
+  const dragOffsetY = useRef(0);
+  const [pointerY, setPointerY] = useState(0);
+
+  const findIndexAtY = useCallback((clientY: number): number | null => {
+    for (let i = 0; i < itemRefs.current.length; i++) {
+      const el = itemRefs.current[i];
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (clientY >= r.top && clientY <= r.bottom) return i;
+    }
+    if (itemRefs.current.length > 0) {
+      const first = itemRefs.current[0]?.getBoundingClientRect();
+      const last = itemRefs.current[itemRefs.current.length - 1]?.getBoundingClientRect();
+      if (first && clientY < first.top) return 0;
+      if (last && clientY > last.bottom) return itemRefs.current.length - 1;
+    }
+    return null;
+  }, []);
+
+  const handlePointerDown = (idx: number) => (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    const itemRect = itemRefs.current[idx]?.getBoundingClientRect();
+    startY.current = e.clientY;
+    dragOffsetY.current = itemRect ? e.clientY - itemRect.top : 0;
+    setPointerY(e.clientY);
+    setDraggingIdx(idx);
+    setOverIdx(idx);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (draggingIdx === null) return;
+    setPointerY(e.clientY);
+    const target = findIndexAtY(e.clientY);
+    if (target !== null && target !== overIdx) setOverIdx(target);
+  };
+
+  const finishDrag = () => {
+    if (draggingIdx !== null && overIdx !== null && draggingIdx !== overIdx) {
+      const arr = [...urls];
+      const [moved] = arr.splice(draggingIdx, 1);
+      arr.splice(overIdx, 0, moved);
+      onReorder(arr);
+    }
+    setDraggingIdx(null);
+    setOverIdx(null);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    try { (e.target as Element).releasePointerCapture(e.pointerId); } catch {}
+    finishDrag();
+  };
+
+  return (
+    <div className="space-y-2 mt-2" data-testid="list-guideline-images">
+      {urls.map((url, idx) => {
+        const isDragging = draggingIdx === idx;
+        const isOver = draggingIdx !== null && overIdx === idx && draggingIdx !== idx;
+        const showAbove = isOver && (overIdx ?? 0) < (draggingIdx ?? 0);
+        const showBelow = isOver && (overIdx ?? 0) > (draggingIdx ?? 0);
+        return (
+          <div
+            key={idx}
+            ref={(el) => { itemRefs.current[idx] = el; }}
+            className={`relative transition-opacity ${isDragging ? "opacity-40" : ""}`}
+            data-testid={`img-guideline-preview-${idx}`}
+          >
+            {showAbove && <div className="h-1 -mt-1 mb-1 rounded-full bg-primary" data-testid={`drop-indicator-${idx}`} />}
+            <div className={`flex items-stretch gap-2 rounded-md border ${isOver ? "border-primary border-2" : "border-border"} bg-background overflow-hidden`}>
+              <button
+                type="button"
+                onPointerDown={handlePointerDown(idx)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                className="flex items-center justify-center px-2 bg-muted/50 hover:bg-muted cursor-grab active:cursor-grabbing touch-none select-none"
+                aria-label={`拖曳重新排序圖片 ${idx + 1}`}
+                title="按住拖曳調整順序"
+                data-testid={`button-drag-image-${idx}`}
+              >
+                <GripVertical className="h-5 w-5 text-muted-foreground" />
+              </button>
+              <div className="flex-1 relative">
+                <img
+                  src={url}
+                  alt={`圖片 ${idx + 1}`}
+                  className="w-full max-h-40 object-contain"
+                  draggable={false}
+                />
+                <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
+                  {idx + 1}
+                </div>
+                <button
+                  type="button"
+                  className="absolute top-1 right-1 bg-background border border-border rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5"
+                  onClick={() => onRemove(idx)}
+                  data-testid={`button-remove-guideline-image-${idx}`}
+                >
+                  <X className="h-3 w-3" />
+                  移除
+                </button>
+              </div>
+            </div>
+            {showBelow && <div className="h-1 mt-1 -mb-1 rounded-full bg-primary" data-testid={`drop-indicator-after-${idx}`} />}
+          </div>
+        );
+      })}
+      {draggingIdx !== null && (
+        <div
+          className="pointer-events-none fixed left-0 right-0 z-50 px-4"
+          style={{ top: pointerY - dragOffsetY.current }}
+          data-testid="drag-ghost"
+        >
+          <div className="mx-auto max-w-md rounded-md border-2 border-primary bg-background shadow-2xl overflow-hidden opacity-90">
+            <img src={urls[draggingIdx]} alt="" className="w-full max-h-32 object-contain" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function GuidelinesPage() {
@@ -638,61 +769,18 @@ export default function GuidelinesPage() {
                   </label>
                 )}
                 {form.imageUrls.length > 0 && (
-                  <div className="space-y-2 mt-2">
-                    {form.imageUrls.map((url, idx) => (
-                      <div key={idx} className="relative" data-testid={`img-guideline-preview-${idx}`}>
-                        <img
-                          src={url}
-                          alt={`圖片 ${idx + 1}`}
-                          className="w-full max-h-40 object-contain rounded-md border border-border"
-                        />
-                        <div className="absolute top-1 right-1 flex gap-1">
-                          {idx > 0 && (
-                            <button
-                              type="button"
-                              className="bg-background border border-border rounded-md p-0.5 text-muted-foreground hover:text-foreground"
-                              onClick={() => setForm((f) => {
-                                const arr = [...f.imageUrls];
-                                [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
-                                return { ...f, imageUrls: arr };
-                              })}
-                              data-testid={`button-move-image-up-${idx}`}
-                              title="向上移動"
-                            >
-                              <ChevronLeft className="h-3 w-3" />
-                            </button>
-                          )}
-                          {idx < form.imageUrls.length - 1 && (
-                            <button
-                              type="button"
-                              className="bg-background border border-border rounded-md p-0.5 text-muted-foreground hover:text-foreground"
-                              onClick={() => setForm((f) => {
-                                const arr = [...f.imageUrls];
-                                [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
-                                return { ...f, imageUrls: arr };
-                              })}
-                              data-testid={`button-move-image-down-${idx}`}
-                              title="向下移動"
-                            >
-                              <ChevronRight className="h-3 w-3" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="bg-background border border-border rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5"
-                            onClick={() => setForm((f) => ({ ...f, imageUrls: f.imageUrls.filter((_, i) => i !== idx) }))}
-                            data-testid={`button-remove-guideline-image-${idx}`}
-                          >
-                            <X className="h-3 w-3" />
-                            移除
-                          </button>
-                        </div>
-                        <div className="absolute top-1 left-1 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
-                          {idx + 1}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    {form.imageUrls.length > 1 && (
+                      <p className="text-xs text-muted-foreground mt-1" data-testid="text-drag-hint">
+                        提示：按住左側拖曳把手可調整圖片順序
+                      </p>
+                    )}
+                    <SortableImageList
+                      urls={form.imageUrls}
+                      onReorder={(next) => setForm((f) => ({ ...f, imageUrls: next }))}
+                      onRemove={(idx) => setForm((f) => ({ ...f, imageUrls: f.imageUrls.filter((_, i) => i !== idx) }))}
+                    />
+                  </>
                 )}
               </div>
             )}
