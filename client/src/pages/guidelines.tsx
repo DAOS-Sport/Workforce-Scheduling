@@ -79,21 +79,23 @@ function SortableImageList({ urls, onReorder, onRemove }: {
   const dragOffsetY = useRef(0);
   const [pointerY, setPointerY] = useState(0);
 
+  itemRefs.current.length = urls.length;
+
   const findIndexAtY = useCallback((clientY: number): number | null => {
-    for (let i = 0; i < itemRefs.current.length; i++) {
+    const len = urls.length;
+    if (len === 0) return null;
+    for (let i = 0; i < len; i++) {
       const el = itemRefs.current[i];
       if (!el) continue;
       const r = el.getBoundingClientRect();
       if (clientY >= r.top && clientY <= r.bottom) return i;
     }
-    if (itemRefs.current.length > 0) {
-      const first = itemRefs.current[0]?.getBoundingClientRect();
-      const last = itemRefs.current[itemRefs.current.length - 1]?.getBoundingClientRect();
-      if (first && clientY < first.top) return 0;
-      if (last && clientY > last.bottom) return itemRefs.current.length - 1;
-    }
+    const first = itemRefs.current[0]?.getBoundingClientRect();
+    const last = itemRefs.current[len - 1]?.getBoundingClientRect();
+    if (first && clientY < first.top) return 0;
+    if (last && clientY > last.bottom) return len - 1;
     return null;
-  }, []);
+  }, [urls.length]);
 
   const handlePointerDown = (idx: number) => (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
