@@ -973,6 +973,22 @@ function GuidelinesCheckScreen({
 function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employeeId?: number }) {
   const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
 
+  // Close on Escape, and lock body scroll while the lightbox is open
+  // (mobile is the primary use case — prevents page scrolling behind the overlay).
+  useEffect(() => {
+    if (!zoomedUrl) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoomedUrl(null);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [zoomedUrl]);
+
   const { data: fullItem } = useQuery<GuidelineItem>({
     queryKey: ["/api/portal/guidelines", item.id, employeeId],
     queryFn: async () => {
@@ -1056,17 +1072,30 @@ function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employee
 
       {zoomedUrl && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="放大檢視圖片"
           className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
           onClick={() => setZoomedUrl(null)}
           data-testid="overlay-image-zoom"
         >
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setZoomedUrl(null); }}
+            aria-label="關閉"
+            className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 text-white flex items-center justify-center backdrop-blur-sm transition-colors"
+            data-testid="button-close-image-zoom"
+          >
+            <X className="h-5 w-5" />
+          </button>
           <img
             src={zoomedUrl}
             alt="放大檢視"
-            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl select-none"
             data-testid="img-zoomed"
           />
-          <span className="absolute top-4 right-5 text-white/70 text-xs">點擊任意處關閉</span>
+          <span className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-xs pointer-events-none">點擊圖片以外區域或右上角關閉</span>
         </div>
       )}
     </>
