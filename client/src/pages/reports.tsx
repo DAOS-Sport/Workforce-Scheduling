@@ -37,6 +37,8 @@ interface ReportClockRecord {
   matchedVenueName: string | null;
   latitude: number;
   longitude: number;
+  amendedTime: string | null;
+  amendmentId: number | null;
 }
 
 interface ClockAmendment {
@@ -692,7 +694,12 @@ export default function ReportsPage() {
                         <td className="p-3 font-medium whitespace-nowrap" data-testid={`cell-name-${r.id}`}>{r.employeeName}</td>
                         <td className="p-3 text-muted-foreground text-xs whitespace-nowrap" data-testid={`cell-code-${r.id}`}>{r.employeeCode}</td>
                         <td className="p-3 whitespace-nowrap text-muted-foreground">{formatTaiwanDate(r.clockTime)}</td>
-                        <td className="p-3 whitespace-nowrap font-mono text-xs">{formatTaiwanDateTime(r.clockTime)}</td>
+                        <td className="p-3 whitespace-nowrap font-mono text-xs">
+                          <span className={r.amendedTime ? "line-through text-muted-foreground" : ""}>{formatTaiwanDateTime(r.clockTime)}</span>
+                          {r.amendedTime && (
+                            <div className="text-emerald-600 font-medium" data-testid={`text-amended-${r.id}`}>→ {formatTaiwanDateTime(r.amendedTime)} <span className="text-[10px] bg-emerald-50 border border-emerald-200 rounded px-1 ml-1">已補正</span></div>
+                          )}
+                        </td>
                         <td className="p-3 whitespace-nowrap">
                           <Badge
                             variant={r.clockType === "in" ? "default" : "secondary"}

@@ -37,6 +37,8 @@ interface ClockRecord {
   matchedVenueName: string | null;
   earlyArrivalReason: string | null;
   lateDepartureReason: string | null;
+  amendedTime: string | null;
+  amendmentId: number | null;
 }
 
 interface ClockAmendment {
@@ -418,13 +420,30 @@ export default function ClockRecordsPage() {
                           <td className="p-3 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
                               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                              {new Date(r.clockTime).toLocaleString("zh-TW", {
-                                timeZone: "Asia/Taipei",
-                                month: "2-digit",
-                                day: "2-digit",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                              <span className={r.amendedTime ? "line-through text-muted-foreground" : ""}>
+                                {new Date(r.clockTime).toLocaleString("zh-TW", {
+                                  timeZone: "Asia/Taipei",
+                                  month: "2-digit",
+                                  day: "2-digit",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                              {r.amendedTime && (
+                                <>
+                                  <span className="text-muted-foreground">→</span>
+                                  <span className="font-medium text-emerald-600 dark:text-emerald-400" data-testid={`text-amended-${r.id}`}>
+                                    {new Date(r.amendedTime).toLocaleString("zh-TW", {
+                                      timeZone: "Asia/Taipei",
+                                      month: "2-digit",
+                                      day: "2-digit",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                  <Badge className="ml-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] px-1.5 py-0">已補正</Badge>
+                                </>
+                              )}
                             </div>
                           </td>
                           <td className="p-3">

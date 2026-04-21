@@ -124,6 +124,7 @@ export interface IStorage {
   updateClockAmendmentStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<ClockAmendment | undefined>;
 
   updateClockRecordReason(id: number, earlyArrivalReason?: string, lateDepartureReason?: string): Promise<ClockRecord | undefined>;
+  applyClockRecordAmendment(clockRecordId: number, amendedTime: Date, amendmentId: number, newFailReason: string | null): Promise<ClockRecord | undefined>;
 
   createDispatchShift(data: InsertDispatchShift): Promise<DispatchShift>;
   batchCreateDispatchShifts(data: InsertDispatchShift[]): Promise<DispatchShift[]>;
@@ -793,6 +794,15 @@ export class DatabaseStorage implements IStorage {
     if (lateDepartureReason !== undefined) updates.lateDepartureReason = lateDepartureReason;
     if (Object.keys(updates).length === 0) return undefined;
     const [record] = await db.update(clockRecords).set(updates).where(eq(clockRecords.id, id)).returning();
+    return record;
+  }
+
+  async applyClockRecordAmendment(clockRecordId: number, amendedTime: Date, amendmentId: number, newFailReason: string | null): Promise<ClockRecord | undefined> {
+    const [record] = await db.update(clockRecords).set({
+      amendedTime,
+      amendmentId,
+      failReason: newFailReason,
+    }).where(eq(clockRecords.id, clockRecordId)).returning();
     return record;
   }
 

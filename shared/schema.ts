@@ -239,6 +239,8 @@ export const clockRecords = pgTable("clock_records", {
   matchedVenueName: text("matched_venue_name"),
   earlyArrivalReason: text("early_arrival_reason"),
   lateDepartureReason: text("late_departure_reason"),
+  amendedTime: timestamp("amended_time"),
+  amendmentId: integer("amendment_id"),
 });
 
 export const insertClockRecordSchema = createInsertSchema(clockRecords).omit({ id: true });
@@ -261,6 +263,7 @@ export const clockAmendments = pgTable("clock_amendments", {
   reviewedAt: timestamp("reviewed_at"),
   reviewNote: text("review_note"),
   createdAt: timestamp("created_at").defaultNow(),
+  originalClockRecordId: integer("original_clock_record_id"),
 });
 
 export const insertClockAmendmentSchema = createInsertSchema(clockAmendments).omit({ id: true, createdAt: true, reviewedAt: true });

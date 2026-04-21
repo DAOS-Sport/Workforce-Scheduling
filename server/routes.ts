@@ -2706,15 +2706,21 @@ export async function registerRoutes(
         } else {
           const earliest = inRecords.sort((a, b) => new Date(a.clockTime ?? 0).getTime() - new Date(b.clockTime ?? 0).getTime())[0];
           const lateMin = parseLateMinutes(earliest.failReason, "遲到");
+          const effectiveIn: any = (earliest as any).amendedTime ?? earliest.clockTime;
+          const linkedAmend = (earliest as any).amendmentId
+            ? allAmendments.find(a => a.id === (earliest as any).amendmentId) || null
+            : null;
           if (lateMin !== null && lateMin > 0) {
             anomalies.push({
               ...baseInfo,
               anomalyType: "遲到",
               anomalyMinutes: lateMin,
-              clockTime: toTaiwanHHMM(earliest.clockTime),
-              amendmentStatus: bestIn?.status || null,
-              amendmentTime: bestIn ? toTaiwanHHMM(bestIn.requestedTime) : null,
-              isResolved: bestIn?.status === "approved",
+              clockTime: toTaiwanHHMM(effectiveIn),
+              amendmentStatus: linkedAmend?.status || bestIn?.status || null,
+              amendmentTime: (earliest as any).amendedTime
+                ? toTaiwanHHMM((earliest as any).amendedTime)
+                : (bestIn ? toTaiwanHHMM(bestIn.requestedTime) : null),
+              isResolved: !!(earliest as any).amendedTime || bestIn?.status === "approved",
             });
           }
         }
@@ -2733,15 +2739,21 @@ export async function registerRoutes(
           } else {
             const latest = outRecords.sort((a, b) => new Date(b.clockTime ?? 0).getTime() - new Date(a.clockTime ?? 0).getTime())[0];
             const earlyMin = parseLateMinutes(latest.failReason, "早退");
+            const effectiveOut: any = (latest as any).amendedTime ?? latest.clockTime;
+            const linkedAmendOut = (latest as any).amendmentId
+              ? allAmendments.find(a => a.id === (latest as any).amendmentId) || null
+              : null;
             if (earlyMin !== null && earlyMin > 0) {
               anomalies.push({
                 ...baseInfo,
                 anomalyType: "早退",
                 anomalyMinutes: earlyMin,
-                clockTime: toTaiwanHHMM(latest.clockTime),
-                amendmentStatus: bestOut?.status || null,
-                amendmentTime: bestOut ? toTaiwanHHMM(bestOut.requestedTime) : null,
-                isResolved: bestOut?.status === "approved",
+                clockTime: toTaiwanHHMM(effectiveOut),
+                amendmentStatus: linkedAmendOut?.status || bestOut?.status || null,
+                amendmentTime: (latest as any).amendedTime
+                  ? toTaiwanHHMM((latest as any).amendedTime)
+                  : (bestOut ? toTaiwanHHMM(bestOut.requestedTime) : null),
+                isResolved: !!(latest as any).amendedTime || bestOut?.status === "approved",
               });
             }
           }
@@ -2757,7 +2769,7 @@ export async function registerRoutes(
 
   app.post("/api/portal/clock-amendment", async (req, res) => {
     try {
-      const { employeeId, clockType, requestedTime, reason, venueId, shiftId, isSystemIssue, evidenceImageUrl } = req.body;
+      const { employeeId, clockType, requestedTime, reason, venueId, shiftId, isSystemIssue, evidenceImageUrl, originalClockRecordId } = req.body;
       if (!employeeId || !clockType || !requestedTime || !reason) {
         return res.status(400).json({ message: "缺少必要欄位" });
       }
@@ -2790,8 +2802,12 @@ export async function registerRoutes(
       const requestedDate = toTaipeiDate(new Date(requestedTime));
       const hasDuplicate = allAmendmentsForDupe.some(a => {
         if (a.status === "rejected") return false;
-        const aDate = toTaipeiDate(a.requestedTime instanceof Date ? a.requestedTime : new Date(a.requestedTime as string));
-        return aDate === requestedDate && a.clockType === clockType;
+        if (originalClockRecordId && a.originalClockRecordId === originalClockRecordId) return true;
+        if (!originalClockRecordId && !a.originalClockRecordId) {
+          const aDate = toTaipeiDate(a.requestedTime instanceof Date ? a.requestedTime : new Date(a.requestedTime as string));
+          return aDate === requestedDate && a.clockType === clockType;
+        }
+        return false;
       });
       if (hasDuplicate) {
         return res.status(400).json({ message: "該日期同類型已有待審核或已批准的補卡申請，無法重複送出。" });
@@ -2809,6 +2825,7 @@ export async function registerRoutes(
         status: "pending",
         reviewedBy: null,
         reviewNote: null,
+        originalClockRecordId: originalClockRecordId || null,
       });
       res.json(record);
     } catch (err: any) {
@@ -2838,8 +2855,11 @@ export async function registerRoutes(
       const lastDay = new Date(yr, mo, 0).getDate();
       const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
 
-      const [empShifts, empClockRecords, allAmendments, allVenues] = await Promise.all([
+      const monthStartExt = monthStart;
+      const monthEndExt = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
+      const [empShifts, empDispatchShifts, empClockRecords, allAmendments, allVenues] = await Promise.all([
         storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd),
+        storage.getDispatchShiftsByLinkedEmployee(employeeId, monthStartExt, monthEndExt),
         storage.getClockRecordsByEmployee(employeeId, monthStart, monthEnd),
         storage.getClockAmendmentsByEmployee(employeeId),
         storage.getAllVenues(),
@@ -2871,65 +2891,163 @@ export async function registerRoutes(
         if (!amendmentMap.has(key)) amendmentMap.set(key, []);
         amendmentMap.get(key)!.push(a);
       }
+      const amendmentByOriginal = new Map<number, typeof allAmendments[0]>();
+      for (const a of allAmendments) {
+        if (a.originalClockRecordId && (a.status === "pending" || a.status === "approved")) {
+          const prev = amendmentByOriginal.get(a.originalClockRecordId);
+          if (!prev || a.status === "approved") amendmentByOriginal.set(a.originalClockRecordId, a);
+        }
+      }
 
-      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const parseLateMin = (failReason: string | null, prefix: string): number | null => {
+        if (!failReason) return null;
+        const reHM = new RegExp(`${prefix}\\s*(\\d+)\\s*小時\\s*(\\d+)\\s*分鐘`);
+        const reH = new RegExp(`${prefix}\\s*(\\d+)\\s*小時`);
+        const reM = new RegExp(`${prefix}\\s*(\\d+)\\s*分鐘`);
+        let m = failReason.match(reHM);
+        if (m) return parseInt(m[1]) * 60 + parseInt(m[2]);
+        m = failReason.match(reH);
+        if (m) return parseInt(m[1]) * 60;
+        m = failReason.match(reM);
+        if (m) return parseInt(m[1]);
+        return null;
+      };
 
-      const eligible: Array<{
+      type ShiftLike = { id: number; date: string; startTime: string; endTime: string; venueId: number | null; isDispatch: boolean };
+      const allShifts: ShiftLike[] = [
+        ...workShifts.map(s => ({ id: s.id, date: String(s.date), startTime: s.startTime, endTime: s.endTime, venueId: s.venueId, isDispatch: false })),
+        ...empDispatchShifts.map(s => ({ id: s.id, date: String(s.date), startTime: s.startTime, endTime: s.endTime, venueId: null as number | null, isDispatch: true })),
+      ];
+
+      type Eligible = {
         date: string;
-        missingClockType: string;
+        missingClockType: "in" | "out";
         shiftStartTime: string;
         shiftEndTime: string;
         venueName: string;
         shiftId: number;
+        isDispatch: boolean;
+        anomalyType: "missing" | "late" | "early" | "warning" | "early_arrival" | "late_departure";
+        originalClockRecordId: number | null;
+        originalClockTime: string | null;
+        anomalyMinutes: number | null;
         hasExistingAmendment: boolean;
         amendmentStatus: string | null;
-      }> = [];
+        isResolved: boolean;
+      };
+      const eligible: Eligible[] = [];
 
-      for (const shift of workShifts) {
-        const shiftDate = String(shift.date);
-        if (shiftDate >= todayStr) continue;
-        const venue = venueMap.get(shift.venueId);
-        const venueName = venue?.shortName || "";
+      const classify = (
+        shift: ShiftLike,
+        direction: "in" | "out",
+        records: typeof empClockRecords,
+      ): Eligible | null => {
+        const venue = shift.venueId ? venueMap.get(shift.venueId) : null;
+        const venueName = shift.isDispatch ? "派遣" : (venue?.shortName || "");
+        const validRecs = records.filter(r => r.status === "success" || r.status === "warning");
+        const sortedRecs = [...validRecs].sort((a, b) =>
+          new Date(a.clockTime ?? 0).getTime() - new Date(b.clockTime ?? 0).getTime()
+        );
+        const pick = direction === "in" ? sortedRecs[0] : sortedRecs[sortedRecs.length - 1];
 
-        const inRecords = (clockMap.get(`${shiftDate}:in`) || []).filter(r => r.status === "success" || r.status === "warning");
-        const outRecords = (clockMap.get(`${shiftDate}:out`) || []).filter(r => r.status === "success" || r.status === "warning");
-        const inAmends = amendmentMap.get(`${shiftDate}:in`) || [];
-        const outAmends = amendmentMap.get(`${shiftDate}:out`) || [];
+        const base: Omit<Eligible, "anomalyType" | "originalClockRecordId" | "originalClockTime" | "anomalyMinutes" | "hasExistingAmendment" | "amendmentStatus" | "isResolved"> = {
+          date: shift.date,
+          missingClockType: direction,
+          shiftStartTime: shift.startTime,
+          shiftEndTime: shift.endTime,
+          venueName,
+          shiftId: shift.id,
+          isDispatch: shift.isDispatch,
+        };
 
-        const getBest = (list: typeof allAmendments) =>
-          list.find(a => a.status === "approved") || list.find(a => a.status === "pending") || null;
-
-        if (inRecords.length === 0) {
-          const best = getBest(inAmends);
-          eligible.push({
-            date: shiftDate,
-            missingClockType: "in",
-            shiftStartTime: shift.startTime,
-            shiftEndTime: shift.endTime,
-            venueName,
-            shiftId: shift.id,
+        if (!pick) {
+          const best = (amendmentMap.get(`${shift.date}:${direction}`) || [])
+            .filter(a => !a.originalClockRecordId)
+            .sort((a, b) => (a.status === "approved" ? -1 : b.status === "approved" ? 1 : 0))[0];
+          return {
+            ...base,
+            anomalyType: "missing",
+            originalClockRecordId: null,
+            originalClockTime: null,
+            anomalyMinutes: null,
             hasExistingAmendment: !!best,
             amendmentStatus: best?.status || null,
-          });
+            isResolved: best?.status === "approved",
+          };
         }
 
-        if (outRecords.length === 0) {
-          const best = getBest(outAmends);
-          eligible.push({
-            date: shiftDate,
-            missingClockType: "out",
-            shiftStartTime: shift.startTime,
-            shiftEndTime: shift.endTime,
-            venueName,
-            shiftId: shift.id,
-            hasExistingAmendment: !!best,
-            amendmentStatus: best?.status || null,
-          });
+        const linkedAmend = amendmentByOriginal.get(pick.id);
+        const isResolved = linkedAmend?.status === "approved";
+        const baseWithLink = {
+          originalClockRecordId: pick.id,
+          originalClockTime: pick.clockTime ? new Date(pick.clockTime).toISOString() : null,
+          hasExistingAmendment: !!linkedAmend,
+          amendmentStatus: linkedAmend?.status || null,
+          isResolved,
+        };
+
+        if (pick.status === "warning") {
+          return { ...base, ...baseWithLink, anomalyType: "warning", anomalyMinutes: null };
         }
+        if (direction === "in") {
+          const lateMin = parseLateMin(pick.failReason, "遲到");
+          const earlyArr = parseLateMin(pick.failReason, "提早");
+          if (lateMin && lateMin > 0) {
+            return { ...base, ...baseWithLink, anomalyType: "late", anomalyMinutes: lateMin };
+          }
+          if (earlyArr && earlyArr > 0) {
+            return { ...base, ...baseWithLink, anomalyType: "early_arrival", anomalyMinutes: earlyArr };
+          }
+        } else {
+          const earlyMin = parseLateMin(pick.failReason, "早退");
+          const lateDep = parseLateMin(pick.failReason, "晚下班");
+          if (earlyMin && earlyMin > 0) {
+            return { ...base, ...baseWithLink, anomalyType: "early", anomalyMinutes: earlyMin };
+          }
+          if (lateDep && lateDep > 0) {
+            return { ...base, ...baseWithLink, anomalyType: "late_departure", anomalyMinutes: lateDep };
+          }
+        }
+        return null;
+      };
+
+      const shiftDates = new Set(allShifts.map(s => s.date));
+      for (const shift of allShifts) {
+        const inRecs = (clockMap.get(`${shift.date}:in`) || []);
+        const outRecs = (clockMap.get(`${shift.date}:out`) || []);
+        const inE = classify(shift, "in", inRecs);
+        if (inE) eligible.push(inE);
+        const outE = classify(shift, "out", outRecs);
+        if (outE) eligible.push(outE);
       }
 
-      eligible.sort((a, b) => a.date.localeCompare(b.date));
+      // Orphan/warning records: clock_records on dates with no matching shift
+      for (const cr of empClockRecords) {
+        const date = toTaiwanDate(cr.clockTime);
+        if (shiftDates.has(date)) continue;
+        if (cr.status !== "warning" && cr.status !== "success") continue;
+        const linkedAmend = amendmentByOriginal.get(cr.id);
+        const tw = new Date(new Date(cr.clockTime!).toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+        const hh = `${String(tw.getHours()).padStart(2, "0")}:${String(tw.getMinutes()).padStart(2, "0")}`;
+        eligible.push({
+          date,
+          missingClockType: cr.clockType as "in" | "out",
+          shiftStartTime: hh,
+          shiftEndTime: hh,
+          venueName: cr.matchedVenueName || "—",
+          shiftId: 0,
+          isDispatch: false,
+          anomalyType: "warning",
+          originalClockRecordId: cr.id,
+          originalClockTime: cr.clockTime ? new Date(cr.clockTime).toISOString() : null,
+          anomalyMinutes: null,
+          hasExistingAmendment: !!linkedAmend,
+          amendmentStatus: linkedAmend?.status || null,
+          isResolved: linkedAmend?.status === "approved",
+        });
+      }
+
+      eligible.sort((a, b) => a.date.localeCompare(b.date) || a.missingClockType.localeCompare(b.missingClockType));
       res.json(eligible);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -2980,19 +3098,60 @@ export async function registerRoutes(
 
       if (status === "approved" && updated) {
         try {
-          await storage.createClockRecord({
-            employeeId: updated.employeeId,
-            venueId: updated.venueId,
-            shiftId: updated.shiftId,
-            clockType: updated.clockType,
-            latitude: 0,
-            longitude: 0,
-            distance: 0,
-            status: "success",
-            failReason: "補打卡",
-            matchedVenueName: null,
-            clockTime: updated.requestedTime,
-          });
+          if (updated.originalClockRecordId) {
+            const original = await storage.getClockRecord(updated.originalClockRecordId);
+            if (!original) throw new Error("找不到原始打卡紀錄");
+            const amendedTime = updated.requestedTime instanceof Date
+              ? updated.requestedTime
+              : new Date(updated.requestedTime as any);
+            // 嘗試取得排班時間以重算 failReason
+            let newFailReason: string | null = "已補正";
+            try {
+              if (original.shiftId) {
+                const shift = await storage.getShift(original.shiftId);
+                if (shift) {
+                  const tw = new Date(amendedTime.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+                  const h = tw.getHours();
+                  const m = tw.getMinutes();
+                  const minutes = h * 60 + m;
+                  const [sh, sm] = shift.startTime.split(":").map(Number);
+                  const [eh, em] = shift.endTime.split(":").map(Number);
+                  const startMin = sh * 60 + sm;
+                  const endMin = eh * 60 + em;
+                  if (updated.clockType === "in") {
+                    if (minutes > startMin) {
+                      const diff = minutes - startMin;
+                      newFailReason = diff >= 60 ? `遲到 ${Math.floor(diff/60)} 小時 ${diff%60} 分鐘（補正）` : `遲到 ${diff} 分鐘（補正）`;
+                    } else {
+                      newFailReason = "已補正";
+                    }
+                  } else {
+                    if (minutes < endMin) {
+                      const diff = endMin - minutes;
+                      newFailReason = diff >= 60 ? `早退 ${Math.floor(diff/60)} 小時 ${diff%60} 分鐘（補正）` : `早退 ${diff} 分鐘（補正）`;
+                    } else {
+                      newFailReason = "已補正";
+                    }
+                  }
+                }
+              }
+            } catch {}
+            await storage.applyClockRecordAmendment(updated.originalClockRecordId, amendedTime, updated.id, newFailReason);
+          } else {
+            await storage.createClockRecord({
+              employeeId: updated.employeeId,
+              venueId: updated.venueId,
+              shiftId: updated.shiftId,
+              clockType: updated.clockType,
+              latitude: 0,
+              longitude: 0,
+              distance: 0,
+              status: "success",
+              failReason: "補打卡",
+              matchedVenueName: null,
+              clockTime: updated.requestedTime,
+            });
+          }
         } catch (recordErr: any) {
           await storage.updateClockAmendmentStatus(id, "pending", 0, "系統", "系統錯誤：打卡紀錄建立失敗，請重新審核");
           return res.status(500).json({ message: "打卡紀錄建立失敗: " + recordErr.message });

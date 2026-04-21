@@ -1672,8 +1672,14 @@ interface EligibleDate {
   shiftEndTime: string;
   venueName: string;
   shiftId: number;
+  isDispatch?: boolean;
+  anomalyType?: "missing" | "late" | "early" | "warning" | "early_arrival" | "late_departure";
+  originalClockRecordId?: number | null;
+  originalClockTime?: string | null;
+  anomalyMinutes?: number | null;
   hasExistingAmendment: boolean;
   amendmentStatus: string | null;
+  isResolved?: boolean;
 }
 
 const AMENDMENT_REASONS = ["漏打卡", "系統異常", "入職開通中", "其他"] as const;
@@ -1722,6 +1728,14 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
   const monthlyRemaining = Math.max(0, 3 - monthlyUsed);
   const isSystemIssue = reason === "系統異常";
 
+  const defaultTimeFor = (e: EligibleDate): string => {
+    if (e.originalClockTime) {
+      const tw = new Date(new Date(e.originalClockTime).toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      return `${String(tw.getHours()).padStart(2, "0")}:${String(tw.getMinutes()).padStart(2, "0")}`;
+    }
+    return e.missingClockType === "in" ? e.shiftStartTime.substring(0, 5) : e.shiftEndTime.substring(0, 5);
+  };
+
   const handleDateClick = (dateStr: string) => {
     const entries = eligibleMap.get(dateStr) || [];
     const clickable = entries.filter(e => e.amendmentStatus !== "approved" && e.amendmentStatus !== "pending");
@@ -1729,14 +1743,14 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
     const e = clickable.find(ent => ent.missingClockType === "in") || clickable[0];
     setSelectedDate(dateStr);
     setClockType(e.missingClockType);
-    setRequestedTime(e.missingClockType === "in" ? e.shiftStartTime.substring(0, 5) : e.shiftEndTime.substring(0, 5));
+    setRequestedTime(defaultTimeFor(e));
   };
 
   const handleClockTypeChange = (type: "in" | "out") => {
     setClockType(type);
     if (selectedDate) {
       const e = (eligibleMap.get(selectedDate) || []).find(ent => ent.missingClockType === type);
-      if (e) setRequestedTime(type === "in" ? e.shiftStartTime.substring(0, 5) : e.shiftEndTime.substring(0, 5));
+      if (e) setRequestedTime(defaultTimeFor(e));
     }
   };
 
@@ -1797,7 +1811,8 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
         reason: fullReason,
         isSystemIssue,
         evidenceImageUrl: evidencePreview,
-        shiftId: selectedEntry?.shiftId ?? null,
+        shiftId: selectedEntry?.isDispatch ? null : (selectedEntry?.shiftId ?? null),
+        originalClockRecordId: selectedEntry?.originalClockRecordId ?? null,
       });
       toast({ title: "補打卡申請已送出" });
       setSelectedDate(null);
@@ -1820,23 +1835,33 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
     const entries = eligibleMap.get(dateStr) || [];
     const isSelected = selectedDate === dateStr;
     if (!entries.length) return { cls: "text-slate-300 cursor-default", label: null, clickable: false };
-    const allApproved = entries.every(e => e.amendmentStatus === "approved");
-    if (allApproved) return {
+    const allResolved = entries.every(e => e.isResolved || e.amendmentStatus === "approved");
+    if (allResolved) return {
       cls: `bg-green-100 text-green-700 cursor-default${isSelected ? " ring-2 ring-green-400" : ""}`,
-      label: "已處理", clickable: false,
+      label: "已補正", clickable: false,
     };
-    const hasMissingIn = entries.some(e => e.missingClockType === "in" && e.amendmentStatus !== "approved");
-    const hasMissingOut = entries.some(e => e.missingClockType === "out" && e.amendmentStatus !== "approved");
-    const allPending = entries.filter(e => e.amendmentStatus !== "approved").every(e => e.amendmentStatus === "pending");
-    if (allPending) return {
+    const actionable = entries.filter(e => !e.isResolved && e.amendmentStatus !== "approved" && e.amendmentStatus !== "pending");
+    if (actionable.length === 0) return {
       cls: `bg-slate-100 text-slate-400 cursor-default opacity-70${isSelected ? " ring-2 ring-offset-1 ring-slate-300" : ""}`,
       label: "待審核", clickable: false,
     };
-    let cls = hasMissingIn
-      ? "bg-amber-100 text-amber-700 border border-amber-300 cursor-pointer hover:bg-amber-200"
-      : "bg-blue-100 text-blue-700 border border-blue-300 cursor-pointer hover:bg-blue-200";
+    const hasMissing = actionable.some(e => e.anomalyType === "missing" || !e.anomalyType);
+    const hasTimeAnom = actionable.some(e => e.anomalyType && e.anomalyType !== "missing");
+    let cls: string;
+    if (hasMissing && !hasTimeAnom) {
+      cls = "bg-amber-100 text-amber-700 border border-amber-300 cursor-pointer hover:bg-amber-200";
+    } else if (hasTimeAnom && !hasMissing) {
+      cls = "bg-orange-100 text-orange-700 border border-orange-300 cursor-pointer hover:bg-orange-200";
+    } else {
+      cls = "bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer hover:bg-rose-200";
+    }
     if (isSelected) cls += " ring-2 ring-offset-1 ring-juns-teal";
-    const label = hasMissingIn && hasMissingOut ? "上下" : hasMissingIn ? "上班" : "下班";
+    const labelMap: Record<string, string> = {
+      missing: "缺卡", late: "遲", early: "早退",
+      warning: "警", early_arrival: "提早", late_departure: "晚走",
+    };
+    const labels = Array.from(new Set(actionable.map(e => labelMap[e.anomalyType || "missing"] || "異常")));
+    const label = labels.length === 1 ? labels[0] : labels.slice(0, 2).join("/");
     return { cls, label, clickable: true };
   };
 
@@ -1933,9 +1958,14 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
               <p className="text-xs font-medium text-slate-500 mb-1.5">補卡類型</p>
               <div className="flex gap-2">
                 {(eligibleMap.get(selectedDate) || [])
-                  .filter(e => e.amendmentStatus !== "approved")
+                  .filter(e => !e.isResolved && e.amendmentStatus !== "approved")
                   .map(e => {
                     const isPending = e.amendmentStatus === "pending";
+                    const labelMap: Record<string, string> = {
+                      missing: "缺卡", late: "遲到", early: "早退",
+                      warning: "無排班", early_arrival: "提早到", late_departure: "晚下班",
+                    };
+                    const tag = labelMap[e.anomalyType || "missing"] || "";
                     return (
                       <button
                         key={e.missingClockType}
@@ -1950,13 +1980,31 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
                         }`}
                         data-testid={`button-amendment-type-${e.missingClockType}`}
                       >
-                        {e.missingClockType === "in" ? "補打上班" : "補打下班"}
+                        {e.missingClockType === "in" ? "上班" : "下班"} · {tag}
+                        {e.isDispatch && <span className="ml-1 text-[10px]">[派遣]</span>}
                         {isPending && <span className="ml-1 text-[10px]">（待審核）</span>}
                       </button>
                     );
                   })}
               </div>
             </div>
+
+            {/* Original clock context if amending an existing record */}
+            {(() => {
+              const sel = (eligibleMap.get(selectedDate) || []).find(e => e.missingClockType === clockType);
+              if (sel?.originalClockTime) {
+                const tw = new Date(new Date(sel.originalClockTime).toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+                const orig = `${String(tw.getHours()).padStart(2, "0")}:${String(tw.getMinutes()).padStart(2, "0")}`;
+                return (
+                  <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-600">
+                    目前打卡時間：<span className="font-semibold tabular-nums">{orig}</span>
+                    <span className="mx-1.5 text-slate-400">→</span>
+                    將修正為：<span className="font-semibold tabular-nums text-juns-teal">{requestedTime}</span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             {/* Time */}
             <div>
