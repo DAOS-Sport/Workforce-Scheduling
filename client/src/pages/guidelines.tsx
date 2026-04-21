@@ -97,7 +97,7 @@ function SortableImageList({ urls, onReorder, onRemove }: {
 
   const handlePointerDown = (idx: number) => (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
-    (e.target as Element).setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
     const itemRect = itemRefs.current[idx]?.getBoundingClientRect();
     startY.current = e.clientY;
     dragOffsetY.current = itemRect ? e.clientY - itemRect.top : 0;
@@ -125,7 +125,9 @@ function SortableImageList({ urls, onReorder, onRemove }: {
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
-    try { (e.target as Element).releasePointerCapture(e.pointerId); } catch {}
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
     finishDrag();
   };
 
