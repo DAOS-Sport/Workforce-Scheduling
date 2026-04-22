@@ -221,7 +221,7 @@ function DroppableCell({ id, children, className, style, "data-testid": testId }
 }
 
 export default function SchedulePage() {
-  const { activeRegion, setActiveRegion, selectedRegions, toggleSelectedRegion } = useRegion();
+  const { activeRegion, selectedRegions, toggleSelectedRegion } = useRegion();
   const selectedRegionsKey = selectedRegions.join(",");
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1490,12 +1490,10 @@ export default function SchedulePage() {
             </Button>
           </div>
 
-          {/* Center: RegionPills (multi-select, schedule-local) */}
+          {/* Center: RegionPills (multi-select view filter) */}
           <div className="shrink-0">
             <RegionPills
-              activeRegion={activeRegion}
               selectedRegions={selectedRegions}
-              onSetActive={setActiveRegion}
               onToggleSelected={toggleSelectedRegion}
             />
           </div>

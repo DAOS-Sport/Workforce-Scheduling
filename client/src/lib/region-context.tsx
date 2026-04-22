@@ -31,9 +31,8 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
   const setActiveRegion = useCallback((region: RegionCode) => {
     setActiveRegionState(region);
     // Maintain invariant: activeRegion ∈ selectedRegions.
-    // We DO NOT preserve previously selected regions when primary changes
-    // unless the new primary was already one of them — this prevents
-    // multi-select scope from silently leaking across navigations.
+    // Switching activeRegion does not silently add other regions; if the new
+    // activeRegion wasn't in the multi-select set, reset to just it.
     setSelectedRegionsSet((prev) => {
       if (prev.has(region)) return prev;
       return new Set<RegionCode>([region]);
@@ -45,12 +44,16 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
 
   const toggleSelectedRegion = useCallback((region: RegionCode) => {
     setSelectedRegionsSet((prev) => {
-      // API-level guard: the active (primary) region can never be removed.
-      if (prev.has(region) && region === activeRegionRef.current) return prev;
       const next = new Set(prev);
       if (next.has(region)) {
         if (next.size <= 1) return prev; // never empty
         next.delete(region);
+        // If we just removed the activeRegion, auto-promote the first
+        // remaining region (REGION_ORDER) so write paths stay valid.
+        if (region === activeRegionRef.current) {
+          const fallback = REGION_ORDER.find((r) => next.has(r));
+          if (fallback) setActiveRegionState(fallback);
+        }
       } else {
         next.add(region);
       }
@@ -61,8 +64,13 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
   const setSelectedRegions = useCallback((regions: RegionCode[]) => {
     if (regions.length === 0) return;
     const next = new Set<RegionCode>(regions);
-    // API-level guard: the active region must always be in selectedRegions.
-    next.add(activeRegionRef.current);
+    // Maintain invariant: activeRegion ∈ selectedRegions. If the caller's
+    // list does not contain the current activeRegion, promote the first
+    // region in REGION_ORDER instead of silently re-adding the old one.
+    if (!next.has(activeRegionRef.current)) {
+      const fallback = REGION_ORDER.find((r) => next.has(r));
+      if (fallback) setActiveRegionState(fallback);
+    }
     setSelectedRegionsSet(next);
   }, []);
 
