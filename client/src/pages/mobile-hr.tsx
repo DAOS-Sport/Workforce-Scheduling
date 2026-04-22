@@ -185,7 +185,7 @@ export default function MobileHrPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string>("partners");
   const [pageTitle, setPageTitle] = useState("我的工作夥伴");
-  const dates = useMemo(() => buildDates(17, 14), []);
+  const dates = useMemo(() => buildDates(17, 7), []);
   const [selectedDay, setSelectedDay] = useState(19);
 
   const venues = MOCK_DATA[selectedDay] ?? [];

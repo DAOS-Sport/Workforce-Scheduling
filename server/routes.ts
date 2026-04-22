@@ -2041,9 +2041,12 @@ export async function registerRoutes(
     return { date, timezone: "Asia/Taipei", myShift, coworkers };
   }
 
-  // Returns coworkers for the next 7 calendar days (today through today+6, Asia/Taipei).
-  // For "today", excludes coworkers whose shift has already ended.
-  // Response shape: array of { date, dayLabel, coworkers: [...] } grouped by date.
+  // Returns coworkers for the strict rolling window [now, now + 7*24h) in
+  // Asia/Taipei. Days with no shift are omitted. For each day, both myShift
+  // and individual coworker shifts must overlap the rolling window
+  // (endAt > now AND startAt < cutoff). Iterates 8 calendar days to ensure
+  // partial coverage of the trailing day.
+  // Response shape: array of { date, dayLabel, relativeLabel, myShift, coworkers }.
   app.get("/api/portal/upcoming-coworkers/:employeeId", async (req, res) => {
     try {
       const employeeId = parseInt(req.params.employeeId);
@@ -2057,55 +2060,55 @@ export async function registerRoutes(
 
       const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
       const nowMs = Date.now();
+      const cutoffMs = nowMs + 7 * 24 * 60 * 60 * 1000;
+
       const addDays = (base: Date, n: number) => {
         const d = new Date(Date.UTC(base.getFullYear(), base.getMonth(), base.getDate() + n));
         return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
       };
+
+      // Convert (date, "HH:mm" startTime, "HH:mm" endTime) → [startMs, endMs]
+      // in Asia/Taipei, handling cross-day shifts and 24:00 endTimes.
+      const toIntervalMs = (date: string, startTime: string, endTime: string): [number, number] => {
+        const startStr = startTime.slice(0, 5);
+        const endStr = endTime.slice(0, 5);
+        const startAt = new Date(`${date}T${startStr}:00+08:00`).getTime();
+        let endAt: number;
+        if (endStr === "24:00" || endStr <= startStr) {
+          const [Y, M, D] = date.split("-").map(Number);
+          const nextUtc = new Date(Date.UTC(Y, M - 1, D + 1));
+          const nd = `${nextUtc.getUTCFullYear()}-${String(nextUtc.getUTCMonth() + 1).padStart(2, "0")}-${String(nextUtc.getUTCDate()).padStart(2, "0")}`;
+          endAt = new Date(`${nd}T${endStr === "24:00" ? "00:00" : endStr}:00+08:00`).getTime();
+        } else {
+          endAt = new Date(`${date}T${endStr}:00+08:00`).getTime();
+        }
+        return [startAt, endAt];
+      };
+      const overlapsWindow = (startAt: number, endAt: number) =>
+        endAt > nowMs && startAt < cutoffMs;
 
       const dayLabels = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
       const out: Array<{
         date: string;
         dayLabel: string;
         relativeLabel: string;
-        myShift: WorkmateMyShift | null;
+        myShift: WorkmateMyShift;
         coworkers: WorkmateCoworker[];
       }> = [];
 
-      for (let i = 0; i < 7; i++) {
+      // Iterate 8 days (today..today+7) to cover the partial trailing day.
+      for (let i = 0; i < 8; i++) {
         const date = addDays(taiwanNow, i);
         const result = await computeWorkmates(employeeId, date);
-
-        // Skip days with no shift entirely
         if (!result.myShift) continue;
 
-        // For today's date, skip if shift already ended
-        if (i === 0) {
-          const endStr = result.myShift.endTime;
-          const startStr = result.myShift.startTime;
-          const startAt = new Date(`${date}T${startStr}:00+08:00`).getTime();
-          let endAt: number;
-          if (endStr === "24:00" || endStr <= startStr) {
-            const next = addDays(taiwanNow, 1);
-            endAt = new Date(`${next}T${endStr === "24:00" ? "00:00" : endStr}:00+08:00`).getTime();
-          } else {
-            endAt = new Date(`${date}T${endStr}:00+08:00`).getTime();
-          }
-          if (endAt <= nowMs) continue;
-          // also filter individual coworkers whose own shift ended
-          result.coworkers = result.coworkers.filter((cw) => {
-            const cwStart = cw.startTime;
-            const cwEnd = cw.endTime;
-            const cwStartAt = new Date(`${date}T${cwStart}:00+08:00`).getTime();
-            let cwEndAt: number;
-            if (cwEnd === "24:00" || cwEnd <= cwStart) {
-              const next = addDays(taiwanNow, 1);
-              cwEndAt = new Date(`${next}T${cwEnd === "24:00" ? "00:00" : cwEnd}:00+08:00`).getTime();
-            } else {
-              cwEndAt = new Date(`${date}T${cwEnd}:00+08:00`).getTime();
-            }
-            return cwEndAt > nowMs;
-          });
-        }
+        const [myStart, myEnd] = toIntervalMs(date, result.myShift.startTime, result.myShift.endTime);
+        if (!overlapsWindow(myStart, myEnd)) continue;
+
+        const filteredCoworkers = result.coworkers.filter((cw) => {
+          const [cs, ce] = toIntervalMs(date, cw.startTime, cw.endTime);
+          return overlapsWindow(cs, ce);
+        });
 
         const dt = new Date(`${date}T00:00:00+08:00`);
         const dow = dt.getDay();
@@ -2116,7 +2119,7 @@ export async function registerRoutes(
           dayLabel: dayLabels[dow],
           relativeLabel,
           myShift: result.myShift,
-          coworkers: result.coworkers,
+          coworkers: filteredCoworkers,
         });
       }
 
