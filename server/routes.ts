@@ -183,13 +183,23 @@ export async function registerRoutes(
 
   app.get("/api/employees/:regionCode", async (req, res) => {
     const { regionCode } = req.params;
-    const region = await storage.getRegionByCode(regionCode);
-    if (!region) return res.json([]);
-    const allEmployees = regionCode === "D"
-      ? await storage.getEmployeesForNeiQin(region.id)
-      : await storage.getEmployeesByRegion(region.id);
-    const employeesList = allEmployees.filter((e) => e.status === "active");
-    res.json(employeesList);
+    const codes = regionCode.split(",").map(c => c.trim()).filter(Boolean);
+    const seen = new Set<number>();
+    const out: any[] = [];
+    for (const code of codes) {
+      const region = await storage.getRegionByCode(code);
+      if (!region) continue;
+      const list = code === "D"
+        ? await storage.getEmployeesForNeiQin(region.id)
+        : await storage.getEmployeesByRegion(region.id);
+      for (const e of list) {
+        if (e.status !== "active") continue;
+        if (seen.has(e.id)) continue;
+        seen.add(e.id);
+        out.push(e);
+      }
+    }
+    res.json(out);
   });
 
   app.post("/api/employees", async (req, res) => {
@@ -240,10 +250,20 @@ export async function registerRoutes(
 
   app.get("/api/venues/:regionCode", async (req, res) => {
     const { regionCode } = req.params;
-    const region = await storage.getRegionByCode(regionCode);
-    if (!region) return res.json([]);
-    const venues = await storage.getVenuesByRegion(region.id);
-    res.json(venues);
+    const codes = regionCode.split(",").map(c => c.trim()).filter(Boolean);
+    const seen = new Set<number>();
+    const out: any[] = [];
+    for (const code of codes) {
+      const region = await storage.getRegionByCode(code);
+      if (!region) continue;
+      const venues = await storage.getVenuesByRegion(region.id);
+      for (const v of venues) {
+        if (seen.has(v.id)) continue;
+        seen.add(v.id);
+        out.push(v);
+      }
+    }
+    res.json(out);
   });
 
   app.post("/api/venues", async (req, res) => {
@@ -278,14 +298,24 @@ export async function registerRoutes(
 
   app.get("/api/shifts/:regionCode/:startDate/:endDate", async (req, res) => {
     const { regionCode, startDate, endDate } = req.params;
-    const region = await storage.getRegionByCode(regionCode);
-    if (!region) return res.json([]);
-    const regionShifts = await storage.getShiftsByRegionAndDateRange(region.id, startDate, endDate);
-    const dispatchedInShifts = await storage.getDispatchedShiftsToRegion(region.id, startDate, endDate);
-    const seenIds = new Set(regionShifts.map(s => s.id));
-    const merged = [...regionShifts];
-    for (const s of dispatchedInShifts) {
-      if (!seenIds.has(s.id)) merged.push(s);
+    const codes = regionCode.split(",").map(c => c.trim()).filter(Boolean);
+    const seenIds = new Set<number>();
+    const merged: any[] = [];
+    for (const code of codes) {
+      const region = await storage.getRegionByCode(code);
+      if (!region) continue;
+      const regionShifts = await storage.getShiftsByRegionAndDateRange(region.id, startDate, endDate);
+      const dispatchedInShifts = await storage.getDispatchedShiftsToRegion(region.id, startDate, endDate);
+      for (const s of regionShifts) {
+        if (seenIds.has(s.id)) continue;
+        seenIds.add(s.id);
+        merged.push(s);
+      }
+      for (const s of dispatchedInShifts) {
+        if (seenIds.has(s.id)) continue;
+        seenIds.add(s.id);
+        merged.push(s);
+      }
     }
     res.json(merged);
   });
@@ -970,10 +1000,20 @@ export async function registerRoutes(
   app.get("/api/dispatch-shifts/:regionCode/:startDate/:endDate", async (req, res) => {
     try {
       const { regionCode, startDate, endDate } = req.params;
-      const region = await storage.getRegionByCode(regionCode);
-      if (!region) return res.json([]);
-      const records = await storage.getDispatchShifts(region.id, startDate, endDate);
-      res.json(records);
+      const codes = regionCode.split(",").map(c => c.trim()).filter(Boolean);
+      const seen = new Set<number>();
+      const out: any[] = [];
+      for (const code of codes) {
+        const region = await storage.getRegionByCode(code);
+        if (!region) continue;
+        const records = await storage.getDispatchShifts(region.id, startDate, endDate);
+        for (const r of records) {
+          if (seen.has(r.id)) continue;
+          seen.add(r.id);
+          out.push(r);
+        }
+      }
+      res.json(out);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -1078,20 +1118,37 @@ export async function registerRoutes(
 
   app.get("/api/schedule-slots/:regionCode/:startDate/:endDate", async (req, res) => {
     const { regionCode, startDate, endDate } = req.params;
-    const region = await storage.getRegionByCode(regionCode);
-    if (!region) return res.json([]);
-    const realSlots = await storage.getScheduleSlotsByRegionAndDateRange(region.id, startDate, endDate);
+    const codes = regionCode.split(",").map(c => c.trim()).filter(Boolean);
+    const allRealSlots: any[] = [];
+    const allRegionVenues: any[] = [];
+    const seenSlot = new Set<number>();
+    const seenVenue = new Set<number>();
 
-    const regionVenues = await storage.getVenuesByRegion(region.id);
+    for (const code of codes) {
+      const region = await storage.getRegionByCode(code);
+      if (!region) continue;
+      const realSlots = await storage.getScheduleSlotsByRegionAndDateRange(region.id, startDate, endDate);
+      for (const s of realSlots) {
+        if (seenSlot.has(s.id)) continue;
+        seenSlot.add(s.id);
+        allRealSlots.push(s);
+      }
+      const regionVenues = await storage.getVenuesByRegion(region.id);
+      for (const v of regionVenues) {
+        if (seenVenue.has(v.id)) continue;
+        seenVenue.add(v.id);
+        allRegionVenues.push(v);
+      }
+    }
 
     const allTemplates: Record<number, any[]> = {};
-    for (const v of regionVenues) {
+    for (const v of allRegionVenues) {
       const tpls = await storage.getVenueShiftTemplates(v.id);
       if (tpls.length > 0) allTemplates[v.id] = tpls;
     }
 
     const realSlotDates = new Set<string>();
-    realSlots.forEach((s) => realSlotDates.add(`${s.venueId}-${s.date}`));
+    allRealSlots.forEach((s) => realSlotDates.add(`${s.venueId}-${s.date}`));
 
     const virtualSlots: any[] = [];
     let virtualId = -1;
@@ -1105,9 +1162,8 @@ export async function registerRoutes(
       const dateStr = `${year}-${month}-${day}`;
       const dayOfWeek = d.getDay();
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      const dayType = isWeekend ? "weekend" : "weekday";
 
-      for (const venue of regionVenues) {
+      for (const venue of allRegionVenues) {
         const key = `${venue.id}-${dateStr}`;
         if (realSlotDates.has(key)) continue;
 
@@ -1134,7 +1190,7 @@ export async function registerRoutes(
       }
     }
 
-    res.json([...realSlots, ...virtualSlots]);
+    res.json([...allRealSlots, ...virtualSlots]);
   });
 
   app.post("/api/schedule-slots/materialize", async (req, res) => {
@@ -1984,6 +2040,92 @@ export async function registerRoutes(
 
     return { date, timezone: "Asia/Taipei", myShift, coworkers };
   }
+
+  // Returns coworkers for the next 7 calendar days (today through today+6, Asia/Taipei).
+  // For "today", excludes coworkers whose shift has already ended.
+  // Response shape: array of { date, dayLabel, coworkers: [...] } grouped by date.
+  app.get("/api/portal/upcoming-coworkers/:employeeId", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.employeeId);
+      if (!employeeId) return res.json([]);
+
+      const lineUserId =
+        (req.header("x-line-user-id") as string | undefined) ??
+        (typeof req.query.lineUserId === "string" ? req.query.lineUserId : undefined);
+      const auth = await verifyPortalCaller(employeeId, lineUserId);
+      if (!auth.ok) return res.status(auth.status).json({ code: auth.code, message: auth.message });
+
+      const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const nowMs = Date.now();
+      const addDays = (base: Date, n: number) => {
+        const d = new Date(Date.UTC(base.getFullYear(), base.getMonth(), base.getDate() + n));
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      };
+
+      const dayLabels = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
+      const out: Array<{
+        date: string;
+        dayLabel: string;
+        relativeLabel: string;
+        myShift: WorkmateMyShift | null;
+        coworkers: WorkmateCoworker[];
+      }> = [];
+
+      for (let i = 0; i < 7; i++) {
+        const date = addDays(taiwanNow, i);
+        const result = await computeWorkmates(employeeId, date);
+
+        // Skip days with no shift entirely
+        if (!result.myShift) continue;
+
+        // For today's date, skip if shift already ended
+        if (i === 0) {
+          const endStr = result.myShift.endTime;
+          const startStr = result.myShift.startTime;
+          const startAt = new Date(`${date}T${startStr}:00+08:00`).getTime();
+          let endAt: number;
+          if (endStr === "24:00" || endStr <= startStr) {
+            const next = addDays(taiwanNow, 1);
+            endAt = new Date(`${next}T${endStr === "24:00" ? "00:00" : endStr}:00+08:00`).getTime();
+          } else {
+            endAt = new Date(`${date}T${endStr}:00+08:00`).getTime();
+          }
+          if (endAt <= nowMs) continue;
+          // also filter individual coworkers whose own shift ended
+          result.coworkers = result.coworkers.filter((cw) => {
+            const cwStart = cw.startTime;
+            const cwEnd = cw.endTime;
+            const cwStartAt = new Date(`${date}T${cwStart}:00+08:00`).getTime();
+            let cwEndAt: number;
+            if (cwEnd === "24:00" || cwEnd <= cwStart) {
+              const next = addDays(taiwanNow, 1);
+              cwEndAt = new Date(`${next}T${cwEnd === "24:00" ? "00:00" : cwEnd}:00+08:00`).getTime();
+            } else {
+              cwEndAt = new Date(`${date}T${cwEnd}:00+08:00`).getTime();
+            }
+            return cwEndAt > nowMs;
+          });
+        }
+
+        const dt = new Date(`${date}T00:00:00+08:00`);
+        const dow = dt.getDay();
+        const relativeLabel = i === 0 ? "今天" : i === 1 ? "明天" : i === 2 ? "後天" : `${i} 天後`;
+
+        out.push({
+          date,
+          dayLabel: dayLabels[dow],
+          relativeLabel,
+          myShift: result.myShift,
+          coworkers: result.coworkers,
+        });
+      }
+
+      res.json(out);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "未知錯誤";
+      res.status(500).json({ message });
+    }
+  });
 
   app.get("/api/portal/workmates", async (req, res) => {
     try {

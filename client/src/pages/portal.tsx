@@ -388,7 +388,7 @@ const VIEW_TITLES: Record<PortalView, string> = {
   outing: "外出簽到",
   attendance: "本月出缺勤統計",
   schedule: "我的班表",
-  coworkers: "今日工作夥伴",
+  coworkers: "工作夥伴",
   amendment: "補打卡申請",
   overtime: "加班申請",
   leave: "請假申請",
@@ -421,7 +421,7 @@ function SideMenuDrawer({
       label: "排班協作",
       items: [
         { view: "schedule", label: "我的班表", icon: CalendarDays },
-        { view: "coworkers", label: "今日工作夥伴", icon: Users },
+        { view: "coworkers", label: "工作夥伴", icon: Users },
       ],
     },
     {
@@ -2686,7 +2686,7 @@ function HomeView({
             setClockInResult(result);
             if (result.status === "success" || result.status === "warning") {
               queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", employee.id] });
-              queryClient.invalidateQueries({ queryKey: ["/api/portal/today-coworkers", employee.id] });
+              queryClient.invalidateQueries({ queryKey: ["/api/portal/upcoming-coworkers", employee.id] });
             }
           }}
           todayLatestClock={attendance?.todayLatestClock}
@@ -2766,12 +2766,36 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   });
 
   const portalLineUserId = employee.lineUserId || (typeof window !== "undefined" ? localStorage.getItem("portal_line_user_id") : null) || "";
-  const { data: todayCoworkers = [], isLoading: coworkersLoading } = useQuery<CoworkerGroup[]>({
-    queryKey: ["/api/portal/today-coworkers", employee.id],
+  type UpcomingCoworkerDay = {
+    date: string;
+    dayLabel: string;
+    relativeLabel: string;
+    myShift: {
+      id: number;
+      venueId: number | null;
+      venueName: string | null;
+      role: string | null;
+      startTime: string;
+      endTime: string;
+      isDispatch: boolean;
+    } | null;
+    coworkers: Array<{
+      id: number;
+      name: string;
+      phone?: string | null;
+      shiftRole?: string | null;
+      shiftTime?: string | null;
+      startTime: string;
+      endTime: string;
+      isDispatch?: boolean;
+    }>;
+  };
+  const { data: upcomingCoworkers = [], isLoading: coworkersLoading } = useQuery<UpcomingCoworkerDay[]>({
+    queryKey: ["/api/portal/upcoming-coworkers", employee.id],
     enabled: !!employee?.id && !!portalLineUserId,
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const res = await fetch(`/api/portal/today-coworkers/${employee.id}`, {
+      const res = await fetch(`/api/portal/upcoming-coworkers/${employee.id}`, {
         headers: { "x-line-user-id": portalLineUserId },
         credentials: "include",
       });
@@ -3275,90 +3299,96 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
       )}
 
       {activeView === "coworkers" && (
-        <div className="max-w-lg mx-auto p-4 pb-8">
-        <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
-          <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
-            <Users className="h-4 w-4 text-juns-teal" />
-            <span className="text-sm font-semibold text-juns-navy">今日工作夥伴</span>
-          </div>
-          <div className="p-4">
-            {coworkersLoading ? (
-              <div className="h-24 bg-slate-100 rounded-lg animate-pulse" />
-            ) : todayCoworkers.length === 0 ? (
-              <p className="text-sm text-center text-slate-400 py-4">今日無排班</p>
-            ) : (
-              <div className="space-y-4">
-                {todayCoworkers.map((group, gIdx) => {
-                  const roleGroups = new Map<string, typeof group.coworkers>();
-                  group.coworkers.forEach((cw) => {
-                    // 守望 is a lifeguard sub-type — merge under 救生 category
-                    const rawRole = cw.shiftRole || "其他";
-                    const key = rawRole === "守望" ? "救生" : rawRole;
-                    if (!roleGroups.has(key)) roleGroups.set(key, []);
-                    roleGroups.get(key)!.push(cw);
-                  });
+        <div className="max-w-lg mx-auto p-4 pb-8 space-y-3">
+          <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+            <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
+              <Users className="h-4 w-4 text-juns-teal" />
+              <span className="text-sm font-semibold text-juns-navy">工作夥伴</span>
+              <span className="text-[11px] text-slate-400 ml-auto">未來 7 天</span>
+            </div>
+            <div className="p-4">
+              {coworkersLoading ? (
+                <div className="h-24 bg-slate-100 rounded-lg animate-pulse" />
+              ) : upcomingCoworkers.length === 0 ? (
+                <p className="text-sm text-center text-slate-400 py-4">未來 7 天無排班</p>
+              ) : (
+                <div className="space-y-5">
+                  {upcomingCoworkers.map((day) => {
+                    const roleGroups = new Map<string, typeof day.coworkers>();
+                    day.coworkers.forEach((cw) => {
+                      const rawRole = cw.shiftRole || "其他";
+                      const key = rawRole === "守望" ? "救生" : rawRole;
+                      if (!roleGroups.has(key)) roleGroups.set(key, []);
+                      roleGroups.get(key)!.push(cw);
+                    });
 
-                  return (
-                    <div key={gIdx}>
-                      <div className="flex items-center gap-1.5 mb-3">
-                        <span className="text-[11px] px-2 py-0.5 rounded-md border border-juns-border text-slate-500 bg-slate-50">
-                          <MapPin className="h-2.5 w-2.5 inline mr-0.5" />
-                          {group.venue?.shortName || "未知"}
-                        </span>
-                      </div>
-                      {group.coworkers.length === 0 ? (
-                        <p className="text-xs text-slate-400 pl-2">今日僅你一人在此場館</p>
-                      ) : (
-                        <div className="space-y-3">
-                          {Array.from(roleGroups.entries()).map(([roleName, members]) => {
-                            const rd = getRoleDisplay(roleName);
-                            return (
-                              <div key={roleName} className={`rounded-lg border-l-2 ${rd.borderClass} pl-3`}>
-                                <div className="flex items-center gap-1.5 mb-1.5">
-                                  <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: rd.color }} />
-                                  <span className={`text-[11px] font-semibold ${rd.textClass}`}>
-                                    {rd.label}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400">({members.length}人)</span>
-                                </div>
-                                <div className="space-y-1">
-                                  {members.map((cw) => (
-                                    <div
-                                      key={cw.id}
-                                      className="flex items-center justify-between gap-2 py-1"
-                                      data-testid={`coworker-row-${cw.id}`}
-                                    >
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-sm text-juns-navy truncate">{cw.name}</span>
-                                        {cw.isDispatch && (
-                                          <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-600 shrink-0">派遣</span>
-                                        )}
-                                        {cw.shiftTime && (
-                                          <span className="text-[10px] text-slate-400 font-mono shrink-0">{cw.shiftTime}</span>
+                    return (
+                      <div key={day.date} data-testid={`coworker-day-${day.date}`}>
+                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-juns-border/60">
+                          <span className="text-[11px] px-1.5 py-0.5 rounded bg-juns-teal/10 text-juns-teal font-semibold">
+                            {day.relativeLabel}
+                          </span>
+                          <span className="text-xs text-slate-500">{day.date.slice(5)} {day.dayLabel}</span>
+                          {day.myShift && (
+                            <span className="text-[11px] px-2 py-0.5 rounded-md border border-juns-border text-slate-500 bg-slate-50 ml-auto">
+                              <MapPin className="h-2.5 w-2.5 inline mr-0.5" />
+                              {day.myShift.venueName || "未知"} · {day.myShift.startTime}-{day.myShift.endTime}
+                            </span>
+                          )}
+                        </div>
+                        {day.coworkers.length === 0 ? (
+                          <p className="text-xs text-slate-400 pl-2">當日僅你一人在此場館</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {Array.from(roleGroups.entries()).map(([roleName, members]) => {
+                              const rd = getRoleDisplay(roleName);
+                              return (
+                                <div key={roleName} className={`rounded-lg border-l-2 ${rd.borderClass} pl-3`}>
+                                  <div className="flex items-center gap-1.5 mb-1.5">
+                                    <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: rd.color }} />
+                                    <span className={`text-[11px] font-semibold ${rd.textClass}`}>
+                                      {rd.label}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">({members.length}人)</span>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {members.map((cw) => (
+                                      <div
+                                        key={`${day.date}-${cw.id}`}
+                                        className="flex items-center justify-between gap-2 py-1"
+                                        data-testid={`coworker-row-${day.date}-${cw.id}`}
+                                      >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <span className="text-sm text-juns-navy truncate">{cw.name}</span>
+                                          {cw.isDispatch && (
+                                            <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-600 shrink-0">派遣</span>
+                                          )}
+                                          {cw.shiftTime && (
+                                            <span className="text-[10px] text-slate-400 font-mono shrink-0">{cw.shiftTime}</span>
+                                          )}
+                                        </div>
+                                        {cw.phone && (
+                                          <a href={`tel:${cw.phone}`} className="shrink-0" data-testid={`button-call-${day.date}-${cw.id}`}>
+                                            <div className="p-1.5 rounded-md hover:bg-juns-green/10 transition-colors">
+                                              <Phone className="h-4 w-4 text-juns-green" />
+                                            </div>
+                                          </a>
                                         )}
                                       </div>
-                                      {cw.phone && (
-                                        <a href={`tel:${cw.phone}`} className="shrink-0" data-testid={`button-call-${cw.id}`}>
-                                          <div className="p-1.5 rounded-md hover:bg-juns-green/10 transition-colors">
-                                            <Phone className="h-4 w-4 text-juns-green" />
-                                          </div>
-                                        </a>
-                                      )}
-                                    </div>
-                                  ))}
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
         </div>
       )}
 
@@ -3464,7 +3494,7 @@ function PortalPageInner() {
       localStorage.setItem("portal_line_user_id", emp.lineUserId);
     }
     localStorage.setItem("portal_employee", JSON.stringify(emp));
-    queryClient.invalidateQueries({ queryKey: ["/api/portal/today-coworkers", emp.id] });
+    queryClient.invalidateQueries({ queryKey: ["/api/portal/upcoming-coworkers", emp.id] });
     queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", emp.id] });
     queryClient.invalidateQueries({ queryKey: ["/api/portal/guidelines-check", emp.id] });
     setEmployee(emp);

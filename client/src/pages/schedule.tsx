@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { RegionTabs } from "@/components/region-tabs";
+import { RegionPills } from "@/components/region-pills";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -220,7 +221,8 @@ function DroppableCell({ id, children, className, style, "data-testid": testId }
 }
 
 export default function SchedulePage() {
-  const { activeRegion } = useRegion();
+  const { activeRegion, selectedRegions } = useRegion();
+  const selectedRegionsKey = selectedRegions.join(",");
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
@@ -420,11 +422,11 @@ export default function SchedulePage() {
   }, [colLeftWidth]);
 
   const { data: venues = [], isLoading: venLoading } = useQuery<Venue[]>({
-    queryKey: ["/api/venues", activeRegion],
+    queryKey: ["/api/venues", selectedRegionsKey],
   });
 
   const { data: allEmployees = [], isLoading: empLoading } = useQuery<Employee[]>({
-    queryKey: ["/api/employees", activeRegion],
+    queryKey: ["/api/employees", selectedRegionsKey],
   });
   const employees = useMemo(() => allEmployees.filter(e => e.status !== "inactive"), [allEmployees]);
 
@@ -493,15 +495,15 @@ export default function SchedulePage() {
   }, [allSystemEmployees, activeRegion, regionsData, regionCodeToId]);
 
   const { data: scheduleSlots = [], isLoading: slotsLoading } = useQuery<ScheduleSlot[]>({
-    queryKey: ["/api/schedule-slots", activeRegion, dateRange.start, dateRange.end],
+    queryKey: ["/api/schedule-slots", selectedRegionsKey, dateRange.start, dateRange.end],
   });
 
   const { data: shifts = [], isLoading: shiftsLoading } = useQuery<Shift[]>({
-    queryKey: ["/api/shifts", activeRegion, dateRange.start, dateRange.end],
+    queryKey: ["/api/shifts", selectedRegionsKey, dateRange.start, dateRange.end],
   });
 
   const { data: dispatchShiftsData = [] } = useQuery<DispatchShift[]>({
-    queryKey: ["/api/dispatch-shifts", activeRegion, dateRange.start, dateRange.end],
+    queryKey: ["/api/dispatch-shifts", selectedRegionsKey, dateRange.start, dateRange.end],
   });
 
   const { data: dateAnnotationsConfig } = useQuery<{ key: string; value: string | null }>({
@@ -1488,9 +1490,9 @@ export default function SchedulePage() {
             </Button>
           </div>
 
-          {/* Center: RegionTabs */}
+          {/* Center: RegionPills (multi-select) */}
           <div className="shrink-0">
-            <RegionTabs />
+            <RegionPills />
           </div>
 
           {/* Right: action buttons */}
