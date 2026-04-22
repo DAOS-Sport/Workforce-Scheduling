@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import type { RegionCode } from "@shared/schema";
 
 const REGION_ORDER: RegionCode[] = ["A", "B", "C", "D"];
@@ -40,12 +40,16 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const activeRegionRef = useRef<RegionCode>(activeRegion);
+  activeRegionRef.current = activeRegion;
+
   const toggleSelectedRegion = useCallback((region: RegionCode) => {
     setSelectedRegionsSet((prev) => {
+      // API-level guard: the active (primary) region can never be removed.
+      if (prev.has(region) && region === activeRegionRef.current) return prev;
       const next = new Set(prev);
       if (next.has(region)) {
-        // Never remove the primary region (UI should also guard).
-        if (next.size <= 1) return prev;
+        if (next.size <= 1) return prev; // never empty
         next.delete(region);
       } else {
         next.add(region);
@@ -56,7 +60,10 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
 
   const setSelectedRegions = useCallback((regions: RegionCode[]) => {
     if (regions.length === 0) return;
-    setSelectedRegionsSet(new Set<RegionCode>(regions));
+    const next = new Set<RegionCode>(regions);
+    // API-level guard: the active region must always be in selectedRegions.
+    next.add(activeRegionRef.current);
+    setSelectedRegionsSet(next);
   }, []);
 
   const resetSelectedRegionsToActive = useCallback(() => {
