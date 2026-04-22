@@ -3309,8 +3309,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
             <div className="p-4">
               {coworkersLoading ? (
                 <div className="h-24 bg-slate-100 rounded-lg animate-pulse" />
-              ) : upcomingCoworkers.length === 0 ? (
-                <p className="text-sm text-center text-slate-400 py-4">未來 7 天無排班</p>
+              ) : upcomingCoworkers.reduce((n, d) => n + d.coworkers.length, 0) === 0 ? (
+                <p className="text-sm text-center text-slate-400 py-4">未來 7 天無同班夥伴</p>
               ) : (
                 <div className="space-y-5">
                   {upcomingCoworkers.map((day) => {

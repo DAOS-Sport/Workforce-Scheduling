@@ -1,7 +1,7 @@
 import express, { type Express, type Request, type Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, insertShiftSchema, insertScheduleSlotSchema, insertVenueShiftTemplateSchema, insertGuidelineSchema, insertGuidelineAckSchema, announcements, insertAnnouncementSchema, clockAmendments, overtimeRequests, leaveRequests, anomalyReports, type InsertAttendanceRecord, type ShiftValidationError, getFourWeekPeriod, calcShiftHours, sumScheduledHours, getAllPeriodsForMonth } from "@shared/schema";
+import { REGIONS_DATA, VENUES_DATA, insertEmployeeSchema, insertVenueSchema, insertShiftSchema, insertScheduleSlotSchema, insertVenueShiftTemplateSchema, insertGuidelineSchema, insertGuidelineAckSchema, announcements, insertAnnouncementSchema, clockAmendments, overtimeRequests, leaveRequests, anomalyReports, type InsertAttendanceRecord, type ShiftValidationError, getFourWeekPeriod, calcShiftHours, sumScheduledHours, getAllPeriodsForMonth, type Employee, type Venue, type Shift, type ScheduleSlot, type DispatchShift } from "@shared/schema";
 import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
@@ -185,7 +185,7 @@ export async function registerRoutes(
     const { regionCode } = req.params;
     const codes = regionCode.split(",").map(c => c.trim()).filter(Boolean);
     const seen = new Set<number>();
-    const out: any[] = [];
+    const out: Employee[] = [];
     for (const code of codes) {
       const region = await storage.getRegionByCode(code);
       if (!region) continue;
@@ -252,7 +252,7 @@ export async function registerRoutes(
     const { regionCode } = req.params;
     const codes = regionCode.split(",").map(c => c.trim()).filter(Boolean);
     const seen = new Set<number>();
-    const out: any[] = [];
+    const out: Venue[] = [];
     for (const code of codes) {
       const region = await storage.getRegionByCode(code);
       if (!region) continue;
@@ -300,7 +300,7 @@ export async function registerRoutes(
     const { regionCode, startDate, endDate } = req.params;
     const codes = regionCode.split(",").map(c => c.trim()).filter(Boolean);
     const seenIds = new Set<number>();
-    const merged: any[] = [];
+    const merged: Shift[] = [];
     for (const code of codes) {
       const region = await storage.getRegionByCode(code);
       if (!region) continue;
@@ -1002,7 +1002,7 @@ export async function registerRoutes(
       const { regionCode, startDate, endDate } = req.params;
       const codes = regionCode.split(",").map(c => c.trim()).filter(Boolean);
       const seen = new Set<number>();
-      const out: any[] = [];
+      const out: DispatchShift[] = [];
       for (const code of codes) {
         const region = await storage.getRegionByCode(code);
         if (!region) continue;
@@ -1119,8 +1119,8 @@ export async function registerRoutes(
   app.get("/api/schedule-slots/:regionCode/:startDate/:endDate", async (req, res) => {
     const { regionCode, startDate, endDate } = req.params;
     const codes = regionCode.split(",").map(c => c.trim()).filter(Boolean);
-    const allRealSlots: any[] = [];
-    const allRegionVenues: any[] = [];
+    const allRealSlots: ScheduleSlot[] = [];
+    const allRegionVenues: Venue[] = [];
     const seenSlot = new Set<number>();
     const seenVenue = new Set<number>();
 

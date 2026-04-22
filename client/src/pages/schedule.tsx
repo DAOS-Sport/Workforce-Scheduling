@@ -24,7 +24,7 @@ import {
   CheckCircle2, AlertTriangle, GripVertical, ListOrdered, SquareCheck
 } from "lucide-react";
 import { GoogleSheetsImportDialog } from "@/components/GoogleSheetsImportDialog";
-import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
+import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift, RegionCode } from "@shared/schema";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
@@ -221,8 +221,32 @@ function DroppableCell({ id, children, className, style, "data-testid": testId }
 }
 
 export default function SchedulePage() {
-  const { activeRegion, selectedRegions } = useRegion();
+  const { activeRegion, setActiveRegion } = useRegion();
+  const REGION_ORDER: RegionCode[] = ["A", "B", "C", "D"];
+  const [selectedRegionsSet, setSelectedRegionsSet] = useState<Set<RegionCode>>(() => new Set([activeRegion]));
+  // Always keep activeRegion in selectedRegions (invariant).
+  useEffect(() => {
+    setSelectedRegionsSet((prev) => {
+      if (prev.has(activeRegion)) return prev;
+      const next = new Set(prev);
+      next.add(activeRegion);
+      return next;
+    });
+  }, [activeRegion]);
+  const selectedRegions = useMemo(
+    () => REGION_ORDER.filter((r) => selectedRegionsSet.has(r)),
+    [selectedRegionsSet],
+  );
   const selectedRegionsKey = selectedRegions.join(",");
+  const toggleSelectedRegion = useCallback((region: RegionCode) => {
+    setSelectedRegionsSet((prev) => {
+      if (region === activeRegion) return prev; // never remove primary
+      const next = new Set(prev);
+      if (next.has(region)) next.delete(region);
+      else next.add(region);
+      return next;
+    });
+  }, [activeRegion]);
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
@@ -1490,9 +1514,14 @@ export default function SchedulePage() {
             </Button>
           </div>
 
-          {/* Center: RegionPills (multi-select) */}
+          {/* Center: RegionPills (multi-select, schedule-local) */}
           <div className="shrink-0">
-            <RegionPills />
+            <RegionPills
+              activeRegion={activeRegion}
+              selectedRegions={selectedRegions}
+              onSetActive={setActiveRegion}
+              onToggleSelected={toggleSelectedRegion}
+            />
           </div>
 
           {/* Right: action buttons */}

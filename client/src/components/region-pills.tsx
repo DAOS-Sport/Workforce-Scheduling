@@ -1,10 +1,15 @@
-import { useRegion } from "@/lib/region-context";
 import { REGIONS_DATA, type RegionCode } from "@shared/schema";
 import { MapPin, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function RegionPills() {
-  const { activeRegion, setActiveRegion, selectedRegions, toggleSelectedRegion } = useRegion();
+interface RegionPillsProps {
+  activeRegion: RegionCode;
+  selectedRegions: RegionCode[];
+  onSetActive: (region: RegionCode) => void;
+  onToggleSelected: (region: RegionCode) => void;
+}
+
+export function RegionPills({ activeRegion, selectedRegions, onSetActive, onToggleSelected }: RegionPillsProps) {
   const selectedSet = new Set(selectedRegions);
 
   return (
@@ -13,26 +18,31 @@ export function RegionPills() {
         const code = region.code as RegionCode;
         const isSelected = selectedSet.has(code);
         const isPrimary = code === activeRegion;
-        const isLastSelected = isSelected && selectedRegions.length === 1;
+
+        const handleClick = (e: React.MouseEvent) => {
+          if (e.shiftKey || e.metaKey || e.ctrlKey) {
+            // Modifier-click: toggle non-primary regions only.
+            if (isPrimary) return;
+            onToggleSelected(code);
+            return;
+          }
+          // Plain click on primary: no-op (cannot deselect primary).
+          if (isPrimary) return;
+          // Plain click on selected non-primary: promote to primary.
+          if (isSelected) {
+            onSetActive(code);
+            return;
+          }
+          // Plain click on unselected: add to selection AND make primary.
+          onToggleSelected(code);
+          onSetActive(code);
+        };
 
         return (
           <button
             key={code}
             type="button"
-            onClick={(e) => {
-              if (e.shiftKey || e.metaKey || e.ctrlKey) {
-                if (!isLastSelected) toggleSelectedRegion(code);
-              } else {
-                if (isSelected && !isPrimary) {
-                  setActiveRegion(code);
-                } else if (!isSelected) {
-                  toggleSelectedRegion(code);
-                  setActiveRegion(code);
-                } else if (isPrimary) {
-                  if (!isLastSelected) toggleSelectedRegion(code);
-                }
-              }
-            }}
+            onClick={handleClick}
             data-testid={`pill-region-${code}`}
             data-active={isPrimary}
             data-selected={isSelected}
@@ -44,7 +54,13 @@ export function RegionPills() {
                   : "bg-juns-teal/10 text-juns-navy border-juns-teal/40"
                 : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:bg-slate-50",
             )}
-            title={isPrimary ? "主區域（再點一次取消）" : isSelected ? "點擊設為主區域 / Shift+點擊移除" : "點擊新增"}
+            title={
+              isPrimary
+                ? "主區域（無法取消）"
+                : isSelected
+                  ? "點擊設為主區域 / Shift+點擊移除"
+                  : "點擊新增並設為主區域 / Shift+點擊只新增"
+            }
           >
             <MapPin className="h-3 w-3" />
             <span>{region.name}</span>
