@@ -2780,14 +2780,15 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
       isDispatch: boolean;
     } | null;
     coworkers: Array<{
-      id: number;
+      employeeId: number;
       name: string;
-      phone?: string | null;
-      shiftRole?: string | null;
-      shiftTime?: string | null;
+      phone: string | null;
+      role: string;
+      shiftTime: string;
+      venueName: string | null;
       startTime: string;
       endTime: string;
-      isDispatch?: boolean;
+      isDispatch: boolean;
     }>;
   };
   const { data: upcomingCoworkers = [], isLoading: coworkersLoading } = useQuery<UpcomingCoworkerDay[]>({
@@ -3316,7 +3317,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                   {upcomingCoworkers.map((day) => {
                     const roleGroups = new Map<string, typeof day.coworkers>();
                     day.coworkers.forEach((cw) => {
-                      const rawRole = cw.shiftRole || "其他";
+                      const rawRole = cw.role || "其他";
                       const key = rawRole === "守望" ? "救生" : rawRole;
                       if (!roleGroups.has(key)) roleGroups.set(key, []);
                       roleGroups.get(key)!.push(cw);
@@ -3354,9 +3355,9 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                   <div className="space-y-1">
                                     {members.map((cw) => (
                                       <div
-                                        key={`${day.date}-${cw.id}`}
+                                        key={`${day.date}-${cw.employeeId}`}
                                         className="flex items-center justify-between gap-2 py-1"
-                                        data-testid={`coworker-row-${day.date}-${cw.id}`}
+                                        data-testid={`coworker-row-${day.date}-${cw.employeeId}`}
                                       >
                                         <div className="flex items-center gap-2 min-w-0">
                                           <span className="text-sm text-juns-navy truncate">{cw.name}</span>
@@ -3368,7 +3369,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                           )}
                                         </div>
                                         {cw.phone && (
-                                          <a href={`tel:${cw.phone}`} className="shrink-0" data-testid={`button-call-${day.date}-${cw.id}`}>
+                                          <a href={`tel:${cw.phone}`} className="shrink-0" data-testid={`button-call-${day.date}-${cw.employeeId}`}>
                                             <div className="p-1.5 rounded-md hover:bg-juns-green/10 transition-colors">
                                               <Phone className="h-4 w-4 text-juns-green" />
                                             </div>

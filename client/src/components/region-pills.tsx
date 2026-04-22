@@ -1,5 +1,5 @@
 import { REGIONS_DATA, type RegionCode } from "@shared/schema";
-import { MapPin, Check } from "lucide-react";
+import { MapPin, Star, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface RegionPillsProps {
@@ -19,53 +19,69 @@ export function RegionPills({ activeRegion, selectedRegions, onSetActive, onTogg
         const isSelected = selectedSet.has(code);
         const isPrimary = code === activeRegion;
 
-        const handleClick = (e: React.MouseEvent) => {
-          if (e.shiftKey || e.metaKey || e.ctrlKey) {
-            // Modifier-click: toggle non-primary regions only.
-            if (isPrimary) return;
-            onToggleSelected(code);
-            return;
-          }
-          // Plain click on primary: no-op (cannot deselect primary).
+        const handlePillClick = () => {
+          // Plain click toggles selection. Primary cannot be deselected
+          // (toggleSelectedRegion in parent enforces this invariant).
           if (isPrimary) return;
-          // Plain click on selected non-primary: promote to primary.
-          if (isSelected) {
+          if (!isSelected) {
+            // Newly selecting also promotes to primary for fast single-region switching.
+            onToggleSelected(code);
             onSetActive(code);
             return;
           }
-          // Plain click on unselected: add to selection AND make primary.
+          // Deselect (allowed because not primary).
           onToggleSelected(code);
+        };
+
+        const handleStarClick = (e: React.MouseEvent) => {
+          e.stopPropagation();
+          if (isPrimary || !isSelected) return;
           onSetActive(code);
         };
 
         return (
-          <button
+          <div
             key={code}
-            type="button"
-            onClick={handleClick}
-            data-testid={`pill-region-${code}`}
-            data-active={isPrimary}
-            data-selected={isSelected}
             className={cn(
-              "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+              "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer select-none",
               isSelected
                 ? isPrimary
                   ? "bg-juns-teal text-white border-juns-teal shadow-sm"
                   : "bg-juns-teal/10 text-juns-navy border-juns-teal/40"
                 : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:bg-slate-50",
             )}
+            data-testid={`pill-region-${code}`}
+            data-active={isPrimary}
+            data-selected={isSelected}
+            onClick={handlePillClick}
+            role="button"
             title={
               isPrimary
                 ? "主區域（無法取消）"
                 : isSelected
-                  ? "點擊設為主區域 / Shift+點擊移除"
-                  : "點擊新增並設為主區域 / Shift+點擊只新增"
+                  ? "點擊取消勾選；點星號設為主區域"
+                  : "點擊勾選並設為主區域"
             }
           >
-            <MapPin className="h-3 w-3" />
+            {isPrimary ? (
+              <Star className="h-3 w-3 fill-current" />
+            ) : (
+              <MapPin className="h-3 w-3" />
+            )}
             <span>{region.name}</span>
+            {isSelected && !isPrimary && (
+              <button
+                type="button"
+                onClick={handleStarClick}
+                className="ml-0.5 rounded p-0.5 hover:bg-juns-teal/20 transition-colors"
+                data-testid={`button-set-primary-${code}`}
+                title="設為主區域"
+              >
+                <Star className="h-3 w-3" />
+              </button>
+            )}
             {isSelected && !isPrimary && <Check className="h-3 w-3" />}
-          </button>
+          </div>
         );
       })}
     </div>
