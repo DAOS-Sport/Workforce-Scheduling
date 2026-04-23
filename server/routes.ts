@@ -2110,8 +2110,11 @@ export async function registerRoutes(
           return overlapsWindow(cs, ce);
         });
 
-        const dt = new Date(`${date}T00:00:00+08:00`);
-        const dow = dt.getDay();
+        // Compute weekday from the calendar date directly (UTC) to avoid
+        // server-local-TZ skew (Replit runs in UTC; using getDay() on a
+        // +08:00-anchored Date returns the previous day's weekday).
+        const [Y, M, D] = date.split("-").map(Number);
+        const dow = new Date(Date.UTC(Y, M - 1, D)).getUTCDay();
         const relativeLabel = i === 0 ? "今天" : i === 1 ? "明天" : i === 2 ? "後天" : `${i} 天後`;
 
         out.push({
