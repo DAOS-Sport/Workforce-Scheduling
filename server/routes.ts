@@ -2059,13 +2059,18 @@ export async function registerRoutes(
       if (!auth.ok) return res.status(auth.status).json({ code: auth.code, message: auth.message });
 
       const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-      const nowMs = Date.now();
-      const cutoffMs = nowMs + 7 * 24 * 60 * 60 * 1000;
 
       const addDays = (base: Date, n: number) => {
         const d = new Date(Date.UTC(base.getFullYear(), base.getMonth(), base.getDate() + n));
         return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
       };
+
+      // Window covers 7 calendar days starting from Taipei "today 00:00"
+      // (rather than "now"), so today's entries remain visible even after
+      // the user's own shift has already ended.
+      const todayStr = addDays(taiwanNow, 0);
+      const nowMs = new Date(`${todayStr}T00:00:00+08:00`).getTime();
+      const cutoffMs = nowMs + 7 * 24 * 60 * 60 * 1000;
 
       // Convert (date, "HH:mm" startTime, "HH:mm" endTime) → [startMs, endMs]
       // in Asia/Taipei, handling cross-day shifts and 24:00 endTimes.
@@ -2096,8 +2101,8 @@ export async function registerRoutes(
         coworkers: WorkmateCoworker[];
       }> = [];
 
-      // Iterate 8 days (today..today+7) to cover the partial trailing day.
-      for (let i = 0; i < 8; i++) {
+      // Iterate 7 calendar days (today..today+6).
+      for (let i = 0; i < 7; i++) {
         const date = addDays(taiwanNow, i);
         const result = await computeWorkmates(employeeId, date);
         if (!result.myShift) continue;
