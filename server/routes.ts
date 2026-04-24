@@ -6,6 +6,7 @@ import { z } from "zod";
 import { validateAllRules } from "./labor-validation";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
 import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId, formatClockInMessage, sendWeeklySchedulePush, sendWeeklyLateReport, pushPendingGuidelinesIfAny, invalidateVenueCache } from "./line-webhook";
+import { registerInternalApi } from "./internal-api";
 import { db } from "./db";
 import { eq, isNull, count } from "drizzle-orm";
 
@@ -136,6 +137,11 @@ export async function registerRoutes(
     return res.status(401).json({ message: "請先登入管理後台" });
   }
 
+  // Internal server-to-server API (X-Internal-Token auth). Registered
+  // BEFORE the admin-cookie middleware so it never falls through to
+  // requireAdmin, and is also added to openPrefixes as a safety net.
+  registerInternalApi(app);
+
   app.use((req, res, next) => {
     if (!req.path.startsWith("/api/")) return next();
     const openPrefixes = [
@@ -143,6 +149,7 @@ export async function registerRoutes(
       "/api/portal/",
       "/api/liff/",
       "/api/line/",
+      "/api/internal/",
       "/api/anomaly-report",
       "/api/announcements/active",
     ];
