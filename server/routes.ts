@@ -3950,10 +3950,29 @@ export async function registerRoutes(
         ? allRegions.find(r => r.code === regionCode)
         : null;
 
-      // 判斷是否為假日（六=6, 日=0）
-      const isWeekend = (dateStr: string): boolean => {
+      // 台灣國定假日（含補假、彈性放假）
+      const TAIWAN_HOLIDAYS: Record<string, string> = {
+        "2024-01-01": "元旦", "2024-02-08": "除夕", "2024-02-09": "春節", "2024-02-10": "春節",
+        "2024-02-11": "春節", "2024-02-12": "春節", "2024-02-13": "春節補假", "2024-02-14": "春節補假",
+        "2024-02-28": "和平紀念日", "2024-04-04": "兒童節", "2024-04-05": "清明節",
+        "2024-05-01": "勞動節", "2024-06-10": "端午節", "2024-09-17": "中秋節", "2024-10-10": "國慶日",
+        "2025-01-01": "元旦", "2025-01-23": "彈性放假", "2025-01-24": "彈性放假",
+        "2025-01-27": "除夕", "2025-01-28": "春節", "2025-01-29": "春節", "2025-01-30": "春節",
+        "2025-01-31": "春節", "2025-02-04": "春節補假", "2025-02-28": "和平紀念日",
+        "2025-04-03": "兒童節補假", "2025-04-04": "兒童節清明", "2025-05-01": "勞動節",
+        "2025-05-30": "彈性放假", "2025-05-31": "端午節", "2025-10-06": "中秋補假",
+        "2025-10-07": "中秋節", "2025-10-10": "國慶日",
+        "2026-01-01": "元旦", "2026-01-02": "彈性放假", "2026-02-16": "除夕",
+        "2026-02-17": "春節", "2026-02-18": "春節", "2026-02-19": "春節", "2026-02-20": "春節",
+        "2026-02-28": "和平紀念日", "2026-03-02": "和平紀念日補假", "2026-04-03": "彈性放假",
+        "2026-04-04": "兒童節", "2026-04-05": "清明節", "2026-04-06": "兒童節清明補假",
+        "2026-05-01": "勞動節", "2026-06-19": "端午節", "2026-09-25": "中秋節", "2026-10-10": "國慶日",
+      };
+
+      // 判斷是否為假日（週六日 或 國定假日/連假）
+      const isHolidayDate = (dateStr: string): boolean => {
         const d = new Date(dateStr + "T00:00:00");
-        return d.getDay() === 0 || d.getDay() === 6;
+        return d.getDay() === 0 || d.getDay() === 6 || !!TAIWAN_HOLIDAYS[dateStr];
       };
 
       // 計算原始時數
@@ -3979,11 +3998,11 @@ export async function registerRoutes(
         return sM <= NOON && eM >= NOON;
       };
 
-      // 計算實際計薪時數：有經過 12:30 則扣（平日 -1h，假日 -0.5h）
+      // 計算實際計薪時數：有經過 12:30 則扣（假日 -0.5h，平日 -1h）
       const calcHours = (start: string, end: string, date: string): number => {
         const raw = rawHours(start, end);
         if (!passesNoon(start, end)) return raw;
-        const deduction = isWeekend(date) ? 0.5 : 1;
+        const deduction = isHolidayDate(date) ? 0.5 : 1;
         return Math.max(0, Math.round((raw - deduction) * 10) / 10);
       };
 
@@ -4144,6 +4163,7 @@ export async function registerRoutes(
       }
 
       // 最終扣時迴圈：不分職位，只要班次時間有經過 12:30，即從 totalWorkHours 扣除
+      // 假日（週六日＋國定假日）-0.5h；平日 -1h
       // 正式班次
       for (const s of allShifts) {
         if (!empMap.has(s.employeeId)) continue;
@@ -4151,7 +4171,7 @@ export async function registerRoutes(
         if (!passesNoon(s.startTime, s.endTime)) continue;
         const entry = stats.get(s.employeeId);
         if (!entry) continue;
-        const deduction = isWeekend(s.date) ? 0.5 : 1;
+        const deduction = isHolidayDate(s.date) ? 0.5 : 1;
         entry.totalWorkHours = Math.max(0, Math.round((entry.totalWorkHours - deduction) * 10) / 10);
       }
       // 派遣班次（已連結員工）
@@ -4159,7 +4179,7 @@ export async function registerRoutes(
         if (!passesNoon(ds.startTime, ds.endTime)) continue;
         const entry = stats.get(ds.linkedEmployeeId!);
         if (!entry) continue;
-        const deduction = isWeekend(ds.date) ? 0.5 : 1;
+        const deduction = isHolidayDate(ds.date) ? 0.5 : 1;
         entry.totalWorkHours = Math.max(0, Math.round((entry.totalWorkHours - deduction) * 10) / 10);
       }
 
