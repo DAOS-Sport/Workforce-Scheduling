@@ -3456,6 +3456,12 @@ export default function SchedulePage() {
                     </button>
                   </div>
                   <div className="grid grid-cols-7 gap-1">
+                    {["一","二","三","四","五","六","日"].map(d => (
+                      <div key={d} className="text-[9px] text-center text-muted-foreground font-medium py-0.5">{d}</div>
+                    ))}
+                    {Array.from({ length: (() => { const dow = monthDates[0].getDay(); return dow === 0 ? 6 : dow - 1; })() }).map((_, i) => (
+                      <div key={`pad-${i}`} />
+                    ))}
                     {monthDates.map((md) => {
                       const mdStr = format(md, "yyyy-MM-dd");
                       const isCurrent = mdStr === shiftDate;
