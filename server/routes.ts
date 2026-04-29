@@ -1038,8 +1038,8 @@ export async function registerRoutes(
       let resolvedLinkedId: number | null = linkedEmployeeId || null;
       if (!resolvedLinkedId && dispatchName) {
         const allEmps = await storage.getAllEmployees();
-        const matched = allEmps.find(e => e.status === "active" && e.name.trim() === dispatchName.trim());
-        if (matched) resolvedLinkedId = matched.id;
+        const matches = allEmps.filter(e => e.status === "active" && e.name.trim() === dispatchName.trim());
+        if (matches.length === 1) resolvedLinkedId = matches[0].id;
       }
       const record = await storage.createDispatchShift({
         regionId: region.id,
@@ -1071,8 +1071,8 @@ export async function registerRoutes(
       let batchLinkedId: number | null = linkedEmployeeId || null;
       if (!batchLinkedId && dispatchName) {
         const allEmps = await storage.getAllEmployees();
-        const matched = allEmps.find(e => e.status === "active" && e.name.trim() === dispatchName.trim());
-        if (matched) batchLinkedId = matched.id;
+        const matches = allEmps.filter(e => e.status === "active" && e.name.trim() === dispatchName.trim());
+        if (matches.length === 1) batchLinkedId = matches[0].id;
       }
       const inserts = (dates as string[]).map((date) => ({
         regionId: region.id,
@@ -1110,11 +1110,11 @@ export async function registerRoutes(
       for (const field of allowedFields) {
         if (rest[field] !== undefined) updateData[field] = rest[field];
       }
-      // 若更新了姓名且未提供 linkedEmployeeId，自動比對員工
+      // 若更新了姓名且未提供 linkedEmployeeId，自動比對員工（僅唯一比對才設定）
       if (updateData.dispatchName && updateData.linkedEmployeeId === undefined) {
         const allEmps = await storage.getAllEmployees();
-        const matched = allEmps.find(e => e.status === "active" && e.name.trim() === (updateData.dispatchName as string).trim());
-        updateData.linkedEmployeeId = matched ? matched.id : null;
+        const matches = allEmps.filter(e => e.status === "active" && e.name.trim() === (updateData.dispatchName as string).trim());
+        updateData.linkedEmployeeId = matches.length === 1 ? matches[0].id : null;
       }
       const updated = await storage.updateDispatchShift(id, updateData);
       res.json(updated);
