@@ -4039,7 +4039,7 @@ export async function registerRoutes(
           entry.leaves[s.role] = (entry.leaves[s.role] || 0) + 1;
           entry.totalLeaveDays++;
         } else {
-          const hrs = calcHours(s.startTime, s.endTime, s.date);
+          const hrs = rawHours(s.startTime, s.endTime);
           entry.hours[s.role] = (entry.hours[s.role] || 0) + hrs;
           entry.totalWorkHours = Math.round((entry.totalWorkHours + hrs) * 10) / 10;
           workRolesSet.add(s.role);
@@ -4136,11 +4136,31 @@ export async function registerRoutes(
         }
         const entry = stats.get(empId)!;
         const role = ds.role || "派遣";
-        const hrs = calcHours(ds.startTime, ds.endTime, ds.date);
+        const hrs = rawHours(ds.startTime, ds.endTime);
         entry.hours[role] = Math.round(((entry.hours[role] || 0) + hrs) * 10) / 10;
         entry.totalWorkHours = Math.round((entry.totalWorkHours + hrs) * 10) / 10;
         entry.shiftCount++;
         workRolesSet.add(role);
+      }
+
+      // 最終扣時迴圈：不分職位，只要班次時間有經過 12:30，即從 totalWorkHours 扣除
+      // 正式班次
+      for (const s of allShifts) {
+        if (!empMap.has(s.employeeId)) continue;
+        if (leaveSet.has(s.role)) continue;
+        if (!passesNoon(s.startTime, s.endTime)) continue;
+        const entry = stats.get(s.employeeId);
+        if (!entry) continue;
+        const deduction = isWeekend(s.date) ? 0.5 : 1;
+        entry.totalWorkHours = Math.max(0, Math.round((entry.totalWorkHours - deduction) * 10) / 10);
+      }
+      // 派遣班次（已連結員工）
+      for (const ds of linkedDispatch) {
+        if (!passesNoon(ds.startTime, ds.endTime)) continue;
+        const entry = stats.get(ds.linkedEmployeeId!);
+        if (!entry) continue;
+        const deduction = isWeekend(ds.date) ? 0.5 : 1;
+        entry.totalWorkHours = Math.max(0, Math.round((entry.totalWorkHours - deduction) * 10) / 10);
       }
 
       const workRoles = Array.from(workRolesSet).sort();
