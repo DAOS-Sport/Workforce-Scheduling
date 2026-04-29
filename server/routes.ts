@@ -8,7 +8,8 @@ import { syncFromRagic, syncVenuesFromRagic } from "./ragic";
 import { verifyLineSignature, verifyForwardedRequest, handleLineWebhook, processClockIn, sendShiftReminders, pushToLine, isValidLineUserId, formatClockInMessage, sendWeeklySchedulePush, sendWeeklyLateReport, pushPendingGuidelinesIfAny, invalidateVenueCache } from "./line-webhook";
 import { registerInternalApi } from "./internal-api";
 import { db } from "./db";
-import { eq, isNull, count } from "drizzle-orm";
+import { eq, isNull, isNotNull, and, gte, lte, count } from "drizzle-orm";
+import { dispatchShifts as dispatchShiftsTable } from "@shared/schema";
 
 import multer from "multer";
 import ExcelJS from "exceljs";
@@ -1034,6 +1035,12 @@ export async function registerRoutes(
       }
       const region = await storage.getRegionByCode(regionCode);
       if (!region) return res.status(404).json({ message: "找不到區域" });
+      let resolvedLinkedId: number | null = linkedEmployeeId || null;
+      if (!resolvedLinkedId && dispatchName) {
+        const allEmps = await storage.getAllEmployees();
+        const matched = allEmps.find(e => e.status === "active" && e.name.trim() === dispatchName.trim());
+        if (matched) resolvedLinkedId = matched.id;
+      }
       const record = await storage.createDispatchShift({
         regionId: region.id,
         venueId: venueId || null,
@@ -1045,7 +1052,7 @@ export async function registerRoutes(
         dispatchPhone: dispatchPhone || null,
         role: role || "救生",
         notes: notes || null,
-        linkedEmployeeId: linkedEmployeeId || null,
+        linkedEmployeeId: resolvedLinkedId,
       });
       res.json(record);
     } catch (err: any) {
@@ -1061,6 +1068,12 @@ export async function registerRoutes(
       }
       const region = await storage.getRegionByCode(regionCode);
       if (!region) return res.status(404).json({ message: "找不到區域" });
+      let batchLinkedId: number | null = linkedEmployeeId || null;
+      if (!batchLinkedId && dispatchName) {
+        const allEmps = await storage.getAllEmployees();
+        const matched = allEmps.find(e => e.status === "active" && e.name.trim() === dispatchName.trim());
+        if (matched) batchLinkedId = matched.id;
+      }
       const inserts = (dates as string[]).map((date) => ({
         regionId: region.id,
         venueId: venueId || null,
@@ -1072,7 +1085,7 @@ export async function registerRoutes(
         dispatchPhone: dispatchPhone || null,
         role: role || "救生",
         notes: notes || null,
-        linkedEmployeeId: linkedEmployeeId || null,
+        linkedEmployeeId: batchLinkedId,
       }));
       const records = await storage.batchCreateDispatchShifts(inserts);
       res.json({ created: records.length, records });
@@ -1096,6 +1109,12 @@ export async function registerRoutes(
       const allowedFields = ["venueId", "date", "startTime", "endTime", "dispatchName", "dispatchCompany", "dispatchPhone", "role", "notes", "linkedEmployeeId"];
       for (const field of allowedFields) {
         if (rest[field] !== undefined) updateData[field] = rest[field];
+      }
+      // 若更新了姓名且未提供 linkedEmployeeId，自動比對員工
+      if (updateData.dispatchName && updateData.linkedEmployeeId === undefined) {
+        const allEmps = await storage.getAllEmployees();
+        const matched = allEmps.find(e => e.status === "active" && e.name.trim() === (updateData.dispatchName as string).trim());
+        updateData.linkedEmployeeId = matched ? matched.id : null;
       }
       const updated = await storage.updateDispatchShift(id, updateData);
       res.json(updated);
@@ -3931,17 +3950,10 @@ export async function registerRoutes(
         ? allRegions.find(r => r.code === regionCode)
         : null;
 
-      // 適用扣時規則的場館 ID（三蘆戰區：新北高中館=2, 三重商工館=1, 三民高中館=3）
-      const VENUE_XINBEI = 2;   // 新北高中館
-      const VENUE_SHANGONG = 1; // 三重商工館
-      const VENUE_SANMIN = 3;   // 三民高中館
-      const DEDUCT_VENUES = new Set([VENUE_XINBEI, VENUE_SHANGONG, VENUE_SANMIN]);
-
       // 判斷是否為假日（六=6, 日=0）
       const isWeekend = (dateStr: string): boolean => {
         const d = new Date(dateStr + "T00:00:00");
-        const day = d.getDay();
-        return day === 0 || day === 6;
+        return d.getDay() === 0 || d.getDay() === 6;
       };
 
       // 計算原始時數
@@ -3953,29 +3965,26 @@ export async function registerRoutes(
         return Math.round(mins / 60 * 10) / 10;
       };
 
-      // 計算扣除後的實際計薪時數
-      const calcHours = (start: string, end: string, venueId: number | null | undefined, date: string): number => {
-        const raw = rawHours(start, end);
-        if (!venueId || !DEDUCT_VENUES.has(venueId)) return raw;
-
+      // 判斷班次時段是否有經過 12:30（含端點）
+      const NOON = 12 * 60 + 30; // 750 分鐘
+      const passesNoon = (start: string, end: string): boolean => {
         const [sh, sm] = start.split(":").map(Number);
-        const startMins = sh * 60 + sm;
-        const IS_1600 = startMins === 16 * 60; // 16:00 整不扣
-        const isEvening = startMins >= 16 * 60; // 16:00 含以後為晚班
-
-        if (isWeekend(date)) {
-          // 假日：新北、三民 扣 0.5；商工不扣
-          if (venueId === VENUE_SHANGONG) return raw;
-          if (!IS_1600 && (venueId === VENUE_XINBEI || venueId === VENUE_SANMIN)) {
-            return Math.max(0, Math.round((raw - 0.5) * 10) / 10);
-          }
-          return raw;
-        } else {
-          // 平日：16:00 整不扣；晚班（16:00後）扣 0.5；其餘扣 1
-          if (IS_1600) return raw;
-          if (isEvening) return Math.max(0, Math.round((raw - 0.5) * 10) / 10);
-          return Math.max(0, Math.round((raw - 1) * 10) / 10);
+        const [eh, em] = end.split(":").map(Number);
+        const sM = sh * 60 + sm;
+        const eM = eh * 60 + em;
+        if (eM <= sM) {
+          // 跨午夜班次：涵蓋 [sM, 1440) ∪ [0, eM]
+          return sM <= NOON || eM >= NOON;
         }
+        return sM <= NOON && eM >= NOON;
+      };
+
+      // 計算實際計薪時數：有經過 12:30 則扣（平日 -1h，假日 -0.5h）
+      const calcHours = (start: string, end: string, date: string): number => {
+        const raw = rawHours(start, end);
+        if (!passesNoon(start, end)) return raw;
+        const deduction = isWeekend(date) ? 0.5 : 1;
+        return Math.max(0, Math.round((raw - deduction) * 10) / 10);
       };
 
       const empMap = new Map<number, typeof allEmployees[0]>();
@@ -4030,7 +4039,7 @@ export async function registerRoutes(
           entry.leaves[s.role] = (entry.leaves[s.role] || 0) + 1;
           entry.totalLeaveDays++;
         } else {
-          const hrs = calcHours(s.startTime, s.endTime, s.venueId, s.date);
+          const hrs = calcHours(s.startTime, s.endTime, s.date);
           entry.hours[s.role] = (entry.hours[s.role] || 0) + hrs;
           entry.totalWorkHours = Math.round((entry.totalWorkHours + hrs) * 10) / 10;
           workRolesSet.add(s.role);
@@ -4096,6 +4105,42 @@ export async function registerRoutes(
           entry.overtimeHours = Math.round((entry.overtimeHours + otHrs) * 10) / 10;
           entry.totalWorkHours = Math.round((entry.totalWorkHours + otHrs) * 10) / 10;
         }
+      }
+
+      // 派遣工時：有 linkedEmployeeId 的派遣班次也納入計算
+      const linkedDispatch = await db.select().from(dispatchShiftsTable).where(
+        and(
+          gte(dispatchShiftsTable.date, startDate),
+          lte(dispatchShiftsTable.date, endDate),
+          isNotNull(dispatchShiftsTable.linkedEmployeeId)
+        )
+      );
+      for (const ds of linkedDispatch) {
+        const empId = ds.linkedEmployeeId!;
+        const emp = empMap.get(empId);
+        if (!emp) continue;
+        if (!stats.has(empId)) {
+          const region = regionMap.get(emp.regionId);
+          stats.set(empId, {
+            id: emp.id,
+            name: emp.name,
+            employeeCode: emp.employeeCode,
+            region: region?.name || "",
+            hours: {},
+            leaves: {},
+            totalWorkHours: 0,
+            totalLeaveDays: 0,
+            shiftCount: 0,
+            overtimeHours: 0,
+          });
+        }
+        const entry = stats.get(empId)!;
+        const role = ds.role || "派遣";
+        const hrs = calcHours(ds.startTime, ds.endTime, ds.date);
+        entry.hours[role] = Math.round(((entry.hours[role] || 0) + hrs) * 10) / 10;
+        entry.totalWorkHours = Math.round((entry.totalWorkHours + hrs) * 10) / 10;
+        entry.shiftCount++;
+        workRolesSet.add(role);
       }
 
       const workRoles = Array.from(workRolesSet).sort();
