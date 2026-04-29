@@ -4006,10 +4006,10 @@ export async function registerRoutes(
         return Math.max(0, Math.round((raw - deduction) * 10) / 10);
       };
 
+      // empMap：含所有員工（不限狀態、不限地區）；有排班即納入計算
+      // 無班次的員工不會進入 stats，自然不出現在報表
       const empMap = new Map<number, typeof allEmployees[0]>();
       for (const e of allEmployees) {
-        if (e.status !== "active") continue;
-        if (regionFilter && e.regionId !== regionFilter.id) continue;
         empMap.set(e.id, e);
       }
 
@@ -4183,16 +4183,24 @@ export async function registerRoutes(
         entry.totalWorkHours = Math.max(0, Math.round((entry.totalWorkHours - deduction) * 10) / 10);
       }
 
-      const workRoles = Array.from(workRolesSet).sort();
-      const leaveTypes = LEAVE_TYPES.filter(l =>
-        Array.from(stats.values()).some(e => e.leaves[l])
-      );
+      // 有選地區篩選時，僅輸出該地區的員工（計算仍涵蓋所有有班次者）
+      const allStatsList = Array.from(stats.values());
+      const filteredStats = regionFilter
+        ? allStatsList.filter(e => {
+            const emp = allEmployees.find(a => a.id === e.id);
+            return emp && emp.regionId === regionFilter.id;
+          })
+        : allStatsList;
 
-      const hasOvertimeData = Array.from(stats.values()).some(e => e.overtimeHours > 0);
-
-      const employees = Array.from(stats.values()).sort((a, b) =>
+      const employees = filteredStats.sort((a, b) =>
         a.region.localeCompare(b.region) || a.name.localeCompare(b.name, "zh-Hant")
       );
+
+      const workRoles = Array.from(
+        filteredStats.reduce((s, e) => { Object.keys(e.hours).forEach(r => s.add(r)); return s; }, new Set<string>())
+      ).sort();
+      const leaveTypes = LEAVE_TYPES.filter(l => filteredStats.some(e => e.leaves[l]));
+      const hasOvertimeData = filteredStats.some(e => e.overtimeHours > 0);
 
       res.json({ year, month, workRoles, leaveTypes, employees, hasOvertimeData });
     } catch (err: any) {
