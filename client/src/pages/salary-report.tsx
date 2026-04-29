@@ -40,6 +40,7 @@ type EmpStats = {
   totalLeaveDays: number;
   shiftCount: number;
   overtimeHours: number;
+  breakDeduction: number;
 };
 
 type HoursReport = {
@@ -59,6 +60,7 @@ function exportCSV(report: HoursReport, regionLabel: string) {
     "員工代號", "姓名", "地區",
     ...workRoles.map(r => `${r}(時數)`),
     ...(hasOT ? ["加班(時數)"] : []),
+    "休息扣除",
     "總工時",
   ];
 
@@ -68,6 +70,7 @@ function exportCSV(report: HoursReport, regionLabel: string) {
     e.region,
     ...workRoles.map(r => (e.hours[r] || 0).toFixed(1)),
     ...(hasOT ? [e.overtimeHours.toFixed(1)] : []),
+    (e.breakDeduction || 0).toFixed(1),
     e.totalWorkHours.toFixed(1),
   ]);
 
@@ -370,6 +373,9 @@ export default function SalaryReportPage() {
                       加班
                     </th>
                   )}
+                  <th className="text-right px-3 py-2.5 font-semibold text-xs text-amber-600 dark:text-amber-400 min-w-[72px] bg-amber-50/50 dark:bg-amber-950/20">
+                    休息扣除
+                  </th>
                   <th className="text-right px-3 py-2.5 font-semibold text-xs text-blue-600 dark:text-blue-400 min-w-[72px] bg-blue-50/50 dark:bg-blue-950/20">
                     總工時
                   </th>
@@ -430,6 +436,15 @@ export default function SalaryReportPage() {
                         )}
                       </td>
                     )}
+                    <td className="px-3 py-2 text-right bg-amber-50/30 dark:bg-amber-950/10" data-testid={`cell-break-deduction-${emp.id}`}>
+                      {(emp.breakDeduction || 0) > 0 ? (
+                        <Badge variant="secondary" className="text-xs font-mono bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-0">
+                          -{(emp.breakDeduction || 0).toFixed(1)}h
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground/30 text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right bg-blue-50/30 dark:bg-blue-950/10">
                       <span className="font-bold text-blue-600 dark:text-blue-400 font-mono text-sm" data-testid={`cell-total-hours-${emp.id}`}>
                         {emp.totalWorkHours.toFixed(1)}h
@@ -453,6 +468,11 @@ export default function SalaryReportPage() {
                       </span>
                     </td>
                   )}
+                  <td className="px-3 py-2.5 text-right bg-amber-50/50 dark:bg-amber-950/20">
+                    <span className="font-bold text-amber-600 dark:text-amber-400 font-mono text-xs">
+                      -{(data.employees.reduce((s, e) => Math.round((s + (e.breakDeduction || 0)) * 10) / 10, 0)).toFixed(1)}h
+                    </span>
+                  </td>
                   <td className="px-3 py-2.5 text-right bg-blue-50/50 dark:bg-blue-950/20">
                     <span className="font-bold text-blue-600 dark:text-blue-400 font-mono text-sm">
                       {totalHours.toFixed(1)}h

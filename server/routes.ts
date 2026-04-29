@@ -4027,6 +4027,7 @@ export async function registerRoutes(
         totalLeaveDays: number;
         shiftCount: number;
         overtimeHours: number;
+        breakDeduction: number;
       };
 
       const stats = new Map<number, EmpStats>();
@@ -4048,6 +4049,7 @@ export async function registerRoutes(
             totalLeaveDays: 0,
             shiftCount: 0,
             overtimeHours: 0,
+            breakDeduction: 0,
           });
         }
 
@@ -4095,6 +4097,7 @@ export async function registerRoutes(
             totalLeaveDays: 0,
             shiftCount: 0,
             overtimeHours: 0,
+            breakDeduction: 0,
           });
         }
 
@@ -4173,6 +4176,7 @@ export async function registerRoutes(
         if (!entry) continue;
         const deduction = isHolidayDate(s.date) ? 0.5 : 1;
         entry.totalWorkHours = Math.max(0, Math.round((entry.totalWorkHours - deduction) * 10) / 10);
+        entry.breakDeduction = Math.round((entry.breakDeduction + deduction) * 10) / 10;
       }
       // 派遣班次（已連結員工）
       for (const ds of linkedDispatch) {
@@ -4181,6 +4185,7 @@ export async function registerRoutes(
         if (!entry) continue;
         const deduction = isHolidayDate(ds.date) ? 0.5 : 1;
         entry.totalWorkHours = Math.max(0, Math.round((entry.totalWorkHours - deduction) * 10) / 10);
+        entry.breakDeduction = Math.round((entry.breakDeduction + deduction) * 10) / 10;
       }
 
       // 有選地區篩選時，僅輸出該地區的員工（計算仍涵蓋所有有班次者）
