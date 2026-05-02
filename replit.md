@@ -10,6 +10,17 @@ I prefer that you communicate in a clear and concise manner, focusing on the mos
 The system is built with a modern web stack:
 - **Frontend**: React, Vite, TypeScript, Tailwind CSS, and Shadcn UI provide a responsive and intuitive user interface. `wouter` is used for client-side routing, and `TanStack React Query` manages server state efficiently.
 - **Backend**: Express.js handles API requests, integrated with PostgreSQL for data storage and Drizzle ORM for database interactions.
+- **Server Architecture (Task #69)**: Layered server/ directory structure:
+    - `server/index.ts` — thin entry, calls `bootstrap()`.
+    - `server/bootstrap/` — boot sequence split into `app.ts` (express + session + body parsers + request logger), `session.ts` (PG-backed session table + middleware), `migrations.ts` (idempotent ensure-schema calls on startup), `scheduler.ts` (every cron job, with the dev-skip rule keyed on `REPLIT_DEPLOYMENT === "1"`), `viteOrStatic.ts` (vite dev or static prod), and `index.ts` (orchestrator: seed → migrations → app → routes → error handler → client → listen → cron).
+    - `server/config/openApiPrefixes.ts` — single source of truth for the public-prefix bypass list (`/api/admin/`, `/api/portal/`, `/api/liff/`, `/api/line/`, `/api/internal/`, `/api/anomaly-report`, `/api/announcements/active`).
+    - `server/shared/middleware/requireAdmin.ts` — `requireAdmin` per-route guard + `gateAdminApi` app-level middleware (consume the openApiPrefixes list).
+    - `server/shared/log.ts` — single shared logger.
+    - `server/modules/_registry.ts` — single fan-out point for module routes; calls `mountShiftRoutes(app)`.
+    - `server/modules/shift/` — full shift module: `shift.types.ts` (LEAVE_TYPES + re-exports), `shift.repository.ts` (data access wrapper), `shiftAudit.service.ts` (audit-log read + actor formatter), `shiftValidation.service.ts` (labor-law orchestration + blocking/warning bucketing), `shift.service.ts` (re-export hub), `shift.routes.ts` (all 15 shift HTTP routes — single CRUD + audit + cancelled/all reads + four-week-precheck + batch + batch-delete + batch-delete-ids + import-batch + batch-update + copy-from-previous).
+    - `server/modules/{employee,region,venue,scheduleSlot,dispatch,attendance,clock,leave,overtime,guideline,anomaly,notification,system}/<name>.repository.ts` — 13 thin repository wrappers around `storage.ts` (using `.bind(storage)` to preserve `this`); structural skeleton for future per-domain extraction. `storage.ts` remains the source of truth.
+    - **Task #50 protection chain** (preserved end-to-end): `storage.updateShift` and `storage.deleteShift` throw unless `force=true` is passed; admin UI direct edit/delete and bulk-replace buttons send `force:true`; automation paths (Ragic sync etc.) omit it and are blocked. Audit-log rows are written inside `storage.createShift/updateShift/deleteShift/restoreShift`.
+    - **Conservative-scope follow-up**: 110+ non-shift routes still register inline in `server/routes.ts`; their migration into per-module route files is tracked as separate follow-up tasks (#67/#68).
 - **Core Features**:
     - **Regional Management**: Organizes operations across four distinct regions (三蘆戰區, 松山國小, 新竹區, 內勤) using tab-based navigation.
     - **Smart Scheduler**: Features a spreadsheet-like weekly grid for intuitive shift planning and editing. Includes functionality for batch shift creation and template-based scheduling.
