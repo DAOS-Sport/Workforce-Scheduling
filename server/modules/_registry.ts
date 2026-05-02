@@ -34,6 +34,7 @@ import { mountNotificationRoutes } from "./notification/notification.routes";
 import { mountSystemRoutes } from "./system/system.routes";
 import { mountLeaveRoutes } from "./leave/leave.routes";
 import { mountAnnouncementRoutes } from "./announcement/announcement.routes";
+import { mountImportExportRoutes } from "./importExport";
 
 export function registerModuleRoutes(httpServer: Server, app: Express): void {
   // Shift module — fully decomposed (the canonical pattern)
@@ -57,4 +58,7 @@ export function registerModuleRoutes(httpServer: Server, app: Express): void {
   mountSystemRoutes(httpServer, app);
   mountLeaveRoutes(httpServer, app);
   mountAnnouncementRoutes(httpServer, app);
+
+  // Spreadsheet ingest boundaries (XLSX → multi-table writes)
+  mountImportExportRoutes(httpServer, app);
 }

@@ -1,24 +1,96 @@
-import { storage } from "../../storage";
+import { db } from "../../db";
+import { eq, and, gte, lte, desc } from "drizzle-orm";
+import {
+  clockRecords,
+  clockAmendments,
+  type ClockRecord,
+  type InsertClockRecord,
+  type ClockAmendment,
+  type InsertClockAmendment,
+} from "@shared/schema";
 
 export const clockRepository = {
-  // Clock records
-  create: storage.createClockRecord.bind(storage),
-  getById: storage.getClockRecord.bind(storage),
-  getByDateRange: storage.getClockRecordsByDateRange.bind(storage),
-  getByEmployee: storage.getClockRecordsByEmployee.bind(storage),
-  updateReason: storage.updateClockRecordReason.bind(storage),
-  applyAmendment: storage.applyClockRecordAmendment.bind(storage),
+  async createClockRecord(data: InsertClockRecord): Promise<ClockRecord> {
+    const [record] = await db.insert(clockRecords).values(data).returning();
+    return record;
+  },
 
-  // Clock amendments
-  createAmendment: storage.createClockAmendment.bind(storage),
-  getAmendments: storage.getClockAmendments.bind(storage),
-  getAmendmentsByEmployee: storage.getClockAmendmentsByEmployee.bind(storage),
-  getAmendment: storage.getClockAmendment.bind(storage),
-  updateAmendmentStatus: storage.updateClockAmendmentStatus.bind(storage),
+  async getClockRecord(id: number): Promise<ClockRecord | undefined> {
+    const [record] = await db.select().from(clockRecords).where(eq(clockRecords.id, id));
+    return record;
+  },
 
-  // Missing clock-in notification dedup
-  hasMissingNotification: storage.hasMissingClockNotification.bind(storage),
-  createMissingNotification: storage.createMissingClockNotification.bind(storage),
-  clearOldMissingNotifications: storage.clearOldMissingClockNotifications.bind(storage),
-  getMissingNotificationsForDate: storage.getMissingClockNotificationsForDate.bind(storage),
+  async getClockRecordsByDateRange(startDate: string, endDate: string): Promise<ClockRecord[]> {
+    return db.select().from(clockRecords).where(
+      and(
+        gte(clockRecords.clockTime, new Date(startDate + "T00:00:00+08:00")),
+        lte(clockRecords.clockTime, new Date(endDate + "T23:59:59+08:00"))
+      )
+    ).orderBy(desc(clockRecords.clockTime));
+  },
+
+  async getClockRecordsByEmployee(employeeId: number, startDate: string, endDate: string): Promise<ClockRecord[]> {
+    return db.select().from(clockRecords).where(
+      and(
+        eq(clockRecords.employeeId, employeeId),
+        gte(clockRecords.clockTime, new Date(startDate + "T00:00:00+08:00")),
+        lte(clockRecords.clockTime, new Date(endDate + "T23:59:59+08:00"))
+      )
+    ).orderBy(desc(clockRecords.clockTime));
+  },
+
+  async createClockAmendment(data: InsertClockAmendment): Promise<ClockAmendment> {
+    const [record] = await db.insert(clockAmendments).values(data).returning();
+    return record;
+  },
+
+  async getClockAmendments(status?: string): Promise<ClockAmendment[]> {
+    if (status) {
+      return db.select().from(clockAmendments)
+        .where(eq(clockAmendments.status, status))
+        .orderBy(desc(clockAmendments.createdAt));
+    }
+    return db.select().from(clockAmendments).orderBy(desc(clockAmendments.createdAt));
+  },
+
+  async getClockAmendmentsByEmployee(employeeId: number): Promise<ClockAmendment[]> {
+    return db.select().from(clockAmendments)
+      .where(eq(clockAmendments.employeeId, employeeId))
+      .orderBy(desc(clockAmendments.createdAt));
+  },
+
+  async getClockAmendment(id: number): Promise<ClockAmendment | undefined> {
+    const [record] = await db.select().from(clockAmendments).where(eq(clockAmendments.id, id));
+    return record;
+  },
+
+  async updateClockAmendmentStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<ClockAmendment | undefined> {
+    const [record] = await db.update(clockAmendments).set({
+      status,
+      reviewedBy,
+      reviewedByName,
+      reviewedAt: new Date(),
+      reviewNote: reviewNote || null,
+    }).where(eq(clockAmendments.id, id)).returning();
+    return record;
+  },
+
+  async updateClockRecordReason(id: number, earlyArrivalReason?: string, lateDepartureReason?: string): Promise<ClockRecord | undefined> {
+    const updates: Record<string, any> = {};
+    if (earlyArrivalReason !== undefined) updates.earlyArrivalReason = earlyArrivalReason;
+    if (lateDepartureReason !== undefined) updates.lateDepartureReason = lateDepartureReason;
+    if (Object.keys(updates).length === 0) return undefined;
+    const [record] = await db.update(clockRecords).set(updates).where(eq(clockRecords.id, id)).returning();
+    return record;
+  },
+
+  async applyClockRecordAmendment(clockRecordId: number, amendedTime: Date, amendmentId: number, newFailReason: string | null): Promise<ClockRecord | undefined> {
+    const [record] = await db.update(clockRecords).set({
+      amendedTime,
+      amendmentId,
+      failReason: newFailReason,
+    }).where(eq(clockRecords.id, clockRecordId)).returning();
+    return record;
+  },
+
 };
