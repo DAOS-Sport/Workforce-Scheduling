@@ -8,6 +8,15 @@ export function mountGuidelineRoutes(_httpServer: Server, app: Express): void {
     res.json(await guidelineService.list(category ? String(category) : undefined));
   });
 
+  // Must be registered BEFORE /:id to prevent "all-acknowledgments" being parsed as an id
+  app.get("/api/guidelines/all-acknowledgments", async (_req, res) => {
+    try {
+      res.json(await guidelineService.allAcksWithDetails());
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/guidelines/:id", async (req, res) => {
     const item = await guidelineService.get(parseInt(req.params.id));
     if (!item) return res.status(404).json({ message: "守則未找到" });

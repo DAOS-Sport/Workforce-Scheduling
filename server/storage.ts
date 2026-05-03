@@ -118,6 +118,7 @@ export interface IStorage {
   getGuidelineAcks(guidelineId: number): Promise<GuidelineAck[]>;
   createGuidelineAck(data: InsertGuidelineAck): Promise<GuidelineAck>;
   getGuidelineAcksByEmployee(employeeId: number): Promise<GuidelineAck[]>;
+  getAllGuidelineAcksWithDetails(): Promise<import("./modules/guideline/guideline.repository").GuidelineAckDetail[]>;
 
   getEmployeeByLineId(lineId: string): Promise<Employee | undefined>;
   getShiftsByEmployeeAndDateRange(employeeId: number, startDate: string, endDate: string): Promise<Shift[]>;
@@ -415,6 +416,10 @@ export class DatabaseStorage implements IStorage {
 
   async getGuidelineAcksByEmployee(employeeId: number): Promise<GuidelineAck[]> {
     return guidelineRepository.getGuidelineAcksByEmployee(employeeId);
+  }
+
+  async getAllGuidelineAcksWithDetails() {
+    return guidelineRepository.getAllGuidelineAcksWithDetails();
   }
 
   async getEmployeeByLineId(lineId: string): Promise<Employee | undefined> {

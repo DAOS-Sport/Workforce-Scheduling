@@ -39,6 +39,8 @@ export const guidelineService = {
 
   acks: (id: number) => storage.getGuidelineAcks(id),
 
+  allAcksWithDetails: () => storage.getAllGuidelineAcksWithDetails(),
+
   async createAck(payload: unknown): Promise<GuidelineAck> {
     const parsed = insertGuidelineAckSchema.parse(payload);
     return storage.createGuidelineAck(parsed);

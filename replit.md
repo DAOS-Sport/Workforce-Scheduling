@@ -1,110 +1,41 @@
 # PT 排班管理系統 (PT Scheduling System)
 
 ## Overview
-This project is a comprehensive workforce scheduling management system designed for Personal Training (PT) staff operating across multiple venues and regions. Its primary purpose is to streamline the scheduling process, ensure compliance with Taiwan labor laws, and provide robust tools for employee and venue management, alongside attendance tracking. The system aims to enhance operational efficiency, reduce administrative overhead, and ensure legal adherence in staff deployment.
+This project is a comprehensive workforce scheduling management system for Personal Training (PT) staff across multiple venues. Its core purpose is to streamline scheduling, ensure compliance with Taiwan labor laws, and provide robust tools for employee and venue management, alongside attendance tracking. The system aims to enhance operational efficiency, reduce administrative overhead, and ensure legal adherence in staff deployment, ultimately improving management capabilities and staff satisfaction.
 
 ## User Preferences
 I prefer that you communicate in a clear and concise manner, focusing on the most impactful changes or information. When working on the codebase, I appreciate an iterative approach, with major architectural decisions or significant feature implementations discussed and approved before proceeding. Please ensure that all changes align with the existing architectural patterns and maintain high code quality. I prefer detailed explanations for complex features or decisions.
 
 ## System Architecture
 The system is built with a modern web stack:
-- **Frontend**: React, Vite, TypeScript, Tailwind CSS, and Shadcn UI provide a responsive and intuitive user interface. `wouter` is used for client-side routing, and `TanStack React Query` manages server state efficiently.
-- **Backend**: Express.js handles API requests, integrated with PostgreSQL for data storage and Drizzle ORM for database interactions.
-- **Server Architecture (Task #69)**: Layered server/ directory structure with full route extraction:
-    - `server/index.ts` — 16-line entry; calls `bootstrap()`.
-    - `server/routes.ts` — 80-line thin delegator; only owns the seed step, CORS shims for externally-consumed endpoints, explicit auth-bootstrap order (mountAdminAuthRoutes → registerInternalApi → gateAdminApi), and a single `registerModuleRoutes(httpServer, app)` fan-out.
-    - `server/bootstrap/` — boot sequence split into `app.ts`, `session.ts` (PG-backed session table + middleware), `migrations.ts` (idempotent ensure-schema), `scheduler.ts` (every cron job, with dev-skip on `REPLIT_DEPLOYMENT !== "1"`), `viteOrStatic.ts`, and `index.ts` (orchestrator: seed → migrations → app → routes → error handler → client → listen → cron).
-    - `server/config/openApiPrefixes.ts` — single source of truth for the public-prefix bypass list.
-    - `server/shared/middleware/requireAdmin.ts` — `requireAdmin` per-route guard + `gateAdminApi` app-level middleware.
-    - `server/shared/log.ts` — single shared logger.
-    - `server/shared/email/sendAnomalyEmail.ts` — shared anomaly-notification email helper used by the anomaly, notification, and system modules.
-    - `server/modules/_registry.ts` — single fan-out point with the `(httpServer: Server, app: Express)` signature; mounts all 19 modules (18 domain + importExport) in dependency-aware order.
-    - `server/modules/shift/` — canonical fully-decomposed module: `shift.types.ts`, `shift.repository.ts`, `shiftAudit.service.ts`, `shiftValidation.service.ts`, `shift.service.ts`, `shift.routes.ts` (all 15 shift HTTP routes).
-    - `server/modules/{admin,region,employee,venue,dispatch,scheduleSlot,attendance,guideline,portal,sync,line,clock,overtime,anomaly,notification,system,leave,announcement}/<name>.routes.ts` — 17 additional domain route modules. Per-module imports are trimmed to actual usage (no copy-pasted union from the original routes.ts); `LEAVE_TYPES` constants stripped from any module that didn't reference them.
-    - **Service Layer (Task #70 重構 A)**: Every one of the 19 non-shift modules now ships a `<name>.service.ts` alongside its routes file. Routes import `xxxService` and never reference `storage` directly; HTTP handlers only parse inputs, validate, call the service, and return JSON. Service convention: `xxxService.findAll() / get(id) / create(data, actor) / update(id, patch, actor) / remove(id)` (variant names allowed when domain-specific). Errors are thrown with a `.status` property; the route catch-block uses `res.status(err.status || 500)`. The shift module's pre-existing `shift.service.ts` / `shiftAudit.service.ts` / `shiftValidation.service.ts` remain canonical.
-    - **Route File Split (Task #71 重構 B)**: The three largest route files are further decomposed by feature group, with each module's top-level `<name>.routes.ts` reduced to a thin umbrella that calls per-feature sub-mounts:
-        - `portal/` → `portal.auth.routes.ts` (dev-login + LINE callback + verify), `portal.shifts.routes.ts` (my-shifts + certificate), `portal.workmates.routes.ts` (today / 7-day coworker discovery), `portal.guidelines.routes.ts` (guideline list / detail / ack-all), `portal.attendance.routes.ts` (monthly summary).
-        - `clock/` → `clock.records.routes.ts` (read/list + report endpoints + reason patch), `clock.amendment.routes.ts` (amendment CRUD + admin approval).
-        - `system/` → `system.config.routes.ts` (salary-rates + system-config), `system.salary.routes.ts` (salary-report + weekly-attendance), `system.fourWeek.routes.ts` (four-week-compliance).
-      No API URLs / response shapes / status codes change. `_registry.ts` signature and mount ordering are unchanged — it still calls `mountPortalRoutes / mountClockRoutes / mountSystemRoutes`, which now fan out to the sub-mounts internally.
-    - `server/modules/importExport/` — owns spreadsheet (XLSX) ingestion boundaries that span more than one persistence domain. Currently hosts `POST /api/attendance-upload` (multer + ExcelJS), extracted from `attendance/` because file-parsing concerns are orthogonal to row CRUD.
-    - `server/storage.ts` — **thin façade (741 lines, was 1121).** Every one of the 112 `IStorage` methods is a one-line delegate of the form `return <domain>Repository.<name>(args)` to one of 14 per-domain repository objects under `server/modules/<domain>/<domain>.repository.ts`. The `IStorage` interface is unchanged so existing `storage.<method>` callers work unmodified.
-    - `server/modules/{shift,employee,region,venue,scheduleSlot,dispatch,attendance,clock,leave,overtime,guideline,anomaly,notification,system}/<name>.repository.ts` — 14 per-domain repositories holding all real `db.*` queries (~1018 lines combined, ~75 lines avg).
-    - **Root file modularization (Task #72 重構 C)**: The three largest root-level legacy files were moved into their respective module folders, with the originals reduced to thin re-export shims so every existing importer keeps working unchanged:
-        - `server/line-webhook.ts` (1300 lines) → `server/modules/line/`:
-            - `lineSignature.ts` — `isValidLineUserId`, `verifyLineSignature`, `verifyForwardedRequest`
-            - `lineHelpers.ts` — Taiwan time helpers + `LEAVE_TYPES`
-            - `lineClock.service.ts` — `processClockIn`, `formatClockInMessage`, venue cache, GPS / haversine, `invalidateVenueCache`
-            - `linePush.service.ts` — `pushToLine`, `pushPendingGuidelinesIfAny`, `sendShiftReminders`, `sendWeeklySchedulePush`, `sendWeeklyLateReport`, `checkMissingClockIn`, `resetMissingClockInTracker`
-            - `lineWebhook.service.ts` — `handleLineWebhook` + follow / text / location event handlers (uses `replyToLine` with push fallback)
-        - `server/internal-api.ts` (1031 lines) → `server/modules/internal/`:
-            - `internal.service.ts` — all data assembly, DTO mapping, enrichment, and helpers (`internalService.getAdminOverview()`, `getTodaySchedules()`, `exportSchedules()`, `exportEmployees()`, `exportVenues()`, `exportShiftTemplates()`, `exportChanges()`, `exportSnapshot()`); error helpers throw with `.status` + `.code`.
-            - `internal.routes.ts` — thin route layer: X-Internal-Token gate (`app.use("/api/internal", requireInternalToken)`) + per-endpoint handlers that parse query, validate, call the service, serialize JSON; preserves all existing routes (`admin/overview`, `schedules/today`, `export/{schedules,employees,venues,shifts,changes,snapshot}`) and the JSON 404 fallback.
-        - `server/ragic.ts` (422 lines) → `server/modules/ragic/`:
-            - `ragicClient.ts` — pure HTTP transport (`fetchAllRagicRecords`, retry, paging)
-            - `ragic.service.ts` — `syncFromRagic`, `syncVenuesFromRagic`, `VENUE_DATA`, all role/status/department mapping. Imports `isValidLineUserId` statically from `modules/line/lineSignature` (replaces the original dynamic `await import("./line-webhook")` — safe because `lineSignature` only depends on `crypto`).
-            - `ragic.routes.ts` — owns `POST /api/ragic-sync` and `POST /api/ragic-venue-sync` (moved out of `modules/sync/sync.routes.ts`; URLs and response shapes unchanged). Mounted via `mountRagicRoutes()` in `_registry.ts` immediately after `mountSyncRoutes()`.
-        - All importers (`bootstrap/scheduler.ts`, `modules/{line,liff,sync,venue,portal,system}/...`, `server/routes.ts`) keep using the root paths — the shims forward every public name. No API URL / response shape / LINE message text / Ragic mapping / cron schedule / DB schema changes.
-    - **LIFF + Ragic module split (Task #73 重構 D — final cleanup)**:
-        - `server/modules/liff/` — new module dedicated to LIFF browser-frame endpoints. `liff.routes.ts` owns `POST /api/liff/clock-in` (extracted from `modules/line/line.routes.ts`); `liff.service.ts` owns `liffService.processLiffClockIn()` + `liffService.backfillLineIdIfNeeded()` (renamed from `lineService.*`, same implementation). `modules/line/line.service.ts` was deleted as it's no longer needed — `modules/line/line.routes.ts` now only owns `POST /api/line/webhook` (Messaging API). `/api/liff/` remains on the public-prefix bypass list (`server/config/openApiPrefixes.ts`).
-        - `server/modules/ragic/ragic.routes.ts` — added `POST /api/ragic/sync-employees` and `POST /api/ragic/sync-venues` for the admin "手動觸發 Ragic 同步" buttons (module-scoped URLs). Both delegate to the same `syncFromRagic()` / `syncVenuesFromRagic()` service functions as the legacy `POST /api/ragic-sync` and `POST /api/ragic-venue-sync`, so request/response shapes are identical. All four routes are admin-gated by `gateAdminApi`.
-        - `server/modules/_registry.ts` mounts `mountLiffRoutes(httpServer, app)` immediately after `mountLineLiffRoutes(...)`, keeping line / liff side by side in the registration order.
-    - **Final modules/ directory layout (after Tasks #69 → #73)**:
-        ```
-        server/modules/
-          _registry.ts                    ← single fan-out (mounts all 21 modules)
-          shift/        types/repository/audit/validation/service/routes (canonical)
-          admin/        admin.routes.ts (auth bootstrap — mounted from server/routes.ts)
-          region/       region.{repository,service,routes}.ts
-          employee/     employee.{repository,service,routes}.ts
-          venue/        venue.{repository,service,routes}.ts
-          dispatch/     dispatch.{repository,service,routes}.ts
-          scheduleSlot/ scheduleSlot.{repository,service,routes}.ts
-          attendance/   attendance.{repository,service,routes}.ts
-          guideline/    guideline.{repository,service,routes}.ts
-          portal/       portal.service.ts + 5 sub-routes (auth/shifts/workmates/guidelines/attendance) + portal.routes.ts umbrella
-          sync/         sync.{service,routes}.ts (shift reminders + weekly schedule + late report)
-          ragic/        ragicClient.ts + ragic.{service,routes}.ts (Ragic transport + sync + admin endpoints)
-          line/         lineSignature.ts + lineHelpers.ts + line{Clock,Push,Webhook}.service.ts + line.routes.ts (Messaging API webhook only)
-          liff/         liff.{service,routes}.ts (LIFF clock-in)
-          internal/     internal.{service,routes}.ts (X-Internal-Token-gated server-to-server API)
-          clock/        clock.{repository,service}.ts + 2 sub-routes (records/amendment) + clock.routes.ts umbrella
-          overtime/     overtime.{repository,service,routes}.ts
-          anomaly/      anomaly.{repository,service,routes}.ts
-          notification/ notification.{repository,service,routes}.ts
-          system/       system.{repository,service}.ts + 3 sub-routes (config/salary/fourWeek) + system.routes.ts umbrella
-          leave/        leave.{repository,service,routes}.ts
-          announcement/ announcement.{repository,service,routes}.ts
-          importExport/ index.ts (XLSX → multi-table writes)
-        ```
-        Boundaries: `*.routes.ts` only parse/validate/serialize → call `*.service.ts` → service calls `storage` (façade over `*.repository.ts`). Cross-module calls go through services, never repositories. Root files `server/{line-webhook,internal-api,ragic}.ts` remain as thin re-export shims for any older importer paths.
-    - **Task #50 protection chain (preserved end-to-end, now inside `shiftRepository`)**: `shiftRepository.updateShift` / `deleteShift` throw `Task #50 protection: shift mutation requires force=true` unless `force=true` is passed. The admin UI direct edit/delete + bulk-replace buttons send `force:true`; automation paths (Ragic sync etc.) omit it and are blocked. Audit-log rows are written inside `shiftRepository.createShift/updateShift/deleteShift/restoreShift`. `restoreShift` intentionally has no `force` gate (restoring a cancelled row to active is non-destructive — see the inline comment on the function for the rationale).
+- **Frontend**: React, Vite, TypeScript, Tailwind CSS, and Shadcn UI for a responsive UI. `wouter` for routing, `TanStack React Query` for server state.
+- **Backend**: Express.js for API requests, PostgreSQL for data, and Drizzle ORM for database interactions.
+- **Server Architecture**: Layered `server/` directory structure. Modules are fully decomposed into `types`, `repository`, `service`, and `routes` files, ensuring clear separation of concerns. A thin `storage` façade delegates to per-domain repositories. Root-level legacy files (`line-webhook.ts`, `internal-api.ts`, `ragic.ts`) have been modularized into their respective feature modules with re-export shims.
 - **Core Features**:
-    - **Regional Management**: Organizes operations across four distinct regions (三蘆戰區, 松山國小, 新竹區, 內勤) using tab-based navigation.
-    - **Smart Scheduler**: Features a spreadsheet-like weekly grid for intuitive shift planning and editing. Includes functionality for batch shift creation and template-based scheduling.
-    - **Labor Law Compliance**: Incorporates a sophisticated HR Eye engine to validate schedules against Taiwan labor laws (e.g., 7-day rest, 12-hour daily limit, 11-hour rest gap, four-week 160h/176h limits). Leave types (休假/特休/病假/事假/喪假/公假) are recognized and appropriately bypass certain labor law validations. Four-week flexible working hours (四週變形工時) compliance: 160h normal limit triggers WARNING, 176h overtime cap triggers BLOCKING error. Reference date stored in `system_configs` table (key: `four_week_reference_date`, default: 2025-01-06). Shared utility `getFourWeekPeriod()` and `calcShiftHours()` in `shared/schema.ts`. Compliance dashboard in salary report page with collapsible section showing per-employee status (normal/warning/over).
-    - **Employee Portal**: A dedicated portal accessible via LINE Login, offering personal schedules, mandatory guideline acknowledgments, and a directory of today's coworkers. Includes a full-page transparent watermark for security. Features an anomaly report button that posts to the anomaly management system with images and notes.
-    - **Anomaly Management**: Admin dashboard at `/anomaly-reports` for monitoring and managing clock-in anomalies. Features KPI cards, filtering/search, batch resolution management, and email notifications via Gmail SMTP (nodemailer). Uses `anomaly_reports` table (with `resolution`/`resolvedNote` columns) and `notification_recipients` table for email recipient management. Supports CORS for external dashboard integration.
-    - **Attendance System**: Supports GPS-based clock-in/out via LINE (webhook and LIFF app), with early arrival/late departure detection and reason selection. Includes features for clock amendment requests and overtime requests, with an admin review process and audit trails. Allows for attendance data import via XLSX files from external systems.
-    - **LINE ID Auto-Binding**: Webhook handles `follow` events (welcome + guide), `text` messages (employee code binding), and `location` messages (clock-in). Employees send their employee code to the LINE official account to auto-bind their LINE User ID. Portal and LIFF auto-write valid lineId on login. Ragic sync protects valid lineIds from being overwritten by invalid values. `isValidLineUserId()` validates `U` + 32 hex format.
-    - **Venue and Employee Management**: CRUD operations for employees and venues, with features like cross-region employee dispatching and Ragic database synchronization for employee data. Ragic sync handles existing employees regardless of their status field — updates name/phone/email/role/region even if 在職狀態 is empty or non-standard, and correctly deactivates employees when Ragic shows 離職/留職停薪 etc. Only new employee creation requires 在職 status. LINE ID sync is protected by `isValidLineUserId()` validation.
-    - **Dispatch Personnel**: Separate `dispatch_shifts` table for non-database personnel. Rendered in a purple-themed collapsible section at the bottom of the schedule grid, with add/edit/delete dialog supporting name, venue, time, company, phone, role, and notes.
-    - **Shift Notes (BRIDGE-01)**: `notes` text column added to `shifts` table. Admin can add/edit freeform notes when creating or editing shifts. Portal employees see a 📋 notes badge below each shift row in the schedule view.
-    - **Announcements System (BRIDGE-04)**: `announcements` table (id, title, content, targetRegion, publishedAt, expiresAt, createdBy). Admin page at `/announcements` for CRUD management (create/delete, no edit). Active announcements endpoint `GET /api/announcements/active` is open (no auth) and filters by expiresAt > now + optional regionCode query param. Portal schedule view shows active announcements as expandable banner cards at top of page. Admin routes (POST/GET list/DELETE) require admin auth.
-    - **Pending Count Badges (BRIDGE-07)**: `GET /api/pending-counts` returns counts of pending: clockAmendments, overtimeRequests, leaveRequests, anomalyReports, total. Admin sidebar shows per-item count badges next to 考勤稽核, 打卡異常, 請假管理 nav items. Amber banner in sidebar header shows total pending count when > 0. Auto-refreshes every 5 minutes.
-    - **Shift Reminders**: Automated LINE push notifications for upcoming shifts.
-    - **Missing Clock-In Alerts**: Cron job runs every 30 minutes (06:00–21:30 Taiwan time) checking for employees who have shifts but haven't clocked in within 15 minutes of their start time. Sends email to admin recipients and LINE push notification to the employee. Uses in-memory Set for deduplication (reset at midnight).
-    - **Cross-Region Dispatch Visibility**: When employees are dispatched (isDispatch=true) to venues in another region, their shifts appear in both the source and destination region schedules. Backend `GET /api/shifts/:regionCode/:start/:end` merges region employee shifts with dispatch shifts targeting that region's venues. Frontend uses `GET /api/venues-all` for a complete venue map to resolve venue names across regions.
-    - **Weekly Attendance Report**: Admin page at `/weekly-attendance` showing per-employee weekly clock-in status grid (on_time/late/missing/leave/no_shift). Week picker defaults to last week. Includes stats cards and a "群發通知" button that sends LINE push (personal summary) to each employee + email (summary table) to admin recipients.
-    - **Hours Report**: Admin page at `/salary-report` showing per-employee monthly shift hours grouped by role type (e.g. 救生, 教練, 櫃台). Month picker, region filter, sort options (by region/hours/name). KPI cards show total persons, total hours, avg hours, and shift count. Table includes work hours per role, overtime hours (when applicable), and total work hours. Footer shows column totals. Exports to CSV. Backend `GET /api/salary-report?year&month&regionCode`. Salary rate config APIs exist (`/api/salary-rates`) but salary calculation UI is not displayed.
-    - **Overtime Clock-In Integration**: Closed-loop overtime workflow: when an employee clocks out late and selects "加班" as the reason in the Portal, an overtime request is auto-created (`source: "clock_triggered"`, `clockRecordId` linked) with idempotency guard and time validation. Admin reviews/approves via overtime management. When approved, clock-out suppresses the late departure flag (checks approved OT coverage with +15 min buffer). Approved overtime hours are included in the salary report as a dedicated "加班" column (conditionally shown when data exists), with totals in footer and CSV export. Schema: `overtime_requests` table has `source` (manual/clock_triggered) and `clock_record_id` columns.
-    - **Four-Week Flexible Working Hours Compliance**: Four-week flexible working hours (四週變形工時) compliance: 160h normal limit triggers WARNING, 176h overtime cap triggers BLOCKING error. Reference date stored in `system_configs` table (key: `four_week_reference_date`, default: 2025-01-06). Shared utility `getFourWeekPeriod()`, `calcShiftHours()`, `sumScheduledHours()`, and `getAllPeriodsForMonth()` in `shared/schema.ts`. Compliance dashboard in salary report page with collapsible section showing per-employee status (normal/warning/over) across all overlapping 4-week periods for the selected month. API `GET /api/four-week-compliance?year&month&regionCode` returns multi-period data with scheduled hours + approved OT hours. Per-employee compliance badges (warning/over icons) shown in main salary table. All shift mutation paths (create/update/batch-create/batch-update) surface four_week_160h warnings via toast notifications. Region codes: A=三蘆戰區, B=松山國小, C=新竹區, D=內勤.
-- **UI/UX Decisions**: The design prioritizes clarity and efficiency, using Shadcn UI components for consistency. Color-coding is used for shift types (e.g., orange for dispatched staff, distinct colors for leave types) and status indicators (e.g., blue/orange badges for early/late clock-ins). Employee pickers persist selections per region for improved user experience.
+    - **Regional Management**: Organizes operations across four regions with tab-based navigation.
+    - **Smart Scheduler**: Spreadsheet-like weekly grid for shift planning, batch creation, and template-based scheduling.
+    - **Labor Law Compliance**: HR Eye engine validates schedules against Taiwan labor laws (e.g., 7-day rest, 12-hour daily limit, 11-hour rest gap, four-week 160h/176h limits). Recognizes leave types to bypass certain validations. Compliance dashboard for four-week flexible working hours.
+    - **Employee Portal**: LINE Login access to personal schedules, mandatory guideline acknowledgments, coworker directory, and anomaly reporting.
+    - **Anomaly Management**: Admin dashboard for monitoring and managing clock-in anomalies, with filtering, batch resolution, and email notifications.
+    - **Attendance System**: GPS-based clock-in/out via LINE (webhook/LIFF), with early/late detection, reason selection, amendment requests, and overtime requests. Supports XLSX data import.
+    - **LINE ID Auto-Binding**: LINE webhook handles `follow`, `text` (employee code binding), and `location` (clock-in) events.
+    - **Venue and Employee Management**: CRUD operations, cross-region employee dispatching, and Ragic database synchronization for employee data.
+    - **Dispatch Personnel**: Manages non-database personnel shifts within the schedule grid.
+    - **Shift Notes**: Allows admin to add freeform notes to shifts, visible to employees in the portal.
+    - **Announcements System**: Admin CRUD for announcements, displayed as active banners in the employee portal based on region and expiry.
+    - **Pending Count Badges**: Displays counts of pending clock amendments, overtime requests, leave requests, and anomaly reports in the admin UI.
+    - **Automated Notifications**: Shift reminders and missing clock-in alerts via LINE and email.
+    - **Cross-Region Dispatch Visibility**: Dispatched employee shifts are visible in both source and destination region schedules.
+    - **Weekly Attendance Report**: Admin page displaying per-employee weekly clock-in status, with push notification and email summary options.
+    - **Hours Report**: Admin page for monthly shift hours report, grouped by role, with region filtering and CSV export.
+    - **Overtime Clock-In Integration**: Automated overtime request creation when employees clock out late and select "加班", with admin approval and integration into salary reports.
+    - **Four-Week Flexible Working Hours Compliance**: Comprehensive compliance checks and reporting for four-week flexible working hours, including warnings and blocking errors.
+- **UI/UX Decisions**: Prioritizes clarity and efficiency using Shadcn UI. Features color-coding for shift types and status indicators, and persistent employee picker selections.
 
 ## External Dependencies
-- **PostgreSQL**: Primary database for all system data.
-- **LINE Messaging API**: Used for LINE Login authentication, GPS clock-in/out via webhooks and LIFF app, and push notifications for shift reminders.
-- **Ragic**: External database used for synchronizing employee information.
-- **Google Maps**: Integrated for displaying user position during GPS clock-in.
-- **Gmail SMTP**: Used via nodemailer for anomaly notification emails (daos.ragic.system@gmail.com with app password).
-- **駿斯運動事業股份有限公司 Attendance System**: Source of attendance data for XLSX imports.
+- **PostgreSQL**: Primary data store.
+- **LINE Messaging API**: For LINE Login, GPS clock-in/out (webhooks, LIFF app), and push notifications.
+- **Ragic**: External database for employee information synchronization.
+- **Google Maps**: Used for displaying user position during GPS clock-in.
+- **Gmail SMTP**: For sending anomaly notification emails via nodemailer.
+- **駿斯運動事業股份有限公司 Attendance System**: Source for XLSX attendance data imports.

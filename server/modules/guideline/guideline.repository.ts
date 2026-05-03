@@ -1,13 +1,25 @@
 import { db } from "../../db";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import {
   guidelines,
   guidelineAcknowledgments,
+  employees,
   type Guideline,
   type InsertGuideline,
   type GuidelineAck,
   type InsertGuidelineAck,
 } from "@shared/schema";
+
+export interface GuidelineAckDetail {
+  id: number;
+  guidelineId: number;
+  employeeId: number;
+  acknowledgedAt: Date | null;
+  guidelineTitle: string | null;
+  guidelineCategory: string | null;
+  employeeName: string | null;
+  employeeCode: string | null;
+}
 
 export const guidelineRepository = {
   async getGuidelines(category?: string): Promise<Guideline[]> {
@@ -49,6 +61,24 @@ export const guidelineRepository = {
 
   async getGuidelineAcksByEmployee(employeeId: number): Promise<GuidelineAck[]> {
     return db.select().from(guidelineAcknowledgments).where(eq(guidelineAcknowledgments.employeeId, employeeId));
+  },
+
+  async getAllGuidelineAcksWithDetails(): Promise<GuidelineAckDetail[]> {
+    return db
+      .select({
+        id: guidelineAcknowledgments.id,
+        guidelineId: guidelineAcknowledgments.guidelineId,
+        employeeId: guidelineAcknowledgments.employeeId,
+        acknowledgedAt: guidelineAcknowledgments.acknowledgedAt,
+        guidelineTitle: guidelines.title,
+        guidelineCategory: guidelines.category,
+        employeeName: employees.name,
+        employeeCode: employees.employeeCode,
+      })
+      .from(guidelineAcknowledgments)
+      .leftJoin(guidelines, eq(guidelineAcknowledgments.guidelineId, guidelines.id))
+      .leftJoin(employees, eq(guidelineAcknowledgments.employeeId, employees.id))
+      .orderBy(desc(guidelineAcknowledgments.acknowledgedAt));
   },
 
 };

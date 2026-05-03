@@ -1,4 +1,4 @@
-import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff } from "lucide-react";
+import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff, PenLine } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,6 +56,7 @@ export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
     { title: "工時總表", url: "/salary-report", icon: Clock },
     { title: "請假管理", url: "/leave-requests", icon: CalendarOff, badge: pendingCounts?.leaveRequests },
     { title: "守則與公告", url: "/guidelines", icon: BookOpen },
+    { title: "守則簽署紀錄", url: "/guideline-acks", icon: PenLine },
   ];
 
   return (
