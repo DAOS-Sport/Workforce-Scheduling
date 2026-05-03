@@ -1,9 +1,22 @@
 /**
- * server/infra/db/index.ts
+ * server/infra/db/index.ts  — CANONICAL database connection.
  *
- * Canonical database connection for the application.
- * Re-exports the pool and db instances from the original server/db.ts
- * so new code can import from this canonical path while backward-compat
- * callers still work via server/db.ts (which also re-exports these).
+ * All new code should import pool / db from this path.
+ * server/db.ts is kept as a backward-compat re-export shim.
  */
-export { pool, db } from "../../db";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+import * as schema from "@shared/schema";
+
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL must be set");
+}
+
+export const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+  max: 10,
+});
+
+export const db = drizzle(pool, { schema });

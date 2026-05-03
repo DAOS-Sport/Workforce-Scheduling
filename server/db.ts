@@ -1,16 +1,12 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
-import * as schema from "@shared/schema";
-
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL must be set");
-}
-
-export const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-  max: 10,
-});
-
-export const db = drizzle(pool, { schema });
+/**
+ * server/db.ts — backward-compat re-export shim.
+ *
+ * The canonical DB connection now lives in server/infra/db/index.ts.
+ * This file exists so all existing importers that do
+ *   import { db } from "../db"
+ *   import { pool } from "../../db"
+ * keep working without changes.
+ *
+ * New code should import from server/infra/db instead.
+ */
+export { pool, db } from "./infra/db";

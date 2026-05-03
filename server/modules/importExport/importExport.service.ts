@@ -5,52 +5,53 @@
  * here. Future ingest endpoints (e.g. employee bulk import, venue bulk
  * import) should add a parser here so the route layer keeps just multer
  * + JSON-shape concerns.
+ *
+ * Low-level Excel helpers (resolveCellValue, loadWorkbook, extractRows)
+ * are imported from server/infra/excel/excelParser.ts — the canonical
+ * infra location — so this service owns only attendance-domain logic.
  */
-import ExcelJS from "exceljs";
 import { storage } from "../../storage";
 import { type InsertAttendanceRecord } from "@shared/schema";
-
-function resolveCellValue(v: any): any {
-  if (v === null || v === undefined) return "";
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === "object") {
-    if ("richText" in v && Array.isArray(v.richText))
-      return v.richText.map((r: any) => r.text ?? "").join("").trim();
-    if ("result" in v) return resolveCellValue(v.result);
-    if ("text" in v) return String(v.text).trim();
-    if ("hyperlink" in v && "text" in v) return String(v.text).trim();
-  }
-  return v;
-}
+import {
+  loadWorkbook,
+  resolveCellValue,
+} from "../../infra/excel/excelParser";
 
 export const importExportService = {
   async importAttendanceXlsx(buffer: Buffer, originalFileName: string) {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    const workbook = await loadWorkbook(buffer);
 
-    const punchWorksheet = workbook.worksheets.find((ws) => ws.name.includes("打卡紀錄"));
+    const punchWorksheet = workbook.worksheets.find((ws) =>
+      ws.name.includes("打卡紀錄"),
+    );
     const punchSheetName = punchWorksheet?.name;
     if (!punchSheetName || !punchWorksheet) {
-      const err: any = new Error("找不到「打卡紀錄」工作表，請確認檔案格式");
+      const err: any = new Error(
+        "找不到「打卡紀錄」工作表，請確認檔案格式",
+      );
       err.status = 400;
       throw err;
     }
 
-    const punchData: any[][] = [];
+    const punchData: unknown[][] = [];
     punchWorksheet.eachRow({ includeEmpty: true }, (row) => {
-      const values = row.values as any[];
-      const rowData = Array.from({ length: Math.max(values.length - 1, 0) }, (_, i) =>
-        resolveCellValue(values[i + 1]),
+      const values = row.values as unknown[];
+      const rowData = Array.from(
+        { length: Math.max(values.length - 1, 0) },
+        (_, i) => resolveCellValue(values[i + 1]),
       );
       punchData.push(rowData);
     });
+
     if (punchData.length < 2) {
       const err: any = new Error("打卡紀錄表無數據");
       err.status = 400;
       throw err;
     }
 
-    const periodMatch = punchSheetName.match(/(\d{4}\.\d{2}\.\d{2})-(\d{4}\.\d{2}\.\d{2})/);
+    const periodMatch = punchSheetName.match(
+      /(\d{4}\.\d{2}\.\d{2})-(\d{4}\.\d{2}\.\d{2})/,
+    );
     let periodStart = "";
     let periodEnd = "";
     if (periodMatch) {
@@ -58,18 +59,22 @@ export const importExportService = {
       periodEnd = periodMatch[2].replace(/\./g, "-");
     }
 
-    const headers = punchData[0].map((h: any) => String(h).trim());
+    const headers = punchData[0].map((h) => String(h).trim());
     const requiredHeaders = ["員工編號", "姓名", "打卡日期"];
-    const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h));
+    const missingHeaders = requiredHeaders.filter(
+      (h) => !headers.includes(h),
+    );
     if (missingHeaders.length > 0) {
-      const err: any = new Error(`打卡紀錄表缺少必要欄位：${missingHeaders.join(", ")}`);
+      const err: any = new Error(
+        `打卡紀錄表缺少必要欄位：${missingHeaders.join(", ")}`,
+      );
       err.status = 400;
       throw err;
     }
 
     const colIdx = (name: string) => headers.indexOf(name);
 
-    const safeGet = (row: any[], name: string): string => {
+    const safeGet = (row: unknown[], name: string): string => {
       const idx = colIdx(name);
       if (idx < 0 || idx >= row.length) return "";
       const val = row[idx];
@@ -85,10 +90,11 @@ export const importExportService = {
       totalRecords: 0,
     });
 
-    const clean = (val: string) => (val === "--" || val === "" ? null : val);
+    const clean = (val: string) =>
+      val === "--" || val === "" ? null : val;
 
     for (let i = 1; i < punchData.length; i++) {
-      const row = punchData[i];
+      const row = punchData[i] as unknown[];
       const empCode = safeGet(row, "員工編號");
       const empName = safeGet(row, "姓名");
       if (!empCode || !empName) continue;
@@ -113,8 +119,16 @@ export const importExportService = {
         scheduledEnd: clean(safeGet(row, "表定下班時間")),
         clockIn: clean(safeGet(row, "上班打卡時間")),
         clockOut: clean(safeGet(row, "下班打卡時間")),
-        isLate: lateVal !== "" && lateVal !== "--" && lateVal !== "0" && lateVal !== "00:00:00",
-        isEarlyLeave: earlyVal !== "" && earlyVal !== "--" && earlyVal !== "0" && earlyVal !== "00:00:00",
+        isLate:
+          lateVal !== "" &&
+          lateVal !== "--" &&
+          lateVal !== "0" &&
+          lateVal !== "00:00:00",
+        isEarlyLeave:
+          earlyVal !== "" &&
+          earlyVal !== "--" &&
+          earlyVal !== "0" &&
+          earlyVal !== "00:00:00",
         hasAnomaly: anomalyVal !== null && anomalyVal !== "",
         anomalyNote: anomalyVal,
         leaveHours: clean(safeGet(row, "請假時數")),
@@ -128,7 +142,9 @@ export const importExportService = {
     }
 
     const savedRecords = await storage.createAttendanceRecords(records);
-    await storage.updateAttendanceUpload(uploadRecord.id, { totalRecords: savedRecords.length });
+    await storage.updateAttendanceUpload(uploadRecord.id, {
+      totalRecords: savedRecords.length,
+    });
 
     return {
       uploadId: uploadRecord.id,

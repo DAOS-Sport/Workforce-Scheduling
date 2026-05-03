@@ -3,24 +3,20 @@
  *
  * Used by anomaly module (when a new anomaly is reported), notification
  * module (test-email button), and system module (weekly attendance report).
- * Lives in shared/email/ so all three modules import a single canonical
- * implementation instead of duplicating it.
+ * Delegates to server/infra/mail/mailer.ts for the transport so there is
+ * a single transporter factory in the codebase.
  */
-import nodemailer from "nodemailer";
+import { sendMail } from "../../infra/mail/mailer";
 
-export async function sendAnomalyEmail(to: string[], subject: string, html: string) {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: process.env.GMAIL_USER || "daos.ragic.system@gmail.com",
-      pass: process.env.GMAIL_APP_PASSWORD,
-    },
-  });
+const GMAIL_USER = process.env.GMAIL_USER || "daos.ragic.system@gmail.com";
 
-  await transporter.sendMail({
-    from: `"DAOS 打卡異常通知" <${process.env.GMAIL_USER || "daos.ragic.system@gmail.com"}>`,
+export async function sendAnomalyEmail(
+  to: string[],
+  subject: string,
+  html: string,
+): Promise<void> {
+  await sendMail({
+    from: `"DAOS 打卡異常通知" <${GMAIL_USER}>`,
     to: to.join(", "),
     subject,
     html: `<div style="font-family: 'Microsoft JhengHei', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">

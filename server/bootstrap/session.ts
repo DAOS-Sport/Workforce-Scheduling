@@ -1,7 +1,14 @@
+/**
+ * server/bootstrap/session.ts
+ *
+ * Sets up the express-session middleware backed by Postgres.
+ * The session store is created via server/infra/db/sessionStore.ts so the
+ * connect-pg-simple details stay in one canonical infra location.
+ */
 import type { Express } from "express";
 import session from "express-session";
-import connectPgSimple from "connect-pg-simple";
-import { pool } from "../db";
+import { pool } from "../infra/db";
+import { createPgSessionStore } from "../infra/db/sessionStore";
 
 declare module "express-session" {
   interface SessionData {
@@ -32,7 +39,7 @@ export async function ensureSessionTable(): Promise<void> {
 /**
  * Install express-session middleware on the given app, backed by Postgres.
  *
- * Cookie config matches what the old monolithic index.ts had:
+ * Cookie config:
  *   - 30-day sliding expiry
  *   - secure flag in production
  *   - sameSite=lax
@@ -43,10 +50,9 @@ export function installSession(app: Express): void {
       "[WARN] SESSION_SECRET is not set. Using insecure fallback secret in production!",
     );
   }
-  const PgStore = connectPgSimple(session);
   app.use(
     session({
-      store: new PgStore({ conString: process.env.DATABASE_URL }),
+      store: createPgSessionStore(),
       secret: process.env.SESSION_SECRET || "fallback-secret-key",
       resave: false,
       saveUninitialized: false,
