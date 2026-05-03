@@ -98,9 +98,9 @@ export function registerCronJobs(): void {
   );
   log("已排程每日午夜重置未打卡追蹤記錄", "cron");
 
-  // Sunday 19:00 — push next-week schedule.
+  // Sunday 12:00 (noon) — push next-week schedule.
   cron.schedule(
-    "0 19 * * 0",
+    "0 12 * * 0",
     async () => {
       log("開始執行每週下週班表推播...", "cron");
       try {
@@ -115,7 +115,7 @@ export function registerCronJobs(): void {
     },
     { timezone: "Asia/Taipei" },
   );
-  log("已排程每週日 19:00 (台灣時間) 自動推播下週班表", "cron");
+  log("已排程每週日 12:00 (台灣時間) 自動推播下週班表", "cron");
 
   // Monday 09:00 — push last-week late report.
   cron.schedule(

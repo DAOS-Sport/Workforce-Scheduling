@@ -6,6 +6,13 @@ import { isValidLineUserId } from "./lineSignature";
 
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 
+/** 員工入口系統連結（LIFF 或 Web Portal） */
+function getSystemLink(): string {
+  const liffId = process.env.VITE_LIFF_ID;
+  if (liffId) return `https://liff.line.me/${liffId}`;
+  return "";
+}
+
 export async function pushToLine(userId: string, text: string, extraMessages?: object[]): Promise<boolean> {
   const messages: object[] = [{ type: "text", text }];
   if (extraMessages) messages.push(...extraMessages);
@@ -182,7 +189,11 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
 
     lines.push("請準時出勤，如需請假請提前告知主管 🙏");
     lines.push("");
-    lines.push("該通知訊息僅做提醒用，實際班別/課表請以系統公告之。");
+    lines.push("⚠️ 該通知訊息僅做提醒用，實際班別/課表請以系統公告為主。");
+    const sysLink = getSystemLink();
+    if (sysLink) {
+      lines.push(`🔗 請登入系統查看: ${sysLink}`);
+    }
 
     const message = lines.join("\n").trim();
 
@@ -321,14 +332,15 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
 
     console.log(`[未打卡提醒] 發送通知: ${emp.name}（ID=${emp.id}）班次=${shiftStart}-${shiftEnd} 場館=${venueName} lineId=${emp.lineId ? "有" : "無"}`);
     if (emp.lineId) {
+      const sysLinkClock = getSystemLink();
       const lineMsg = [
         `⚠️ 打卡提醒`,
         ``,
         `${emp.name} 您好，`,
         `您今日 ${venueName} 的班次（${shiftStart}-${shiftEnd}）已超過上班時間，但系統尚未收到您的打卡紀錄。`,
         ``,
-        `如果您已到達現場，請盡快透過選單中的「打卡」按鈕進行打卡。`,
-        `如需請假或有其他狀況，請聯繫您的主管。`,
+        `您尚未打卡，如需補卡請證明您早上未遲到。`,
+        ...(sysLinkClock ? [`🔗 請登入系統: ${sysLinkClock}`] : []),
       ].join("\n");
 
       try {
@@ -486,7 +498,12 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
     }
 
     lines.push("請準時出勤，如需請假請提前告知主管 🙏");
-    lines.push("該通知訊息僅做提醒用，實際班別請以系統公告為主。");
+    lines.push("");
+    lines.push("⚠️ 該通知訊息僅做提醒用，實際班別請以系統公告為主。");
+    const sysLinkWeekly = getSystemLink();
+    if (sysLinkWeekly) {
+      lines.push(`🔗 請登入系統查看: ${sysLinkWeekly}`);
+    }
 
     const message = lines.join("\n").trim();
     const ok = await pushToLine(emp.lineId, message);
