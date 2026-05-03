@@ -35,6 +35,7 @@ import { mountAttendanceRoutes } from "./attendance/attendance.routes";
 import { mountGuidelineRoutes } from "./guideline/guideline.routes";
 import { mountPortalRoutes } from "./portal/portal.routes";
 import { mountSyncRoutes } from "./sync/sync.routes";
+import { mountRagicRoutes } from "./ragic/ragic.routes";
 import { mountLineLiffRoutes } from "./line/line.routes";
 import { mountClockRoutes } from "./clock/clock.routes";
 import { mountOvertimeRoutes } from "./overtime/overtime.routes";
@@ -59,6 +60,7 @@ export function registerModuleRoutes(httpServer: Server, app: Express): void {
   mountGuidelineRoutes(httpServer, app);
   mountPortalRoutes(httpServer, app);
   mountSyncRoutes(httpServer, app);
+  mountRagicRoutes(httpServer, app);
   mountLineLiffRoutes(httpServer, app);
   mountClockRoutes(httpServer, app);
   mountOvertimeRoutes(httpServer, app);

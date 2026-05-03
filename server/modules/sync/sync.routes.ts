@@ -3,21 +3,8 @@ import { type Server } from "http";
 import { syncService } from "./sync.service";
 
 export function mountSyncRoutes(_httpServer: Server, app: Express): void {
-  app.post("/api/ragic-venue-sync", async (_req, res) => {
-    try {
-      res.json(await syncService.ragicVenues());
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  app.post("/api/ragic-sync", async (_req, res) => {
-    try {
-      res.json(await syncService.ragicAll());
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
+  // Note: POST /api/ragic-sync and POST /api/ragic-venue-sync moved to
+  // modules/ragic/ragic.routes.ts in Task #72 重構 C. URLs unchanged.
 
   app.post("/api/send-shift-reminders", async (req, res) => {
     try {
