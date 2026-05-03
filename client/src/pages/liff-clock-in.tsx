@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, CheckCircle2, AlertTriangle, XCircle, Loader2, Navigation, Smartphone, Settings } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { MapPin, CheckCircle2, AlertTriangle, XCircle, Loader2, Navigation, Smartphone, Settings, Camera, ImagePlus, X, Send } from "lucide-react";
 
 const LIFF_ID = import.meta.env.VITE_LIFF_ID || "";
 
@@ -178,7 +179,13 @@ export default function LiffClockInPage() {
         )}
 
         {stage === "done" && result && (
-          <ResultCard result={result} accuracy={accuracy} onRetry={() => { setResult(null); setStage("ready"); }} />
+          <ResultCard
+            result={result}
+            accuracy={accuracy}
+            lineUserId={profile?.userId}
+            displayName={profile?.displayName}
+            onRetry={() => { setResult(null); setStage("ready"); }}
+          />
         )}
 
         {stage === "error" && errorCode === 1 ? (
@@ -278,7 +285,236 @@ export default function LiffClockInPage() {
   );
 }
 
-function ResultCard({ result, accuracy, onRetry }: { result: ClockInResult; accuracy: number | null; onRetry: () => void }) {
+// ── Photo proof section (shown when GPS fail due to distance) ─────────────────
+
+type ProofStage = "idle" | "submitting" | "submitted" | "error";
+
+function PhotoProofSection({
+  result,
+  lineUserId,
+  displayName,
+}: {
+  result: ClockInResult;
+  lineUserId?: string;
+  displayName?: string;
+}) {
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const [proofStage, setProofStage] = useState<ProofStage>("idle");
+  const [proofError, setProofError] = useState("");
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  const addPhoto = (file: File) => {
+    if (photos.length >= 3) return;
+    const url = URL.createObjectURL(file);
+    setPhotos((prev) => [...prev, file]);
+    setPreviews((prev) => [...prev, url]);
+  };
+
+  const removePhoto = (idx: number) => {
+    URL.revokeObjectURL(previews[idx]);
+    setPhotos((prev) => prev.filter((_, i) => i !== idx));
+    setPreviews((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSubmit = async () => {
+    if (photos.length === 0) {
+      setProofError("請先拍攝或選擇至少一張照片");
+      return;
+    }
+    setProofStage("submitting");
+    setProofError("");
+
+    try {
+      const formData = new FormData();
+      const payload = {
+        context: "拍照證明 — GPS 超出打卡範圍",
+        employee: {
+          name: displayName || result.employeeName || "未知",
+          lineUserId: lineUserId || "",
+        },
+        clockResult: {
+          status: result.status,
+          clockType: result.clockType,
+          time: result.time,
+          date: result.date,
+          venueName: result.venueName,
+          distance: result.distance,
+          failReason: result.failReason,
+        },
+        userNote: note.trim() || "員工提交拍照證明",
+      };
+      formData.append("data", JSON.stringify(payload));
+      photos.forEach((p) => formData.append("images", p));
+
+      const resp = await fetch("/api/anomaly-report", { method: "POST", body: formData });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || "送出失敗");
+      }
+      setProofStage("submitted");
+    } catch (err: any) {
+      setProofError(err.message || "送出失敗，請稍後再試");
+      setProofStage("error");
+    }
+  };
+
+  if (proofStage === "submitted") {
+    return (
+      <div className="mt-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 p-5 text-center">
+        <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto mb-2" />
+        <p className="text-emerald-300 font-semibold text-sm">拍照證明已送出</p>
+        <p className="text-emerald-200/60 text-xs mt-1">
+          主管收到後將確認您的出勤狀況，如需補卡請聯繫主管
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 overflow-hidden" data-testid="section-photo-proof">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3 border-b border-amber-500/20">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+            <Camera className="h-4 w-4 text-amber-400" />
+          </div>
+          <div>
+            <p className="text-amber-300 font-semibold text-sm leading-tight">請拍照證明您目前在場館內執勤</p>
+            <p className="text-amber-200/60 text-[11px] mt-0.5">GPS 定位超出範圍，請拍攝現場照片送交主管確認</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {/* Photo grid */}
+        <div className="grid grid-cols-3 gap-2">
+          {previews.map((src, idx) => (
+            <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-slate-700" data-testid={`photo-preview-${idx}`}>
+              <img src={src} alt="" className="w-full h-full object-cover" />
+              <button
+                onClick={() => removePhoto(idx)}
+                className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center"
+                data-testid={`button-remove-photo-${idx}`}
+              >
+                <X className="h-3 w-3 text-white" />
+              </button>
+            </div>
+          ))}
+
+          {photos.length < 3 && (
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              className="aspect-square rounded-xl border-2 border-dashed border-amber-500/40 flex flex-col items-center justify-center gap-1 bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
+              data-testid="button-take-photo"
+            >
+              <Camera className="h-6 w-6 text-amber-400/70" />
+              <span className="text-[10px] text-amber-400/70 font-medium">拍照</span>
+            </button>
+          )}
+        </div>
+
+        {/* Camera input (hidden) — capture from camera */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) addPhoto(file);
+            e.target.value = "";
+          }}
+          data-testid="input-camera-capture"
+        />
+
+        {/* Gallery input (hidden) — pick from library */}
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            files.slice(0, 3 - photos.length).forEach(addPhoto);
+            e.target.value = "";
+          }}
+          data-testid="input-gallery-select"
+        />
+
+        {/* Alternate: pick from gallery */}
+        {photos.length < 3 && (
+          <button
+            onClick={() => galleryInputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-amber-500/25 text-amber-400/70 text-xs hover:bg-amber-500/10 transition-colors"
+            data-testid="button-select-gallery"
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+            從相簿選取（最多 {3 - photos.length} 張）
+          </button>
+        )}
+
+        {/* Note */}
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="補充說明（選填）：例如「我在三民場館救生員崗位」…"
+          className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl text-white/80 text-xs placeholder:text-white/30 p-3 resize-none focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+          rows={2}
+          data-testid="textarea-photo-note"
+        />
+
+        {proofError && (
+          <p className="text-red-400 text-xs text-center" data-testid="text-proof-error">{proofError}</p>
+        )}
+
+        {/* Submit */}
+        <button
+          onClick={handleSubmit}
+          disabled={proofStage === "submitting" || photos.length === 0}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black transition-colors"
+          data-testid="button-submit-photo-proof"
+        >
+          {proofStage === "submitting" ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              送出中...
+            </>
+          ) : (
+            <>
+              <Send className="h-4 w-4" />
+              送出拍照證明
+            </>
+          )}
+        </button>
+
+        <p className="text-center text-white/25 text-[10px]">
+          照片將送交主管確認，不影響 GPS 打卡紀錄
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Result card ───────────────────────────────────────────────────────────────
+
+function ResultCard({
+  result,
+  accuracy,
+  lineUserId,
+  displayName,
+  onRetry,
+}: {
+  result: ClockInResult;
+  accuracy: number | null;
+  lineUserId?: string;
+  displayName?: string;
+  onRetry: () => void;
+}) {
   const isSuccess = result.status === "success";
   const isWarning = result.status === "warning";
   const isFail = result.status === "fail" || result.status === "error";
@@ -289,6 +525,8 @@ function ResultCard({ result, accuracy, onRetry }: { result: ClockInResult; accu
 
   const clockLabel = result.clockType === "in" ? "上班打卡" : "下班打卡";
   const isNotBound = isFail && (result.failReason?.includes("尚未綁定") || result.failReason?.includes("找不到員工"));
+  const isDistanceFail = isFail && !isNotBound;
+
   const statusText = isSuccess
     ? `${clockLabel}成功！`
     : isWarning
@@ -296,61 +534,72 @@ function ResultCard({ result, accuracy, onRetry }: { result: ClockInResult; accu
       : result.failReason || "打卡失敗";
 
   return (
-    <Card className="p-6 bg-slate-800/50 border-slate-700" data-testid="card-clock-result">
-      <div className="text-center mb-4">
-        <div className={`w-16 h-16 rounded-full ${bgColor} flex items-center justify-center mx-auto mb-3`}>
-          <Icon className={`h-8 w-8 ${iconColor}`} />
+    <div>
+      <Card className="p-6 bg-slate-800/50 border-slate-700" data-testid="card-clock-result">
+        <div className="text-center mb-4">
+          <div className={`w-16 h-16 rounded-full ${bgColor} flex items-center justify-center mx-auto mb-3`}>
+            <Icon className={`h-8 w-8 ${iconColor}`} />
+          </div>
+          <p className={`text-lg font-semibold ${iconColor}`}>{statusText}</p>
         </div>
-        <p className={`text-lg font-semibold ${iconColor}`}>{statusText}</p>
-      </div>
 
-      {isNotBound && (
-        <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4 mb-4" data-testid="card-not-bound-guide">
-          <p className="text-orange-300 font-semibold text-sm mb-2">帳號綁定步驟：</p>
-          <ol className="text-orange-200/80 text-xs leading-relaxed space-y-1.5 list-decimal list-inside">
-            <li>回到 LINE 官方帳號對話</li>
-            <li>傳送您的<strong>「員工編號」</strong>（純數字）</li>
-            <li>系統自動完成綁定</li>
-            <li>綁定成功後即可打卡</li>
-          </ol>
-          <p className="text-orange-400/60 text-[11px] mt-2">如不確定員工編號，請洽詢主管或 HR。</p>
-        </div>
-      )}
-
-      <div className="space-y-2 text-sm">
-        {result.employeeName && (
-          <InfoRow label="員工" value={result.employeeName} />
-        )}
-        {result.venueName && (
-          <InfoRow label="場館" value={result.venueName} />
-        )}
-        {result.distance !== null && (
-          <InfoRow label="距離" value={`${result.distance}m${result.radius ? ` / ${result.radius}m 內` : ""}`} />
-        )}
-        <InfoRow label="時間" value={`${result.date} ${result.time}`} />
-        {result.shiftInfo && (
-          <InfoRow label="班別" value={result.shiftInfo} />
-        )}
-        {isSuccess && result.failReason && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
-            <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0" />
-            <span className="text-orange-300 font-medium text-sm" data-testid="text-late-info">{result.failReason}</span>
+        {isNotBound && (
+          <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4 mb-4" data-testid="card-not-bound-guide">
+            <p className="text-orange-300 font-semibold text-sm mb-2">帳號綁定步驟：</p>
+            <ol className="text-orange-200/80 text-xs leading-relaxed space-y-1.5 list-decimal list-inside">
+              <li>回到 LINE 官方帳號對話</li>
+              <li>傳送您的<strong>「員工編號」</strong>（純數字）</li>
+              <li>系統自動完成綁定</li>
+              <li>綁定成功後即可打卡</li>
+            </ol>
+            <p className="text-orange-400/60 text-[11px] mt-2">如不確定員工編號，請洽詢主管或 HR。</p>
           </div>
         )}
-        {accuracy && (
-          <InfoRow label="GPS 精度" value={`±${accuracy}m`} />
-        )}
-      </div>
 
-      <Button
-        variant="outline"
-        className="w-full mt-6 border-slate-600 text-white hover:bg-slate-700"
-        onClick={onRetry}
-        data-testid="button-clock-again"
-      >
-        再次打卡
-      </Button>
-    </Card>
+        <div className="space-y-2 text-sm">
+          {result.employeeName && (
+            <InfoRow label="員工" value={result.employeeName} />
+          )}
+          {result.venueName && (
+            <InfoRow label="場館" value={result.venueName} />
+          )}
+          {result.distance !== null && (
+            <InfoRow label="距離" value={`${result.distance}m${result.radius ? ` / 需在 ${result.radius}m 內` : ""}`} />
+          )}
+          <InfoRow label="時間" value={`${result.date} ${result.time}`} />
+          {result.shiftInfo && (
+            <InfoRow label="班別" value={result.shiftInfo} />
+          )}
+          {isSuccess && result.failReason && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
+              <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0" />
+              <span className="text-orange-300 font-medium text-sm" data-testid="text-late-info">{result.failReason}</span>
+            </div>
+          )}
+          {accuracy && (
+            <InfoRow label="GPS 精度" value={`±${accuracy}m`} />
+          )}
+        </div>
+
+        <Button
+          variant="outline"
+          className="w-full mt-6 border-slate-600 text-white hover:bg-slate-700"
+          onClick={onRetry}
+          data-testid="button-clock-again"
+        >
+          再次打卡
+        </Button>
+      </Card>
+
+      {/* Photo proof section — shown only when distance fail (not an unbound-account fail) */}
+      {isDistanceFail && (
+        <PhotoProofSection
+          result={result}
+          lineUserId={lineUserId}
+          displayName={displayName}
+        />
+      )}
+    </div>
   );
 }
 
