@@ -28,6 +28,7 @@ import LiffClockInPage from "@/pages/liff-clock-in";
 import AdminLoginPage from "@/pages/admin-login";
 import MobileHrPage from "@/pages/mobile-hr";
 import GuidelineAcksPage from "@/pages/guideline-acks";
+import SopPage from "@/pages/sop";
 import { Loader2 } from "lucide-react";
 
 function AdminRouter() {
@@ -46,6 +47,7 @@ function AdminRouter() {
       <Route path="/reports" component={ReportsPage} />
       <Route path="/leave-requests" component={LeaveRequestsPage} />
       <Route path="/guideline-acks" component={GuidelineAcksPage} />
+      <Route path="/sop" component={SopPage} />
       <Route path="/announcements">{() => <Redirect to="/guidelines" />}</Route>
       <Route component={NotFound} />
     </Switch>
