@@ -16,6 +16,7 @@ import { mountPortalShiftsRoutes } from "./portal.shifts.routes";
 import { mountPortalWorkmatesRoutes } from "./portal.workmates.routes";
 import { mountPortalGuidelinesRoutes } from "./portal.guidelines.routes";
 import { mountPortalAttendanceRoutes } from "./portal.attendance.routes";
+import { mountPortalOutingRoutes } from "./portal.outing.routes";
 
 export function mountPortalRoutes(httpServer: Server, app: Express): void {
   mountPortalAuthRoutes(httpServer, app);
@@ -23,4 +24,5 @@ export function mountPortalRoutes(httpServer: Server, app: Express): void {
   mountPortalWorkmatesRoutes(httpServer, app);
   mountPortalGuidelinesRoutes(httpServer, app);
   mountPortalAttendanceRoutes(httpServer, app);
+  mountPortalOutingRoutes(httpServer, app);
 }

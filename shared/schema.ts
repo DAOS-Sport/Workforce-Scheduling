@@ -520,6 +520,24 @@ export const insertLeaveRequestSchema = createInsertSchema(leaveRequests).omit({
 export type InsertLeaveRequest = z.infer<typeof insertLeaveRequestSchema>;
 export type LeaveRequest = typeof leaveRequests.$inferSelect;
 
+export const outingRecords = pgTable("outing_records", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  outType: text("out_type").notNull(),          // "out" | "return"
+  destination: text("destination"),              // required for "out"
+  note: text("note"),
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  accuracy: real("accuracy"),
+  imageUrl: text("image_url"),
+  status: text("status").notNull().default("submitted"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertOutingRecordSchema = createInsertSchema(outingRecords).omit({ id: true, createdAt: true });
+export type InsertOutingRecord = z.infer<typeof insertOutingRecordSchema>;
+export type OutingRecord = typeof outingRecords.$inferSelect;
+
 export interface VacancyInfo {
   venueId: number;
   venueName: string;

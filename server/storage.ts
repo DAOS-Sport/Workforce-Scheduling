@@ -717,6 +717,25 @@ export async function ensureLeaveRequestsTable(): Promise<void> {
   console.log("[db] leave_requests 表格確認完成");
 }
 
+export async function ensureOutingRecordsTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS outing_records (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL,
+      out_type TEXT NOT NULL,
+      destination TEXT,
+      note TEXT,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      accuracy REAL,
+      image_url TEXT,
+      status TEXT NOT NULL DEFAULT 'submitted',
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  console.log("[db] outing_records 表格確認完成");
+}
+
 /**
  * Ensures the weekly_push_notifications table exists with the required unique constraint.
  * Called at server startup so the table is guaranteed to exist before any cron/API access.

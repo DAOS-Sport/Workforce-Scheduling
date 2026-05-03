@@ -3,6 +3,7 @@ import {
   ensureLeaveRequestsTable,
   ensureAnnouncementsTable,
   ensureShiftsSoftDelete,
+  ensureOutingRecordsTable,
 } from "../storage";
 import { log } from "../shared/log";
 
@@ -39,5 +40,12 @@ export async function runStartupMigrations(): Promise<void> {
     await ensureAnnouncementsTable();
   } catch (err: any) {
     log(`announcements 表格建立失敗: ${err.message}`, "db");
+  }
+
+  // Outing records table
+  try {
+    await ensureOutingRecordsTable();
+  } catch (err: any) {
+    log(`outing_records 表格建立失敗: ${err.message}`, "db");
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, parseISO, getDay } from "date-fns";
 import { zhTW } from "date-fns/locale";
@@ -27,6 +27,19 @@ interface PortalEmployee {
   employeeCode: string;
   role: string;
   lineUserId?: string;
+}
+
+interface OutingRecord {
+  id: number;
+  outType: "out" | "return";
+  destination: string | null;
+  note: string | null;
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  imageUrl: string | null;
+  status: string;
+  createdAt: string;
 }
 
 interface PortalShift {
@@ -2735,6 +2748,377 @@ function HomeView({
   );
 }
 
+// ── 外出簽到 section ──────────────────────────────────────────────────────────
+
+type OutingMode = "idle" | "locating" | "form" | "submitting";
+
+function OutingSection({ employee }: { employee: PortalEmployee }) {
+  const [mode, setMode] = useState<OutingMode>("idle");
+  const [outType, setOutType] = useState<"out" | "return">("out");
+  const [destination, setDestination] = useState("");
+  const [note, setNote] = useState("");
+  const [gps, setGps] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [photo, setPhoto] = useState<string | null>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const { data: records = [], refetch } = useQuery<OutingRecord[]>({
+    queryKey: ["/api/portal/outing-records", employee.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/outing-records/${employee.id}`);
+      if (!res.ok) throw new Error("載入失敗");
+      return res.json();
+    },
+  });
+
+  const taiwanToday = (() => {
+    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
+  const todayRecords = records.filter((r) => {
+    const dt = new Date(r.createdAt).toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+    return dt === taiwanToday;
+  });
+
+  const resetForm = () => {
+    setDestination("");
+    setNote("");
+    setGps(null);
+    setPhoto(null);
+    setMode("idle");
+  };
+
+  const handleStart = async (type: "out" | "return") => {
+    setOutType(type);
+    setMode("locating");
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
+        });
+      });
+      setGps({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: Math.round(position.coords.accuracy),
+      });
+      setMode("form");
+    } catch {
+      toast({ title: "GPS 取得失敗，請確認已開啟位置權限", variant: "destructive" });
+      setMode("idle");
+    }
+  };
+
+  const handlePhotoChange = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const MAX = 1024;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else { width = Math.round(width * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0, width, height);
+          setPhoto(canvas.toDataURL("image/jpeg", 0.7));
+        } catch {
+          toast({ title: "圖片處理失敗，請重新選擇", variant: "destructive" });
+        }
+      };
+      img.onerror = () => toast({ title: "圖片讀取失敗", variant: "destructive" });
+      img.src = ev.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async () => {
+    if (outType === "out" && !destination.trim()) {
+      toast({ title: "請填寫外出地點或事由", variant: "destructive" });
+      return;
+    }
+    setMode("submitting");
+    try {
+      await apiRequest("POST", "/api/portal/outing-record", {
+        employeeId: employee.id,
+        outType,
+        destination: destination.trim() || null,
+        note: note.trim() || null,
+        latitude: gps!.lat,
+        longitude: gps!.lng,
+        accuracy: gps!.accuracy,
+        imageUrl: photo,
+      });
+      toast({ title: outType === "out" ? "✅ 外出簽到完成" : "✅ 返回簽到完成" });
+      resetForm();
+      refetch();
+    } catch (err: any) {
+      toast({ title: err.message || "送出失敗，請稍後再試", variant: "destructive" });
+      setMode("form");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* ── Idle: two action buttons ─────────────────────────────────────── */}
+      {mode === "idle" && (
+        <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+          <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
+            <Navigation className="h-4 w-4 text-juns-teal" />
+            <span className="text-sm font-semibold text-juns-navy">外出簽到</span>
+          </div>
+          <div className="p-4">
+            <p className="text-xs text-slate-400 mb-4 text-center">
+              離開或返回場館時點擊對應按鈕，系統將自動記錄 GPS 位置
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => handleStart("out")}
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-juns-teal/30 bg-juns-teal/5 hover:bg-juns-teal/10 active:scale-95 transition-all"
+                data-testid="button-outing-out"
+              >
+                <div className="w-12 h-12 rounded-full bg-juns-teal/15 flex items-center justify-center">
+                  <Navigation className="h-6 w-6 text-juns-teal" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold text-juns-navy">外出</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">離開場館時點此</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleStart("return")}
+                className="flex flex-col items-center gap-2.5 p-5 rounded-xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 active:scale-95 transition-all"
+                data-testid="button-outing-return"
+              >
+                <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center">
+                  <Home className="h-6 w-6 text-slate-500" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold text-slate-700">返回</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">回到場館時點此</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Locating ─────────────────────────────────────────────────────── */}
+      {mode === "locating" && (
+        <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+          <div className="px-4 py-10 flex flex-col items-center gap-3 text-center">
+            <div className="w-16 h-16 rounded-full bg-juns-teal/10 flex items-center justify-center animate-pulse">
+              <MapPin className="h-8 w-8 text-juns-teal" />
+            </div>
+            <p className="text-sm font-semibold text-juns-navy">正在取得 GPS 位置...</p>
+            <p className="text-xs text-slate-400">請確認已開啟位置權限</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Form ─────────────────────────────────────────────────────────── */}
+      {(mode === "form" || mode === "submitting") && (
+        <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+          <div className="px-4 py-3 border-b border-juns-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {outType === "out"
+                ? <Navigation className="h-4 w-4 text-juns-teal" />
+                : <Home className="h-4 w-4 text-slate-500" />
+              }
+              <span className="text-sm font-semibold text-juns-navy">
+                {outType === "out" ? "外出簽到" : "返回簽到"}
+              </span>
+            </div>
+            {gps && (
+              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                <MapPin className="h-3 w-3" /> GPS ±{gps.accuracy}m
+              </span>
+            )}
+          </div>
+
+          <div className="p-4 space-y-3">
+            {/* Destination — required only for "out" */}
+            {outType === "out" && (
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">
+                  外出地點／事由 <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  placeholder="例如：前往三民高中取設備"
+                  className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-juns-teal/30"
+                  data-testid="input-outing-destination"
+                />
+              </div>
+            )}
+
+            {/* Note */}
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">備註（選填）</label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="其他補充說明..."
+                rows={2}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-juns-teal/30"
+                data-testid="input-outing-note"
+              />
+            </div>
+
+            {/* Photo */}
+            <div>
+              <label className="text-xs text-slate-500 mb-1.5 block">現場照片（選填）</label>
+              {photo ? (
+                <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-100">
+                  <img src={photo} alt="" className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => setPhoto(null)}
+                    className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center"
+                    data-testid="button-remove-outing-photo"
+                  >
+                    <X className="h-4 w-4 text-white" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => cameraRef.current?.click()}
+                    className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50 transition-colors"
+                    data-testid="button-outing-camera"
+                  >
+                    <Camera className="h-3.5 w-3.5" /> 拍照
+                  </button>
+                  <button
+                    onClick={() => galleryRef.current?.click()}
+                    className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50 transition-colors"
+                    data-testid="button-outing-gallery"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" /> 選相片
+                  </button>
+                </div>
+              )}
+              <input
+                ref={cameraRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoChange(f); e.target.value = ""; }}
+              />
+              <input
+                ref={galleryRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoChange(f); e.target.value = ""; }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={resetForm}
+                disabled={mode === "submitting"}
+                className="flex-1 h-10 rounded-lg border border-slate-200 text-sm text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-40"
+                data-testid="button-outing-cancel"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={mode === "submitting"}
+                className="flex-1 h-10 rounded-lg bg-juns-teal text-white text-sm font-semibold flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 transition-colors"
+                data-testid="button-outing-submit"
+              >
+                {mode === "submitting" ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> 送出中...</>
+                ) : (
+                  <><Send className="h-4 w-4" /> 確認送出</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Today's record history ────────────────────────────────────────── */}
+      <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+        <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
+          <Clock className="h-4 w-4 text-juns-teal" />
+          <span className="text-sm font-semibold text-juns-navy">今日外出記錄</span>
+          {todayRecords.length > 0 && (
+            <span className="ml-auto text-[10px] bg-juns-teal/10 text-juns-teal px-2 py-0.5 rounded-full font-medium">
+              共 {todayRecords.length} 筆
+            </span>
+          )}
+        </div>
+        {todayRecords.length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <Navigation className="h-8 w-8 text-slate-200 mx-auto mb-2" />
+            <p className="text-xs text-slate-400">今日尚無外出簽到記錄</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-juns-border">
+            {todayRecords.map((r) => {
+              const time = new Date(r.createdAt).toLocaleTimeString("zh-TW", {
+                timeZone: "Asia/Taipei",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              });
+              return (
+                <div key={r.id} className="px-4 py-3 flex items-center gap-3" data-testid={`outing-record-${r.id}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                    r.outType === "out" ? "bg-juns-teal/10" : "bg-slate-100"
+                  }`}>
+                    {r.outType === "out"
+                      ? <Navigation className="h-4 w-4 text-juns-teal" />
+                      : <Home className="h-4 w-4 text-slate-500" />
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold ${r.outType === "out" ? "text-juns-teal" : "text-slate-600"}`}>
+                        {r.outType === "out" ? "外出" : "返回"}
+                      </span>
+                      <span className="text-xs text-slate-400 flex items-center gap-0.5">
+                        <Clock className="h-3 w-3" />{time}
+                      </span>
+                    </div>
+                    {r.destination && (
+                      <p className="text-xs text-slate-600 truncate mt-0.5">{r.destination}</p>
+                    )}
+                    {r.note && (
+                      <p className="text-[10px] text-slate-400 truncate">{r.note}</p>
+                    )}
+                  </div>
+                  {r.imageUrl && (
+                    <img src={r.imageUrl} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 border border-slate-100" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [activeView, setActiveView] = useState<PortalView>("home");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -2929,14 +3313,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
       )}
 
       {activeView === "outing" && (
-        <div className="max-w-lg mx-auto p-4 pt-6">
-          <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
-            <div className="px-4 py-10 flex flex-col items-center gap-3 text-center">
-              <Navigation className="h-10 w-10 text-slate-300" />
-              <p className="text-sm font-semibold text-slate-500">外出/簽到功能即將推出</p>
-              <p className="text-xs text-slate-400">此功能尚未開放，敬請期待</p>
-            </div>
-          </div>
+        <div className="max-w-lg mx-auto p-4 pb-8">
+          <OutingSection employee={employee} />
         </div>
       )}
 
