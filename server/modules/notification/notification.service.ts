@@ -14,7 +14,7 @@ export const notificationService = {
     if (!payload.email) throw new Error("缺少 email");
     return storage.createNotificationRecipient({
       email: payload.email,
-      label: payload.label ?? null,
+      label: payload.label || null,
       enabled: payload.enabled !== false,
       notifyNewReport: payload.notifyNewReport !== false,
       notifyResolution: payload.notifyResolution !== false,
