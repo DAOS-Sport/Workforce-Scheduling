@@ -17,6 +17,7 @@ import {
   AlertTriangle, ClipboardCheck, BookOpen, Navigation, Loader2, XCircle,
   Wifi, Signal, Copy, MessageSquareWarning, Camera, X, ImagePlus, Send,
   Menu, Home, LogOut, FileEdit, Briefcase, BarChart2,
+  HelpCircle, Info, ChevronDown, ChevronUp, Fingerprint, FileWarning,
   type LucideIcon,
 } from "lucide-react";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
@@ -394,7 +395,7 @@ function JunsHeader({
   );
 }
 
-type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "leave" | "guidelines";
+type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "leave" | "guidelines" | "sop";
 
 const VIEW_TITLES: Record<PortalView, string> = {
   home: "打卡首頁",
@@ -406,6 +407,7 @@ const VIEW_TITLES: Record<PortalView, string> = {
   overtime: "加班申請",
   leave: "請假申請",
   guidelines: "員工守則",
+  sop: "系統使用說明",
 };
 
 function SideMenuDrawer({
@@ -449,6 +451,7 @@ function SideMenuDrawer({
       label: "系統資訊",
       items: [
         { view: "guidelines", label: "員工守則", icon: BookOpen },
+        { view: "sop", label: "系統使用說明", icon: HelpCircle },
       ],
     },
   ];
@@ -3892,6 +3895,12 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
         </div>
       )}
 
+      {activeView === "sop" && (
+        <div className="max-w-lg mx-auto p-4 pb-8">
+          <EmployeeSopSection />
+        </div>
+      )}
+
       {activeView === "guidelines" && (
         <div className="max-w-lg mx-auto p-4 pb-8">
         <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-guidelines-review">
@@ -3913,6 +3922,244 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
         </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── 員工 SOP 說明元件 ───────────────────────────────────────── */
+
+interface EmpSopStep {
+  text: string;
+  note?: string;
+  warn?: string;
+}
+
+interface EmpSopSection {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  color: string;
+  steps: EmpSopStep[];
+}
+
+const empSopSections: EmpSopSection[] = [
+  {
+    id: "binding",
+    icon: Fingerprint,
+    title: "第一次使用：帳號綁定",
+    color: "teal",
+    steps: [
+      { text: "先加入公司 LINE 官方帳號好友（掃描主管提供的 QR Code）。" },
+      { text: "在 LINE 聊天視窗中，直接傳送你的員工編號（例如：E001）。" },
+      { text: "收到「綁定成功」訊息後，即可使用所有員工功能。", note: "員工編號可向主管或 HR 確認。" },
+      { text: "之後從 LINE 選單點擊「員工入口」即可進入系統，不需要再輸入密碼。" },
+    ],
+  },
+  {
+    id: "clockin",
+    icon: MapPin,
+    title: "GPS 打卡上下班",
+    color: "green",
+    steps: [
+      { text: "打開員工入口，系統自動偵測你的位置，點擊「上班打卡」或「下班打卡」。" },
+      { text: "系統比對你的位置與場館距離，距離在範圍內自動打卡成功。", note: "打卡前請確認手機 GPS 已開啟，並允許 LINE 取得位置。" },
+      { text: "距離過遠時會顯示警告，仍可選擇打卡但會標記為異常，請同時聯繫主管說明。" },
+      { text: "打卡完成後會顯示確認畫面（場館名稱、時間、距離）請確認資訊正確。", warn: "若打卡後發現時間錯誤，請盡快提交補打卡申請。" },
+    ],
+  },
+  {
+    id: "amendment",
+    icon: FileEdit,
+    title: "補打卡申請",
+    color: "orange",
+    steps: [
+      { text: "左側選單點擊「補打卡申請」，選擇需要補打的日期。" },
+      { text: "填寫補打原因（必填）、選擇是上班或下班打卡。" },
+      { text: "確認送出後等待主管審核，每月最多可申請 3 次。", note: "審核結果會透過 LINE 通知你。" },
+      { text: "若屬於系統問題導致的漏打，不佔用補打次數，請在原因欄說明。" },
+    ],
+  },
+  {
+    id: "overtime",
+    icon: Briefcase,
+    title: "加班申請",
+    color: "amber",
+    steps: [
+      { text: "下班打卡時，系統若偵測到你超過預定下班時間，會詢問是否為加班。" },
+      { text: "選擇「是，我在加班」後自動建立加班申請。" },
+      { text: "也可在選單「加班申請」頁面手動提交，填寫加班日期、起訖時間與原因。" },
+      { text: "加班申請需由主管審核，核准後才計入薪資。", warn: "請在加班當天或隔天提交，超過 3 天可能無法補登。" },
+    ],
+  },
+  {
+    id: "leave",
+    icon: CalendarDays,
+    title: "請假申請",
+    color: "pink",
+    steps: [
+      { text: "左側選單點擊「請假申請」，點擊「新增請假」。" },
+      { text: "選擇假別（特休、病假、事假、婚假等）、日期、起訖時間。" },
+      { text: "填寫請假原因後送出，等待主管審核。", note: "病假建議附上就診證明，主管可能於審核時索取。" },
+      { text: "核准後，你的班表會自動標記該假別，無需另外通知排班組。" },
+    ],
+  },
+  {
+    id: "schedule",
+    icon: CalendarDays,
+    title: "查詢我的班表",
+    color: "blue",
+    steps: [
+      { text: "左側選單點擊「我的班表」，顯示本月月曆。" },
+      { text: "有排班的日期會標記顏色，點擊任一天查看當天詳細班次（場館、時間）。" },
+      { text: "右上角可切換「月曆模式」和「清單模式」，清單模式顯示逐日明細。" },
+      { text: "班次備注（如有）會顯示在班次下方，請注意閱讀主管留言。" },
+    ],
+  },
+  {
+    id: "coworkers",
+    icon: Users,
+    title: "工作夥伴",
+    color: "violet",
+    steps: [
+      { text: "左側選單點擊「工作夥伴」，顯示未來 7 天與你同班的夥伴名單。" },
+      { text: "名單依日期和角色分組顯示（救生/教練/櫃台等）。" },
+      { text: "夥伴名字右側有電話圖示，點擊可直接撥打電話聯繫。", note: "電話資料由 HR 設定，若號碼有誤請通知主管更新。" },
+    ],
+  },
+  {
+    id: "outing",
+    icon: Navigation,
+    title: "外出簽到",
+    color: "emerald",
+    steps: [
+      { text: "需外出至場館以外地點（如送件、出差）時，使用「外出簽到」功能。" },
+      { text: "點擊左側選單「外出簽到」，填寫外出地點/事由（必填）。" },
+      { text: "確認後系統記錄你的 GPS 位置與外出時間。" },
+      { text: "返回後再次點擊「外出簽到」選擇「返回」完成記錄。", note: "外出記錄會由主管於後台查閱，請確實登記。" },
+    ],
+  },
+  {
+    id: "guidelines",
+    icon: BookOpen,
+    title: "員工守則確認",
+    color: "cyan",
+    steps: [
+      { text: "每次登入系統時，若有未讀守則或每月說明文件，系統會自動彈出要求閱覽。" },
+      { text: "請逐份閱讀完整內容（可上下滑動），點擊「確認已閱讀」完成確認。" },
+      { text: "所有守則確認後才能進入主頁，確認記錄由系統保存。", note: "左側選單「員工守則」可隨時重新閱覽已確認的文件。" },
+      { text: "收到「保密同意書」時，請特別留意相關條款，確認後視同簽署。", warn: "保密協議屬勞動契約的一部分，請詳細閱讀後再確認。" },
+    ],
+  },
+  {
+    id: "anomaly",
+    icon: FileWarning,
+    title: "打卡異常回報",
+    color: "red",
+    steps: [
+      { text: "打卡失敗或系統出現錯誤訊息時，在打卡結果頁面可選擇「回報異常」。" },
+      { text: "填寫說明、可附上截圖（最多 5 張），送出後主管會收到通知。" },
+      { text: "異常回報不代表打卡成功，若需補打請同時提交補打卡申請。", warn: "連絡 LINE 官方帳號後，客服會協助你確認問題並指引後續步驟。" },
+    ],
+  },
+];
+
+const empColorMap: Record<string, { bg: string; border: string; iconBg: string; iconText: string; dot: string; text: string }> = {
+  teal:   { bg: "bg-teal-50",   border: "border-teal-200",   iconBg: "bg-teal-100",   iconText: "text-teal-700",   dot: "bg-teal-500",   text: "text-teal-700" },
+  green:  { bg: "bg-green-50",  border: "border-green-200",  iconBg: "bg-green-100",  iconText: "text-green-700",  dot: "bg-green-500",  text: "text-green-700" },
+  orange: { bg: "bg-orange-50", border: "border-orange-200", iconBg: "bg-orange-100", iconText: "text-orange-700", dot: "bg-orange-500", text: "text-orange-700" },
+  amber:  { bg: "bg-amber-50",  border: "border-amber-200",  iconBg: "bg-amber-100",  iconText: "text-amber-700",  dot: "bg-amber-500",  text: "text-amber-700" },
+  pink:   { bg: "bg-pink-50",   border: "border-pink-200",   iconBg: "bg-pink-100",   iconText: "text-pink-700",   dot: "bg-pink-500",   text: "text-pink-700" },
+  blue:   { bg: "bg-blue-50",   border: "border-blue-200",   iconBg: "bg-blue-100",   iconText: "text-blue-700",   dot: "bg-blue-500",   text: "text-blue-700" },
+  violet: { bg: "bg-violet-50", border: "border-violet-200", iconBg: "bg-violet-100", iconText: "text-violet-700", dot: "bg-violet-500", text: "text-violet-700" },
+  emerald:{ bg: "bg-emerald-50",border: "border-emerald-200",iconBg: "bg-emerald-100",iconText: "text-emerald-700",dot: "bg-emerald-500",text: "text-emerald-700" },
+  cyan:   { bg: "bg-cyan-50",   border: "border-cyan-200",   iconBg: "bg-cyan-100",   iconText: "text-cyan-700",   dot: "bg-cyan-500",   text: "text-cyan-700" },
+  red:    { bg: "bg-red-50",    border: "border-red-200",    iconBg: "bg-red-100",    iconText: "text-red-700",    dot: "bg-red-500",    text: "text-red-700" },
+};
+
+function EmployeeSopSection() {
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-3" data-testid="section-employee-sop">
+      {/* 頁首說明 */}
+      <div className="bg-juns-navy rounded-xl p-4 flex items-start gap-3">
+        <HelpCircle className="h-5 w-5 text-juns-teal shrink-0 mt-0.5" />
+        <div>
+          <p className="text-white font-semibold text-sm">系統使用說明</p>
+          <p className="text-slate-300 text-xs mt-1 leading-relaxed">
+            共 {empSopSections.length} 個功能說明，點擊任一項目展開操作步驟。
+          </p>
+        </div>
+      </div>
+
+      {/* 各功能說明 */}
+      {empSopSections.map((sec, idx) => {
+        const c = empColorMap[sec.color] ?? empColorMap.teal;
+        const Icon = sec.icon;
+        const isOpen = openId === sec.id;
+        return (
+          <div
+            key={sec.id}
+            className={`rounded-xl border bg-white overflow-hidden transition-all ${isOpen ? c.border : "border-juns-border"}`}
+            data-testid={`card-sop-${sec.id}`}
+          >
+            {/* 標題列（點擊展開/收合） */}
+            <button
+              type="button"
+              className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+              onClick={() => setOpenId(isOpen ? null : sec.id)}
+              data-testid={`toggle-sop-${sec.id}`}
+            >
+              <div className={`flex-shrink-0 flex items-center justify-center h-9 w-9 rounded-xl ${c.iconBg}`}>
+                <Icon className={`h-4.5 w-4.5 ${c.iconText}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-juns-navy">{idx + 1}. {sec.title}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{sec.steps.length} 個步驟</p>
+              </div>
+              {isOpen
+                ? <ChevronUp className="h-4 w-4 text-slate-400 shrink-0" />
+                : <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />}
+            </button>
+
+            {/* 展開內容 */}
+            {isOpen && (
+              <div className={`border-t ${c.border} px-4 py-3 space-y-3 ${c.bg}`}>
+                {sec.steps.map((step, i) => (
+                  <div key={i} className="flex gap-2.5">
+                    <div className={`flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full ${c.iconBg} ${c.iconText} text-[10px] font-bold mt-0.5`}>
+                      {i + 1}
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <p className="text-sm text-juns-navy leading-relaxed">{step.text}</p>
+                      {step.note && (
+                        <div className="flex items-start gap-1.5 text-xs text-slate-500 bg-white rounded-lg px-2.5 py-1.5 border border-juns-border">
+                          <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-slate-400" />
+                          <span className="leading-relaxed">{step.note}</span>
+                        </div>
+                      )}
+                      {step.warn && (
+                        <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5 border border-amber-200">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span className="leading-relaxed">{step.warn}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* 底部聯絡提示 */}
+      <div className="rounded-xl border border-juns-border bg-white px-4 py-3.5 flex items-center gap-3">
+        <ShieldCheck className="h-5 w-5 text-juns-teal shrink-0" />
+        <p className="text-xs text-slate-500 leading-relaxed">
+          使用上有任何問題，請聯繫直屬主管或透過 LINE 官方帳號回報。
+        </p>
+      </div>
     </div>
   );
 }

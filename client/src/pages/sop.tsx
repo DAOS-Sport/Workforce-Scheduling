@@ -609,11 +609,14 @@ export default function SopPage() {
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
-                  <span className={cn("flex-shrink-0 flex items-center justify-center h-5 w-5 rounded text-[10px] font-bold", isActive ? c.badge : "bg-muted text-muted-foreground")}>
-                    {idx + 1}
+                  <span className={cn("flex-shrink-0 relative flex items-center justify-center h-6 w-6 rounded-md", isActive ? c.badge : "bg-muted text-muted-foreground")}>
+                    <sec.icon className="h-3.5 w-3.5" />
+                    <span className="absolute -bottom-1 -right-1 flex items-center justify-center h-3.5 w-3.5 rounded-full bg-background border border-border text-[8px] font-bold leading-none text-foreground">
+                      {idx + 1}
+                    </span>
                   </span>
-                  <span className="truncate">{sec.title}</span>
-                  {isActive && <ChevronRight className="h-3 w-3 ml-auto shrink-0" />}
+                  <span className="truncate flex-1">{sec.title}</span>
+                  {isActive && <ChevronRight className="h-3 w-3 shrink-0" />}
                 </button>
               );
             })}
