@@ -1,12 +1,14 @@
 import { type Express } from "express";
 import { type Server } from "http";
-import { storage } from "../../storage";
+import { regionService } from "./region.service";
 
-export function mountRegionRoutes(httpServer: Server, app: Express): void {
+export function mountRegionRoutes(_httpServer: Server, app: Express): void {
   app.get("/api/regions", async (_req, res) => {
-  const regions = await storage.getRegions();
-  res.json(regions);
-});
-
+    try {
+      const regions = await regionService.findAll();
+      res.json(regions);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
 }
-

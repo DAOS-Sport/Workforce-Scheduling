@@ -7,10 +7,13 @@
  * any inline domain routes.
  *
  * The shift module is the canonical, fully-decomposed module
- * (types/repository/audit/validation/service/routes). The other 16
- * modules are pure route extractions for now — their handlers still call
- * `storage.*` directly. Per-domain repository/service decomposition is
- * tracked as Task #67 / #68 follow-up work.
+ * (types/repository/audit/validation/service/routes). All 19 other
+ * modules now also have a `<name>.service.ts` (Task #70 重構 A) — routes
+ * import from `xxxService`, never from `storage` directly. Service-layer
+ * naming convention: `xxxService.findAll() / get(id) / create(data, actor) /
+ * update(id, patch, actor) / remove(id)`. Errors throw with `.status` set;
+ * the route catch-block uses `err.status || 500`.
+ * Per-domain repository decomposition continues as Task #71 (重構 B).
  */
 import type { Express } from "express";
 import type { Server } from "http";
