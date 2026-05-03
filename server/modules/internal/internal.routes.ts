@@ -15,6 +15,7 @@ import {
 } from "./internal.service";
 import { requireInternalToken } from "./internal.auth";
 import { parseFacilityKey, sendServiceError } from "./internal.helpers";
+import { syncService } from "../sync/sync.service";
 
 export function registerInternalApi(app: Express) {
   app.use("/api/internal", requireInternalToken);
@@ -130,6 +131,15 @@ export function registerInternalApi(app: Express) {
       res.json(await internalService.exportSnapshot({ from, to, facilityKey: facilityKey as string }));
     } catch (err: any) {
       sendServiceError(res, "EXPORT_SNAPSHOT_FAILED", err);
+    }
+  });
+
+  app.post("/api/internal/trigger-weekly-schedule", async (_req, res) => {
+    try {
+      const result = await syncService.weeklySchedule(true);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      sendServiceError(res, "TRIGGER_WEEKLY_SCHEDULE_FAILED", err);
     }
   });
 
