@@ -3,6 +3,7 @@ import {
   ensureLeaveRequestsTable,
   ensureAnnouncementsTable,
   ensureShiftsSoftDelete,
+  ensureDispatchShiftsSoftDelete,
   ensureOutingRecordsTable,
 } from "../storage";
 import { log } from "../shared/log";
@@ -33,6 +34,13 @@ export async function runStartupMigrations(): Promise<void> {
     await ensureShiftsSoftDelete();
   } catch (err: any) {
     log(`shifts soft-delete schema 建立失敗: ${err.message}`, "db");
+  }
+
+  // Dispatch shift soft-delete columns + dispatch_shift_audit_log table (Task #55)
+  try {
+    await ensureDispatchShiftsSoftDelete();
+  } catch (err: any) {
+    log(`dispatch_shifts soft-delete schema 建立失敗: ${err.message}`, "db");
   }
 
   // Announcements table

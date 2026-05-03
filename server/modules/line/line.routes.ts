@@ -6,13 +6,10 @@
  */
 import { type Express, type Request, type Response } from "express";
 import { type Server } from "http";
-import {
-  verifyLineSignature,
-  verifyForwardedRequest,
-  handleLineWebhook,
-} from "../../line-webhook";
+import { verifyLineSignature, verifyForwardedRequest } from "./lineSignature";
+import { handleLineWebhook } from "./lineWebhook.service";
 
-export function mountLineLiffRoutes(_httpServer: Server, app: Express): void {
+export function mountLineRoutes(_httpServer: Server, app: Express): void {
   app.post("/api/line/webhook", async (req: Request, res: Response) => {
     const signature = req.headers["x-line-signature"] as string;
     const forwardSecret = req.headers["x-forward-secret"] as string;

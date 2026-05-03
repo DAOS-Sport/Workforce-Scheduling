@@ -1,5 +1,5 @@
 import { db } from "../../db";
-import { eq, and, gte, lte, isNull } from "drizzle-orm";
+import { eq, and, gte, lte, isNull, ne } from "drizzle-orm";
 import {
   dispatchShifts,
   employees,
@@ -29,6 +29,7 @@ export const dispatchRepository = {
         eq(dispatchShifts.regionId, regionId),
         gte(dispatchShifts.date, startDate),
         lte(dispatchShifts.date, endDate),
+        ne(dispatchShifts.status, "cancelled"),
       ));
   },
 
@@ -56,8 +57,33 @@ export const dispatchRepository = {
     return record;
   },
 
-  async deleteDispatchShift(id: number): Promise<void> {
-    await db.delete(dispatchShifts).where(eq(dispatchShifts.id, id));
+  async deleteDispatchShift(id: number, actor = "admin", reason?: string): Promise<boolean> {
+    const [existing] = await db.select().from(dispatchShifts).where(eq(dispatchShifts.id, id));
+    if (!existing || existing.status === "cancelled") return false;
+    await db.update(dispatchShifts)
+      .set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: actor, cancelReason: reason || null })
+      .where(eq(dispatchShifts.id, id));
+    return true;
+  },
+
+  async restoreDispatchShift(id: number, actor = "admin"): Promise<DispatchShift | undefined> {
+    const [existing] = await db.select().from(dispatchShifts).where(eq(dispatchShifts.id, id));
+    if (!existing || existing.status !== "cancelled") return undefined;
+    const [restored] = await db.update(dispatchShifts)
+      .set({ status: "active", cancelledAt: null, cancelledBy: null, cancelReason: null })
+      .where(eq(dispatchShifts.id, id))
+      .returning();
+    return restored;
+  },
+
+  async getCancelledDispatchShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<DispatchShift[]> {
+    return db.select().from(dispatchShifts)
+      .where(and(
+        eq(dispatchShifts.regionId, regionId),
+        gte(dispatchShifts.date, startDate),
+        lte(dispatchShifts.date, endDate),
+        eq(dispatchShifts.status, "cancelled"),
+      ));
   },
 
   async reconcileDispatchLinks(): Promise<number> {

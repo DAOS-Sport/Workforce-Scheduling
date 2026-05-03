@@ -984,14 +984,22 @@ function GuidelinesCheckScreen({
 }
 
 function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employeeId?: number }) {
-  const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ urls: string[]; idx: number } | null>(null);
+  const [scale, setScale] = useState(1);
+  const swipeStartX = useRef<number | null>(null);
+  const pinchDist = useRef<number | null>(null);
+  const pinchScale = useRef<number>(1);
 
-  // Close on Escape, and lock body scroll while the lightbox is open
-  // (mobile is the primary use case — prevents page scrolling behind the overlay).
+  // Reset zoom when switching images
+  useEffect(() => { setScale(1); }, [lightbox?.idx]);
+
+  // Keyboard navigation + scroll lock
   useEffect(() => {
-    if (!zoomedUrl) return;
+    if (!lightbox) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setZoomedUrl(null);
+      if (e.key === "Escape") setLightbox(null);
+      if (e.key === "ArrowRight") setLightbox(prev => prev && prev.idx < prev.urls.length - 1 ? { ...prev, idx: prev.idx + 1 } : prev);
+      if (e.key === "ArrowLeft") setLightbox(prev => prev && prev.idx > 0 ? { ...prev, idx: prev.idx - 1 } : prev);
     };
     window.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -1000,9 +1008,9 @@ function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employee
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [zoomedUrl]);
+  }, [!!lightbox]);
 
-  const { data: fullItem } = useQuery<GuidelineItem>({
+  const { data: fullItem, isLoading: imagesLoading } = useQuery<GuidelineItem>({
     queryKey: ["/api/portal/guidelines", item.id, employeeId],
     queryFn: async () => {
       const url = `/api/portal/guidelines/${item.id}?employeeId=${employeeId}`;
@@ -1012,6 +1020,50 @@ function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employee
     },
     enabled: item.contentType === "image" && !!employeeId,
   });
+
+  const getPinchDist = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) return null;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      swipeStartX.current = e.touches[0].clientX;
+      pinchDist.current = null;
+    } else if (e.touches.length === 2) {
+      swipeStartX.current = null;
+      pinchDist.current = getPinchDist(e);
+      pinchScale.current = scale;
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchDist.current !== null) {
+      const dist = getPinchDist(e);
+      if (dist !== null) {
+        const newScale = Math.min(4, Math.max(1, pinchScale.current * (dist / pinchDist.current)));
+        setScale(newScale);
+      }
+    }
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (swipeStartX.current !== null && e.changedTouches.length > 0 && scale <= 1.05) {
+      const delta = e.changedTouches[0].clientX - swipeStartX.current;
+      if (Math.abs(delta) > 60) {
+        if (delta < 0) {
+          setLightbox(prev => prev && prev.idx < prev.urls.length - 1 ? { ...prev, idx: prev.idx + 1 } : prev);
+        } else {
+          setLightbox(prev => prev && prev.idx > 0 ? { ...prev, idx: prev.idx - 1 } : prev);
+        }
+        setScale(1);
+      }
+    }
+    swipeStartX.current = null;
+    pinchDist.current = null;
+  };
 
   return (
     <>
@@ -1060,6 +1112,13 @@ function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employee
               </a>
             )}
             {item.contentType === "image" && (() => {
+              if (imagesLoading) {
+                return (
+                  <div className="mt-2 space-y-2" data-testid={`skeleton-guideline-images-${item.id}`}>
+                    <Skeleton className="w-full h-48 rounded-lg" />
+                  </div>
+                );
+              }
               const source = fullItem || item;
               const urls = (source.imageUrls && source.imageUrls.length > 0)
                 ? source.imageUrls
@@ -1072,7 +1131,7 @@ function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employee
                       src={url}
                       alt={`${item.title} ${idx + 1}`}
                       className="w-full max-h-64 object-contain rounded-lg border border-juns-border cursor-zoom-in active:opacity-80"
-                      onClick={() => setZoomedUrl(url)}
+                      onClick={() => setLightbox({ urls, idx })}
                       data-testid={`img-portal-guideline-${item.id}-${idx}`}
                     />
                   ))}
@@ -1083,32 +1142,76 @@ function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employee
         </div>
       </div>
 
-      {zoomedUrl && (
+      {lightbox && (
         <div
           role="dialog"
           aria-modal="true"
           aria-label="放大檢視圖片"
-          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
-          onClick={() => setZoomedUrl(null)}
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center"
+          onClick={() => { if (scale <= 1.05) setLightbox(null); }}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
           data-testid="overlay-image-zoom"
         >
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setZoomedUrl(null); }}
+            onClick={(e) => { e.stopPropagation(); setLightbox(null); }}
             aria-label="關閉"
-            className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 text-white flex items-center justify-center backdrop-blur-sm transition-colors"
+            className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 text-white flex items-center justify-center backdrop-blur-sm transition-colors z-10"
             data-testid="button-close-image-zoom"
           >
             <X className="h-5 w-5" />
           </button>
+
+          {lightbox.idx > 0 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setLightbox(prev => prev ? { ...prev, idx: prev.idx - 1 } : null); setScale(1); }}
+              aria-label="上一張"
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center backdrop-blur-sm transition-colors z-10"
+              data-testid="button-lightbox-prev"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
+
           <img
-            src={zoomedUrl}
+            src={lightbox.urls[lightbox.idx]}
             alt="放大檢視"
             onClick={(e) => e.stopPropagation()}
-            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl select-none"
+            style={{
+              transform: `scale(${scale})`,
+              transition: scale === 1 ? "transform 0.2s" : "none",
+              maxWidth: "calc(100vw - 4rem)",
+              maxHeight: "calc(100vh - 4rem)",
+            }}
+            className="object-contain rounded-lg shadow-2xl select-none"
             data-testid="img-zoomed"
           />
-          <span className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-xs pointer-events-none">點擊圖片以外區域或右上角關閉</span>
+
+          {lightbox.idx < lightbox.urls.length - 1 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setLightbox(prev => prev ? { ...prev, idx: prev.idx + 1 } : null); setScale(1); }}
+              aria-label="下一張"
+              className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center backdrop-blur-sm transition-colors z-10"
+              data-testid="button-lightbox-next"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          )}
+
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none">
+            {lightbox.urls.length > 1 && (
+              <span className="text-white/80 text-sm font-medium" data-testid="text-lightbox-index">
+                {lightbox.idx + 1} / {lightbox.urls.length}
+              </span>
+            )}
+            <span className="text-white/50 text-xs">
+              {lightbox.urls.length > 1 ? "左右滑動切換・" : ""}雙指縮放・點擊空白處關閉
+            </span>
+          </div>
         </div>
       )}
     </>

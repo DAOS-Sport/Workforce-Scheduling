@@ -149,7 +149,9 @@ export interface IStorage {
   getDispatchShiftsByLinkedEmployee(employeeId: number, startDate: string, endDate: string): Promise<DispatchShift[]>;
   getDispatchShift(id: number): Promise<DispatchShift | undefined>;
   updateDispatchShift(id: number, data: Partial<InsertDispatchShift>): Promise<DispatchShift | undefined>;
-  deleteDispatchShift(id: number): Promise<void>;
+  deleteDispatchShift(id: number, actor?: string, reason?: string): Promise<boolean>;
+  restoreDispatchShift(id: number, actor?: string): Promise<DispatchShift | undefined>;
+  getCancelledDispatchShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<DispatchShift[]>;
   reconcileDispatchLinks(): Promise<number>;
 
   createOvertimeRequest(data: InsertOvertimeRequest): Promise<OvertimeRequest>;
@@ -510,8 +512,16 @@ export class DatabaseStorage implements IStorage {
     return dispatchRepository.updateDispatchShift(id, data);
   }
 
-  async deleteDispatchShift(id: number): Promise<void> {
-    return dispatchRepository.deleteDispatchShift(id);
+  async deleteDispatchShift(id: number, actor = "admin", reason?: string): Promise<boolean> {
+    return dispatchRepository.deleteDispatchShift(id, actor, reason);
+  }
+
+  async restoreDispatchShift(id: number, actor = "admin"): Promise<DispatchShift | undefined> {
+    return dispatchRepository.restoreDispatchShift(id, actor);
+  }
+
+  async getCancelledDispatchShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<DispatchShift[]> {
+    return dispatchRepository.getCancelledDispatchShiftsByRegionAndDateRange(regionId, startDate, endDate);
   }
 
   async reconcileDispatchLinks(): Promise<number> {
@@ -657,6 +667,28 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+export async function ensureDispatchShiftsSoftDelete(): Promise<void> {
+  await pool.query(`
+    ALTER TABLE dispatch_shifts ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+    ALTER TABLE dispatch_shifts ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP;
+    ALTER TABLE dispatch_shifts ADD COLUMN IF NOT EXISTS cancelled_by TEXT;
+    ALTER TABLE dispatch_shifts ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
+
+    CREATE TABLE IF NOT EXISTS dispatch_shift_audit_log (
+      id SERIAL PRIMARY KEY,
+      dispatch_shift_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      payload JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dispatch_shift_audit ON dispatch_shift_audit_log (dispatch_shift_id);
+    CREATE INDEX IF NOT EXISTS idx_dispatch_shifts_status ON dispatch_shifts (status);
+  `);
+  console.log("[db] dispatch_shifts soft-delete schema 確認完成");
+}
 
 export async function ensureShiftsSoftDelete(): Promise<void> {
   await pool.query(`

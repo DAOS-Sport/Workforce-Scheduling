@@ -278,16 +278,32 @@ export default function SalaryReportPage() {
               </SelectContent>
             </Select>
             {data && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5"
-                onClick={() => exportCSV(data, regionLabel)}
-                data-testid="button-export-csv"
-              >
-                <Download className="h-3.5 w-3.5" />
-                匯出 CSV
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={() => exportCSV(data, regionLabel)}
+                  data-testid="button-export-csv"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  匯出 CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={() => {
+                    const params = new URLSearchParams({ year: String(data.year), month: String(data.month) });
+                    if (regionCode !== "all") params.set("regionCode", regionCode);
+                    window.open(`/api/salary-report/excel?${params.toString()}`, "_blank");
+                  }}
+                  data-testid="button-export-excel"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  匯出 Excel
+                </Button>
+              </>
             )}
           </div>
         </div>

@@ -10,24 +10,24 @@ I prefer that you communicate in a clear and concise manner, focusing on the mos
 The system is built with a modern web stack:
 - **Frontend**: React, Vite, TypeScript, Tailwind CSS, and Shadcn UI for a responsive UI. `wouter` for routing, `TanStack React Query` for server state.
 - **Backend**: Express.js for API requests, PostgreSQL for data, and Drizzle ORM for database interactions.
-- **Server Architecture**: Layered `server/` directory structure. Modules are fully decomposed into `types`, `repository`, `service`, and `routes` files, ensuring clear separation of concerns. A thin `storage` façade delegates to per-domain repositories. Root-level legacy files (`line-webhook.ts`, `internal-api.ts`, `ragic.ts`) have been modularized into their respective feature modules with re-export shims.
+- **Server Architecture**: Layered `server/` directory structure. Modules are fully decomposed into `types`, `repository`, `service`, and `routes` files, ensuring clear separation of concerns. A thin `storage` façade delegates to per-domain repositories. Legacy shim files (`line-webhook.ts`, `internal-api.ts`, `ragic.ts`) have been deleted — all callers use direct module paths. Internal API auth is split into `internal.auth.ts` + `internal.helpers.ts` for reuse and testability. All route handlers use uniform response helpers (`ok/created/fail/notFound/badRequest`) from `server/shared/http/response.ts`.
 - **Core Features**:
     - **Regional Management**: Organizes operations across four regions with tab-based navigation.
     - **Smart Scheduler**: Spreadsheet-like weekly grid for shift planning, batch creation, and template-based scheduling.
     - **Labor Law Compliance**: HR Eye engine validates schedules against Taiwan labor laws (e.g., 7-day rest, 12-hour daily limit, 11-hour rest gap, four-week 160h/176h limits). Recognizes leave types to bypass certain validations. Compliance dashboard for four-week flexible working hours.
-    - **Employee Portal**: LINE Login access to personal schedules, mandatory guideline acknowledgments, coworker directory, and anomaly reporting.
+    - **Employee Portal**: LINE Login access to personal schedules, mandatory guideline acknowledgments (with swipe/pinch-zoom lightbox for images), coworker directory, and anomaly reporting. All portal endpoints enforce identity verification via `verifyCaller(employeeId, lineUserId)`.
     - **Anomaly Management**: Admin dashboard for monitoring and managing clock-in anomalies, with filtering, batch resolution, and email notifications.
     - **Attendance System**: GPS-based clock-in/out via LINE (webhook/LIFF), with early/late detection, reason selection, amendment requests, and overtime requests. Supports XLSX data import.
     - **LINE ID Auto-Binding**: LINE webhook handles `follow`, `text` (employee code binding), and `location` (clock-in) events.
     - **Venue and Employee Management**: CRUD operations, cross-region employee dispatching, and Ragic database synchronization for employee data.
-    - **Dispatch Personnel**: Manages non-database personnel shifts within the schedule grid.
+    - **Dispatch Personnel**: Manages non-database personnel shifts within the schedule grid. Supports soft-delete (cancel/restore) with audit log. Cancelled dispatch shifts can be reviewed and restored via the "取消記錄" dialog in the schedule page. "回填連結" button auto-links dispatch names to employee records.
     - **Shift Notes**: Allows admin to add freeform notes to shifts, visible to employees in the portal.
     - **Announcements System**: Admin CRUD for announcements, displayed as active banners in the employee portal based on region and expiry.
     - **Pending Count Badges**: Displays counts of pending clock amendments, overtime requests, leave requests, and anomaly reports in the admin UI.
     - **Automated Notifications**: Shift reminders and missing clock-in alerts via LINE and email.
     - **Cross-Region Dispatch Visibility**: Dispatched employee shifts are visible in both source and destination region schedules.
     - **Weekly Attendance Report**: Admin page displaying per-employee weekly clock-in status, with push notification and email summary options.
-    - **Hours Report**: Admin page for monthly shift hours report, grouped by role, with region filtering and CSV export.
+    - **Hours Report**: Admin page for monthly shift hours report, grouped by role, with region filtering, CSV export, and Excel export (two-sheet: 工時彙總 + 派遣明細).
     - **Overtime Clock-In Integration**: Automated overtime request creation when employees clock out late and select "加班", with admin approval and integration into salary reports.
     - **Four-Week Flexible Working Hours Compliance**: Comprehensive compliance checks and reporting for four-week flexible working hours, including warnings and blocking errors.
 - **UI/UX Decisions**: Prioritizes clarity and efficiency using Shadcn UI. Features color-coding for shift types and status indicators, and persistent employee picker selections.

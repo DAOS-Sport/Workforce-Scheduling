@@ -1,10 +1,11 @@
 import { storage } from "../../storage";
 import { calcShiftHours, sumScheduledHours, getAllPeriodsForMonth } from "@shared/schema";
-import { pushToLine } from "../../line-webhook";
+import { pushToLine } from "../line/linePush.service";
 import { db } from "../../db";
 import { isNotNull, and, gte, lte } from "drizzle-orm";
 import { dispatchShifts as dispatchShiftsTable } from "@shared/schema";
 import { sendAnomalyEmail } from "../../shared/email/sendAnomalyEmail";
+import ExcelJS from "exceljs";
 
 const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
 
@@ -293,6 +294,107 @@ export const systemService = {
     const hasOvertimeData = filteredStats.some(e => e.overtimeHours > 0);
 
     return { year, month, workRoles, leaveTypes, employees, hasOvertimeData };
+  },
+
+  async salaryReportExcel(year: number, month: number, regionCode?: string): Promise<Buffer> {
+    if (!year || !month || month < 1 || month > 12) throw err(400, "需提供正確的 year 和 month");
+
+    const report = await this.salaryReport(year, month, regionCode);
+
+    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+    const allEmployees = await storage.getAllEmployees();
+    const allVenues = await storage.getAllVenues();
+    const venueMap = new Map(allVenues.map(v => [v.id, v]));
+    const empMap = new Map(allEmployees.map(e => [e.id, e]));
+
+    const linkedDispatch = await db.select().from(dispatchShiftsTable).where(
+      and(
+        gte(dispatchShiftsTable.date, startDate),
+        lte(dispatchShiftsTable.date, endDate),
+        isNotNull(dispatchShiftsTable.linkedEmployeeId),
+      )
+    );
+
+    const rawHoursLocal = (start: string, end: string): number => {
+      const [sh, sm] = start.split(":").map(Number);
+      const [eh, em] = end.split(":").map(Number);
+      let mins = (eh * 60 + em) - (sh * 60 + sm);
+      if (mins < 0) mins += 24 * 60;
+      return Math.round(mins / 60 * 10) / 10;
+    };
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "三蘆智慧管理系統";
+    wb.created = new Date();
+
+    const headerFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
+    const headerFont: Partial<ExcelJS.Font> = { color: { argb: "FFFFFFFF" }, bold: true, size: 11 };
+    const borderStyle: Partial<ExcelJS.Borders> = {
+      top: { style: "thin" }, left: { style: "thin" },
+      bottom: { style: "thin" }, right: { style: "thin" },
+    };
+
+    const ws1 = wb.addWorksheet("工時彙總");
+    const roleHeaders = report.workRoles;
+    const leaveHeaders = report.leaveTypes;
+    const ws1Headers = ["區域", "員工代號", "姓名", "班次數", ...roleHeaders.map(r => `${r}時數`), ...leaveHeaders.map(l => `${l}(天)`), "加班時數", "休息扣除", "工時合計"];
+    const ws1Head = ws1.addRow(ws1Headers);
+    ws1Head.eachCell(cell => {
+      cell.fill = headerFill; cell.font = headerFont; cell.border = borderStyle;
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+    ws1.getRow(1).height = 22;
+    ws1.columns = ws1Headers.map((h, i) => ({ key: `c${i}`, width: i < 3 ? 14 : 10 }));
+
+    for (const emp of report.employees) {
+      const row = [emp.region, emp.employeeCode, emp.name, emp.shiftCount,
+        ...roleHeaders.map(r => emp.hours[r] || 0),
+        ...leaveHeaders.map(l => emp.leaves[l] || 0),
+        emp.overtimeHours, emp.breakDeduction, emp.totalWorkHours];
+      const r = ws1.addRow(row);
+      r.eachCell(cell => { cell.border = borderStyle; cell.alignment = { horizontal: "center", vertical: "middle" }; });
+      r.getCell(3).alignment = { horizontal: "left", vertical: "middle" };
+      ws1.getRow(r.number).height = 18;
+    }
+    ws1.getRow(1).font = headerFont;
+
+    const ws2 = wb.addWorksheet("派遣明細");
+    const ws2Headers = ["日期", "姓名", "員工代號", "區域", "場館", "班別", "上班時間", "下班時間", "時數"];
+    const ws2Head = ws2.addRow(ws2Headers);
+    ws2Head.eachCell(cell => {
+      cell.fill = headerFill; cell.font = headerFont; cell.border = borderStyle;
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+    ws2.getRow(1).height = 22;
+    ws2.columns = [
+      { key: "date", width: 14 }, { key: "name", width: 12 }, { key: "code", width: 12 },
+      { key: "region", width: 10 }, { key: "venue", width: 14 }, { key: "role", width: 10 },
+      { key: "start", width: 10 }, { key: "end", width: 10 }, { key: "hours", width: 8 },
+    ];
+
+    const sortedDispatch = [...linkedDispatch].sort((a, b) => a.date.localeCompare(b.date));
+    for (const ds of sortedDispatch) {
+      const emp = empMap.get(ds.linkedEmployeeId!);
+      const venue = ds.venueId ? venueMap.get(ds.venueId) : null;
+      const allRegions = await storage.getRegions();
+      const regionMap2 = new Map(allRegions.map(r => [r.id, r]));
+      const region = emp ? regionMap2.get(emp.regionId) : null;
+      const hrs = rawHoursLocal(ds.startTime, ds.endTime);
+      const r = ws2.addRow([
+        ds.date, emp?.name || ds.dispatchName, emp?.employeeCode || "",
+        region?.name || "", venue?.shortName || venue?.name || "",
+        ds.role, ds.startTime.substring(0, 5), ds.endTime.substring(0, 5), hrs,
+      ]);
+      r.eachCell(cell => { cell.border = borderStyle; cell.alignment = { horizontal: "center", vertical: "middle" }; });
+      r.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+      ws2.getRow(r.number).height = 18;
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    return Buffer.from(buf);
   },
 
   async _buildWeeklyData(weekStart: string) {

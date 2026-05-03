@@ -21,7 +21,8 @@ import {
   Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
   Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft,
   GraduationCap, Award, Briefcase, Monitor, Eye, Clipboard, ClipboardPaste, FileSpreadsheet,
-  CheckCircle2, AlertTriangle, GripVertical, ListOrdered, SquareCheck
+  CheckCircle2, AlertTriangle, GripVertical, ListOrdered, SquareCheck,
+  RotateCcw, History, Loader2, Link2
 } from "lucide-react";
 import { GoogleSheetsImportDialog } from "@/components/GoogleSheetsImportDialog";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
@@ -299,6 +300,10 @@ export default function SchedulePage() {
   const [dispatchAddNameInput, setDispatchAddNameInput] = useState("");
   const [dispatchEmpSearchOpen, setDispatchEmpSearchOpen] = useState(false);
   const [dispatchSectionCollapsed, setDispatchSectionCollapsed] = useState(false);
+  const [cancelledShiftsOpen, setCancelledShiftsOpen] = useState(false);
+  const [cancelledShiftsStartDate, setCancelledShiftsStartDate] = useState("");
+  const [cancelledShiftsEndDate, setCancelledShiftsEndDate] = useState("");
+  const [cancelledAuditShiftId, setCancelledAuditShiftId] = useState<number | null>(null);
   const [pendingDispatchNames, setPendingDispatchNames] = useState<string[]>([]);
   const [inlineDispatchInput, setInlineDispatchInput] = useState("");
   const inlineDispatchInputRef = useRef<HTMLInputElement>(null);
@@ -977,6 +982,35 @@ export default function SchedulePage() {
     },
   });
 
+  const reconcileDispatchLinks = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/dispatch-shifts/reconcile-links");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts"] });
+      toast({ title: `回填完成：已連結 ${data.updated} 筆派遣班次` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "回填失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const restoreDispatchShift = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/dispatch-shifts/${id}/restore`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dispatch-shifts-cancelled"] });
+      toast({ title: "派遣班次已還原" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "還原失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
   const batchDeleteShifts = useMutation({
     mutationFn: async (data: { employeeId: number; venueId?: number; startTime?: string; endTime?: string; role?: string; targetDates: string[] }) => {
       const res = await apiRequest("POST", "/api/shifts/batch-delete", data);
@@ -1547,6 +1581,24 @@ export default function SchedulePage() {
               <X className="h-2.5 w-2.5 opacity-60" />
             </button>
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1.5 shrink-0"
+            onClick={() => {
+              const y = currentMonth.getFullYear();
+              const m = currentMonth.getMonth();
+              setCancelledShiftsStartDate(format(new Date(y, m, 1), "yyyy-MM-dd"));
+              setCancelledShiftsEndDate(format(new Date(y, m + 1, 0), "yyyy-MM-dd"));
+              setCancelledShiftsOpen(true);
+            }}
+            data-testid="button-cancelled-shifts"
+            title="查看並還原已取消的派遣班次"
+          >
+            <History className="h-3.5 w-3.5" />
+            取消記錄
+          </Button>
 
           <Button
             variant="outline"
@@ -2354,6 +2406,16 @@ export default function SchedulePage() {
                     <button onClick={() => setDispatchSectionCollapsed(!dispatchSectionCollapsed)} className="flex items-center gap-1">
                       {dispatchSectionCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-purple-600" /> : <ChevronDown className="h-3.5 w-3.5 text-purple-600" />}
                       <span className="text-xs font-bold text-purple-700 dark:text-purple-400 tracking-wide">派遣人員 ({dispatchNames.length})</span>
+                    </button>
+                    <button
+                      className="ml-1 flex items-center gap-0.5 px-1.5 py-0.5 rounded text-purple-500 hover:text-purple-700 hover:bg-purple-100/60 dark:hover:bg-purple-900/30 dark:hover:text-purple-300 transition-colors text-[11px] font-medium"
+                      onClick={() => reconcileDispatchLinks.mutate()}
+                      disabled={reconcileDispatchLinks.isPending}
+                      data-testid="button-reconcile-dispatch"
+                      title="批次回填：依姓名自動連結員工 ID"
+                    >
+                      {reconcileDispatchLinks.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />}
+                      回填連結
                     </button>
                     <button
                       className="ml-auto flex items-center gap-0.5 px-1.5 py-0.5 rounded text-purple-500 hover:text-purple-700 hover:bg-purple-100/60 dark:hover:bg-purple-900/30 dark:hover:text-purple-300 transition-colors text-[11px] font-medium"
@@ -4067,6 +4129,104 @@ export default function SchedulePage() {
         currentYear={currentMonth.getFullYear()}
         currentMonth={currentMonth.getMonth() + 1}
       />
+
+      <Dialog open={cancelledShiftsOpen} onOpenChange={setCancelledShiftsOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col gap-0 p-0">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <History className="h-4 w-4 text-purple-600" />
+              已取消的派遣班次
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-5 py-3 border-b shrink-0 flex gap-2 items-center flex-wrap">
+            <span className="text-xs text-muted-foreground shrink-0">日期區間</span>
+            <input
+              type="date"
+              value={cancelledShiftsStartDate}
+              onChange={e => setCancelledShiftsStartDate(e.target.value)}
+              className="h-7 text-xs border rounded px-2 bg-background"
+              data-testid="input-cancelled-start"
+            />
+            <span className="text-xs text-muted-foreground">—</span>
+            <input
+              type="date"
+              value={cancelledShiftsEndDate}
+              onChange={e => setCancelledShiftsEndDate(e.target.value)}
+              className="h-7 text-xs border rounded px-2 bg-background"
+              data-testid="input-cancelled-end"
+            />
+          </div>
+          <CancelledDispatchList
+            regionCode={activeRegion}
+            startDate={cancelledShiftsStartDate}
+            endDate={cancelledShiftsEndDate}
+            venues={venues}
+            onRestore={id => restoreDispatchShift.mutate(id)}
+            restoring={restoreDispatchShift.isPending}
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function CancelledDispatchList({
+  regionCode, startDate, endDate, venues, onRestore, restoring,
+}: {
+  regionCode: string; startDate: string; endDate: string;
+  venues: import("@shared/schema").Venue[];
+  onRestore: (id: number) => void; restoring: boolean;
+}) {
+  const enabled = !!(regionCode && startDate && endDate);
+  const { data: cancelled = [], isLoading } = useQuery<import("@shared/schema").DispatchShift[]>({
+    queryKey: ["/api/dispatch-shifts-cancelled", regionCode, startDate, endDate],
+    enabled,
+  });
+  const venueMap = new Map(venues.map(v => [v.id, v]));
+
+  if (!enabled) return <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground p-8">請選擇日期區間</div>;
+  if (isLoading) return <div className="flex-1 flex items-center justify-center p-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  if (cancelled.length === 0) return <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground p-8">此區間無已取消的派遣班次</div>;
+
+  return (
+    <div className="flex-1 overflow-y-auto min-h-0">
+      <table className="w-full text-xs">
+        <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+          <tr>
+            <th className="px-3 py-2 text-left font-medium">日期</th>
+            <th className="px-3 py-2 text-left font-medium">姓名</th>
+            <th className="px-3 py-2 text-left font-medium">場館</th>
+            <th className="px-3 py-2 text-left font-medium">班別</th>
+            <th className="px-3 py-2 text-left font-medium">被誰取消</th>
+            <th className="px-3 py-2 text-left font-medium">取消時間</th>
+            <th className="px-3 py-2 text-center font-medium">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cancelled.map(ds => (
+            <tr key={ds.id} className="border-t hover:bg-muted/40" data-testid={`row-cancelled-dispatch-${ds.id}`}>
+              <td className="px-3 py-2 text-muted-foreground">{ds.date}</td>
+              <td className="px-3 py-2 font-medium">{ds.dispatchName}</td>
+              <td className="px-3 py-2">{ds.venueId ? (venueMap.get(ds.venueId)?.shortName || venueMap.get(ds.venueId)?.name || "—") : "—"}</td>
+              <td className="px-3 py-2">{ds.role}</td>
+              <td className="px-3 py-2 text-muted-foreground">{ds.cancelledBy || "—"}</td>
+              <td className="px-3 py-2 text-muted-foreground">{ds.cancelledAt ? new Date(ds.cancelledAt).toLocaleString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+              <td className="px-3 py-2 text-center">
+                <button
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-purple-600 hover:text-purple-700 hover:bg-purple-100/60 transition-colors font-medium disabled:opacity-40"
+                  onClick={() => onRestore(ds.id)}
+                  disabled={restoring}
+                  data-testid={`button-restore-dispatch-${ds.id}`}
+                  title="還原此派遣班次"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  還原
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

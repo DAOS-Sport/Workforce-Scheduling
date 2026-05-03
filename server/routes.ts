@@ -20,7 +20,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 
 import { storage } from "./storage";
-import { registerInternalApi } from "./internal-api";
+import { registerInternalApi } from "./modules/internal/internal.routes";
 import { gateAdminApi } from "./shared/middleware/requireAdmin";
 import { registerModuleRoutes } from "./modules/_registry";
 import { mountAdminAuthRoutes } from "./modules/admin/admin.routes";

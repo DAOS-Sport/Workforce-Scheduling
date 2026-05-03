@@ -155,7 +155,7 @@ export default function EmployeesPage() {
 
   const ragicSync = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/ragic-sync");
+      const res = await apiRequest("POST", "/api/ragic/sync-employees");
       return res.json();
     },
     onSuccess: (data: any) => {

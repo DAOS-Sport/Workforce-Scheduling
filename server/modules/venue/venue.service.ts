@@ -6,7 +6,7 @@
  */
 import { storage } from "../../storage";
 import { insertVenueSchema, type Venue, type InsertVenue } from "@shared/schema";
-import { invalidateVenueCache } from "../../line-webhook";
+import { invalidateVenueCache } from "../line/lineClock.service";
 
 export const venueService = {
   findAll: () => storage.getAllVenues(),

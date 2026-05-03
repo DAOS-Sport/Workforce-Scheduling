@@ -1,103 +1,22 @@
 /**
- * Internal API HTTP route layer (Task #72 重構 C).
+ * Internal API HTTP route layer (Task #72 重構 C, Task #75 split auth).
  *
- * Auth: INTERNAL_API_TOKEN, accepted via three header forms:
- *   * Authorization: Bearer <token>
- *   * X-Internal-Token: <token>
- *   * X-API-Key: <token>
- *
- * All responses are JSON; we never fall through to HTML login pages.
- * All data assembly is delegated to internal.service.ts. This file is
- * deliberately kept thin — only auth wiring, query-param parsing,
- * validation, service invocation, and JSON serialization.
+ * Auth: INTERNAL_API_TOKEN — see internal.auth.ts for middleware.
+ * Query helpers: see internal.helpers.ts.
+ * All data assembly is delegated to internal.service.ts.
  */
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express } from "express";
 import {
   internalService,
   isValidDate,
   decodeCursor,
   parseLimit,
   todayInTaipei,
-  isValidFacilityKey,
-  VALID_FACILITY_KEYS,
 } from "./internal.service";
-
-// ---------------------------------------------------------------------
-// Auth middleware
-// ---------------------------------------------------------------------
-
-function extractToken(req: Request): string | undefined {
-  const auth = req.header("authorization") ?? req.header("Authorization");
-  if (auth) {
-    const m = /^Bearer\s+(.+)$/i.exec(auth.trim());
-    if (m) return m[1].trim();
-  }
-  const xInternal = req.header("x-internal-token") ?? req.header("X-Internal-Token");
-  if (xInternal) return xInternal.trim();
-  const xApiKey = req.header("x-api-key") ?? req.header("X-API-Key");
-  if (xApiKey) return xApiKey.trim();
-  if (typeof req.query.token === "string" && req.query.token) return req.query.token;
-  return undefined;
-}
-
-function requireInternalToken(req: Request, res: Response, next: NextFunction) {
-  res.type("application/json");
-  const expected = process.env.INTERNAL_API_TOKEN;
-  if (!expected) {
-    return res.status(503).json({
-      code: "INTERNAL_API_DISABLED",
-      message: "INTERNAL_API_TOKEN is not configured on the server",
-    });
-  }
-  const provided = extractToken(req);
-  if (!provided) {
-    return res.status(401).json({
-      code: "MISSING_INTERNAL_TOKEN",
-      message: "Missing token. Provide one of: Authorization: Bearer, X-Internal-Token, X-API-Key.",
-    });
-  }
-  if (provided !== expected) {
-    return res.status(403).json({ code: "INVALID_INTERNAL_TOKEN", message: "Invalid token" });
-  }
-  next();
-}
-
-// ---------------------------------------------------------------------
-// Shared query parsers / response helpers
-// ---------------------------------------------------------------------
-
-function parseFacilityKey(req: Request, res: Response, required: boolean): string | undefined | false {
-  const raw = req.query.facilityKey ? String(req.query.facilityKey).trim().toUpperCase() : "";
-  if (!raw) {
-    if (required) {
-      res.status(400).json({ code: "MISSING_FACILITY_KEY", message: "facilityKey query parameter is required (A/B/C/D)" });
-      return false;
-    }
-    return "";
-  }
-  if (!isValidFacilityKey(raw)) {
-    res.status(400).json({
-      code: "INVALID_FACILITY_KEY",
-      message: `facilityKey must be one of ${VALID_FACILITY_KEYS.join(", ")}`,
-      received: raw,
-    });
-    return false;
-  }
-  return raw;
-}
-
-function sendServiceError(res: Response, defaultCode: string, err: any) {
-  const status = err?.status ?? 500;
-  const code = err?.code ?? defaultCode;
-  res.status(status).json({ code, message: err?.message || String(err) });
-}
-
-// ---------------------------------------------------------------------
-// Routes
-// ---------------------------------------------------------------------
+import { requireInternalToken } from "./internal.auth";
+import { parseFacilityKey, sendServiceError } from "./internal.helpers";
 
 export function registerInternalApi(app: Express) {
-  // Auth gate for everything under /api/internal.
   app.use("/api/internal", requireInternalToken);
 
   app.get("/api/internal/admin/overview", async (_req, res) => {
@@ -214,7 +133,6 @@ export function registerInternalApi(app: Express) {
     }
   });
 
-  // JSON 404 fallback for any unknown /api/internal/* path.
   app.use("/api/internal", (_req, res) => {
     res.status(404).json({ code: "INTERNAL_ROUTE_NOT_FOUND", message: "Not found" });
   });

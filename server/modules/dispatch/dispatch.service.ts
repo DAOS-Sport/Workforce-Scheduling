@@ -133,7 +133,42 @@ export const dispatchService = {
     return storage.updateDispatchShift(id, updateData);
   },
 
-  remove: (id: number) => storage.deleteDispatchShift(id),
+  async remove(id: number, actor = "admin", reason?: string): Promise<boolean> {
+    const deleted = await storage.deleteDispatchShift(id, actor, reason);
+    if (!deleted) {
+      const err: any = new Error("找不到派遣班次或已是取消狀態");
+      err.status = 404;
+      throw err;
+    }
+    return deleted;
+  },
+
+  async restore(id: number, actor = "admin"): Promise<DispatchShift> {
+    const restored = await storage.restoreDispatchShift(id, actor);
+    if (!restored) {
+      const err: any = new Error("找不到派遣班次或並非已取消狀態");
+      err.status = 404;
+      throw err;
+    }
+    return restored;
+  },
+
+  async listCancelledByRegionCodes(regionCodeCsv: string, startDate: string, endDate: string): Promise<DispatchShift[]> {
+    const codes = regionCodeCsv.split(",").map((c) => c.trim()).filter(Boolean);
+    const seen = new Set<number>();
+    const out: DispatchShift[] = [];
+    for (const code of codes) {
+      const region = await storage.getRegionByCode(code);
+      if (!region) continue;
+      const records = await storage.getCancelledDispatchShiftsByRegionAndDateRange(region.id, startDate, endDate);
+      for (const r of records) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        out.push(r);
+      }
+    }
+    return out;
+  },
 
   async reconcileLinks() {
     const updated = await storage.reconcileDispatchLinks();

@@ -1,5 +1,5 @@
 import { storage } from "../../storage";
-import { isValidLineUserId } from "../../line-webhook";
+import { isValidLineUserId } from "../line/lineSignature";
 
 function err(status: number, message: string, code?: string): Error {
   const e: any = new Error(message);

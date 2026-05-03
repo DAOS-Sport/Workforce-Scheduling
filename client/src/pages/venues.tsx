@@ -339,7 +339,7 @@ export default function VenuesPage() {
             onClick={async () => {
               setVenueSyncing(true);
               try {
-                const res = await apiRequest("POST", "/api/ragic-venue-sync");
+                const res = await apiRequest("POST", "/api/ragic/sync-venues");
                 const data = await res.json();
                 queryClient.invalidateQueries({ queryKey: ["/api/venues", activeRegion] });
                 toast({

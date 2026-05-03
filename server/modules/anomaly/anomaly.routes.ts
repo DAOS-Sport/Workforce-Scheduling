@@ -2,6 +2,7 @@ import { type Express } from "express";
 import { type Server } from "http";
 import multer from "multer";
 import { anomalyService } from "./anomaly.service";
+import { ok, created, fail, notFound } from "../../shared/http/response";
 
 export function mountAnomalyRoutes(_httpServer: Server, app: Express): void {
   const anomalyUpload = multer({
@@ -18,53 +19,41 @@ export function mountAnomalyRoutes(_httpServer: Server, app: Express): void {
       const body = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body;
       const files = (req.files as Express.Multer.File[]) || [];
       const imageUrls = files.map((f) => `data:${f.mimetype};base64,${f.buffer.toString("base64")}`);
-
       const { record, reportText } = await anomalyService.create({
-        employee: body.employee,
-        clockResult: body.clockResult,
-        errorMsg: body.errorMsg,
-        context: body.context,
-        userNote: body.userNote,
-        imageUrls,
+        employee: body.employee, clockResult: body.clockResult, errorMsg: body.errorMsg,
+        context: body.context, userNote: body.userNote, imageUrls,
       });
-
-      res.json({
-        id: record.id,
-        reportText,
-        imageUrls,
-        createdAt: record.createdAt,
-        lineUrl: "https://lin.ee/TupPc0V",
-      });
+      created(res, { id: record.id, reportText, imageUrls, createdAt: record.createdAt, lineUrl: "https://lin.ee/TupPc0V" });
     } catch (err: any) {
       console.error("Anomaly report error:", err);
-      res.status(err.status || 500).json({ message: err.message });
+      fail(res, err.status || 500, err.message);
     }
   });
 
   app.get("/api/anomaly-reports", async (_req, res) => {
     try {
-      res.json(await anomalyService.list());
+      ok(res, await anomalyService.list());
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      fail(res, 500, err.message);
     }
   });
 
   app.get("/api/anomaly-reports/:id", async (req, res) => {
     try {
       const report = await anomalyService.get(Number(req.params.id));
-      if (!report) return res.status(404).json({ message: "找不到此異常報告" });
-      res.json(report);
+      if (!report) return notFound(res, "找不到此異常報告");
+      ok(res, report);
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      fail(res, 500, err.message);
     }
   });
 
   app.patch("/api/anomaly-reports/batch/resolution", async (req, res) => {
     try {
       const { ids, resolution, resolvedNote } = req.body;
-      res.json(await anomalyService.batchUpdateResolution(ids, resolution, resolvedNote));
+      ok(res, await anomalyService.batchUpdateResolution(ids, resolution, resolvedNote));
     } catch (err: any) {
-      res.status(err.status || 500).json({ message: err.message });
+      fail(res, err.status || 500, err.message);
     }
   });
 
@@ -72,27 +61,27 @@ export function mountAnomalyRoutes(_httpServer: Server, app: Express): void {
     try {
       const { resolution, resolvedNote } = req.body;
       const record = await anomalyService.updateResolution(Number(req.params.id), resolution, resolvedNote);
-      if (!record) return res.status(404).json({ message: "找不到此異常報告" });
-      res.json(record);
+      if (!record) return notFound(res, "找不到此異常報告");
+      ok(res, record);
     } catch (err: any) {
-      res.status(err.status || 500).json({ message: err.message });
+      fail(res, err.status || 500, err.message);
     }
   });
 
   app.post("/api/anomaly-reports/batch/delete", async (req, res) => {
     try {
-      res.json(await anomalyService.batchDelete(req.body?.ids));
+      ok(res, await anomalyService.batchDelete(req.body?.ids));
     } catch (err: any) {
-      res.status(err.status || 500).json({ message: err.message });
+      fail(res, err.status || 500, err.message);
     }
   });
 
   app.delete("/api/anomaly-reports/:id", async (req, res) => {
     try {
       await anomalyService.remove(Number(req.params.id));
-      res.json({ success: true });
+      ok(res, { success: true });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      fail(res, 500, err.message);
     }
   });
 }

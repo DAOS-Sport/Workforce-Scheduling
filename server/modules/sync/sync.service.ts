@@ -5,12 +5,12 @@
  * this file is the single seam routes / cron / future internal-api should
  * call so the underlying functions can be moved without breaking callers.
  */
-import { syncFromRagic, syncVenuesFromRagic } from "../../ragic";
+import { syncFromRagic, syncVenuesFromRagic } from "../ragic/ragic.service";
 import {
   sendShiftReminders,
   sendWeeklySchedulePush,
   sendWeeklyLateReport,
-} from "../../line-webhook";
+} from "../line/linePush.service";
 
 export const syncService = {
   ragicVenues: () => syncVenuesFromRagic(),

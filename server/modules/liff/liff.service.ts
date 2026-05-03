@@ -11,13 +11,9 @@
  * signature, they're authenticated by lineUserId / employeeId in the body.
  */
 import { storage } from "../../storage";
-import {
-  processClockIn,
-  pushToLine,
-  isValidLineUserId,
-  formatClockInMessage,
-  pushPendingGuidelinesIfAny,
-} from "../../line-webhook";
+import { processClockIn, formatClockInMessage } from "../line/lineClock.service";
+import { pushToLine, pushPendingGuidelinesIfAny } from "../line/linePush.service";
+import { isValidLineUserId } from "../line/lineSignature";
 
 export interface LiffClockInPayload {
   lineUserId?: string;

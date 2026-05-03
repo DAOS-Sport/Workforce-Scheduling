@@ -305,11 +305,30 @@ export const dispatchShifts = pgTable("dispatch_shifts", {
   role: text("role").notNull().default("救生"),
   notes: text("notes"),
   linkedEmployeeId: integer("linked_employee_id"),
+  status: text("status").notNull().default("active"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledBy: text("cancelled_by"),
+  cancelReason: text("cancel_reason"),
 });
 
-export const insertDispatchShiftSchema = createInsertSchema(dispatchShifts).omit({ id: true });
+export const insertDispatchShiftSchema = createInsertSchema(dispatchShifts).omit({
+  id: true,
+  status: true,
+  cancelledAt: true,
+  cancelledBy: true,
+  cancelReason: true,
+});
 export type InsertDispatchShift = z.infer<typeof insertDispatchShiftSchema>;
 export type DispatchShift = typeof dispatchShifts.$inferSelect;
+
+export const dispatchShiftAuditLog = pgTable("dispatch_shift_audit_log", {
+  id: serial("id").primaryKey(),
+  dispatchShiftId: integer("dispatch_shift_id").notNull(),
+  action: text("action").notNull(),
+  actor: text("actor").notNull(),
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 export const anomalyReports = pgTable("anomaly_reports", {
   id: serial("id").primaryKey(),
