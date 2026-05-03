@@ -829,6 +829,15 @@ function GuidelinesCheckScreen({
   const { data, isLoading, isError } = useQuery<{ items: GuidelineItem[]; allAcknowledged: boolean }>({
     queryKey: ["/api/portal/guidelines-check", employee.id],
     staleTime: 60 * 1000,
+    queryFn: async () => {
+      const lineId = employee.lineUserId || localStorage.getItem("portal_line_user_id") || "";
+      const res = await fetch(`/api/portal/guidelines-check/${employee.id}`, {
+        headers: { "x-line-user-id": lineId },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
   });
 
   // Auto-advance when all guidelines are already acknowledged
@@ -859,10 +868,14 @@ function GuidelinesCheckScreen({
     mutationFn: async () => {
       if (!data) return;
       const guidelineIds = data.items.filter((i) => !i.acknowledged).map((i) => i.id);
-      const res = await apiRequest("POST", "/api/portal/acknowledge-all", {
-        employeeId: employee.id,
-        guidelineIds,
+      const lineId = employee.lineUserId || localStorage.getItem("portal_line_user_id") || "";
+      const res = await fetch("/api/portal/acknowledge-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-line-user-id": lineId },
+        body: JSON.stringify({ employeeId: employee.id, guidelineIds }),
+        credentials: "include",
       });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       return res.json();
     },
     onSuccess: () => {
@@ -1016,8 +1029,12 @@ function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employee
   const { data: fullItem, isLoading: imagesLoading } = useQuery<GuidelineItem>({
     queryKey: ["/api/portal/guidelines", item.id, employeeId],
     queryFn: async () => {
+      const lineId = (typeof window !== "undefined" ? localStorage.getItem("portal_line_user_id") : null) || "";
       const url = `/api/portal/guidelines/${item.id}?employeeId=${employeeId}`;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, {
+        headers: { "x-line-user-id": lineId },
+        credentials: "include",
+      });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -1304,6 +1321,15 @@ function VenueShiftInfo({ employee, result }: { employee: PortalEmployee; result
   const { data: todayShifts = [] } = useQuery<PortalShift[]>({
     queryKey: ["/api/portal/my-shifts", employee.id, today, today],
     staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const lineId = employee.lineUserId || localStorage.getItem("portal_line_user_id") || "";
+      const res = await fetch(`/api/portal/my-shifts/${employee.id}/${today}/${today}`, {
+        headers: { "x-line-user-id": lineId },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
   });
 
   const matchedVenue = result?.venueName;
@@ -2872,7 +2898,11 @@ function OutingSection({ employee }: { employee: PortalEmployee }) {
   const { data: records = [], refetch } = useQuery<OutingRecord[]>({
     queryKey: ["/api/portal/outing-records", employee.id],
     queryFn: async () => {
-      const res = await fetch(`/api/portal/outing-records/${employee.id}`);
+      const lineId = employee.lineUserId || localStorage.getItem("portal_line_user_id") || "";
+      const res = await fetch(`/api/portal/outing-records/${employee.id}`, {
+        headers: { "x-line-user-id": lineId },
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("載入失敗");
       return res.json();
     },
@@ -2954,16 +2984,23 @@ function OutingSection({ employee }: { employee: PortalEmployee }) {
     }
     setMode("submitting");
     try {
-      await apiRequest("POST", "/api/portal/outing-record", {
-        employeeId: employee.id,
-        outType,
-        destination: destination.trim() || null,
-        note: note.trim() || null,
-        latitude: gps!.lat,
-        longitude: gps!.lng,
-        accuracy: gps!.accuracy,
-        imageUrl: photo,
+      const lineId = employee.lineUserId || localStorage.getItem("portal_line_user_id") || "";
+      const _outingRes = await fetch("/api/portal/outing-record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-line-user-id": lineId },
+        body: JSON.stringify({
+          employeeId: employee.id,
+          outType,
+          destination: destination.trim() || null,
+          note: note.trim() || null,
+          latitude: gps!.lat,
+          longitude: gps!.lng,
+          accuracy: gps!.accuracy,
+          imageUrl: photo,
+        }),
+        credentials: "include",
       });
+      if (!_outingRes.ok) throw new Error(`${_outingRes.status}: ${await _outingRes.text()}`);
       toast({ title: outType === "out" ? "✅ 外出簽到完成" : "✅ 返回簽到完成" });
       resetForm();
       refetch();
@@ -3251,11 +3288,19 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const monthStart = format(startOfMonth(currentMonth), "yyyy-MM-dd");
   const monthEnd = format(endOfMonth(currentMonth), "yyyy-MM-dd");
 
+  const portalLineUserId = employee.lineUserId || (typeof window !== "undefined" ? localStorage.getItem("portal_line_user_id") : null) || "";
+
   const { data: myShifts = [], isLoading: shiftsLoading } = useQuery<PortalShift[]>({
     queryKey: ["/api/portal/my-shifts", employee.id, monthStart, monthEnd],
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/my-shifts/${employee.id}/${monthStart}/${monthEnd}`, {
+        headers: { "x-line-user-id": portalLineUserId },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
   });
-
-  const portalLineUserId = employee.lineUserId || (typeof window !== "undefined" ? localStorage.getItem("portal_line_user_id") : null) || "";
   type UpcomingCoworkerDay = {
     date: string;
     dayLabel: string;
@@ -3297,14 +3342,30 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
 
   const { data: attendance, isLoading: attendanceLoading } = useQuery<AttendanceSummary>({
     queryKey: ["/api/portal/my-attendance", employee.id],
-    enabled: !!employee?.id,
+    enabled: !!employee?.id && !!portalLineUserId,
     staleTime: 60 * 1000,
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/my-attendance/${employee.id}`, {
+        headers: { "x-line-user-id": portalLineUserId },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
   });
 
   const { data: guidelinesData } = useQuery<{ items: GuidelineItem[]; allAcknowledged: boolean }>({
     queryKey: ["/api/portal/guidelines-check", employee.id],
-    enabled: activeView === "guidelines" && !!employee?.id,
+    enabled: activeView === "guidelines" && !!employee?.id && !!portalLineUserId,
     staleTime: 60 * 1000,
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/guidelines-check/${employee.id}`, {
+        headers: { "x-line-user-id": portalLineUserId },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
   });
 
   const { data: amendments = [] } = useQuery<ClockAmendmentRecord[]>({
