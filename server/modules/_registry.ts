@@ -13,7 +13,13 @@
  * naming convention: `xxxService.findAll() / get(id) / create(data, actor) /
  * update(id, patch, actor) / remove(id)`. Errors throw with `.status` set;
  * the route catch-block uses `err.status || 500`.
- * Per-domain repository decomposition continues as Task #71 (重構 B).
+ *
+ * Task #71 重構 B: the three largest route files (portal/clock/system)
+ * are further split into per-feature sub-route files (e.g.
+ * `portal.auth.routes.ts`, `portal.workmates.routes.ts`,
+ * `clock.amendment.routes.ts`, `system.salary.routes.ts`); each module's
+ * top-level `<name>.routes.ts` is now a thin umbrella that calls the
+ * sub-mounts. The registry signature is unchanged.
  */
 import type { Express } from "express";
 import type { Server } from "http";
