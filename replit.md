@@ -44,7 +44,40 @@ The system is built with a modern web stack:
             - `ragicClient.ts` — pure HTTP transport (`fetchAllRagicRecords`, retry, paging)
             - `ragic.service.ts` — `syncFromRagic`, `syncVenuesFromRagic`, `VENUE_DATA`, all role/status/department mapping. Imports `isValidLineUserId` statically from `modules/line/lineSignature` (replaces the original dynamic `await import("./line-webhook")` — safe because `lineSignature` only depends on `crypto`).
             - `ragic.routes.ts` — owns `POST /api/ragic-sync` and `POST /api/ragic-venue-sync` (moved out of `modules/sync/sync.routes.ts`; URLs and response shapes unchanged). Mounted via `mountRagicRoutes()` in `_registry.ts` immediately after `mountSyncRoutes()`.
-        - All 8 importers (`bootstrap/scheduler.ts`, `modules/line/{line.routes,line.service}`, `modules/sync/sync.service`, `modules/venue/venue.service`, `modules/portal/portal.service`, `modules/system/system.service`, `server/routes.ts`) keep using the root paths — the shims forward every public name. No API URL / response shape / LINE message text / Ragic mapping / cron schedule / DB schema changes.
+        - All importers (`bootstrap/scheduler.ts`, `modules/{line,liff,sync,venue,portal,system}/...`, `server/routes.ts`) keep using the root paths — the shims forward every public name. No API URL / response shape / LINE message text / Ragic mapping / cron schedule / DB schema changes.
+    - **LIFF + Ragic module split (Task #73 重構 D — final cleanup)**:
+        - `server/modules/liff/` — new module dedicated to LIFF browser-frame endpoints. `liff.routes.ts` owns `POST /api/liff/clock-in` (extracted from `modules/line/line.routes.ts`); `liff.service.ts` owns `liffService.processLiffClockIn()` + `liffService.backfillLineIdIfNeeded()` (renamed from `lineService.*`, same implementation). `modules/line/line.service.ts` was deleted as it's no longer needed — `modules/line/line.routes.ts` now only owns `POST /api/line/webhook` (Messaging API). `/api/liff/` remains on the public-prefix bypass list (`server/config/openApiPrefixes.ts`).
+        - `server/modules/ragic/ragic.routes.ts` — added `POST /api/ragic/sync-employees` and `POST /api/ragic/sync-venues` for the admin "手動觸發 Ragic 同步" buttons (module-scoped URLs). Both delegate to the same `syncFromRagic()` / `syncVenuesFromRagic()` service functions as the legacy `POST /api/ragic-sync` and `POST /api/ragic-venue-sync`, so request/response shapes are identical. All four routes are admin-gated by `gateAdminApi`.
+        - `server/modules/_registry.ts` mounts `mountLiffRoutes(httpServer, app)` immediately after `mountLineLiffRoutes(...)`, keeping line / liff side by side in the registration order.
+    - **Final modules/ directory layout (after Tasks #69 → #73)**:
+        ```
+        server/modules/
+          _registry.ts                    ← single fan-out (mounts all 21 modules)
+          shift/        types/repository/audit/validation/service/routes (canonical)
+          admin/        admin.routes.ts (auth bootstrap — mounted from server/routes.ts)
+          region/       region.{repository,service,routes}.ts
+          employee/     employee.{repository,service,routes}.ts
+          venue/        venue.{repository,service,routes}.ts
+          dispatch/     dispatch.{repository,service,routes}.ts
+          scheduleSlot/ scheduleSlot.{repository,service,routes}.ts
+          attendance/   attendance.{repository,service,routes}.ts
+          guideline/    guideline.{repository,service,routes}.ts
+          portal/       portal.service.ts + 5 sub-routes (auth/shifts/workmates/guidelines/attendance) + portal.routes.ts umbrella
+          sync/         sync.{service,routes}.ts (shift reminders + weekly schedule + late report)
+          ragic/        ragicClient.ts + ragic.{service,routes}.ts (Ragic transport + sync + admin endpoints)
+          line/         lineSignature.ts + lineHelpers.ts + line{Clock,Push,Webhook}.service.ts + line.routes.ts (Messaging API webhook only)
+          liff/         liff.{service,routes}.ts (LIFF clock-in)
+          internal/     internal.{service,routes}.ts (X-Internal-Token-gated server-to-server API)
+          clock/        clock.{repository,service}.ts + 2 sub-routes (records/amendment) + clock.routes.ts umbrella
+          overtime/     overtime.{repository,service,routes}.ts
+          anomaly/      anomaly.{repository,service,routes}.ts
+          notification/ notification.{repository,service,routes}.ts
+          system/       system.{repository,service}.ts + 3 sub-routes (config/salary/fourWeek) + system.routes.ts umbrella
+          leave/        leave.{repository,service,routes}.ts
+          announcement/ announcement.{repository,service,routes}.ts
+          importExport/ index.ts (XLSX → multi-table writes)
+        ```
+        Boundaries: `*.routes.ts` only parse/validate/serialize → call `*.service.ts` → service calls `storage` (façade over `*.repository.ts`). Cross-module calls go through services, never repositories. Root files `server/{line-webhook,internal-api,ragic}.ts` remain as thin re-export shims for any older importer paths.
     - **Task #50 protection chain (preserved end-to-end, now inside `shiftRepository`)**: `shiftRepository.updateShift` / `deleteShift` throw `Task #50 protection: shift mutation requires force=true` unless `force=true` is passed. The admin UI direct edit/delete + bulk-replace buttons send `force:true`; automation paths (Ragic sync etc.) omit it and are blocked. Audit-log rows are written inside `shiftRepository.createShift/updateShift/deleteShift/restoreShift`. `restoreShift` intentionally has no `force` gate (restoring a cancelled row to active is non-destructive — see the inline comment on the function for the rationale).
 - **Core Features**:
     - **Regional Management**: Organizes operations across four distinct regions (三蘆戰區, 松山國小, 新竹區, 內勤) using tab-based navigation.

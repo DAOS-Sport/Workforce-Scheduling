@@ -1,3 +1,9 @@
+/**
+ * LINE HTTP route layer.
+ *
+ * Owns LINE Messaging API webhook (`POST /api/line/webhook`). The legacy
+ * `POST /api/liff/clock-in` was extracted to modules/liff/ in Task #73 重構 D.
+ */
 import { type Express, type Request, type Response } from "express";
 import { type Server } from "http";
 import {
@@ -5,7 +11,6 @@ import {
   verifyForwardedRequest,
   handleLineWebhook,
 } from "../../line-webhook";
-import { lineService } from "./line.service";
 
 export function mountLineLiffRoutes(_httpServer: Server, app: Express): void {
   app.post("/api/line/webhook", async (req: Request, res: Response) => {
@@ -32,16 +37,6 @@ export function mountLineLiffRoutes(_httpServer: Server, app: Express): void {
       await handleLineWebhook(body);
     } catch (err) {
       console.error("[LINE Webhook] Error handling event:", err);
-    }
-  });
-
-  app.post("/api/liff/clock-in", async (req: Request, res: Response) => {
-    try {
-      const result = await lineService.processLiffClockIn(req.body);
-      res.json(result);
-    } catch (err: any) {
-      console.error("[Clock-in] Error:", err);
-      res.status(err.status || 500).json({ message: err.message });
     }
   });
 }

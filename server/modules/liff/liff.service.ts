@@ -1,10 +1,14 @@
 /**
- * LINE / LIFF service.
+ * LIFF service (Task #73 重構 D — extracted from modules/line/line.service.ts).
  *
- * Owns the LIFF clock-in orchestration (signature/channel verification still
- * lives in line-webhook.ts and is invoked from the route layer because it
- * needs the raw HTTP request). Push-on-success and the auto-back-fill of an
- * employee's lineId belong here so any future caller can reuse them.
+ * Owns the LIFF clock-in orchestration: GPS-based clock-in handling,
+ * automatic LINE-ID back-fill on first successful LIFF call, and the
+ * post-clock-in LINE push (with pending-guideline reminder fan-out).
+ *
+ * The low-level signature/channel verification still lives under
+ * modules/line/ and is invoked from the LINE webhook route layer because
+ * it needs the raw HTTP request — LIFF requests don't carry a LINE
+ * signature, they're authenticated by lineUserId / employeeId in the body.
  */
 import { storage } from "../../storage";
 import {
@@ -24,7 +28,7 @@ export interface LiffClockInPayload {
   clockType?: string;
 }
 
-export const lineService = {
+export const liffService = {
   async backfillLineIdIfNeeded(lineUserId: string | undefined): Promise<void> {
     if (!lineUserId || !isValidLineUserId(lineUserId)) return;
     const emp = await storage.getEmployeeByLineId(lineUserId);
