@@ -1,10 +1,9 @@
-import { createServer } from "http";
 import { createApp, installErrorHandler } from "./app";
+import { buildHttpServer, startListening } from "./http";
 import { runStartupMigrations } from "./migrations";
 import { registerCronJobs } from "./scheduler";
 import { setupClientServing } from "./viteOrStatic";
 import { registerRoutes } from "../routes";
-import { log } from "../shared/log";
 
 /**
  * The single entry point used by server/index.ts.
@@ -33,7 +32,7 @@ export async function bootstrap(): Promise<void> {
 
   // 3) build app
   const app = await createApp();
-  const httpServer = createServer(app);
+  const httpServer = buildHttpServer(app);
 
   // 4) routes
   await registerRoutes(httpServer, app);
@@ -44,18 +43,9 @@ export async function bootstrap(): Promise<void> {
   // 6) client (Vite dev or static prod) — MUST come after API routes
   await setupClientServing(httpServer, app);
 
-  // 7) listen
-  const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-      // 8) schedule cron jobs (skipped in dev)
-      registerCronJobs();
-    },
-  );
+  // 7) listen (delegates to bootstrap/http.ts)
+  startListening(httpServer, () => {
+    // 8) schedule cron jobs (skipped in dev)
+    registerCronJobs();
+  });
 }

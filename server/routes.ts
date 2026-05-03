@@ -24,6 +24,7 @@ import { registerInternalApi } from "./internal-api";
 import { gateAdminApi } from "./shared/middleware/requireAdmin";
 import { registerModuleRoutes } from "./modules/_registry";
 import { mountAdminAuthRoutes } from "./modules/admin/admin.routes";
+import { corsFor } from "./shared/middleware/cors";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -49,17 +50,10 @@ export async function registerRoutes(
   }
 
   // ── 2. CORS shims for externally-consumed endpoints ────────────────────
-  const corsHeaders = (methods: string) => (req: any, res: any, next: any) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", methods);
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    if (req.method === "OPTIONS") return res.sendStatus(204);
-    next();
-  };
-  app.use("/api/anomaly-report",        corsHeaders("GET, POST, OPTIONS"));
-  app.use("/api/anomaly-reports",       corsHeaders("GET, PATCH, DELETE, OPTIONS"));
-  app.use("/api/notification-recipients", corsHeaders("GET, POST, PATCH, DELETE, OPTIONS"));
-  app.use("/api/test-email",            corsHeaders("POST, OPTIONS"));
+  app.use("/api/anomaly-report",          corsFor("GET, POST, OPTIONS"));
+  app.use("/api/anomaly-reports",         corsFor("GET, PATCH, DELETE, OPTIONS"));
+  app.use("/api/notification-recipients", corsFor("GET, POST, PATCH, DELETE, OPTIONS"));
+  app.use("/api/test-email",              corsFor("POST, OPTIONS"));
 
   // ── 3. Auth bootstrap (strict order matters!) ──────────────────────────
   //   a) Admin auth routes — mount BEFORE the gate so /api/admin/login

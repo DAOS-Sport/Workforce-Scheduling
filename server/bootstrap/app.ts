@@ -1,6 +1,7 @@
-import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import express, { type Express } from "express";
 import { log } from "../shared/log";
 import { installSession, ensureSessionTable } from "./session";
+import { globalErrorHandler } from "../shared/http/errorHandler";
 
 declare module "http" {
   interface IncomingMessage {
@@ -73,13 +74,8 @@ export async function createApp(): Promise<Express> {
 
 /**
  * Final JSON error handler. Mount AFTER all routes.
+ * Delegates to the canonical globalErrorHandler in shared/http/errorHandler.ts.
  */
 export function installErrorHandler(app: Express): void {
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    console.error("Internal Server Error:", err);
-    if (res.headersSent) return next(err);
-    return res.status(status).json({ message });
-  });
+  app.use(globalErrorHandler);
 }
