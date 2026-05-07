@@ -3216,7 +3216,7 @@ export default function SchedulePage() {
                     <SelectValue placeholder="選擇場館" />
                   </SelectTrigger>
                   <SelectContent>
-                    {venues.filter((v) => venuesWithRequirements.has(v.id)).map((v) => (
+                    {venues.map((v) => (
                       <SelectItem key={v.id} value={v.id.toString()}>{v.shortName}</SelectItem>
                     ))}
                   </SelectContent>
