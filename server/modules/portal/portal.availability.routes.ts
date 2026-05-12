@@ -101,6 +101,13 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
           return badRequest(res, "時間格式須為 HH:MM");
         }
         if (startTime >= endTime) return badRequest(res, "結束時間必須晚於開始時間");
+        // 勞基法：單日工時上限 12 小時（正常 8h + 延長 4h）
+        const [sh, sm] = (startTime as string).split(":").map(Number);
+        const [eh, em] = (endTime as string).split(":").map(Number);
+        const durationMin = (eh * 60 + em) - (sh * 60 + sm);
+        if (durationMin > 12 * 60) {
+          return badRequest(res, "單次時段不得超過 12 小時（勞基法每日工時上限）");
+        }
       }
       const windowErr = await checkWindowOpen(date);
       if (windowErr) return fail(res, 403, windowErr);
@@ -115,11 +122,25 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       if (!isOffRequest && empType === "full_time") {
         return badRequest(res, "正職員工僅可填寫休假意願，無法選擇時段");
       }
+      // 同一天不得重複填寫（正職、兼職皆適用）
+      const alreadyExists = await availabilityRepository.existsOnDate(Number(employeeId), date);
+      if (alreadyExists) {
+        return badRequest(res, "該日已有填寫記錄，請先刪除後再重新填寫");
+      }
       if (isOffRequest) {
         const { weekStart, weekEnd } = getIsoWeekBounds(date);
         const weekCount = await availabilityRepository.countOffRequestsInWeek(Number(employeeId), weekStart, weekEnd);
         if (weekCount >= 2) {
           return badRequest(res, "每週最多標記 2 天休假意願");
+        }
+        // 勞工請假規則第7條：事假每年上限 14 天
+        const leaveNote = (note as string | undefined)?.trim() ?? "";
+        if (leaveNote === "事假") {
+          const year = Number(date.slice(0, 4));
+          const yearCount = await availabilityRepository.countOffRequestsByNoteAndYear(Number(employeeId), "事假", year);
+          if (yearCount >= 14) {
+            return badRequest(res, `事假已達今年上限 14 天（勞工請假規則第7條）`);
+          }
         }
       }
       if (!isOffRequest && emp.regionId) {

@@ -71,4 +71,41 @@ export const availabilityRepository = {
       );
     return row?.cnt ?? 0;
   },
+
+  /** 計算某員工在指定年度中，特定假別（note 完全符合）的事假天數 */
+  async countOffRequestsByNoteAndYear(
+    employeeId: number,
+    note: string,
+    year: number
+  ): Promise<number> {
+    const yearStart = `${year}-01-01`;
+    const yearEnd = `${year}-12-31`;
+    const [row] = await db
+      .select({ cnt: sql<number>`count(*)::int` })
+      .from(shiftAvailabilities)
+      .where(
+        and(
+          eq(shiftAvailabilities.employeeId, employeeId),
+          eq(shiftAvailabilities.entryType, "off_request"),
+          eq(shiftAvailabilities.note, note),
+          gte(shiftAvailabilities.date, yearStart),
+          lte(shiftAvailabilities.date, yearEnd)
+        )
+      );
+    return row?.cnt ?? 0;
+  },
+
+  /** 檢查同一員工在同一天是否已有任何填寫記錄（防止重複） */
+  async existsOnDate(employeeId: number, date: string): Promise<boolean> {
+    const [row] = await db
+      .select({ cnt: sql<number>`count(*)::int` })
+      .from(shiftAvailabilities)
+      .where(
+        and(
+          eq(shiftAvailabilities.employeeId, employeeId),
+          eq(shiftAvailabilities.date, date)
+        )
+      );
+    return (row?.cnt ?? 0) > 0;
+  },
 };

@@ -3391,6 +3391,12 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [addAvailStart, setAddAvailStart] = useState("08:00");
   const [addAvailEnd, setAddAvailEnd] = useState("17:00");
   const [leaveTypeSheet, setLeaveTypeSheet] = useState<string | null>(null);
+  const addAvailDurationMin = (() => {
+    const [sh, sm] = addAvailStart.split(":").map(Number);
+    const [eh, em] = addAvailEnd.split(":").map(Number);
+    return (eh * 60 + em) - (sh * 60 + sm);
+  })();
+  const addAvailOver12h = addAvailDurationMin > 12 * 60;
 
   interface AvailWindow { targetYearMonth: string; openFrom: string; openUntil: string; }
   interface PortalAvail { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; note: string | null; }
@@ -4195,7 +4201,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           <div className="grid grid-cols-2 gap-2">
                             {(["特休", "事假"] as const).map(lt => (
                               <button key={lt}
-                                className={`h-11 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 ${lt === "特休" ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`}
+                                className={`h-11 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-50 ${lt === "特休" ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`}
                                 disabled={addAvailMutation.isPending}
                                 onClick={() => {
                                   addAvailMutation.mutate({ date: leaveTypeSheet, entryType: "off_request", note: lt });
@@ -4203,7 +4209,12 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 }}
                                 data-testid={`button-leave-type-${lt}`}
                               >
-                                {addAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : lt}
+                                {addAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                                  <>
+                                    <span>{lt}</span>
+                                    {lt === "事假" && <span className="text-[9px] font-normal opacity-80">每年上限14天</span>}
+                                  </>
+                                )}
                               </button>
                             ))}
                           </div>
@@ -4275,6 +4286,11 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                               超出場館開放時間（{regionHours.openTime.slice(0,5)}–{regionHours.closeTime.slice(0,5)}）
                             </div>
                           )}
+                          {addAvailOver12h && (
+                            <div className="text-[10px] text-red-600 bg-red-50 rounded-lg px-2 py-1 border border-red-200" data-testid="warn-over12h">
+                              時段超過 12 小時，不符合勞基法每日工時上限（正常8h＋延長4h）
+                            </div>
+                          )}
                           <div className="flex items-center gap-2">
                             <input type="time" value={addAvailStart}
                               min={regionHours?.openTime?.slice(0,5)}
@@ -4294,7 +4310,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                             <button
                               className="flex-1 h-9 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                               onClick={() => addAvailMutation.mutate({ date: addAvailDate, startTime: addAvailStart, endTime: addAvailEnd })}
-                              disabled={addAvailMutation.isPending || addAvailStart >= addAvailEnd}
+                              disabled={addAvailMutation.isPending || addAvailStart >= addAvailEnd || addAvailOver12h}
                               data-testid="button-submit-avail"
                             >
                               {addAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
