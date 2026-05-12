@@ -137,10 +137,9 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       if (isOffRequest && empType !== "full_time") {
         return badRequest(res, "兼職員工無法填寫休假意願，請選擇可上班時段");
       }
-      // Full-time may submit shift-preference notes (available, no startTime/endTime).
-      // They may NOT submit time-slot entries (startTime/endTime present).
-      if (!isOffRequest && empType === "full_time" && (startTime || endTime)) {
-        return badRequest(res, "正職員工無法選擇時段，僅可填寫休假意願或班別備註");
+      // Full-time may only submit off_request entries.
+      if (!isOffRequest && empType === "full_time") {
+        return badRequest(res, "正職員工僅可填寫休假意願");
       }
       // Part-time without startTime/endTime is only allowed when note is "都可以"
       if (!isOffRequest && empType !== "full_time" && !startTime && !endTime) {
