@@ -18,7 +18,8 @@ function extractLineUserId(req: import("express").Request): string | undefined {
     (typeof req.query.lineUserId === "string" ? req.query.lineUserId : undefined);
 }
 
-interface AvailWindow { targetYearMonth: string; openFrom: string; openUntil: string; }
+interface AvailWindowEntry { openFrom: string; openUntil: string; }
+interface AvailWindow { targetYearMonth: string; windows: AvailWindowEntry[]; }
 
 /** Returns today's date string (yyyy-MM-dd) in Asia/Taipei timezone. */
 function todayTaipei(): string {
@@ -42,19 +43,23 @@ function getIsoWeekBounds(dateStr: string): { weekStart: string; weekEnd: string
 async function checkWindowOpen(targetDate?: string): Promise<string | null> {
   const cfg = await storage.getSystemConfig("availability_window");
   if (!cfg?.value) return "管理員尚未設定意願填寫開放時間";
-  let win: AvailWindow;
-  try { win = JSON.parse(cfg.value) as AvailWindow; } catch { return "意願填寫設定格式錯誤"; }
-  if (!/^\d{4}-\d{2}$/.test(win.targetYearMonth) ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(win.openFrom) ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(win.openUntil)) {
-    return "意願填寫設定格式錯誤";
-  }
+  let raw: any;
+  try { raw = JSON.parse(cfg.value); } catch { return "意願填寫設定格式錯誤"; }
+  if (!/^\d{4}-\d{2}$/.test(raw.targetYearMonth)) return "意願填寫設定格式錯誤";
+  // Backward compat: old flat format had openFrom/openUntil at top level
+  const windows: AvailWindowEntry[] = raw.windows ??
+    (raw.openFrom ? [{ openFrom: raw.openFrom, openUntil: raw.openUntil }] : []);
   const today = todayTaipei();
-  if (today < win.openFrom || today > win.openUntil) return "目前不在開放填寫期間";
+  const isOpen = windows.some(w =>
+    /^\d{4}-\d{2}-\d{2}$/.test(w.openFrom) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(w.openUntil) &&
+    today >= w.openFrom && today <= w.openUntil
+  );
+  if (!isOpen) return "目前不在開放填寫期間";
   if (targetDate) {
-    const dateMonth = targetDate.slice(0, 7); // yyyy-MM
-    if (dateMonth !== win.targetYearMonth) {
-      return `填寫日期須屬於開放月份（${win.targetYearMonth}）`;
+    const dateMonth = targetDate.slice(0, 7);
+    if (dateMonth !== raw.targetYearMonth) {
+      return `填寫日期須屬於開放月份（${raw.targetYearMonth}）`;
     }
   }
   return null;

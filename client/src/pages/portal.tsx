@@ -3398,7 +3398,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   })();
   const addAvailOver12h = addAvailDurationMin > 12 * 60;
 
-  interface AvailWindow { targetYearMonth: string; openFrom: string; openUntil: string; }
+  interface AvailWindowEntry { openFrom: string; openUntil: string; }
+  interface AvailWindow { targetYearMonth: string; windows: AvailWindowEntry[]; openFrom?: string; openUntil?: string; }
   interface PortalAvail { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; note: string | null; createdAt: string | null; }
 
   const { data: availWindow } = useQuery<AvailWindow | null>({
@@ -3512,8 +3513,12 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
 
   const isAvailWindowOpen = useMemo(() => {
     if (!availWindow) return false;
+    if (availWindow.targetYearMonth !== availMonth) return false;
     const today = format(new Date(), "yyyy-MM-dd");
-    return today >= availWindow.openFrom && today <= availWindow.openUntil && availWindow.targetYearMonth === availMonth;
+    // Backward compat: old format had flat openFrom/openUntil
+    const wins: AvailWindowEntry[] = availWindow.windows ??
+      (availWindow.openFrom ? [{ openFrom: availWindow.openFrom, openUntil: availWindow.openUntil! }] : []);
+    return wins.some(w => w.openFrom && w.openUntil && today >= w.openFrom && today <= w.openUntil);
   }, [availWindow, availMonth]);
 
   const uploadCertMutation = useMutation({
@@ -4103,19 +4108,26 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
         <div className="max-w-lg mx-auto p-4 pb-8 space-y-3">
           {availWindow ? (
             <div className={`rounded-xl border px-4 py-3 text-sm ${isAvailWindowOpen ? "border-green-200 bg-green-50 text-green-800" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
-              {isAvailWindowOpen ? (
-                <>
-                  <p className="font-semibold">目前開放填寫</p>
-                  <p className="text-xs mt-0.5">填寫月份：{availWindow.targetYearMonth}｜截止：{availWindow.openUntil}</p>
-                </>
-              ) : (
-                <>
-                  <p className="font-semibold">目前不開放填寫</p>
-                  {availWindow.openFrom && availWindow.openUntil && (
-                    <p className="text-xs mt-0.5">開放期間：{availWindow.openFrom} ～ {availWindow.openUntil}</p>
-                  )}
-                </>
-              )}
+              {(() => {
+                const wins: AvailWindowEntry[] = availWindow.windows ??
+                  (availWindow.openFrom ? [{ openFrom: availWindow.openFrom, openUntil: availWindow.openUntil! }] : []);
+                const validWins = wins.filter(w => w.openFrom && w.openUntil);
+                return isAvailWindowOpen ? (
+                  <>
+                    <p className="font-semibold">目前開放填寫</p>
+                    <p className="text-xs mt-0.5">填寫月份：{availWindow.targetYearMonth}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold">目前不開放填寫</p>
+                    {validWins.map((w, i) => (
+                      <p key={i} className="text-xs mt-0.5">
+                        {validWins.length > 1 ? `第${i + 1}段` : "開放期間"}：{w.openFrom} ～ {w.openUntil}
+                      </p>
+                    ))}
+                  </>
+                );
+              })()}
             </div>
           ) : (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400">

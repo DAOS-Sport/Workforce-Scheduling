@@ -24,10 +24,10 @@ interface ShiftAvailability {
   note: string | null;
 }
 
+interface AvailWindowEntry { openFrom: string; openUntil: string; }
 interface AvailabilityWindow {
   targetYearMonth: string;
-  openFrom: string;
-  openUntil: string;
+  windows: AvailWindowEntry[];
 }
 
 const DAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
@@ -42,8 +42,10 @@ export default function AvailabilityPage() {
 
   const [windowForm, setWindowForm] = useState<AvailabilityWindow>({
     targetYearMonth: format(defaultNextMonth, "yyyy-MM"),
-    openFrom: format(now, "yyyy-MM-dd"),
-    openUntil: format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd"),
+    windows: [
+      { openFrom: format(now, "yyyy-MM-dd"), openUntil: format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd") },
+      { openFrom: "", openUntil: "" },
+    ],
   });
   const [windowLoaded, setWindowLoaded] = useState(false);
   const [holidaySet, setHolidaySet] = useState<Set<string>>(new Set());
@@ -93,12 +95,26 @@ export default function AvailabilityPage() {
   useEffect(() => {
     if (windowConfigData?.value && !windowLoaded) {
       try {
-        const parsed = JSON.parse(windowConfigData.value) as AvailabilityWindow;
-        setWindowForm(parsed);
+        const parsed = JSON.parse(windowConfigData.value);
+        let wins: AvailWindowEntry[] = parsed.windows ?? [];
+        // Backward compat: old flat format
+        if (!parsed.windows && parsed.openFrom) {
+          wins = [{ openFrom: parsed.openFrom, openUntil: parsed.openUntil }];
+        }
+        while (wins.length < 2) wins.push({ openFrom: "", openUntil: "" });
+        setWindowForm({ targetYearMonth: parsed.targetYearMonth, windows: wins.slice(0, 2) });
         setWindowLoaded(true);
       } catch {}
     }
   }, [windowConfigData, windowLoaded]);
+
+  function updateWindow(idx: number, field: "openFrom" | "openUntil", value: string) {
+    setWindowForm(prev => {
+      const wins = [...prev.windows];
+      wins[idx] = { ...wins[idx], [field]: value };
+      return { ...prev, windows: wins };
+    });
+  }
 
   useEffect(() => {
     try {
@@ -113,6 +129,12 @@ export default function AvailabilityPage() {
     const end = new Date(y, m, 0);
     return eachDayOfInterval({ start, end });
   }, [windowForm.targetYearMonth]);
+
+  const EMPTY_WIN: AvailWindowEntry = { openFrom: "", openUntil: "" };
+  const safeWindows: AvailWindowEntry[] = [
+    windowForm.windows?.[0] ?? EMPTY_WIN,
+    windowForm.windows?.[1] ?? EMPTY_WIN,
+  ];
 
   const saveWindowMutation = useMutation({
     mutationFn: async (form: AvailabilityWindow) => {
@@ -198,36 +220,63 @@ export default function AvailabilityPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <Label className="text-xs">目標填寫月份</Label>
-              <Input
-                type="month"
-                value={windowForm.targetYearMonth}
-                onChange={e => setWindowForm(prev => ({ ...prev, targetYearMonth: e.target.value }))}
-                className="h-8 text-sm"
-                data-testid="input-target-year-month"
-              />
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+              <div className="space-y-1">
+                <Label className="text-xs">目標填寫月份</Label>
+                <Input
+                  type="month"
+                  value={windowForm.targetYearMonth}
+                  onChange={e => setWindowForm(prev => ({ ...prev, targetYearMonth: e.target.value }))}
+                  className="h-8 text-sm"
+                  data-testid="input-target-year-month"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">第一段 開放開始</Label>
+                <Input
+                  type="date"
+                  value={safeWindows[0].openFrom}
+                  onChange={e => updateWindow(0, "openFrom", e.target.value)}
+                  className="h-8 text-sm"
+                  data-testid="input-open-from-1"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">第一段 開放截止</Label>
+                <Input
+                  type="date"
+                  value={safeWindows[0].openUntil}
+                  onChange={e => updateWindow(0, "openUntil", e.target.value)}
+                  className="h-8 text-sm"
+                  data-testid="input-open-until-1"
+                />
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">開放開始日期</Label>
-              <Input
-                type="date"
-                value={windowForm.openFrom}
-                onChange={e => setWindowForm(prev => ({ ...prev, openFrom: e.target.value }))}
-                className="h-8 text-sm"
-                data-testid="input-open-from"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">開放截止日期</Label>
-              <Input
-                type="date"
-                value={windowForm.openUntil}
-                onChange={e => setWindowForm(prev => ({ ...prev, openUntil: e.target.value }))}
-                className="h-8 text-sm"
-                data-testid="input-open-until"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+              <div className="flex items-center">
+                <span className="text-[11px] text-muted-foreground">第二段（選填）</span>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">第二段 開放開始</Label>
+                <Input
+                  type="date"
+                  value={safeWindows[1].openFrom}
+                  onChange={e => updateWindow(1, "openFrom", e.target.value)}
+                  className="h-8 text-sm"
+                  data-testid="input-open-from-2"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">第二段 開放截止</Label>
+                <Input
+                  type="date"
+                  value={safeWindows[1].openUntil}
+                  onChange={e => updateWindow(1, "openUntil", e.target.value)}
+                  className="h-8 text-sm"
+                  data-testid="input-open-until-2"
+                />
+              </div>
             </div>
           </div>
           <Button
