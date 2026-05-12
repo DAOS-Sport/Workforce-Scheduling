@@ -93,6 +93,15 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       if (windowErr) return fail(res, 403, windowErr);
       const auth = await portalService.verifyCaller(Number(employeeId), extractLineUserId(req));
       if (!auth.ok) return fail(res, auth.status, auth.message ?? "未授權", { code: auth.code });
+      const emp = await storage.getEmployee(Number(employeeId));
+      if (!emp) return notFound(res, "找不到員工資料");
+      const empType = emp.employmentType ?? "full_time";
+      if (isOffRequest && empType !== "full_time") {
+        return badRequest(res, "兼職員工無法填寫休假意願，請選擇可上班時段");
+      }
+      if (!isOffRequest && empType === "full_time") {
+        return badRequest(res, "正職員工僅可填寫休假意願，無法選擇時段");
+      }
       const row = await availabilityRepository.create({
         employeeId: Number(employeeId),
         date,

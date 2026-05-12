@@ -4157,6 +4157,9 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     </>
                   ) : (
                     <>
+                      <div className="mb-2 text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+                        點擊日期選擇<span className="font-semibold text-purple-600 mx-1">可上班時段</span>，可新增多個時段
+                      </div>
                       <div className="grid grid-cols-7 gap-px">
                         {availCalendarDays.map((d, idx) => {
                           if (!d) return <div key={`pad-${idx}`} />;
