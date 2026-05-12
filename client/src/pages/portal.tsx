@@ -3396,7 +3396,6 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     const [eh, em] = addAvailEnd.split(":").map(Number);
     return (eh * 60 + em) - (sh * 60 + sm);
   })();
-  const addAvailOver12h = addAvailDurationMin > 12 * 60;
 
   interface AvailWindowEntry { openFrom: string; openUntil: string; }
   interface AvailWindow { targetYearMonth: string; windows: AvailWindowEntry[]; openFrom?: string; openUntil?: string; }
@@ -4354,9 +4353,10 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                               {isHoliday && <div className="rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center bg-red-100 text-red-600">休館</div>}
                               {slots.map(s => {
                                 const slotLocked = isAvailLocked(s.createdAt);
+                                const isAnytime = s.note === "都可以" && !s.startTime;
                                 return (
-                                <div key={s.id} className="rounded bg-purple-100 text-purple-700 text-[9px] leading-tight px-0.5 py-px mb-0.5 flex items-center justify-between gap-0.5">
-                                  <span>{s.startTime ? s.startTime.slice(0, 5) : ""}–{s.endTime ? s.endTime.slice(0, 5) : ""}</span>
+                                <div key={s.id} className={`rounded text-[9px] leading-tight px-0.5 py-px mb-0.5 flex items-center justify-between gap-0.5 ${isAnytime ? "bg-teal-100 text-teal-700" : "bg-purple-100 text-purple-700"}`}>
+                                  <span>{isAnytime ? "都可以" : `${s.startTime ? s.startTime.slice(0, 5) : ""}–${s.endTime ? s.endTime.slice(0, 5) : ""}`}</span>
                                   {isAvailWindowOpen && (
                                     slotLocked ? (
                                       <span className="text-slate-400 shrink-0" title="送出超過4小時，請聯繫管理員刪除">
@@ -4386,11 +4386,6 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                               超出場館開放時間（{regionHours.openTime.slice(0,5)}–{regionHours.closeTime.slice(0,5)}）
                             </div>
                           )}
-                          {addAvailOver12h && (
-                            <div className="text-[10px] text-red-600 bg-red-50 rounded-lg px-2 py-1 border border-red-200" data-testid="warn-over12h">
-                              時段超過 12 小時，不符合勞基法每日工時上限（正常8h＋延長4h）
-                            </div>
-                          )}
                           <div className="flex items-center gap-2">
                             <input type="time" value={addAvailStart}
                               min={regionHours?.openTime?.slice(0,5)}
@@ -4410,7 +4405,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                             <button
                               className="flex-1 h-9 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                               onClick={() => addAvailMutation.mutate({ date: addAvailDate, startTime: addAvailStart, endTime: addAvailEnd })}
-                              disabled={addAvailMutation.isPending || addAvailStart >= addAvailEnd || addAvailOver12h}
+                              disabled={addAvailMutation.isPending || addAvailStart >= addAvailEnd}
                               data-testid="button-submit-avail"
                             >
                               {addAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -4419,6 +4414,20 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                             <button className="px-3 h-9 rounded-lg border border-purple-200 text-purple-600 text-sm hover:bg-purple-100 active:scale-[0.98] transition-all"
                               onClick={() => setAddAvailDate(null)} data-testid="button-cancel-avail">取消</button>
                           </div>
+                          <div className="relative flex items-center gap-2 pt-1">
+                            <div className="flex-1 h-px bg-slate-200" />
+                            <span className="text-[10px] text-slate-400">或</span>
+                            <div className="flex-1 h-px bg-slate-200" />
+                          </div>
+                          <button
+                            className="w-full h-9 rounded-lg bg-teal-500 hover:bg-teal-600 text-white text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                            onClick={() => addAvailMutation.mutate({ date: addAvailDate, entryType: "available", note: "都可以" })}
+                            disabled={addAvailMutation.isPending}
+                            data-testid="button-submit-avail-anytime"
+                          >
+                            {addAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            全天都可以
+                          </button>
                         </div>
                       )}
 

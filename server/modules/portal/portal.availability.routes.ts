@@ -119,21 +119,13 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       const isOffRequest = entryType === "off_request";
       if (!employeeId || !date) return badRequest(res, "缺少必要欄位");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return badRequest(res, "date 格式須為 YYYY-MM-DD");
-      // Time-slot validation only applies when startTime/endTime are provided
-      // (full-time shift-preference notes have no startTime/endTime)
+      // Time-slot format validation (only when startTime/endTime are provided)
       if (!isOffRequest && (startTime || endTime)) {
         if (!startTime || !endTime) return badRequest(res, "缺少必要欄位");
         if (!/^\d{2}:\d{2}(:\d{2})?$/.test(startTime) || !/^\d{2}:\d{2}(:\d{2})?$/.test(endTime)) {
           return badRequest(res, "時間格式須為 HH:MM");
         }
         if (startTime >= endTime) return badRequest(res, "結束時間必須晚於開始時間");
-        // 勞基法：單日工時上限 12 小時（正常 8h + 延長 4h）
-        const [sh, sm] = (startTime as string).split(":").map(Number);
-        const [eh, em] = (endTime as string).split(":").map(Number);
-        const durationMin = (eh * 60 + em) - (sh * 60 + sm);
-        if (durationMin > 12 * 60) {
-          return badRequest(res, "單次時段不得超過 12 小時（勞基法每日工時上限）");
-        }
       }
       const windowErr = await checkWindowOpen(date);
       if (windowErr) return fail(res, 403, windowErr);
@@ -150,9 +142,10 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       if (!isOffRequest && empType === "full_time" && (startTime || endTime)) {
         return badRequest(res, "正職員工無法選擇時段，僅可填寫休假意願或班別備註");
       }
-      // Part-time must provide startTime/endTime for available entries
+      // Part-time without startTime/endTime is only allowed when note is "都可以"
       if (!isOffRequest && empType !== "full_time" && !startTime && !endTime) {
-        return badRequest(res, "兼職員工填寫可上班時段時須提供時間");
+        const n = (note as string | undefined)?.trim() ?? "";
+        if (n !== "都可以") return badRequest(res, "兼職員工填寫可上班時段時須提供時間");
       }
       // 同一天不得重複填寫（正職、兼職皆適用）
       const alreadyExists = await availabilityRepository.existsOnDate(Number(employeeId), date);
