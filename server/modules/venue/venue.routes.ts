@@ -46,4 +46,17 @@ export function mountVenueRoutes(_httpServer: Server, app: Express): void {
       res.status(400).json({ message: err.message });
     }
   });
+
+  app.get("/api/portal/region-hours/:regionCode", async (req, res) => {
+    try {
+      const venues = await venueService.findByRegionCodes(req.params.regionCode);
+      const active = venues.filter((v) => v.openTime && v.closeTime);
+      if (active.length === 0) return res.json(null);
+      const openTime = active.map((v) => v.openTime!).sort()[0];
+      const closeTime = active.map((v) => v.closeTime!).sort().reverse()[0];
+      res.json({ openTime, closeTime });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
 }

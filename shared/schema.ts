@@ -25,6 +25,8 @@ export const venues = pgTable("venues", {
   taxId: text("tax_id"),
   isInternal: boolean("is_internal").default(false),
   operationType: text("operation_type"),
+  openTime: text("open_time"),
+  closeTime: text("close_time"),
 });
 
 export const insertVenueSchema = createInsertSchema(venues).omit({ id: true });

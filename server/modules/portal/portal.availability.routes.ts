@@ -122,6 +122,19 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
           return badRequest(res, "每週最多標記 2 天休假意願");
         }
       }
+      if (!isOffRequest && emp.regionId) {
+        const regionVenues = await storage.getVenuesByRegion(emp.regionId);
+        const operated = regionVenues.filter((v) => v.openTime && v.closeTime);
+        if (operated.length > 0) {
+          const regionOpen = operated.map((v) => v.openTime!).sort()[0];
+          const regionClose = operated.map((v) => v.closeTime!).sort().reverse()[0];
+          const st = (startTime as string).slice(0, 5);
+          const et = (endTime as string).slice(0, 5);
+          if (st < regionOpen || et > regionClose) {
+            return badRequest(res, `時段超出場館開放時間（${regionOpen}–${regionClose}）`);
+          }
+        }
+      }
       const leaveType = isOffRequest ? (note?.trim() || null) : null;
       const row = await availabilityRepository.create({
         employeeId: Number(employeeId),

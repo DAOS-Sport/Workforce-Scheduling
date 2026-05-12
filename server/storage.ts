@@ -795,6 +795,14 @@ export async function ensureAvailabilityEntryTypeColumn(): Promise<void> {
   console.log("[db] shift_availabilities entry_type 欄位確認完成");
 }
 
+export async function ensureVenueOperatingHoursColumns(): Promise<void> {
+  await pool.query(`
+    ALTER TABLE venues ADD COLUMN IF NOT EXISTS open_time TEXT;
+    ALTER TABLE venues ADD COLUMN IF NOT EXISTS close_time TEXT;
+  `);
+  console.log("[db] venues open_time/close_time 欄位確認完成");
+}
+
 /**
  * Ensures the weekly_push_notifications table exists with the required unique constraint.
  * Called at server startup so the table is guaranteed to exist before any cron/API access.

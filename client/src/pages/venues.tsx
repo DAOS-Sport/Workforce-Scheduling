@@ -55,6 +55,8 @@ export default function VenuesPage() {
     taxId: "",
     isInternal: false,
     operationType: "OT" as string,
+    openTime: "",
+    closeTime: "",
   });
   const [activeTemplateTab, setActiveTemplateTab] = useState("weekday");
   const [weekdayTemplates, setWeekdayTemplates] = useState<TemplateRow[]>([]);
@@ -148,7 +150,7 @@ export default function VenuesPage() {
   });
 
   const resetForm = () => {
-    setForm({ name: "", shortName: "", address: "", latitude: "", longitude: "", radius: "100", taxId: "", isInternal: false, operationType: "OT" });
+    setForm({ name: "", shortName: "", address: "", latitude: "", longitude: "", radius: "100", taxId: "", isInternal: false, operationType: "OT", openTime: "", closeTime: "" });
     setEditingVenue(null);
     setWeekdayTemplates([]);
     setWeekendTemplates([]);
@@ -172,6 +174,8 @@ export default function VenuesPage() {
       taxId: venue.taxId || "",
       isInternal: venue.isInternal || false,
       operationType: venue.operationType || "OT",
+      openTime: venue.openTime || "",
+      closeTime: venue.closeTime || "",
     });
     setDialogOpen(true);
   };
@@ -188,6 +192,8 @@ export default function VenuesPage() {
       taxId: form.taxId || null,
       isInternal: form.operationType === "內勤單位",
       operationType: form.operationType,
+      openTime: form.openTime || null,
+      closeTime: form.closeTime || null,
       regionId,
     };
 
@@ -483,6 +489,34 @@ export default function VenuesPage() {
                   placeholder="100"
                   data-testid="input-venue-radius"
                 />
+              </div>
+            </div>
+
+            <div className="border-t pt-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium">場館開放時間（選填）</Label>
+              </div>
+              <p className="text-[11px] text-muted-foreground">設定後，兼職員工填寫排班意願時只能選擇此範圍內的時段</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">開館時間</Label>
+                  <Input
+                    type="time"
+                    value={form.openTime}
+                    onChange={(e) => setForm({ ...form, openTime: e.target.value })}
+                    data-testid="input-venue-open-time"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">閉館時間</Label>
+                  <Input
+                    type="time"
+                    value={form.closeTime}
+                    onChange={(e) => setForm({ ...form, closeTime: e.target.value })}
+                    data-testid="input-venue-close-time"
+                  />
+                </div>
               </div>
             </div>
 

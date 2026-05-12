@@ -7,6 +7,7 @@ import {
   ensureOutingRecordsTable,
   ensureShiftAvailabilitiesTable,
   ensureAvailabilityEntryTypeColumn,
+  ensureVenueOperatingHoursColumns,
 } from "../storage";
 import { log } from "../shared/log";
 
@@ -71,5 +72,12 @@ export async function runStartupMigrations(): Promise<void> {
     await ensureAvailabilityEntryTypeColumn();
   } catch (err: any) {
     log(`shift_availabilities entry_type 欄位建立失敗: ${err.message}`, "db");
+  }
+
+  // Venue operating hours columns (open_time, close_time)
+  try {
+    await ensureVenueOperatingHoursColumns();
+  } catch (err: any) {
+    log(`venues open_time/close_time 欄位建立失敗: ${err.message}`, "db");
   }
 }

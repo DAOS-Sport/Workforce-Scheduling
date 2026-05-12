@@ -3418,6 +3418,23 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     },
   });
 
+  interface RegionHours { openTime: string; closeTime: string; }
+  const employeeRegionCode = (() => {
+    if (!employee?.id) return null;
+    const regions: Record<number, string> = { 1: "A", 2: "B", 3: "C", 4: "D" };
+    return regions[employee.regionId as number] ?? null;
+  })();
+  const { data: regionHours } = useQuery<RegionHours | null>({
+    queryKey: ["/api/portal/region-hours", employeeRegionCode],
+    enabled: activeView === "availability" && !!employeeRegionCode && employee.employmentType !== "full_time",
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/region-hours/${employeeRegionCode}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
   const addAvailMutation = useMutation({
     mutationFn: async ({ date, startTime, endTime, entryType = "available", note }: { date: string; startTime?: string; endTime?: string; entryType?: string; note?: string }) => {
       const res = await fetch("/api/portal/availability", {
@@ -4201,8 +4218,11 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     );
                   })() : (
                     <>
-                      <div className="mb-2 text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-                        點擊日期選擇<span className="font-semibold text-purple-600 mx-1">可上班時段</span>，可新增多個時段
+                      <div className="mb-2 text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100 space-y-0.5">
+                        <div>點擊日期選擇<span className="font-semibold text-purple-600 mx-1">可上班時段</span>，可新增多個時段</div>
+                        {regionHours && (
+                          <div className="text-slate-400">場館開放時間：<span className="font-semibold text-slate-600">{regionHours.openTime.slice(0,5)}–{regionHours.closeTime.slice(0,5)}</span>，請在此範圍內選擇</div>
+                        )}
                       </div>
                       <div className="grid grid-cols-7 gap-px">
                         {availCalendarDays.map((d, idx) => {
@@ -4224,8 +4244,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 if (!isAvailWindowOpen) return;
                                 if (isPast) return;
                                 setAddAvailDate(isSelected ? null : dateStr);
-                                setAddAvailStart("08:00");
-                                setAddAvailEnd("17:00");
+                                setAddAvailStart(regionHours?.openTime?.slice(0,5) ?? "08:00");
+                                setAddAvailEnd(regionHours?.closeTime?.slice(0,5) ?? "17:00");
                               }}
                               data-testid={`avail-day-${dateStr}`}
                             >
@@ -4250,12 +4270,23 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                       {addAvailDate && isAvailWindowOpen && (
                         <div className="mt-3 border border-purple-200 rounded-xl bg-purple-50/50 p-3 space-y-2" data-testid="card-add-avail">
                           <div className="text-xs font-semibold text-purple-700">{addAvailDate} 新增可上班時段</div>
+                          {regionHours && (addAvailStart < regionHours.openTime.slice(0,5) || addAvailEnd > regionHours.closeTime.slice(0,5)) && (
+                            <div className="text-[10px] text-amber-600 bg-amber-50 rounded-lg px-2 py-1 border border-amber-200">
+                              超出場館開放時間（{regionHours.openTime.slice(0,5)}–{regionHours.closeTime.slice(0,5)}）
+                            </div>
+                          )}
                           <div className="flex items-center gap-2">
-                            <input type="time" value={addAvailStart} onChange={e => setAddAvailStart(e.target.value)}
+                            <input type="time" value={addAvailStart}
+                              min={regionHours?.openTime?.slice(0,5)}
+                              max={regionHours?.closeTime?.slice(0,5)}
+                              onChange={e => setAddAvailStart(e.target.value)}
                               className="flex-1 rounded-lg border border-purple-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
                               data-testid="input-avail-start" />
                             <span className="text-xs text-slate-400">至</span>
-                            <input type="time" value={addAvailEnd} onChange={e => setAddAvailEnd(e.target.value)}
+                            <input type="time" value={addAvailEnd}
+                              min={regionHours?.openTime?.slice(0,5)}
+                              max={regionHours?.closeTime?.slice(0,5)}
+                              onChange={e => setAddAvailEnd(e.target.value)}
                               className="flex-1 rounded-lg border border-purple-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
                               data-testid="input-avail-end" />
                           </div>

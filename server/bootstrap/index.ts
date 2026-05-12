@@ -19,16 +19,16 @@ import { registerRoutes } from "../routes";
  *   8. Register cron jobs (only when REPLIT_DEPLOYMENT === "1")
  */
 export async function bootstrap(): Promise<void> {
-  // 1) seed
+  // 1) idempotent migrations first — ensures schema is up-to-date before seed queries it
+  await runStartupMigrations();
+
+  // 2) seed
   try {
     const { seedDatabase } = await import("../seed");
     await seedDatabase();
   } catch (err) {
     console.error("Seed error:", err);
   }
-
-  // 2) idempotent migrations
-  await runStartupMigrations();
 
   // 3) build app
   const app = await createApp();
