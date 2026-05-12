@@ -395,7 +395,7 @@ function JunsHeader({
   );
 }
 
-type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "leave" | "guidelines" | "sop";
+type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "leave" | "guidelines" | "sop" | "availability";
 
 const VIEW_TITLES: Record<PortalView, string> = {
   home: "打卡首頁",
@@ -408,6 +408,7 @@ const VIEW_TITLES: Record<PortalView, string> = {
   leave: "請假申請",
   guidelines: "員工守則",
   sop: "系統使用說明",
+  availability: "排班意願",
 };
 
 function SideMenuDrawer({
@@ -437,6 +438,7 @@ function SideMenuDrawer({
       items: [
         { view: "schedule", label: "我的班表", icon: CalendarDays },
         { view: "coworkers", label: "工作夥伴", icon: Users },
+        { view: "availability", label: "排班意願", icon: CalendarDays },
       ],
     },
     {
@@ -3379,6 +3381,98 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     staleTime: 5 * 60 * 1000,
   });
 
+  const [availMonth, setAvailMonth] = useState(() => {
+    const n = new Date();
+    return format(new Date(n.getFullYear(), n.getMonth() + 1, 1), "yyyy-MM");
+  });
+  const [addAvailDate, setAddAvailDate] = useState<string | null>(null);
+  const [addAvailStart, setAddAvailStart] = useState("08:00");
+  const [addAvailEnd, setAddAvailEnd] = useState("17:00");
+
+  interface AvailWindow { targetYearMonth: string; openFrom: string; openUntil: string; }
+  interface PortalAvail { id: number; employeeId: number; date: string; startTime: string; endTime: string; note: string | null; }
+
+  const { data: availWindow } = useQuery<AvailWindow | null>({
+    queryKey: ["/api/portal/availability-window"],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const res = await fetch("/api/portal/availability-window");
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
+  const { data: myAvailabilities = [], isLoading: availLoading } = useQuery<PortalAvail[]>({
+    queryKey: ["/api/portal/my-availabilities", employee.id, availMonth],
+    enabled: activeView === "availability" && !!employee?.id && !!portalLineUserId,
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/my-availabilities/${employee.id}/${availMonth}`, {
+        headers: { "x-line-user-id": portalLineUserId },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  const addAvailMutation = useMutation({
+    mutationFn: async ({ date, startTime, endTime }: { date: string; startTime: string; endTime: string }) => {
+      const res = await fetch("/api/portal/availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-line-user-id": portalLineUserId },
+        credentials: "include",
+        body: JSON.stringify({ employeeId: employee.id, date, startTime, endTime }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/my-availabilities", employee.id, availMonth] });
+      setAddAvailDate(null);
+    },
+    onError: () => { toast({ title: "新增失敗", variant: "destructive" }); },
+  });
+
+  const deleteAvailMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/portal/availability/${id}`, {
+        method: "DELETE",
+        headers: { "x-line-user-id": portalLineUserId },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(await res.text());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/my-availabilities", employee.id, availMonth] });
+    },
+    onError: () => { toast({ title: "刪除失敗", variant: "destructive" }); },
+  });
+
+  const availByDate = useMemo(() => {
+    const map = new Map<string, PortalAvail[]>();
+    myAvailabilities.forEach(a => {
+      if (!map.has(a.date)) map.set(a.date, []);
+      map.get(a.date)!.push(a);
+    });
+    return map;
+  }, [myAvailabilities]);
+
+  const availCalendarDays = useMemo(() => {
+    const [y, m] = availMonth.split("-").map(Number);
+    const start = new Date(y, m - 1, 1);
+    const end = new Date(y, m, 0);
+    const days = eachDayOfInterval({ start, end });
+    const startDow = getDay(start);
+    const padding: (Date | null)[] = Array.from({ length: startDow }, () => null);
+    return [...padding, ...days];
+  }, [availMonth]);
+
+  const isAvailWindowOpen = useMemo(() => {
+    if (!availWindow) return false;
+    const today = format(new Date(), "yyyy-MM-dd");
+    return today >= availWindow.openFrom && today <= availWindow.openUntil && availWindow.targetYearMonth === availMonth;
+  }, [availWindow, availMonth]);
+
   const uploadCertMutation = useMutation({
     mutationFn: async ({ shiftId, imageUrl }: { shiftId: number; imageUrl: string | null }) => {
       const res = await apiRequest("PATCH", `/api/portal/shifts/${shiftId}/certificate`, {
@@ -3959,6 +4053,140 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
       {activeView === "sop" && (
         <div className="max-w-lg mx-auto p-4 pb-8">
           <EmployeeSopSection />
+        </div>
+      )}
+
+      {activeView === "availability" && (
+        <div className="max-w-lg mx-auto p-4 pb-8 space-y-3">
+          {availWindow ? (
+            <div className={`rounded-xl border px-4 py-3 text-sm ${isAvailWindowOpen ? "border-green-200 bg-green-50 text-green-800" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+              {isAvailWindowOpen ? (
+                <>
+                  <p className="font-semibold">目前開放填寫</p>
+                  <p className="text-xs mt-0.5">填寫月份：{availWindow.targetYearMonth}｜截止：{availWindow.openUntil}</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold">目前不開放填寫</p>
+                  {availWindow.openFrom && availWindow.openUntil && (
+                    <p className="text-xs mt-0.5">開放期間：{availWindow.openFrom} ～ {availWindow.openUntil}</p>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400">
+              管理員尚未設定意願填寫時間
+            </div>
+          )}
+
+          <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+            <div className="px-4 py-3 border-b border-juns-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-juns-teal" />
+                <span className="text-sm font-semibold text-juns-navy">排班意願</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button className="p-1 rounded hover:bg-slate-100" onClick={() => {
+                  const [y, m] = availMonth.split("-").map(Number);
+                  setAvailMonth(format(new Date(y, m - 2, 1), "yyyy-MM"));
+                }} data-testid="button-avail-prev-month"><ChevronLeft className="h-4 w-4 text-slate-500" /></button>
+                <span className="text-xs font-mono text-juns-navy font-medium" data-testid="text-avail-month">{availMonth}</span>
+                <button className="p-1 rounded hover:bg-slate-100" onClick={() => {
+                  const [y, m] = availMonth.split("-").map(Number);
+                  setAvailMonth(format(new Date(y, m, 1), "yyyy-MM"));
+                }} data-testid="button-avail-next-month"><ChevronRight className="h-4 w-4 text-slate-500" /></button>
+              </div>
+            </div>
+
+            <div className="p-3">
+              {availLoading ? (
+                <div className="h-48 bg-slate-100 rounded-lg animate-pulse" />
+              ) : (
+                <>
+                  <div className="grid grid-cols-7 gap-px mb-1">
+                    {DAY_LABELS.map(d => (
+                      <div key={d} className="text-center text-[11px] font-medium text-slate-400 py-1">{d}</div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-px">
+                    {availCalendarDays.map((d, idx) => {
+                      if (!d) return <div key={`pad-${idx}`} />;
+                      const dateStr = format(d, "yyyy-MM-dd");
+                      const slots = availByDate.get(dateStr) || [];
+                      const isSelected = addAvailDate === dateStr;
+                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                      const isPast = dateStr < format(new Date(), "yyyy-MM-dd");
+                      return (
+                        <div key={dateStr}
+                          className={`min-h-[52px] rounded-md p-1 border cursor-pointer transition-all ${
+                            isSelected ? "border-purple-400 bg-purple-50" :
+                            slots.length > 0 ? "border-purple-200 bg-purple-50/60" :
+                            isWeekend ? "border-slate-200 bg-amber-50/40" :
+                            "border-slate-100 bg-white hover:border-slate-300"
+                          } ${isPast ? "opacity-50" : ""}`}
+                          onClick={() => {
+                            if (!isAvailWindowOpen) return;
+                            if (isPast) return;
+                            setAddAvailDate(isSelected ? null : dateStr);
+                            setAddAvailStart("08:00");
+                            setAddAvailEnd("17:00");
+                          }}
+                          data-testid={`avail-day-${dateStr}`}
+                        >
+                          <div className={`text-[11px] font-mono ${isWeekend ? "text-amber-600" : "text-juns-navy"}`}>{d.getDate()}</div>
+                          {slots.map(s => (
+                            <div key={s.id} className="rounded bg-purple-100 text-purple-700 text-[9px] leading-tight px-0.5 py-px mb-0.5 flex items-center justify-between gap-0.5">
+                              <span>{s.startTime.slice(0, 5)}–{s.endTime.slice(0, 5)}</span>
+                              {isAvailWindowOpen && (
+                                <button onClick={e => { e.stopPropagation(); deleteAvailMutation.mutate(s.id); }}
+                                  className="text-purple-400 hover:text-red-500 transition-colors shrink-0"
+                                  data-testid={`button-delete-avail-${s.id}`}>
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {addAvailDate && isAvailWindowOpen && (
+                    <div className="mt-3 border border-purple-200 rounded-xl bg-purple-50/50 p-3 space-y-2" data-testid="card-add-avail">
+                      <div className="text-xs font-semibold text-purple-700">{addAvailDate} 新增可上班時段</div>
+                      <div className="flex items-center gap-2">
+                        <input type="time" value={addAvailStart} onChange={e => setAddAvailStart(e.target.value)}
+                          className="flex-1 rounded-lg border border-purple-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+                          data-testid="input-avail-start" />
+                        <span className="text-xs text-slate-400">至</span>
+                        <input type="time" value={addAvailEnd} onChange={e => setAddAvailEnd(e.target.value)}
+                          className="flex-1 rounded-lg border border-purple-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+                          data-testid="input-avail-end" />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          className="flex-1 h-9 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                          onClick={() => addAvailMutation.mutate({ date: addAvailDate, startTime: addAvailStart, endTime: addAvailEnd })}
+                          disabled={addAvailMutation.isPending || addAvailStart >= addAvailEnd}
+                          data-testid="button-submit-avail"
+                        >
+                          {addAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                          確認新增
+                        </button>
+                        <button className="px-3 h-9 rounded-lg border border-purple-200 text-purple-600 text-sm hover:bg-purple-100 active:scale-[0.98] transition-all"
+                          onClick={() => setAddAvailDate(null)} data-testid="button-cancel-avail">取消</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isAvailWindowOpen && (
+                    <p className="text-center text-xs text-slate-400 mt-3">目前不在開放填寫期間，僅可查看已填意願</p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

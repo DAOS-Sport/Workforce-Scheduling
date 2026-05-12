@@ -319,6 +319,7 @@ export default function SchedulePage() {
   const resizingLeftRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const [dragConfirmTarget, setDragConfirmTarget] = useState<{ shiftId: number; targetDate: string; targetEmpId: number } | null>(null);
   const [sheetsImportOpen, setSheetsImportOpen] = useState(false);
+  const [showAvailability, setShowAvailability] = useState(false);
 
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedShiftIds, setSelectedShiftIds] = useState<Set<number>>(new Set());
@@ -503,6 +504,31 @@ export default function SchedulePage() {
   const { data: scheduleSlots = [], isLoading: slotsLoading } = useQuery<ScheduleSlot[]>({
     queryKey: ["/api/schedule-slots", selectedRegionsKey, dateRange.start, dateRange.end],
   });
+
+  interface ScheduleAvailability { id: number; employeeId: number; date: string; startTime: string; endTime: string; }
+  const availYearMonth = format(currentMonth, "yyyy-MM");
+  const { data: availabilities = [] } = useQuery<ScheduleAvailability[]>({
+    queryKey: ["/api/availabilities", selectedRegionsKey, availYearMonth],
+    enabled: showAvailability,
+    queryFn: async () => {
+      const params = new URLSearchParams({ yearMonth: availYearMonth });
+      if (selectedRegions.length === 1) params.set("regionCode", selectedRegions[0]);
+      const res = await fetch(`/api/availabilities?${params}`);
+      if (!res.ok) throw new Error("failed");
+      return res.json();
+    },
+  });
+
+  const availByEmpDate = useMemo(() => {
+    if (!showAvailability) return new Map<string, ScheduleAvailability[]>();
+    const map = new Map<string, ScheduleAvailability[]>();
+    availabilities.forEach(a => {
+      const key = `${a.employeeId}-${a.date}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(a);
+    });
+    return map;
+  }, [availabilities, showAvailability]);
 
   const { data: shifts = [], isLoading: shiftsLoading } = useQuery<Shift[]>({
     queryKey: ["/api/shifts", selectedRegionsKey, dateRange.start, dateRange.end],
@@ -1601,6 +1627,18 @@ export default function SchedulePage() {
           </Button>
 
           <Button
+            variant={showAvailability ? "default" : "outline"}
+            size="sm"
+            className={`h-7 text-xs gap-1.5 shrink-0 ${showAvailability ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-600" : ""}`}
+            onClick={() => setShowAvailability(prev => !prev)}
+            title={showAvailability ? "關閉意願疊加顯示" : "開啟意願疊加顯示（顯示員工排班意願）"}
+            data-testid="button-toggle-availability"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            {showAvailability ? "意願顯示中" : "意願疊加"}
+          </Button>
+
+          <Button
             variant="outline"
             size="sm"
             className="h-7 text-xs gap-1.5 shrink-0"
@@ -2298,11 +2336,22 @@ export default function SchedulePage() {
                           const dropId = `drop-${emp.id}-${dateStr}`;
                           const canPaste = !!shiftClipboard && shiftClipboard.employeeId === emp.id;
 
+                          const cellAvail = showAvailability ? (availByEmpDate.get(`${emp.id}-${dateStr}`) || []) : [];
+
                           return (
                             <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
                               cellAnnotationStyle ? `${cellAnnotationStyle.cell} ${cellAnnotationStyle.border}` :
                               isToday ? "bg-primary/5" : isHoliday ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
                             }`} style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
+                              {cellAvail.length > 0 && (
+                                <div className="mb-0.5 space-y-px">
+                                  {cellAvail.map(a => (
+                                    <div key={a.id} className="rounded px-1 py-px text-[9px] leading-tight bg-purple-100/80 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-300 truncate" title={`意願：${a.startTime.slice(0,5)}–${a.endTime.slice(0,5)}`}>
+                                      {a.startTime.slice(0,5)}–{a.endTime.slice(0,5)}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                               {cellShifts.length > 0 ? (
                                 <div className="space-y-0.5">
                                   {cellShifts.map((shift) => renderShiftCard(shift, emp, d))}

@@ -5,6 +5,7 @@ import {
   ensureShiftsSoftDelete,
   ensureDispatchShiftsSoftDelete,
   ensureOutingRecordsTable,
+  ensureShiftAvailabilitiesTable,
 } from "../storage";
 import { log } from "../shared/log";
 
@@ -55,5 +56,12 @@ export async function runStartupMigrations(): Promise<void> {
     await ensureOutingRecordsTable();
   } catch (err: any) {
     log(`outing_records 表格建立失敗: ${err.message}`, "db");
+  }
+
+  // Shift availabilities table
+  try {
+    await ensureShiftAvailabilitiesTable();
+  } catch (err: any) {
+    log(`shift_availabilities 表格建立失敗: ${err.message}`, "db");
   }
 }

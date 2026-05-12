@@ -29,6 +29,7 @@ import AdminLoginPage from "@/pages/admin-login";
 import MobileHrPage from "@/pages/mobile-hr";
 import GuidelineAcksPage from "@/pages/guideline-acks";
 import SopPage from "@/pages/sop";
+import AvailabilityPage from "@/pages/availability";
 import { Loader2 } from "lucide-react";
 
 function AdminRouter() {
@@ -48,6 +49,7 @@ function AdminRouter() {
       <Route path="/leave-requests" component={LeaveRequestsPage} />
       <Route path="/guideline-acks" component={GuidelineAcksPage} />
       <Route path="/sop" component={SopPage} />
+      <Route path="/availability" component={AvailabilityPage} />
       <Route path="/announcements">{() => <Redirect to="/guidelines" />}</Route>
       <Route component={NotFound} />
     </Switch>

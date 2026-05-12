@@ -557,6 +557,20 @@ export const insertOutingRecordSchema = createInsertSchema(outingRecords).omit({
 export type InsertOutingRecord = z.infer<typeof insertOutingRecordSchema>;
 export type OutingRecord = typeof outingRecords.$inferSelect;
 
+export const shiftAvailabilities = pgTable("shift_availabilities", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  date: text("date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertShiftAvailabilitySchema = createInsertSchema(shiftAvailabilities).omit({ id: true, createdAt: true });
+export type InsertShiftAvailability = z.infer<typeof insertShiftAvailabilitySchema>;
+export type ShiftAvailability = typeof shiftAvailabilities.$inferSelect;
+
 export interface VacancyInfo {
   venueId: number;
   venueName: string;

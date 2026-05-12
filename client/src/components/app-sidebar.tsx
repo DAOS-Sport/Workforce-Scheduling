@@ -1,4 +1,4 @@
-import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff, PenLine, ListChecks } from "lucide-react";
+import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff, PenLine, ListChecks, ClipboardList } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 const mainItems = [
   { title: "排班總覽", url: "/", icon: LayoutGrid },
   { title: "排班編輯", url: "/schedule", icon: Calendar },
+  { title: "排班意願", url: "/availability", icon: ClipboardList },
   { title: "員工管理", url: "/employees", icon: Users },
   { title: "場館管理", url: "/venues", icon: Building2 },
 ];
