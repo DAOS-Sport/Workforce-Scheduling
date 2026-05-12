@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
 import { zhTW } from "date-fns/locale";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RegionPills } from "@/components/region-pills";
+import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -70,23 +70,24 @@ export default function AvailabilityPage() {
     },
   });
 
-  useQuery<{ key: string; value: string } | null>({
+  const { data: windowConfigData } = useQuery<{ key: string; value: string } | null>({
     queryKey: ["/api/system-config/availability_window"],
     queryFn: async () => {
       const res = await fetch("/api/system-config/availability_window");
       if (!res.ok) return null;
       return res.json();
     },
-    onSuccess: (data: any) => {
-      if (data?.value && !windowLoaded) {
-        try {
-          const parsed = JSON.parse(data.value);
-          setWindowForm(parsed);
-          setWindowLoaded(true);
-        } catch {}
-      }
-    },
-  } as any);
+  });
+
+  useEffect(() => {
+    if (windowConfigData?.value && !windowLoaded) {
+      try {
+        const parsed = JSON.parse(windowConfigData.value) as AvailabilityWindow;
+        setWindowForm(parsed);
+        setWindowLoaded(true);
+      } catch {}
+    }
+  }, [windowConfigData, windowLoaded]);
 
   const saveWindowMutation = useMutation({
     mutationFn: async (form: AvailabilityWindow) => {
@@ -211,7 +212,7 @@ export default function AvailabilityPage() {
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
-          <RegionPills />
+          <RegionTabs />
         </div>
 
         {(empLoading || availLoading) ? (

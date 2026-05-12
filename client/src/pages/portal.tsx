@@ -3265,6 +3265,7 @@ function OutingSection({ employee }: { employee: PortalEmployee }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PortalMain({ employee }: { employee: PortalEmployee }) {
+  const { toast } = useToast();
   const [activeView, setActiveView] = useState<PortalView>("home");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
