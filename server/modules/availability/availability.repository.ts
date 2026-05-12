@@ -1,5 +1,5 @@
 import { db } from "../../db";
-import { eq, and, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, inArray, sql } from "drizzle-orm";
 import {
   shiftAvailabilities,
   type ShiftAvailability,
@@ -55,5 +55,20 @@ export const availabilityRepository = {
   async getById(id: number): Promise<ShiftAvailability | undefined> {
     const [row] = await db.select().from(shiftAvailabilities).where(eq(shiftAvailabilities.id, id));
     return row;
+  },
+
+  async countOffRequestsInWeek(employeeId: number, weekStart: string, weekEnd: string): Promise<number> {
+    const [row] = await db
+      .select({ cnt: sql<number>`count(*)::int` })
+      .from(shiftAvailabilities)
+      .where(
+        and(
+          eq(shiftAvailabilities.employeeId, employeeId),
+          eq(shiftAvailabilities.entryType, "off_request"),
+          gte(shiftAvailabilities.date, weekStart),
+          lte(shiftAvailabilities.date, weekEnd)
+        )
+      );
+    return row?.cnt ?? 0;
   },
 };

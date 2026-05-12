@@ -2347,8 +2347,8 @@ export default function SchedulePage() {
                                 <div className="mb-0.5 space-y-px">
                                   {cellAvail.map(a => (
                                     a.entryType === "off_request" ? (
-                                      <div key={a.id} className="rounded px-1 py-px text-[9px] leading-tight bg-red-100/80 dark:bg-red-900/40 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-300 font-bold text-center" title="希望休假">
-                                        休
+                                      <div key={a.id} className={`rounded px-1 py-px text-[9px] leading-tight font-bold text-center border ${a.note === "特休" ? "bg-orange-100/80 dark:bg-orange-900/40 border-orange-200 dark:border-orange-700 text-orange-600 dark:text-orange-300" : a.note === "事假" ? "bg-blue-100/80 dark:bg-blue-900/40 border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-300" : "bg-red-100/80 dark:bg-red-900/40 border-red-200 dark:border-red-700 text-red-600 dark:text-red-300"}`} title={a.note ? `希望${a.note}` : "希望休假"}>
+                                        {a.note || "休"}
                                       </div>
                                     ) : (
                                       <div key={a.id} className="rounded px-1 py-px text-[9px] leading-tight bg-purple-100/80 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-300 truncate" title={`意願：${a.startTime ? a.startTime.slice(0,5) : ""}–${a.endTime ? a.endTime.slice(0,5) : ""}`}>

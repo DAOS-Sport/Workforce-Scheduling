@@ -25,6 +25,19 @@ function todayTaipei(): string {
   return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Taipei" });
 }
 
+/** Returns ISO week bounds (Mon–Sun) for a given date string (yyyy-MM-dd). */
+function getIsoWeekBounds(dateStr: string): { weekStart: string; weekEnd: string } {
+  const d = new Date(dateStr);
+  const day = d.getDay(); // 0=Sun
+  const diffToMon = day === 0 ? -6 : 1 - day;
+  const mon = new Date(d);
+  mon.setDate(d.getDate() + diffToMon);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const fmt = (dt: Date) => dt.toISOString().slice(0, 10);
+  return { weekStart: fmt(mon), weekEnd: fmt(sun) };
+}
+
 /** Load and validate the current availability window. Returns error string if closed, null if open. */
 async function checkWindowOpen(targetDate?: string): Promise<string | null> {
   const cfg = await storage.getSystemConfig("availability_window");
@@ -102,13 +115,21 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       if (!isOffRequest && empType === "full_time") {
         return badRequest(res, "正職員工僅可填寫休假意願，無法選擇時段");
       }
+      if (isOffRequest) {
+        const { weekStart, weekEnd } = getIsoWeekBounds(date);
+        const weekCount = await availabilityRepository.countOffRequestsInWeek(Number(employeeId), weekStart, weekEnd);
+        if (weekCount >= 2) {
+          return badRequest(res, "每週最多標記 2 天休假意願");
+        }
+      }
+      const leaveType = isOffRequest ? (note?.trim() || null) : null;
       const row = await availabilityRepository.create({
         employeeId: Number(employeeId),
         date,
         entryType: isOffRequest ? "off_request" : "available",
         startTime: isOffRequest ? null : startTime,
         endTime: isOffRequest ? null : endTime,
-        note: note?.trim() || null,
+        note: isOffRequest ? leaveType : (note?.trim() || null),
       });
       created(res, row);
     } catch (err: any) {

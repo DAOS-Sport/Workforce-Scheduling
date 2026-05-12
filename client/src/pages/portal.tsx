@@ -3390,6 +3390,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [addAvailDate, setAddAvailDate] = useState<string | null>(null);
   const [addAvailStart, setAddAvailStart] = useState("08:00");
   const [addAvailEnd, setAddAvailEnd] = useState("17:00");
+  const [leaveTypeSheet, setLeaveTypeSheet] = useState<string | null>(null);
 
   interface AvailWindow { targetYearMonth: string; openFrom: string; openUntil: string; }
   interface PortalAvail { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; note: string | null; }
@@ -3418,12 +3419,12 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   });
 
   const addAvailMutation = useMutation({
-    mutationFn: async ({ date, startTime, endTime, entryType = "available" }: { date: string; startTime?: string; endTime?: string; entryType?: string }) => {
+    mutationFn: async ({ date, startTime, endTime, entryType = "available", note }: { date: string; startTime?: string; endTime?: string; entryType?: string; note?: string }) => {
       const res = await fetch("/api/portal/availability", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-user-id": portalLineUserId },
         credentials: "include",
-        body: JSON.stringify({ employeeId: employee.id, date, startTime, endTime, entryType }),
+        body: JSON.stringify({ employeeId: employee.id, date, startTime, endTime, entryType, note }),
       });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
@@ -4112,10 +4113,23 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     ))}
                   </div>
 
-                  {employee.employmentType === "full_time" ? (
+                  {employee.employmentType === "full_time" ? (() => {
+                    const getIsoWeekKey = (d: Date) => {
+                      const day = d.getDay();
+                      const mon = new Date(d);
+                      mon.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+                      return format(mon, "yyyy-MM-dd");
+                    };
+                    const offRequestCountByWeek = new Map<string, number>();
+                    myAvailabilities.filter(a => a.entryType === "off_request").forEach(a => {
+                      const key = getIsoWeekKey(new Date(a.date));
+                      offRequestCountByWeek.set(key, (offRequestCountByWeek.get(key) ?? 0) + 1);
+                    });
+                    return (
                     <>
-                      <div className="mb-2 text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-                        點擊日期標記<span className="font-semibold text-red-600 mx-1">休假意願</span>，再次點擊取消
+                      <div className="mb-2 text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100 space-y-0.5">
+                        <div>點擊日期選擇假別（<span className="font-semibold text-orange-600">特休</span> / <span className="font-semibold text-blue-600">事假</span>），再次點擊取消</div>
+                        <div className="text-slate-400">每週最多標記 <span className="font-semibold text-red-500">2</span> 天休假意願</div>
                       </div>
                       <div className="grid grid-cols-7 gap-px">
                         {availCalendarDays.map((d, idx) => {
@@ -4125,37 +4139,67 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           const offReq = slots.find(s => s.entryType === "off_request");
                           const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                           const isPast = dateStr < format(new Date(), "yyyy-MM-dd");
+                          const weekKey = getIsoWeekKey(d);
+                          const weekCount = offRequestCountByWeek.get(weekKey) ?? 0;
+                          const weekFull = !offReq && weekCount >= 2;
+                          const leaveColor = offReq?.note === "特休" ? "orange" : offReq?.note === "事假" ? "blue" : "red";
                           return (
                             <div key={dateStr}
                               className={`min-h-[52px] rounded-md p-1 border transition-all ${
-                                offReq ? "border-red-300 bg-red-50 cursor-pointer" :
+                                offReq ? (leaveColor === "orange" ? "border-orange-300 bg-orange-50 cursor-pointer" : "border-blue-300 bg-blue-50 cursor-pointer") :
+                                weekFull ? "border-slate-200 bg-slate-50 opacity-40 cursor-not-allowed" :
                                 isWeekend ? "border-slate-200 bg-amber-50/40 cursor-pointer" :
                                 "border-slate-100 bg-white hover:border-slate-300 cursor-pointer"
                               } ${isPast ? "opacity-40 pointer-events-none" : ""}`}
                               onClick={() => {
-                                if (!isAvailWindowOpen) return;
-                                if (isPast) return;
+                                if (!isAvailWindowOpen || isPast || weekFull) return;
                                 if (offReq) {
                                   deleteAvailMutation.mutate(offReq.id);
                                 } else {
-                                  addAvailMutation.mutate({ date: dateStr, entryType: "off_request" });
+                                  setLeaveTypeSheet(dateStr);
                                 }
                               }}
                               data-testid={`avail-day-${dateStr}`}
                             >
-                              <div className={`text-[11px] font-mono ${isWeekend ? "text-amber-600" : offReq ? "text-red-600 font-semibold" : "text-juns-navy"}`}>{d.getDate()}</div>
+                              <div className={`text-[11px] font-mono ${isWeekend ? "text-amber-600" : offReq ? (leaveColor === "orange" ? "text-orange-600 font-semibold" : "text-blue-600 font-semibold") : "text-juns-navy"}`}>{d.getDate()}</div>
                               {offReq && (
-                                <div className="rounded bg-red-100 text-red-600 text-[10px] leading-tight px-0.5 py-px font-bold text-center mt-0.5">休</div>
+                                <div className={`rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 ${leaveColor === "orange" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
+                                  {offReq.note || "休"}
+                                </div>
                               )}
                             </div>
                           );
                         })}
                       </div>
+
+                      {leaveTypeSheet && isAvailWindowOpen && (
+                        <div className="mt-3 border border-slate-200 rounded-xl bg-white p-4 shadow-sm space-y-3" data-testid="card-leave-type">
+                          <div className="text-xs font-semibold text-slate-700">{leaveTypeSheet} — 請選擇假別</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {(["特休", "事假"] as const).map(lt => (
+                              <button key={lt}
+                                className={`h-11 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 ${lt === "特休" ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`}
+                                disabled={addAvailMutation.isPending}
+                                onClick={() => {
+                                  addAvailMutation.mutate({ date: leaveTypeSheet, entryType: "off_request", note: lt });
+                                  setLeaveTypeSheet(null);
+                                }}
+                                data-testid={`button-leave-type-${lt}`}
+                              >
+                                {addAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : lt}
+                              </button>
+                            ))}
+                          </div>
+                          <button className="w-full text-xs text-slate-400 hover:text-slate-600 transition-colors" onClick={() => setLeaveTypeSheet(null)} data-testid="button-leave-type-cancel">取消</button>
+                        </div>
+                      )}
+
                       {!isAvailWindowOpen && (
                         <p className="text-center text-xs text-slate-400 mt-3">目前不在開放填寫期間，僅可查看已填意願</p>
                       )}
                     </>
-                  ) : (
+                    );
+                  })() : (
                     <>
                       <div className="mb-2 text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
                         點擊日期選擇<span className="font-semibold text-purple-600 mx-1">可上班時段</span>，可新增多個時段

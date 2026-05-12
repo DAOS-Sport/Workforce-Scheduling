@@ -264,8 +264,8 @@ export default function AvailabilityPage() {
                             <div className="space-y-0.5">
                               {slots.map(s => (
                                 s.entryType === "off_request" ? (
-                                  <div key={s.id} className="rounded bg-red-100 dark:bg-red-900/40 border border-red-200 dark:border-red-700 px-1 py-0.5 text-[10px] text-red-700 dark:text-red-300 leading-tight font-bold text-center">
-                                    休
+                                  <div key={s.id} className={`rounded px-1 py-0.5 text-[10px] leading-tight font-bold text-center border ${s.note === "特休" ? "bg-orange-100 border-orange-200 text-orange-700 dark:bg-orange-900/40 dark:border-orange-700 dark:text-orange-300" : s.note === "事假" ? "bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-300" : "bg-red-100 border-red-200 text-red-700 dark:bg-red-900/40 dark:border-red-700 dark:text-red-300"}`}>
+                                    {s.note || "休"}
                                   </div>
                                 ) : (
                                   <div key={s.id} className="rounded bg-purple-100 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 px-1 py-0.5 text-[10px] text-purple-700 dark:text-purple-300 leading-tight">
