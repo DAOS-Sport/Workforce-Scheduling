@@ -3468,8 +3468,13 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portal/my-availabilities", employee.id, availMonth] });
       setAddAvailDate(null);
+      setLeaveTypeSheet(null);
     },
-    onError: () => { toast({ title: "新增失敗", variant: "destructive" }); },
+    onError: (err: any) => {
+      let msg = "新增失敗";
+      try { msg = JSON.parse(err.message)?.message || err.message || msg; } catch {}
+      toast({ title: msg, variant: "destructive" });
+    },
   });
 
   const deleteAvailMutation = useMutation({
@@ -4242,7 +4247,6 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 disabled={addAvailMutation.isPending}
                                 onClick={() => {
                                   addAvailMutation.mutate({ date: leaveTypeSheet, entryType: "off_request", note: lt });
-                                  setLeaveTypeSheet(null);
                                 }}
                                 data-testid={`button-leave-type-${lt}`}
                               >
