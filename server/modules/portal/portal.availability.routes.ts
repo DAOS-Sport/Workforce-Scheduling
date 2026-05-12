@@ -20,13 +20,23 @@ function extractLineUserId(req: import("express").Request): string | undefined {
 
 interface AvailWindow { targetYearMonth: string; openFrom: string; openUntil: string; }
 
+/** Returns today's date string (yyyy-MM-dd) in Asia/Taipei timezone. */
+function todayTaipei(): string {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Taipei" });
+}
+
 /** Load and validate the current availability window. Returns error string if closed, null if open. */
 async function checkWindowOpen(targetDate?: string): Promise<string | null> {
   const cfg = await storage.getSystemConfig("availability_window");
   if (!cfg?.value) return "管理員尚未設定意願填寫開放時間";
   let win: AvailWindow;
   try { win = JSON.parse(cfg.value) as AvailWindow; } catch { return "意願填寫設定格式錯誤"; }
-  const today = new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}$/.test(win.targetYearMonth) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(win.openFrom) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(win.openUntil)) {
+    return "意願填寫設定格式錯誤";
+  }
+  const today = todayTaipei();
   if (today < win.openFrom || today > win.openUntil) return "目前不在開放填寫期間";
   if (targetDate) {
     const dateMonth = targetDate.slice(0, 7); // yyyy-MM
@@ -71,6 +81,9 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       const { employeeId, date, startTime, endTime, note } = req.body;
       if (!employeeId || !date || !startTime || !endTime) return badRequest(res, "缺少必要欄位");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return badRequest(res, "date 格式須為 YYYY-MM-DD");
+      if (!/^\d{2}:\d{2}(:\d{2})?$/.test(startTime) || !/^\d{2}:\d{2}(:\d{2})?$/.test(endTime)) {
+        return badRequest(res, "時間格式須為 HH:MM");
+      }
       if (startTime >= endTime) return badRequest(res, "結束時間必須晚於開始時間");
       const windowErr = await checkWindowOpen(date);
       if (windowErr) return fail(res, 403, windowErr);
