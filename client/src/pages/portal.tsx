@@ -3399,7 +3399,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const addAvailOver12h = addAvailDurationMin > 12 * 60;
 
   interface AvailWindow { targetYearMonth: string; openFrom: string; openUntil: string; }
-  interface PortalAvail { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; note: string | null; }
+  interface PortalAvail { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; note: string | null; createdAt: string | null; }
 
   const { data: availWindow } = useQuery<AvailWindow | null>({
     queryKey: ["/api/portal/availability-window"],
@@ -3441,6 +3441,18 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     staleTime: 10 * 60 * 1000,
   });
 
+  const { data: monthlyHolidays = [] } = useQuery<string[]>({
+    queryKey: ["/api/portal/monthly-holidays", availMonth],
+    enabled: activeView === "availability",
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/monthly-holidays/${availMonth}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+  const holidaySet = useMemo(() => new Set(monthlyHolidays), [monthlyHolidays]);
+
   const addAvailMutation = useMutation({
     mutationFn: async ({ date, startTime, endTime, entryType = "available", note }: { date: string; startTime?: string; endTime?: string; entryType?: string; note?: string }) => {
       const res = await fetch("/api/portal/availability", {
@@ -3471,8 +3483,13 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portal/my-availabilities", employee.id, availMonth] });
     },
-    onError: () => { toast({ title: "刪除失敗", variant: "destructive" }); },
+    onError: (err: any) => { toast({ title: err.message || "刪除失敗", variant: "destructive" }); },
   });
+
+  function isAvailLocked(createdAt: string | null): boolean {
+    if (!createdAt) return false;
+    return Date.now() - new Date(createdAt).getTime() > 4 * 60 * 60 * 1000;
+  }
 
   const availByDate = useMemo(() => {
     const map = new Map<string, PortalAvail[]>();
@@ -4162,21 +4179,28 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           const offReq = slots.find(s => s.entryType === "off_request");
                           const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                           const isPast = dateStr < format(new Date(), "yyyy-MM-dd");
+                          const isHoliday = holidaySet.has(dateStr);
                           const weekKey = getIsoWeekKey(d);
                           const weekCount = offRequestCountByWeek.get(weekKey) ?? 0;
                           const weekFull = !offReq && weekCount >= 2;
                           const leaveColor = offReq?.note === "特休" ? "orange" : offReq?.note === "事假" ? "blue" : "red";
+                          const offReqLocked = offReq ? isAvailLocked(offReq.createdAt) : false;
                           return (
                             <div key={dateStr}
                               className={`min-h-[52px] rounded-md p-1 border transition-all ${
+                                isHoliday ? "border-red-300 bg-red-50 cursor-not-allowed opacity-70" :
                                 offReq ? (leaveColor === "orange" ? "border-orange-300 bg-orange-50 cursor-pointer" : "border-blue-300 bg-blue-50 cursor-pointer") :
                                 weekFull ? "border-slate-200 bg-slate-50 opacity-40 cursor-not-allowed" :
                                 isWeekend ? "border-slate-200 bg-amber-50/40 cursor-pointer" :
                                 "border-slate-100 bg-white hover:border-slate-300 cursor-pointer"
                               } ${isPast ? "opacity-40 pointer-events-none" : ""}`}
                               onClick={() => {
-                                if (!isAvailWindowOpen || isPast || weekFull) return;
+                                if (!isAvailWindowOpen || isPast || weekFull || isHoliday) return;
                                 if (offReq) {
+                                  if (offReqLocked) {
+                                    toast({ title: "送出超過 4 小時，請聯繫管理員刪除", variant: "destructive" });
+                                    return;
+                                  }
                                   deleteAvailMutation.mutate(offReq.id);
                                 } else {
                                   setLeaveTypeSheet(dateStr);
@@ -4184,8 +4208,9 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                               }}
                               data-testid={`avail-day-${dateStr}`}
                             >
-                              <div className={`text-[11px] font-mono ${isWeekend ? "text-amber-600" : offReq ? (leaveColor === "orange" ? "text-orange-600 font-semibold" : "text-blue-600 font-semibold") : "text-juns-navy"}`}>{d.getDate()}</div>
-                              {offReq && (
+                              <div className={`text-[11px] font-mono ${isHoliday ? "text-red-500 font-semibold" : isWeekend ? "text-amber-600" : offReq ? (leaveColor === "orange" ? "text-orange-600 font-semibold" : "text-blue-600 font-semibold") : "text-juns-navy"}`}>{d.getDate()}</div>
+                              {isHoliday && <div className="rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 bg-red-100 text-red-600">休館</div>}
+                              {offReq && !isHoliday && (
                                 <div className={`rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 ${leaveColor === "orange" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
                                   {offReq.note || "休"}
                                 </div>
@@ -4243,36 +4268,47 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           const isSelected = addAvailDate === dateStr;
                           const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                           const isPast = dateStr < format(new Date(), "yyyy-MM-dd");
+                          const isHoliday = holidaySet.has(dateStr);
                           return (
                             <div key={dateStr}
-                              className={`min-h-[52px] rounded-md p-1 border cursor-pointer transition-all ${
-                                isSelected ? "border-purple-400 bg-purple-50" :
-                                slots.length > 0 ? "border-purple-200 bg-purple-50/60" :
-                                isWeekend ? "border-slate-200 bg-amber-50/40" :
-                                "border-slate-100 bg-white hover:border-slate-300"
+                              className={`min-h-[52px] rounded-md p-1 border transition-all ${
+                                isHoliday ? "border-red-300 bg-red-50 cursor-not-allowed opacity-70" :
+                                isSelected ? "border-purple-400 bg-purple-50 cursor-pointer" :
+                                slots.length > 0 ? "border-purple-200 bg-purple-50/60 cursor-pointer" :
+                                isWeekend ? "border-slate-200 bg-amber-50/40 cursor-pointer" :
+                                "border-slate-100 bg-white hover:border-slate-300 cursor-pointer"
                               } ${isPast ? "opacity-50" : ""}`}
                               onClick={() => {
-                                if (!isAvailWindowOpen) return;
-                                if (isPast) return;
+                                if (!isAvailWindowOpen || isPast || isHoliday) return;
                                 setAddAvailDate(isSelected ? null : dateStr);
                                 setAddAvailStart(regionHours?.openTime?.slice(0,5) ?? "08:00");
                                 setAddAvailEnd(regionHours?.closeTime?.slice(0,5) ?? "17:00");
                               }}
                               data-testid={`avail-day-${dateStr}`}
                             >
-                              <div className={`text-[11px] font-mono ${isWeekend ? "text-amber-600" : "text-juns-navy"}`}>{d.getDate()}</div>
-                              {slots.map(s => (
+                              <div className={`text-[11px] font-mono ${isHoliday ? "text-red-500 font-semibold" : isWeekend ? "text-amber-600" : "text-juns-navy"}`}>{d.getDate()}</div>
+                              {isHoliday && <div className="rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center bg-red-100 text-red-600">休館</div>}
+                              {slots.map(s => {
+                                const slotLocked = isAvailLocked(s.createdAt);
+                                return (
                                 <div key={s.id} className="rounded bg-purple-100 text-purple-700 text-[9px] leading-tight px-0.5 py-px mb-0.5 flex items-center justify-between gap-0.5">
                                   <span>{s.startTime ? s.startTime.slice(0, 5) : ""}–{s.endTime ? s.endTime.slice(0, 5) : ""}</span>
                                   {isAvailWindowOpen && (
-                                    <button onClick={e => { e.stopPropagation(); deleteAvailMutation.mutate(s.id); }}
-                                      className="text-purple-400 hover:text-red-500 transition-colors shrink-0"
-                                      data-testid={`button-delete-avail-${s.id}`}>
-                                      <X className="h-2.5 w-2.5" />
-                                    </button>
+                                    slotLocked ? (
+                                      <span className="text-slate-400 shrink-0" title="送出超過4小時，請聯繫管理員刪除">
+                                        <Lock className="h-2.5 w-2.5" />
+                                      </span>
+                                    ) : (
+                                      <button onClick={e => { e.stopPropagation(); deleteAvailMutation.mutate(s.id); }}
+                                        className="text-purple-400 hover:text-red-500 transition-colors shrink-0"
+                                        data-testid={`button-delete-avail-${s.id}`}>
+                                        <X className="h-2.5 w-2.5" />
+                                      </button>
+                                    )
                                   )}
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           );
                         })}

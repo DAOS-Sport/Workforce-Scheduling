@@ -60,7 +60,26 @@ async function checkWindowOpen(targetDate?: string): Promise<string | null> {
   return null;
 }
 
+/** Returns the array of holiday date strings (yyyy-MM-dd) for a given yearMonth from system_config. */
+async function getHolidaysForMonth(yearMonth: string): Promise<string[]> {
+  const cfg = await storage.getSystemConfig("monthly_holidays");
+  if (!cfg?.value) return [];
+  try {
+    const map = JSON.parse(cfg.value) as Record<string, string[]>;
+    return map[yearMonth] ?? [];
+  } catch { return []; }
+}
+
 export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express): void {
+  /** Public endpoint: returns holiday dates for a given yearMonth */
+  app.get("/api/portal/monthly-holidays/:yearMonth", async (req, res) => {
+    try {
+      const { yearMonth } = req.params;
+      if (!/^\d{4}-\d{2}$/.test(yearMonth)) return badRequest(res, "yearMonth 格式須為 YYYY-MM");
+      ok(res, await getHolidaysForMonth(yearMonth));
+    } catch (err: any) { fail(res, 500, err.message); }
+  });
+
   app.get("/api/portal/availability-window", async (_req, res) => {
     try {
       const cfg = await storage.getSystemConfig("availability_window");
@@ -143,6 +162,11 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
           }
         }
       }
+      // 假日（休館日）不得填寫意願
+      const holidays = await getHolidaysForMonth(date.slice(0, 7));
+      if (holidays.includes(date)) {
+        return badRequest(res, "該日為休館日，無法填寫排班意願");
+      }
       if (!isOffRequest && emp.regionId) {
         const regionVenues = await storage.getVenuesByRegion(emp.regionId);
         const operated = regionVenues.filter((v) => v.openTime && v.closeTime);
@@ -181,6 +205,13 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       if (windowErr) return fail(res, 403, windowErr);
       const auth = await portalService.verifyCaller(row.employeeId, extractLineUserId(req));
       if (!auth.ok) return fail(res, auth.status, auth.message ?? "未授權", { code: auth.code });
+      // 送出超過 4 小時後，員工不得自行刪除，需由管理員操作
+      if (row.createdAt) {
+        const ageMs = Date.now() - new Date(row.createdAt).getTime();
+        if (ageMs > 4 * 60 * 60 * 1000) {
+          return fail(res, 403, "送出超過 4 小時，請聯繫管理員刪除", { code: "LOCKED" });
+        }
+      }
       await availabilityRepository.delete(id);
       ok(res, { success: true });
     } catch (err: any) {

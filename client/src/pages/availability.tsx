@@ -11,7 +11,7 @@ import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, Settings, Save, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, Settings, Save, ChevronLeft, ChevronRight, CalendarOff } from "lucide-react";
 import type { Employee, Region } from "@shared/schema";
 
 interface ShiftAvailability {
@@ -46,6 +46,7 @@ export default function AvailabilityPage() {
     openUntil: format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd"),
   });
   const [windowLoaded, setWindowLoaded] = useState(false);
+  const [holidaySet, setHolidaySet] = useState<Set<string>>(new Set());
 
   const { data: regionsData = [] } = useQuery<Region[]>({ queryKey: ["/api/regions"] });
 
@@ -80,6 +81,15 @@ export default function AvailabilityPage() {
     },
   });
 
+  const { data: holidayConfigData } = useQuery<{ key: string; value: string | null } | null>({
+    queryKey: ["/api/system-config/monthly_holidays"],
+    queryFn: async () => {
+      const res = await fetch("/api/system-config/monthly_holidays");
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
   useEffect(() => {
     if (windowConfigData?.value && !windowLoaded) {
       try {
@@ -89,6 +99,20 @@ export default function AvailabilityPage() {
       } catch {}
     }
   }, [windowConfigData, windowLoaded]);
+
+  useEffect(() => {
+    try {
+      const map = holidayConfigData?.value ? JSON.parse(holidayConfigData.value) as Record<string, string[]> : {};
+      setHolidaySet(new Set(map[windowForm.targetYearMonth] ?? []));
+    } catch { setHolidaySet(new Set()); }
+  }, [holidayConfigData, windowForm.targetYearMonth]);
+
+  const holidayMonthDates = useMemo(() => {
+    const [y, m] = windowForm.targetYearMonth.split("-").map(Number);
+    const start = new Date(y, m - 1, 1);
+    const end = new Date(y, m, 0);
+    return eachDayOfInterval({ start, end });
+  }, [windowForm.targetYearMonth]);
 
   const saveWindowMutation = useMutation({
     mutationFn: async (form: AvailabilityWindow) => {
@@ -104,6 +128,28 @@ export default function AvailabilityPage() {
       toast({ title: "儲存失敗", variant: "destructive" });
     },
   });
+
+  const saveHolidayMutation = useMutation({
+    mutationFn: async (dates: string[]) => {
+      let existing: Record<string, string[]> = {};
+      try { existing = holidayConfigData?.value ? JSON.parse(holidayConfigData.value) : {}; } catch {}
+      existing[windowForm.targetYearMonth] = dates;
+      await apiRequest("POST", "/api/system-config/monthly_holidays", { value: JSON.stringify(existing) });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/system-config/monthly_holidays"] });
+      toast({ title: "休館日已儲存" });
+    },
+    onError: () => toast({ title: "儲存失敗", variant: "destructive" }),
+  });
+
+  function toggleHoliday(dateStr: string) {
+    setHolidaySet(prev => {
+      const next = new Set(prev);
+      if (next.has(dateStr)) next.delete(dateStr); else next.add(dateStr);
+      return next;
+    });
+  }
 
   const monthDates = useMemo(() => {
     const [y, m] = viewYearMonth.split("-").map(Number);
@@ -197,6 +243,62 @@ export default function AvailabilityPage() {
           <p className="text-[11px] text-muted-foreground mt-2">
             員工僅可在「開放期間」內，透過員工入口填寫「{windowForm.targetYearMonth}」的排班意願。
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <CalendarOff className="h-4 w-4" />
+            國定假日／休館日設定
+            <span className="text-xs font-normal text-muted-foreground ml-1">（{windowForm.targetYearMonth}）</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-[11px] text-muted-foreground mb-3">
+            點擊日期標記為休館日，員工當日無法填寫排班意願。紅色為已選休館日。
+          </p>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {holidayMonthDates.map(d => {
+              const dateStr = format(d, "yyyy-MM-dd");
+              const isHol = holidaySet.has(dateStr);
+              const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+              return (
+                <button
+                  key={dateStr}
+                  onClick={() => toggleHoliday(dateStr)}
+                  className={`px-2 py-1 rounded-md text-xs font-medium border transition-all ${
+                    isHol
+                      ? "bg-red-500 border-red-500 text-white"
+                      : isWeekend
+                      ? "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+                      : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                  }`}
+                  data-testid={`button-holiday-${dateStr}`}
+                >
+                  {d.getDate()}
+                  {["日", "一", "二", "三", "四", "五", "六"][d.getDay()]}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => saveHolidayMutation.mutate(Array.from(holidaySet))}
+              disabled={saveHolidayMutation.isPending}
+              data-testid="button-save-holidays"
+            >
+              <Save className="h-3.5 w-3.5" />
+              儲存休館日
+            </Button>
+            {holidaySet.size > 0 && (
+              <span className="text-[11px] text-muted-foreground">
+                已選 <span className="font-semibold text-red-600">{holidaySet.size}</span> 天休館日
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
