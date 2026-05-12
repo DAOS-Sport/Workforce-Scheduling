@@ -119,7 +119,9 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       const isOffRequest = entryType === "off_request";
       if (!employeeId || !date) return badRequest(res, "缺少必要欄位");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return badRequest(res, "date 格式須為 YYYY-MM-DD");
-      if (!isOffRequest) {
+      // Time-slot validation only applies when startTime/endTime are provided
+      // (full-time shift-preference notes have no startTime/endTime)
+      if (!isOffRequest && (startTime || endTime)) {
         if (!startTime || !endTime) return badRequest(res, "缺少必要欄位");
         if (!/^\d{2}:\d{2}(:\d{2})?$/.test(startTime) || !/^\d{2}:\d{2}(:\d{2})?$/.test(endTime)) {
           return badRequest(res, "時間格式須為 HH:MM");
@@ -143,8 +145,14 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       if (isOffRequest && empType !== "full_time") {
         return badRequest(res, "兼職員工無法填寫休假意願，請選擇可上班時段");
       }
-      if (!isOffRequest && empType === "full_time") {
-        return badRequest(res, "正職員工僅可填寫休假意願，無法選擇時段");
+      // Full-time may submit shift-preference notes (available, no startTime/endTime).
+      // They may NOT submit time-slot entries (startTime/endTime present).
+      if (!isOffRequest && empType === "full_time" && (startTime || endTime)) {
+        return badRequest(res, "正職員工無法選擇時段，僅可填寫休假意願或班別備註");
+      }
+      // Part-time must provide startTime/endTime for available entries
+      if (!isOffRequest && empType !== "full_time" && !startTime && !endTime) {
+        return badRequest(res, "兼職員工填寫可上班時段時須提供時間");
       }
       // 同一天不得重複填寫（正職、兼職皆適用）
       const alreadyExists = await availabilityRepository.existsOnDate(Number(employeeId), date);
