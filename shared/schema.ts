@@ -561,8 +561,9 @@ export const shiftAvailabilities = pgTable("shift_availabilities", {
   id: serial("id").primaryKey(),
   employeeId: integer("employee_id").notNull(),
   date: text("date").notNull(),
-  startTime: text("start_time").notNull(),
-  endTime: text("end_time").notNull(),
+  entryType: text("entry_type").notNull().default("available"),
+  startTime: text("start_time"),
+  endTime: text("end_time"),
   note: text("note"),
   createdAt: timestamp("created_at").defaultNow(),
 });

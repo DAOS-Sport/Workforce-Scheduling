@@ -6,6 +6,7 @@ import {
   ensureDispatchShiftsSoftDelete,
   ensureOutingRecordsTable,
   ensureShiftAvailabilitiesTable,
+  ensureAvailabilityEntryTypeColumn,
 } from "../storage";
 import { log } from "../shared/log";
 
@@ -63,5 +64,12 @@ export async function runStartupMigrations(): Promise<void> {
     await ensureShiftAvailabilitiesTable();
   } catch (err: any) {
     log(`shift_availabilities 表格建立失敗: ${err.message}`, "db");
+  }
+
+  // Shift availabilities entry_type column + nullable start/end times (Task #84)
+  try {
+    await ensureAvailabilityEntryTypeColumn();
+  } catch (err: any) {
+    log(`shift_availabilities entry_type 欄位建立失敗: ${err.message}`, "db");
   }
 }

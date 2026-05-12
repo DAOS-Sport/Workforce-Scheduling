@@ -78,13 +78,17 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
 
   app.post("/api/portal/availability", async (req, res) => {
     try {
-      const { employeeId, date, startTime, endTime, note } = req.body;
-      if (!employeeId || !date || !startTime || !endTime) return badRequest(res, "缺少必要欄位");
+      const { employeeId, date, startTime, endTime, note, entryType } = req.body;
+      const isOffRequest = entryType === "off_request";
+      if (!employeeId || !date) return badRequest(res, "缺少必要欄位");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return badRequest(res, "date 格式須為 YYYY-MM-DD");
-      if (!/^\d{2}:\d{2}(:\d{2})?$/.test(startTime) || !/^\d{2}:\d{2}(:\d{2})?$/.test(endTime)) {
-        return badRequest(res, "時間格式須為 HH:MM");
+      if (!isOffRequest) {
+        if (!startTime || !endTime) return badRequest(res, "缺少必要欄位");
+        if (!/^\d{2}:\d{2}(:\d{2})?$/.test(startTime) || !/^\d{2}:\d{2}(:\d{2})?$/.test(endTime)) {
+          return badRequest(res, "時間格式須為 HH:MM");
+        }
+        if (startTime >= endTime) return badRequest(res, "結束時間必須晚於開始時間");
       }
-      if (startTime >= endTime) return badRequest(res, "結束時間必須晚於開始時間");
       const windowErr = await checkWindowOpen(date);
       if (windowErr) return fail(res, 403, windowErr);
       const auth = await portalService.verifyCaller(Number(employeeId), extractLineUserId(req));
@@ -92,8 +96,9 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       const row = await availabilityRepository.create({
         employeeId: Number(employeeId),
         date,
-        startTime,
-        endTime,
+        entryType: isOffRequest ? "off_request" : "available",
+        startTime: isOffRequest ? null : startTime,
+        endTime: isOffRequest ? null : endTime,
         note: note?.trim() || null,
       });
       created(res, row);

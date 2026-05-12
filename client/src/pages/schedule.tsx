@@ -505,7 +505,7 @@ export default function SchedulePage() {
     queryKey: ["/api/schedule-slots", selectedRegionsKey, dateRange.start, dateRange.end],
   });
 
-  interface ScheduleAvailability { id: number; employeeId: number; date: string; startTime: string; endTime: string; }
+  interface ScheduleAvailability { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; }
   const availYearMonth = format(currentMonth, "yyyy-MM");
   const { data: availabilities = [] } = useQuery<ScheduleAvailability[]>({
     queryKey: ["/api/availabilities", selectedRegionsKey, availYearMonth],
@@ -2346,9 +2346,15 @@ export default function SchedulePage() {
                               {cellAvail.length > 0 && (
                                 <div className="mb-0.5 space-y-px">
                                   {cellAvail.map(a => (
-                                    <div key={a.id} className="rounded px-1 py-px text-[9px] leading-tight bg-purple-100/80 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-300 truncate" title={`意願：${a.startTime.slice(0,5)}–${a.endTime.slice(0,5)}`}>
-                                      {a.startTime.slice(0,5)}–{a.endTime.slice(0,5)}
-                                    </div>
+                                    a.entryType === "off_request" ? (
+                                      <div key={a.id} className="rounded px-1 py-px text-[9px] leading-tight bg-red-100/80 dark:bg-red-900/40 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-300 font-bold text-center" title="希望休假">
+                                        休
+                                      </div>
+                                    ) : (
+                                      <div key={a.id} className="rounded px-1 py-px text-[9px] leading-tight bg-purple-100/80 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-300 truncate" title={`意願：${a.startTime ? a.startTime.slice(0,5) : ""}–${a.endTime ? a.endTime.slice(0,5) : ""}`}>
+                                        {a.startTime ? a.startTime.slice(0,5) : ""}–{a.endTime ? a.endTime.slice(0,5) : ""}
+                                      </div>
+                                    )
                                   ))}
                                 </div>
                               )}

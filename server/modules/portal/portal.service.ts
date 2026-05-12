@@ -181,7 +181,7 @@ export const portalService = {
     }
     if (!found) throw err(404, "找不到員工");
     if (found.status !== "active") throw err(403, "此帳號已停用");
-    return { id: found.id, name: found.name, employeeCode: found.employeeCode, role: found.role };
+    return { id: found.id, name: found.name, employeeCode: found.employeeCode, role: found.role, employmentType: found.employmentType };
   },
 
   async lineCallback(code: string, redirectUri: string) {
@@ -232,7 +232,7 @@ export const portalService = {
     }
     return {
       id: employee.id, name: employee.name, employeeCode: employee.employeeCode, role: employee.role,
-      lineDisplayName: profile.displayName, lineUserId,
+      employmentType: employee.employmentType, lineDisplayName: profile.displayName, lineUserId,
     };
   },
 
@@ -243,7 +243,7 @@ export const portalService = {
     if (employee.status !== "active") throw err(403, "此帳號已停用");
     return {
       id: employee.id, name: employee.name, employeeCode: employee.employeeCode,
-      role: employee.role, lineUserId: lineId,
+      role: employee.role, employmentType: employee.employmentType, lineUserId: lineId,
     };
   },
 

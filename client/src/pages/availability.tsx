@@ -18,8 +18,9 @@ interface ShiftAvailability {
   id: number;
   employeeId: number;
   date: string;
-  startTime: string;
-  endTime: string;
+  entryType: string;
+  startTime: string | null;
+  endTime: string | null;
   note: string | null;
 }
 
@@ -245,7 +246,12 @@ export default function AvailabilityPage() {
                 {activeEmployees.map(emp => (
                   <tr key={emp.id} className="hover:bg-muted/20">
                     <td className="sticky left-0 z-10 bg-background px-2 py-1 border-b border-r font-medium whitespace-nowrap" style={{ minWidth: EMP_COL_WIDTH }}>
-                      <div className="text-[11px] font-semibold truncate" title={emp.name}>{emp.name}</div>
+                      <div className="flex items-center gap-1">
+                        <span className={`text-[9px] px-1 py-0 rounded font-bold shrink-0 ${emp.employmentType === "part_time" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
+                          {emp.employmentType === "part_time" ? "兼" : "正"}
+                        </span>
+                        <div className="text-[11px] font-semibold truncate" title={emp.name}>{emp.name}</div>
+                      </div>
                     </td>
                     {monthDates.map((d, i) => {
                       const dateStr = format(d, "yyyy-MM-dd");
@@ -257,9 +263,15 @@ export default function AvailabilityPage() {
                           {slots.length > 0 ? (
                             <div className="space-y-0.5">
                               {slots.map(s => (
-                                <div key={s.id} className="rounded bg-purple-100 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 px-1 py-0.5 text-[10px] text-purple-700 dark:text-purple-300 leading-tight">
-                                  {s.startTime.slice(0, 5)}–{s.endTime.slice(0, 5)}
-                                </div>
+                                s.entryType === "off_request" ? (
+                                  <div key={s.id} className="rounded bg-red-100 dark:bg-red-900/40 border border-red-200 dark:border-red-700 px-1 py-0.5 text-[10px] text-red-700 dark:text-red-300 leading-tight font-bold text-center">
+                                    休
+                                  </div>
+                                ) : (
+                                  <div key={s.id} className="rounded bg-purple-100 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 px-1 py-0.5 text-[10px] text-purple-700 dark:text-purple-300 leading-tight">
+                                    {s.startTime ? s.startTime.slice(0, 5) : ""}–{s.endTime ? s.endTime.slice(0, 5) : ""}
+                                  </div>
+                                )
                               ))}
                             </div>
                           ) : null}
@@ -273,9 +285,23 @@ export default function AvailabilityPage() {
           </div>
         )}
 
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <div className="w-3 h-3 rounded bg-purple-100 border border-purple-200" />
-          <span>紫色色塊表示員工填寫的可上班時段</span>
+        <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-purple-100 border border-purple-200" />
+            <span>紫色：可上班時段（兼職）</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
+            <span>紅色「休」：希望休假（正職）</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] px-1 py-0 rounded font-bold bg-amber-100 text-amber-700">兼</span>
+            <span>兼職</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] px-1 py-0 rounded font-bold bg-blue-100 text-blue-700">正</span>
+            <span>正職</span>
+          </div>
         </div>
       </div>
     </div>
