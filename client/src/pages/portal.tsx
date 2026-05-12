@@ -4243,10 +4243,10 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                         return (
                           <div className="mt-3 border border-slate-200 rounded-xl bg-white p-4 shadow-sm space-y-3" data-testid="card-leave-type">
                             <div className="text-xs font-semibold text-slate-700">{leaveTypeSheet} — 請選擇假別</div>
-                            <div className="grid grid-cols-2 gap-2">
-                              {(["特休", "事假"] as const).map(lt => (
+                            <div className="grid grid-cols-3 gap-2">
+                              {(["特休", "事假", "休假"] as const).map(lt => (
                                 <button key={lt}
-                                  className={`h-11 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-40 ${lt === "特休" ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`}
+                                  className={`h-11 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-40 ${lt === "特休" ? "bg-orange-500 hover:bg-orange-600 text-white" : lt === "事假" ? "bg-blue-500 hover:bg-blue-600 text-white" : "bg-slate-500 hover:bg-slate-600 text-white"}`}
                                   disabled={addAvailMutation.isPending || ltsWeekFull}
                                   onClick={() => {
                                     addAvailMutation.mutate({ date: leaveTypeSheet, entryType: "off_request", note: lt });
