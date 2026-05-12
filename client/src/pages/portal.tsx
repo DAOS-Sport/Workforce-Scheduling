@@ -4336,12 +4336,14 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           const isCopyable = copySourceDate !== null && !isPast && !isHoliday && slots.length === 0 && !isCopySource;
                           return (
                             <div key={dateStr}
-                              className={`min-h-[52px] rounded-md p-1 border transition-all ${
+                              className={`rounded-md p-1 border transition-all flex flex-col ${
+                                copySourceDate ? "min-h-[64px]" : "min-h-[52px]"
+                              } ${
                                 isHoliday ? "border-red-300 bg-red-50 cursor-not-allowed opacity-70" :
                                 isCopySource ? "border-indigo-400 bg-indigo-50 cursor-default ring-2 ring-indigo-300" :
-                                isCopyTarget ? "border-teal-400 bg-teal-50 cursor-pointer ring-1 ring-teal-300" :
+                                isCopyTarget ? "border-teal-400 bg-teal-50 cursor-pointer" :
                                 isCopyable ? "border-slate-300 bg-slate-50 hover:border-teal-400 hover:bg-teal-50/50 cursor-pointer" :
-                                copySourceDate && !isCopySource ? "border-slate-100 bg-white opacity-40 cursor-not-allowed" :
+                                copySourceDate ? "border-slate-100 bg-white opacity-30 cursor-not-allowed" :
                                 isSelected ? "border-purple-400 bg-purple-50 cursor-pointer" :
                                 slots.length > 0 ? "border-purple-200 bg-purple-50/60 cursor-pointer" :
                                 isWeekend ? "border-slate-200 bg-amber-50/40 cursor-pointer" :
@@ -4366,18 +4368,25 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                             >
                               <div className={`text-[11px] font-mono ${isHoliday ? "text-red-500 font-semibold" : isWeekend ? "text-amber-600" : isCopySource ? "text-indigo-600 font-semibold" : "text-juns-navy"}`}>{d.getDate()}</div>
                               {isHoliday && <div className="rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center bg-red-100 text-red-600">休館</div>}
-                              {isCopyTarget && <div className="rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center bg-teal-100 text-teal-700">✓</div>}
-                              {!isCopyTarget && slots.map(s => {
+                              {isCopyTarget && (
+                                <div className="flex-1 flex items-center justify-center">
+                                  <span className="text-lg leading-none text-teal-500">✓</span>
+                                </div>
+                              )}
+                              {isCopyable && !isCopyTarget && (
+                                <div className="flex-1 flex items-center justify-center">
+                                  <span className="text-base leading-none text-slate-300">+</span>
+                                </div>
+                              )}
+                              {!copySourceDate && slots.map(s => {
                                 const slotLocked = isAvailLocked(s.createdAt);
                                 const isAnytime = s.note === "都可以" && !s.startTime;
                                 return (
                                 <div key={s.id} className={`rounded text-[9px] leading-tight px-0.5 py-px mb-0.5 flex items-center justify-between gap-0.5 ${isAnytime ? "bg-teal-100 text-teal-700" : "bg-purple-100 text-purple-700"}`}>
                                   <span className="truncate">{isAnytime ? "都可以" : `${s.startTime ? s.startTime.slice(0, 5) : ""}–${s.endTime ? s.endTime.slice(0, 5) : ""}`}</span>
-                                  {isAvailWindowOpen && !copySourceDate && (
+                                  {isAvailWindowOpen && (
                                     slotLocked ? (
-                                      <span className="text-slate-400 shrink-0" title="送出超過4小時，請聯繫管理員刪除">
-                                        <Lock className="h-2.5 w-2.5" />
-                                      </span>
+                                      <span className="text-slate-400 shrink-0"><Lock className="h-2.5 w-2.5" /></span>
                                     ) : (
                                       <button onClick={e => { e.stopPropagation(); deleteAvailMutation.mutate(s.id); }}
                                         className="text-purple-400 hover:text-red-500 transition-colors shrink-0"
@@ -4389,44 +4398,93 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 </div>
                                 );
                               })}
-                              {isAvailWindowOpen && !copySourceDate && slots.length > 0 && (
-                                <button
-                                  onClick={e => { e.stopPropagation(); setAddAvailDate(null); setCopySourceDate(dateStr); setCopyTargetDates(new Set()); }}
-                                  className="mt-0.5 w-full flex items-center justify-center gap-0.5 text-[9px] text-indigo-400 hover:text-indigo-600 transition-colors"
-                                  data-testid={`button-copy-avail-${dateStr}`}
-                                >
-                                  <Copy className="h-2 w-2" />複製
-                                </button>
-                              )}
                             </div>
                           );
                         })}
                       </div>
 
-                      {copySourceDate && (
-                        <div className="mt-3 border border-indigo-200 rounded-xl bg-indigo-50/50 p-3 space-y-2" data-testid="card-copy-avail">
-                          <div className="text-xs font-semibold text-indigo-700">
-                            複製 {copySourceDate} 的時段 → 已選 {copyTargetDates.size} 個日期
-                          </div>
-                          <div className="flex gap-2">
+                      {copySourceDate && (() => {
+                        const allEmptyDates = availCalendarDays.filter(d => {
+                          if (!d) return false;
+                          const ds = format(d, "yyyy-MM-dd");
+                          const today = format(new Date(), "yyyy-MM-dd");
+                          return ds !== copySourceDate && ds >= today && !holidaySet.has(ds) && (availByDate.get(ds) || []).length === 0;
+                        }).map(d => format(d!, "yyyy-MM-dd"));
+                        const allSelected = allEmptyDates.length > 0 && allEmptyDates.every(ds => copyTargetDates.has(ds));
+                        return (
+                          <div className="mt-3 border border-indigo-200 rounded-xl bg-indigo-50/50 p-3 space-y-2" data-testid="card-copy-avail">
+                            <div className="text-xs font-semibold text-indigo-700">
+                              複製 {copySourceDate} 的時段 → 已選 <span className="text-base">{copyTargetDates.size}</span> 個日期
+                            </div>
                             <button
-                              className="flex-1 h-9 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                              disabled={copyTargetDates.size === 0 || batchCopyMutation.isPending}
-                              onClick={() => batchCopyMutation.mutate({ sourceDate: copySourceDate, targets: [...copyTargetDates] })}
-                              data-testid="button-confirm-copy"
+                              className="w-full h-9 rounded-lg border border-indigo-200 bg-white text-indigo-600 text-sm font-medium active:scale-[0.98] transition-all"
+                              onClick={() => {
+                                if (allSelected) {
+                                  setCopyTargetDates(new Set());
+                                } else {
+                                  setCopyTargetDates(new Set(allEmptyDates));
+                                }
+                              }}
+                              data-testid="button-select-all-copy"
                             >
-                              {batchCopyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
-                              確認複製
+                              {allSelected ? "取消全選" : "全選空白日"}
                             </button>
-                            <button className="px-3 h-9 rounded-lg border border-indigo-200 text-indigo-600 text-sm hover:bg-indigo-100 active:scale-[0.98] transition-all"
-                              onClick={() => { setCopySourceDate(null); setCopyTargetDates(new Set()); }}
-                              data-testid="button-cancel-copy">取消</button>
+                            <div className="flex gap-2">
+                              <button
+                                className="flex-1 h-11 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                disabled={copyTargetDates.size === 0 || batchCopyMutation.isPending}
+                                onClick={() => batchCopyMutation.mutate({ sourceDate: copySourceDate, targets: [...copyTargetDates] })}
+                                data-testid="button-confirm-copy"
+                              >
+                                {batchCopyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
+                                確認複製到 {copyTargetDates.size} 天
+                              </button>
+                              <button className="px-4 h-11 rounded-lg border border-indigo-200 text-indigo-600 text-sm hover:bg-indigo-100 active:scale-[0.98] transition-all"
+                                onClick={() => { setCopySourceDate(null); setCopyTargetDates(new Set()); }}
+                                data-testid="button-cancel-copy">取消</button>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
-                      {!copySourceDate && addAvailDate && isAvailWindowOpen && (
-                        <div className="mt-3 border border-purple-200 rounded-xl bg-purple-50/50 p-3 space-y-2" data-testid="card-add-avail">
+                      {!copySourceDate && addAvailDate && isAvailWindowOpen && (() => {
+                        const existingSlots = availByDate.get(addAvailDate) || [];
+                        if (existingSlots.length > 0) {
+                          const s = existingSlots[0];
+                          const isAnytime = s.note === "都可以" && !s.startTime;
+                          const slotLocked = isAvailLocked(s.createdAt);
+                          return (
+                            <div className="mt-3 border border-purple-200 rounded-xl bg-purple-50/50 p-3 space-y-2" data-testid="card-add-avail">
+                              <div className="text-xs font-semibold text-purple-700">{addAvailDate} 已填時段</div>
+                              <div className="rounded-lg bg-purple-100 px-3 py-2 text-sm font-semibold text-purple-800 text-center">
+                                {isAnytime ? "全天都可以" : `${s.startTime?.slice(0,5)} – ${s.endTime?.slice(0,5)}`}
+                              </div>
+                              <button
+                                className="w-full h-11 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                                disabled={slotLocked}
+                                onClick={() => { setCopySourceDate(addAvailDate); setCopyTargetDates(new Set()); setAddAvailDate(null); }}
+                                data-testid={`button-copy-avail-${addAvailDate}`}
+                              >
+                                <Copy className="h-4 w-4" />
+                                複製此時段到其他日期
+                              </button>
+                              {slotLocked && <div className="text-[10px] text-center text-slate-400">送出超過 4 小時，無法複製</div>}
+                              {!slotLocked && (
+                                <button
+                                  className="w-full h-9 rounded-lg border border-red-200 text-red-500 text-sm hover:bg-red-50 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
+                                  disabled={deleteAvailMutation.isPending}
+                                  onClick={() => { deleteAvailMutation.mutate(s.id); setAddAvailDate(null); }}
+                                  data-testid={`button-delete-avail-panel-${s.id}`}
+                                >
+                                  <X className="h-3.5 w-3.5" />刪除此時段
+                                </button>
+                              )}
+                              <button className="w-full text-xs text-slate-400 hover:text-slate-600 transition-colors" onClick={() => setAddAvailDate(null)}>關閉</button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="mt-3 border border-purple-200 rounded-xl bg-purple-50/50 p-3 space-y-2" data-testid="card-add-avail">
                           <div className="text-xs font-semibold text-purple-700">{addAvailDate} 新增可上班時段</div>
                           {regionHours && (addAvailStart < regionHours.openTime.slice(0,5) || addAvailEnd > regionHours.closeTime.slice(0,5)) && (
                             <div className="text-[10px] text-amber-600 bg-amber-50 rounded-lg px-2 py-1 border border-amber-200">
@@ -4476,7 +4534,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                             全天都可以
                           </button>
                         </div>
-                      )}
+                      );
+                      })()}
 
                       {!isAvailWindowOpen && (
                         <p className="text-center text-xs text-slate-400 mt-3">目前不在開放填寫期間，僅可查看已填意願</p>
