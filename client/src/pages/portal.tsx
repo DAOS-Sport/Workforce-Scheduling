@@ -4273,7 +4273,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                   {addAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : (
                                     <>
                                       <span>{lt}</span>
-                                      {ltsWeekFull ? <span className="text-[9px] font-normal opacity-80">本週已滿2天</span> : lt === "事假" ? <span className="text-[9px] font-normal opacity-80">每年上限14天</span> : null}
+                                      {lt === "事假" ? <span className="text-[9px] font-normal opacity-80">每年上限14天</span> : null}
                                     </>
                                   )}
                                 </button>
