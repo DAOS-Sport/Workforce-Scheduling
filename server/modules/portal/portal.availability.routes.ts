@@ -152,11 +152,6 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
         return badRequest(res, "該日已有填寫記錄，請先刪除後再重新填寫");
       }
       if (isOffRequest) {
-        const { weekStart, weekEnd } = getIsoWeekBounds(date);
-        const weekCount = await availabilityRepository.countOffRequestsInWeek(Number(employeeId), weekStart, weekEnd);
-        if (weekCount >= 2) {
-          return badRequest(res, "每週最多標記 2 天休假意願");
-        }
         // 勞工請假規則第7條：事假每年上限 14 天
         const leaveNote = (note as string | undefined)?.trim() ?? "";
         if (leaveNote === "事假") {
