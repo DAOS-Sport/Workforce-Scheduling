@@ -3527,9 +3527,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     },
   });
 
-  function isAvailLocked(createdAt: string | null): boolean {
-    if (!createdAt) return false;
-    return Date.now() - new Date(createdAt).getTime() > 4 * 60 * 60 * 1000;
+  function isAvailLocked(_createdAt: string | null): boolean {
+    return false;
   }
 
   const availByDate = useMemo(() => {
@@ -4234,7 +4233,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 if (!isAvailWindowOpen || isPast || isHoliday) return;
                                 if (offReq) {
                                   if (offReqLocked) {
-                                    toast({ title: "送出超過 4 小時，請聯繫管理員刪除", variant: "destructive" });
+                                    toast({ title: "填報期間已結束，無法修改", variant: "destructive" });
                                     return;
                                   }
                                   deleteAvailMutation.mutate(offReq.id);
@@ -4449,7 +4448,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 <Copy className="h-4 w-4" />
                                 複製此時段到其他日期
                               </button>
-                              {slotLocked && <div className="text-[10px] text-center text-slate-400">送出超過 4 小時，無法複製</div>}
+                              {slotLocked && <div className="text-[10px] text-center text-slate-400">填報期間已結束，無法修改</div>}
                               {!slotLocked && (
                                 <button
                                   className="w-full h-9 rounded-lg border border-red-200 text-red-500 text-sm hover:bg-red-50 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
