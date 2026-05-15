@@ -180,26 +180,6 @@ export default function AvailabilityPage() {
     return eachDayOfInterval({ start, end });
   }, [viewYearMonth]);
 
-  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 639px)");
-    setIsMobile(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
-  const [weekOffset, setWeekOffset] = useState(0);
-  useEffect(() => { setWeekOffset(0); }, [viewYearMonth]);
-
-  const maxWeekOffset = useMemo(() => Math.max(0, Math.ceil(monthDates.length / 7) - 1), [monthDates]);
-
-  const visibleDates = useMemo(() => {
-    if (!isMobile) return monthDates;
-    const start = weekOffset * 7;
-    return monthDates.slice(start, Math.min(start + 7, monthDates.length));
-  }, [isMobile, monthDates, weekOffset]);
-
   const availByEmpDate = useMemo(() => {
     const map = new Map<string, ShiftAvailability[]>();
     availabilities.forEach(a => {
@@ -222,8 +202,8 @@ export default function AvailabilityPage() {
     setViewYearMonth(format(d, "yyyy-MM"));
   }
 
-  const COL_WIDTH = isMobile ? 44 : 64;
-  const EMP_COL_WIDTH = isMobile ? 86 : 100;
+  const COL_WIDTH = 52;
+  const EMP_COL_WIDTH = 90;
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
@@ -386,32 +366,6 @@ export default function AvailabilityPage() {
           </div>
           <RegionTabs />
         </div>
-        {isMobile && (
-          <div className="flex items-center gap-2 text-xs">
-            <button
-              className="p-1 rounded-md hover:bg-muted transition-colors disabled:opacity-30"
-              onClick={() => setWeekOffset(o => Math.max(0, o - 1))}
-              disabled={weekOffset === 0}
-              data-testid="button-prev-week"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="font-medium">
-              第 {weekOffset + 1} 週
-              <span className="text-muted-foreground ml-1">
-                ({format(visibleDates[0], "M/d")}–{format(visibleDates[visibleDates.length - 1], "M/d")})
-              </span>
-            </span>
-            <button
-              className="p-1 rounded-md hover:bg-muted transition-colors disabled:opacity-30"
-              onClick={() => setWeekOffset(o => Math.min(maxWeekOffset, o + 1))}
-              disabled={weekOffset === maxWeekOffset}
-              data-testid="button-next-week"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        )}
 
         {(empLoading || availLoading) ? (
           <div className="space-y-2">
@@ -421,20 +375,21 @@ export default function AvailabilityPage() {
           <div className="text-sm text-muted-foreground text-center py-8">此區域無員工資料</div>
         ) : (
           <div
-            className="border rounded-lg overflow-y-auto"
+            className="border rounded-lg overflow-auto"
             style={{
               WebkitOverflowScrolling: "touch",
-              touchAction: "pan-y",
+              touchAction: "pan-x pan-y",
+              overscrollBehavior: "contain",
               maxHeight: "65vh",
             }}
           >
-            <table className="border-collapse text-xs w-full" style={isMobile ? undefined : { minWidth: "max-content" }}>
+            <table className="border-collapse text-xs" style={{ minWidth: "max-content" }}>
               <thead>
                 <tr>
                   <th className="sticky top-0 left-0 z-30 bg-muted/95 backdrop-blur-sm px-2 py-2 text-left font-semibold border-b border-r" style={{ minWidth: EMP_COL_WIDTH, width: EMP_COL_WIDTH }}>
                     員工
                   </th>
-                  {visibleDates.map((d, i) => {
+                  {monthDates.map((d, i) => {
                     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                     return (
                       <th key={i}
@@ -458,7 +413,7 @@ export default function AvailabilityPage() {
                         <div className="text-[11px] font-semibold truncate" title={emp.name}>{emp.name}</div>
                       </div>
                     </td>
-                    {visibleDates.map((d, i) => {
+                    {monthDates.map((d, i) => {
                       const dateStr = format(d, "yyyy-MM-dd");
                       const slots = availByEmpDate.get(`${emp.id}-${dateStr}`) || [];
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
