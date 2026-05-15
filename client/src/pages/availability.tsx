@@ -206,7 +206,7 @@ export default function AvailabilityPage() {
   const EMP_COL_WIDTH = 100;
 
   return (
-    <div className="h-full overflow-auto p-4 space-y-4">
+    <div className="h-full overflow-y-auto p-4 space-y-4">
       <div className="flex items-center gap-3">
         <CalendarDays className="h-5 w-5 text-primary" />
         <h1 className="text-xl font-bold">排班意願管理</h1>
@@ -374,8 +374,8 @@ export default function AvailabilityPage() {
         ) : activeEmployees.length === 0 ? (
           <div className="text-sm text-muted-foreground text-center py-8">此區域無員工資料</div>
         ) : (
-          <div className="border rounded-lg overflow-auto">
-            <table className="border-collapse text-xs">
+          <div className="border rounded-lg overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+            <table className="border-collapse text-xs" style={{ minWidth: "max-content" }}>
               <thead>
                 <tr className="bg-muted/50">
                   <th className="sticky left-0 z-10 bg-muted/50 px-2 py-2 text-left font-semibold border-b border-r" style={{ minWidth: EMP_COL_WIDTH, width: EMP_COL_WIDTH }}>
