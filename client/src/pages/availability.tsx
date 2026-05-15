@@ -374,17 +374,25 @@ export default function AvailabilityPage() {
         ) : activeEmployees.length === 0 ? (
           <div className="text-sm text-muted-foreground text-center py-8">此區域無員工資料</div>
         ) : (
-          <div className="border rounded-lg overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div
+            className="border rounded-lg overflow-auto"
+            style={{
+              WebkitOverflowScrolling: "touch",
+              touchAction: "pan-x pan-y",
+              maxHeight: "65vh",
+            }}
+          >
             <table className="border-collapse text-xs" style={{ minWidth: "max-content" }}>
               <thead>
-                <tr className="bg-muted/50">
-                  <th className="sticky left-0 z-10 bg-muted/50 px-2 py-2 text-left font-semibold border-b border-r" style={{ minWidth: EMP_COL_WIDTH, width: EMP_COL_WIDTH }}>
+                <tr>
+                  <th className="sticky top-0 left-0 z-30 bg-muted/95 backdrop-blur-sm px-2 py-2 text-left font-semibold border-b border-r" style={{ minWidth: EMP_COL_WIDTH, width: EMP_COL_WIDTH }}>
                     員工
                   </th>
                   {monthDates.map((d, i) => {
                     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                     return (
-                      <th key={i} className={`border-b border-r px-1 py-1 text-center font-medium ${isWeekend ? "bg-amber-50 dark:bg-amber-950/20" : ""}`}
+                      <th key={i}
+                        className={`sticky top-0 z-20 border-b border-r px-1 py-1 text-center font-medium backdrop-blur-sm ${isWeekend ? "bg-amber-50/95 dark:bg-amber-950/80" : "bg-muted/95"}`}
                         style={{ minWidth: COL_WIDTH, width: COL_WIDTH }}>
                         <div className="text-[10px] text-muted-foreground">{DAY_NAMES[d.getDay()]}</div>
                         <div>{d.getDate()}</div>
