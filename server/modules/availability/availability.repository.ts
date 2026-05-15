@@ -95,6 +95,23 @@ export const availabilityRepository = {
     return row?.cnt ?? 0;
   },
 
+  /** 取得某年月所有員工的意願填寫記錄（用於計算未填人員） */
+  async getByYearMonth(yearMonth: string): Promise<ShiftAvailability[]> {
+    const start = `${yearMonth}-01`;
+    const [y, m] = yearMonth.split("-").map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const end = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
+    return db
+      .select()
+      .from(shiftAvailabilities)
+      .where(
+        and(
+          gte(shiftAvailabilities.date, start),
+          lte(shiftAvailabilities.date, end)
+        )
+      );
+  },
+
   /** 檢查同一員工在同一天是否已有任何填寫記錄（防止重複） */
   async existsOnDate(employeeId: number, date: string): Promise<boolean> {
     const [row] = await db
