@@ -225,6 +225,10 @@ function mapRegularShift(s: Shift, b: EnrichmentBundle) {
     sourceTable: "shifts",
     sourceRowId: s.id,
     date: s.date,
+    role: employee?.role ?? null,
+    period,
+    venueName: venue?.name ?? null,
+    venueShortName: venue?.shortName ?? null,
     region,
     venue: venueDto(venue),
     shift: {
@@ -273,6 +277,10 @@ function mapDispatchShift(d: DispatchShift, b: EnrichmentBundle) {
     sourceTable: "dispatch_shifts",
     sourceRowId: d.id,
     date: d.date,
+    role: d.role ?? null,
+    period,
+    venueName: venue?.name ?? null,
+    venueShortName: venue?.shortName ?? null,
     region: region ? { id: region.id, code: region.code, name: region.name } : null,
     venue: venueDto(venue),
     shift: {
@@ -410,6 +418,7 @@ export const internalService = {
           startTime: s.startTime,
           endTime: s.endTime,
           role: s.role,
+          period: periodFromTimes(s.startTime ?? "", s.endTime ?? ""),
           employee: emp ? { id: emp.id, name: emp.name, employeeCode: emp.employeeCode, phone: emp.phone } : null,
           venue: v ? { id: v.id, name: v.name, shortName: v.shortName } : { id: s.venueId, name: null, shortName: null },
           isDispatch: !!s.isDispatch,
@@ -431,6 +440,7 @@ export const internalService = {
           startTime: d.startTime,
           endTime: d.endTime,
           role: d.role,
+          period: periodFromTimes(d.startTime ?? "", d.endTime ?? ""),
           dispatch: { name: d.dispatchName, company: d.dispatchCompany, phone: d.dispatchPhone },
           linkedEmployeeId: d.linkedEmployeeId,
           venue: v
