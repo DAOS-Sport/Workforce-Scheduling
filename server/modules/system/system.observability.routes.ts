@@ -56,12 +56,12 @@ async function probeLine(): Promise<{ status: "ok" | "degraded" | "down"; latenc
 async function probeRagic(): Promise<{ status: "ok" | "degraded" | "down"; latencyMs: number; error?: string }> {
   const start = Date.now();
   const ragicKey = process.env.RAGIC_API_KEY;
-  const ragicUrl = process.env.RAGIC_BASE_URL;
-  if (!ragicKey || !ragicUrl) return { status: "degraded", latencyMs: 0, error: "Ragic env vars not configured" };
+  if (!ragicKey) return { status: "degraded", latencyMs: 0, error: "RAGIC_API_KEY not configured" };
   try {
-    const res = await fetch(ragicUrl, {
-      headers: { Authorization: `Basic ${ragicKey}` },
-      signal: AbortSignal.timeout(5000),
+    const params = new URLSearchParams({ v: "3", limit: "1", _: String(Date.now()) });
+    const res = await fetch(`https://ap7.ragic.com/xinsheng/ragicforms4/20004?${params}`, {
+      headers: { Authorization: `Basic ${ragicKey}`, "Cache-Control": "no-cache" },
+      signal: AbortSignal.timeout(6000),
     });
     const latencyMs = Date.now() - start;
     return { status: res.ok ? "ok" : "degraded", latencyMs };
@@ -71,7 +71,7 @@ async function probeRagic(): Promise<{ status: "ok" | "degraded" | "down"; laten
 }
 
 const PROBE_TTL = 30_000;
-let lastProbeAt = 0;
+export let lastProbeAt = 0;
 
 async function getOrRefreshProbes() {
   const now = Date.now();
