@@ -30,6 +30,7 @@ import MobileHrPage from "@/pages/mobile-hr";
 import GuidelineAcksPage from "@/pages/guideline-acks";
 import SopPage from "@/pages/sop";
 import AvailabilityPage from "@/pages/availability";
+import ObservabilityPage from "@/pages/IT/Observability";
 import { Loader2 } from "lucide-react";
 
 function AdminRouter() {
@@ -50,6 +51,7 @@ function AdminRouter() {
       <Route path="/guideline-acks" component={GuidelineAcksPage} />
       <Route path="/sop" component={SopPage} />
       <Route path="/availability" component={AvailabilityPage} />
+      <Route path="/IT/observability" component={ObservabilityPage} />
       <Route path="/announcements">{() => <Redirect to="/guidelines" />}</Route>
       <Route component={NotFound} />
     </Switch>

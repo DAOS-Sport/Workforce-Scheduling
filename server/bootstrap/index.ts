@@ -4,6 +4,7 @@ import { runStartupMigrations } from "./migrations";
 import { registerCronJobs } from "./scheduler";
 import { setupClientServing } from "./viteOrStatic";
 import { registerRoutes } from "../routes";
+import { registerLogPersistence } from "../observability/persist";
 
 /**
  * The single entry point used by server/index.ts.
@@ -21,6 +22,9 @@ import { registerRoutes } from "../routes";
 export async function bootstrap(): Promise<void> {
   // 1) idempotent migrations first — ensures schema is up-to-date before seed queries it
   await runStartupMigrations();
+
+  // 1a) wire up structured log persistence (after tables exist)
+  registerLogPersistence();
 
   // 2) seed
   try {

@@ -18,4 +18,5 @@ export const OPEN_API_PREFIXES = [
   "/api/internal/",
   "/api/anomaly-report",
   "/api/announcements/active",
+  "/api/health",
 ] as const;

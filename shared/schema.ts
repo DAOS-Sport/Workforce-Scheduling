@@ -582,3 +582,53 @@ export interface VacancyInfo {
   assigned: number;
   shortage: number;
 }
+
+export const appLogs = pgTable("app_logs", {
+  id: serial("id").primaryKey(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  level: text("level").notNull(),
+  service: text("service").notNull(),
+  environment: text("environment").notNull(),
+  module: text("module"),
+  action: text("action"),
+  requestId: text("request_id"),
+  route: text("route"),
+  method: text("method"),
+  statusCode: integer("status_code"),
+  durationMs: integer("duration_ms"),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  externalService: text("external_service"),
+  safeContext: jsonb("safe_context"),
+  message: text("message").notNull(),
+});
+export type AppLog = typeof appLogs.$inferSelect;
+
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  requestId: text("request_id"),
+  actorUserId: text("actor_user_id"),
+  actorRole: text("actor_role"),
+  action: text("action").notNull(),
+  targetType: text("target_type"),
+  targetId: text("target_id"),
+  beforeState: jsonb("before_state"),
+  afterState: jsonb("after_state"),
+  message: text("message").notNull(),
+});
+export type AuditLog = typeof auditLogs.$inferSelect;
+
+export const userErrorEvents = pgTable("user_error_events", {
+  id: serial("id").primaryKey(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  requestId: text("request_id"),
+  userId: text("user_id"),
+  userRole: text("user_role"),
+  action: text("action"),
+  errorCode: text("error_code"),
+  messageShown: text("message_shown"),
+  route: text("route"),
+  formStateSnapshot: jsonb("form_state_snapshot"),
+});
+export type UserErrorEvent = typeof userErrorEvents.$inferSelect;
