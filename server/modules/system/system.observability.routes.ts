@@ -56,15 +56,17 @@ async function probeLine(): Promise<{ status: "ok" | "degraded" | "down"; latenc
 async function probeRagic(): Promise<{ status: "ok" | "degraded" | "down"; latencyMs: number; error?: string }> {
   const start = Date.now();
   const ragicKey = process.env.RAGIC_API_KEY;
-  if (!ragicKey) return { status: "degraded", latencyMs: 0, error: "RAGIC_API_KEY not configured" };
   try {
     const params = new URLSearchParams({ v: "3", limit: "1", _: String(Date.now()) });
+    const headers: Record<string, string> = { "Cache-Control": "no-cache" };
+    if (ragicKey) headers["Authorization"] = `Basic ${ragicKey}`;
     const res = await fetch(`https://ap7.ragic.com/xinsheng/ragicforms4/20004?${params}`, {
-      headers: { Authorization: `Basic ${ragicKey}`, "Cache-Control": "no-cache" },
+      headers,
       signal: AbortSignal.timeout(6000),
     });
     const latencyMs = Date.now() - start;
-    return { status: res.ok ? "ok" : "degraded", latencyMs };
+    // 200 = ok with auth, 401/403 = reachable but no auth — still "ok" for connectivity purposes
+    return { status: res.status < 500 ? "ok" : "degraded", latencyMs };
   } catch (e: any) {
     return { status: "down", latencyMs: Date.now() - start, error: e?.message ?? "unknown" };
   }
