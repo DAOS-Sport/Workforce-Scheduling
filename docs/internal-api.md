@@ -456,3 +456,82 @@
 | `MISSING_INTERNAL_TOKEN` | 401 | 未帶 token |
 | `INVALID_INTERNAL_TOKEN` | 403 | Token 錯誤 |
 | `INTERNAL_API_DISABLED` | 503 | 伺服器未設定 `INTERNAL_API_TOKEN` |
+
+---
+
+## 接入服務說明
+
+以下為已規劃或正在對接本 API 的外部服務，以及各服務推薦使用的端點。
+
+---
+
+### 1. LINE 即時通知
+
+**用途：** 透過 LINE Bot 主動推送班務警示給管理員或教練。
+
+| 情境 | 建議端點 | 說明 |
+|------|----------|------|
+| 今日誰遲到 | `GET /schedules/today?facilityKey=A` | 取今日班表，比對打卡記錄 |
+| 今日誰沒到 | `GET /schedules/today?facilityKey=A` | 比對應到班但無打卡的員工 |
+| 明天班提醒 | `GET /export/schedules?from=<tomorrow>&to=<tomorrow>` | 撈明日班次，逐人發提醒 |
+| 缺人警告 | `GET /schedules/today?facilityKey=A` | 比對班次數與最低需求人數 |
+
+**建議排程頻率：** 早上 07:30 推今日班次；上班前 30 分鐘推個人提醒；每小時比對缺人。
+
+---
+
+### 2. IT 監控平台
+
+**用途：** 外部監控儀表板（如 Grafana、自建 Dashboard）串接排班系統健康資料。
+
+| 情境 | 建議端點 | 說明 |
+|------|----------|------|
+| 系統整體狀態 | `GET /admin/overview` | 員工數、今日班次、待審件數 |
+| 排班同步確認 | `GET /export/schedules?from=<today>&to=<today>` | 確認今日班次是否正常同步 |
+| 異動量監控 | `GET /export/changes?from=<today>&to=<today>` | 今日排班異動筆數 |
+| 完整資料快照 | `GET /export/snapshot?from=<date>&to=<date>` | 定期全量備份或差異比對 |
+
+**建議排程頻率：** 每 5 分鐘 `overview`；每日凌晨 `snapshot` 做全量同步。
+
+---
+
+### 3. AI 排班分析
+
+**用途：** 餵入歷史班表與員工資料給 AI 模型，進行排班優化與人力預測分析。
+
+| 分析目標 | 建議端點 | 說明 |
+|----------|----------|------|
+| 哪館最缺人 | `GET /export/schedules` + `GET /export/venues` | 按館別統計班次空缺率 |
+| 哪時段最忙 | `GET /export/schedules?from=<N週前>&to=<today>` | 按 `period` 欄位統計各時段班次量 |
+| 哪個人常請假 | `GET /export/changes` | `changeType = cancel` 並依員工彙總 |
+| 哪館 turnover 高 | `GET /export/employees?status=all` + `GET /export/changes` | 員工狀態變化 + 取消班次頻率 |
+| 月度人力報告 | `GET /export/snapshot?from=<月初>&to=<月末>` | 一次取得完整月份資料 |
+
+**建議：** 每週拉取一次 `snapshot` 做增量訓練；`period` 與 `role` 欄位已標準化，可直接作為分析維度。
+
+---
+
+### 4. 員工 Portal
+
+**用途：** 面向員工的自助查詢介面，顯示個人班表、同事資訊與館別資訊。
+
+| 功能 | 建議端點 | 說明 |
+|------|----------|------|
+| 個人班表查詢 | `GET /export/schedules?employeeNumber=<編號>` | 依員工編號篩選班次 |
+| 今日我的班 | `GET /schedules/today?facilityKey=<區>` | 快速取今日班次，前端過濾 |
+| 同事清單 | `GET /export/employees?facilityKey=<區>` | 同館區的 active 員工 |
+| 館別資訊 | `GET /export/venues` | 地址、GPS 座標、館別代碼 |
+
+**注意：** Portal 若面向員工公開，請於前端或 Proxy 層做身分驗證，不應直接將 `INTERNAL_API_TOKEN` 暴露於瀏覽器端。
+
+---
+
+### 接入服務監控
+
+上述四個服務的呼叫狀態（呼叫次數、最後呼叫時間）可在管理後台 **IT 監控 → 接入服務** 分頁即時查看。狀態說明：
+
+| 狀態 | 說明 |
+|------|------|
+| **活躍** | 24 小時內有呼叫記錄 |
+| **閒置** | 有歷史呼叫但超過 24 小時未呼叫 |
+| **未接入** | 尚無任何呼叫記錄（可能尚未設定或尚在開發中） |

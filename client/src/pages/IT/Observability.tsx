@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Clock, Activity, Database, Radio } from "lucide-react";
+import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Clock, Activity, Database, Radio, MessageSquare, Bot, Users, BarChart3 } from "lucide-react";
 
 interface Metrics {
   timestamp: string;
@@ -187,6 +187,7 @@ export default function ObservabilityPage() {
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="overview" data-testid="tab-overview">總覽</TabsTrigger>
           <TabsTrigger value="services" data-testid="tab-services">外部服務</TabsTrigger>
+          <TabsTrigger value="api-clients" data-testid="tab-api-clients">接入服務</TabsTrigger>
           <TabsTrigger value="internal-api" data-testid="tab-internal-api">Internal API</TabsTrigger>
           <TabsTrigger value="errors" data-testid="tab-errors">
             錯誤日誌
@@ -310,6 +311,123 @@ export default function ObservabilityPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* ── 接入服務 ── */}
+        <TabsContent value="api-clients" className="mt-4 space-y-3">
+          {(() => {
+            const stats = internalQuery.data?.endpoints ?? [];
+            const lastCalledMap = new Map(stats.map((e) => [e.endpoint, e]));
+
+            function clientActivity(endpoints: string[]) {
+              const matched = endpoints.map((ep) => lastCalledMap.get(ep)).filter(Boolean) as InternalApiStat[];
+              if (matched.length === 0) return { active: false, lastCalledAtIso: null as string | null, totalCalls: 0 };
+              const totalCalls = matched.reduce((s, e) => s + e.callCount, 0);
+              const latest = matched.reduce((best, e) => {
+                if (!e.lastCalledAtIso) return best;
+                if (!best) return e.lastCalledAtIso;
+                return e.lastCalledAtIso > best ? e.lastCalledAtIso : best;
+              }, null as string | null);
+              const recentMs = latest ? Date.now() - new Date(latest).getTime() : Infinity;
+              return { active: recentMs < 24 * 60 * 60 * 1000, lastCalledAtIso: latest, totalCalls };
+            }
+
+            const clients = [
+              {
+                key: "line-notify",
+                icon: <MessageSquare className="h-5 w-5 text-green-500" />,
+                name: "LINE 即時通知",
+                desc: "今日遲到 / 未到 / 明天班提醒 / 缺人警告",
+                endpoints: [
+                  "GET /api/internal/schedules/today",
+                  "GET /api/internal/export/schedules",
+                ],
+                useCases: ["今日誰遲到", "今日誰沒到", "明天班提醒", "缺人警告"],
+              },
+              {
+                key: "it-monitor",
+                icon: <Activity className="h-5 w-5 text-blue-500" />,
+                name: "IT 監控平台",
+                desc: "API 健康、異常量、排班同步、系統狀態",
+                endpoints: [
+                  "GET /api/internal/admin/overview",
+                  "GET /api/internal/export/schedules",
+                  "GET /api/internal/export/snapshot",
+                ],
+                useCases: ["API 健康", "異常量監控", "排班同步狀態", "系統整體狀態"],
+              },
+              {
+                key: "ai-analysis",
+                icon: <Bot className="h-5 w-5 text-purple-500" />,
+                name: "AI 排班分析",
+                desc: "最缺人館別、最忙時段、常請假、人員流動",
+                endpoints: [
+                  "GET /api/internal/export/schedules",
+                  "GET /api/internal/export/employees",
+                  "GET /api/internal/export/snapshot",
+                  "GET /api/internal/export/changes",
+                ],
+                useCases: ["哪館最缺人", "哪時段最忙", "哪個人常請假", "哪館 turnover 高"],
+              },
+              {
+                key: "employee-portal",
+                icon: <Users className="h-5 w-5 text-orange-500" />,
+                name: "員工 Portal",
+                desc: "個人班表、員工資訊、館別查詢",
+                endpoints: [
+                  "GET /api/internal/schedules/today",
+                  "GET /api/internal/export/schedules",
+                  "GET /api/internal/export/employees",
+                  "GET /api/internal/export/venues",
+                ],
+                useCases: ["個人班表查詢", "員工清單", "館別資訊"],
+              },
+            ];
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {clients.map((client) => {
+                  const act = clientActivity(client.endpoints);
+                  return (
+                    <Card key={client.key} data-testid={`card-api-client-${client.key}`}>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            {client.icon}
+                            {client.name}
+                          </CardTitle>
+                          {act.totalCalls > 0 ? (
+                            act.active
+                              ? <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 shrink-0">活躍</Badge>
+                              : <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 shrink-0">閒置</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground shrink-0">未接入</Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{client.desc}</p>
+                      </CardHeader>
+                      <CardContent className="text-xs space-y-2">
+                        <div className="flex flex-wrap gap-1">
+                          {client.useCases.map((uc) => (
+                            <span key={uc} className="bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{uc}</span>
+                          ))}
+                        </div>
+                        <div className="border-t pt-2 space-y-1 text-muted-foreground">
+                          <p>呼叫次數：<span className="text-foreground font-medium">{act.totalCalls}</span></p>
+                          <p>最後呼叫：{formatTs(act.lastCalledAtIso)}</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {client.endpoints.map((ep) => (
+                              <code key={ep} className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono">{ep.replace("GET ", "").replace("POST ", "")}</code>
+                            ))}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </TabsContent>
 
         {/* ── Internal API ── */}
