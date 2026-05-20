@@ -318,77 +318,157 @@ export default function ObservabilityPage() {
           {(() => {
             const stats = internalQuery.data?.endpoints ?? [];
             const lastCalledMap = new Map(stats.map((e) => [e.endpoint, e]));
+            const lineProbe = s?.services?.find((x) => x.name === "line");
+            const lineOk = lineProbe?.status === "ok";
+            const liffId = import.meta.env.VITE_LIFF_ID as string | undefined;
+            const lineChannelId = import.meta.env.VITE_LINE_CHANNEL_ID as string | undefined;
 
-            function clientActivity(endpoints: string[]) {
+            function internalApiActivity(endpoints: string[]) {
               const matched = endpoints.map((ep) => lastCalledMap.get(ep)).filter(Boolean) as InternalApiStat[];
-              if (matched.length === 0) return { active: false, lastCalledAtIso: null as string | null, totalCalls: 0 };
-              const totalCalls = matched.reduce((s, e) => s + e.callCount, 0);
+              const totalCalls = matched.reduce((sum, e) => sum + e.callCount, 0);
               const latest = matched.reduce((best, e) => {
                 if (!e.lastCalledAtIso) return best;
-                if (!best) return e.lastCalledAtIso;
-                return e.lastCalledAtIso > best ? e.lastCalledAtIso : best;
+                return !best || e.lastCalledAtIso > best ? e.lastCalledAtIso : best;
               }, null as string | null);
               const recentMs = latest ? Date.now() - new Date(latest).getTime() : Infinity;
-              return { active: recentMs < 24 * 60 * 60 * 1000, lastCalledAtIso: latest, totalCalls };
+              return { totalCalls, lastCalledAtIso: latest, recentlyActive: recentMs < 24 * 60 * 60 * 1000 };
             }
 
-            const clients = [
+            type ServiceStatus = "active" | "idle" | "not_connected";
+            type Client = {
+              key: string;
+              icon: React.ReactNode;
+              name: string;
+              desc: string;
+              status: ServiceStatus;
+              statusLabel: string;
+              statusHint: string;
+              useCases: string[];
+              endpoints: string[];
+              totalCalls: number;
+              lastCalledAtIso: string | null;
+            };
+
+            const lineNotifyAct = internalApiActivity([
+              "GET /api/internal/schedules/today",
+              "GET /api/internal/export/schedules",
+            ]);
+            const itMonitorAct = internalApiActivity([
+              "GET /api/internal/admin/overview",
+              "GET /api/internal/export/schedules",
+              "GET /api/internal/export/snapshot",
+            ]);
+            const aiAct = internalApiActivity([
+              "GET /api/internal/export/schedules",
+              "GET /api/internal/export/employees",
+              "GET /api/internal/export/snapshot",
+              "GET /api/internal/export/changes",
+            ]);
+            const portalAct = internalApiActivity([
+              "GET /api/internal/schedules/today",
+              "GET /api/internal/export/schedules",
+              "GET /api/internal/export/employees",
+              "GET /api/internal/export/venues",
+            ]);
+
+            const clients: Client[] = [
               {
                 key: "line-notify",
                 icon: <MessageSquare className="h-5 w-5 text-green-500" />,
                 name: "LINE 即時通知",
-                desc: "今日遲到 / 未到 / 明天班提醒 / 缺人警告",
+                desc: "排班提醒、打卡通知、遲到 / 未到警示",
+                status: lineOk ? "active" : "not_connected",
+                statusLabel: lineOk ? "運作中" : "未接入",
+                statusHint: lineOk
+                  ? `LINE Bot 已啟用（Channel ${lineChannelId ?? "—"}）・排班通知、打卡提醒均已設定`
+                  : "LINE_CHANNEL_ACCESS_TOKEN 未設定",
+                useCases: ["今日誰遲到", "今日誰沒到", "明天班提醒", "缺人警告", "打卡提醒"],
                 endpoints: [
                   "GET /api/internal/schedules/today",
                   "GET /api/internal/export/schedules",
                 ],
-                useCases: ["今日誰遲到", "今日誰沒到", "明天班提醒", "缺人警告"],
-              },
-              {
-                key: "it-monitor",
-                icon: <Activity className="h-5 w-5 text-blue-500" />,
-                name: "IT 監控平台",
-                desc: "API 健康、異常量、排班同步、系統狀態",
-                endpoints: [
-                  "GET /api/internal/admin/overview",
-                  "GET /api/internal/export/schedules",
-                  "GET /api/internal/export/snapshot",
-                ],
-                useCases: ["API 健康", "異常量監控", "排班同步狀態", "系統整體狀態"],
-              },
-              {
-                key: "ai-analysis",
-                icon: <Bot className="h-5 w-5 text-purple-500" />,
-                name: "AI 排班分析",
-                desc: "最缺人館別、最忙時段、常請假、人員流動",
-                endpoints: [
-                  "GET /api/internal/export/schedules",
-                  "GET /api/internal/export/employees",
-                  "GET /api/internal/export/snapshot",
-                  "GET /api/internal/export/changes",
-                ],
-                useCases: ["哪館最缺人", "哪時段最忙", "哪個人常請假", "哪館 turnover 高"],
+                totalCalls: lineNotifyAct.totalCalls,
+                lastCalledAtIso: lineNotifyAct.lastCalledAtIso,
               },
               {
                 key: "employee-portal",
                 icon: <Users className="h-5 w-5 text-orange-500" />,
                 name: "員工 Portal",
-                desc: "個人班表、員工資訊、館別查詢",
+                desc: "LINE LIFF 員工自助查詢：班表、打卡、請假",
+                status: (lineOk && !!liffId) ? "active" : "not_connected",
+                statusLabel: (lineOk && !!liffId) ? "運作中" : "未接入",
+                statusHint: (lineOk && !!liffId)
+                  ? `LIFF ID：${liffId}・員工可透過 LINE 查詢班表與打卡`
+                  : !liffId ? "VITE_LIFF_ID 未設定" : "LINE 服務異常",
+                useCases: ["個人班表查詢", "GPS 打卡", "請假申請", "員工通訊錄"],
                 endpoints: [
                   "GET /api/internal/schedules/today",
                   "GET /api/internal/export/schedules",
                   "GET /api/internal/export/employees",
                   "GET /api/internal/export/venues",
                 ],
-                useCases: ["個人班表查詢", "員工清單", "館別資訊"],
+                totalCalls: portalAct.totalCalls,
+                lastCalledAtIso: portalAct.lastCalledAtIso,
+              },
+              {
+                key: "it-monitor",
+                icon: <Activity className="h-5 w-5 text-blue-500" />,
+                name: "IT 監控平台",
+                desc: "外部系統透過 Internal API 拉取健康與排班資料",
+                status: itMonitorAct.totalCalls > 0
+                  ? (itMonitorAct.recentlyActive ? "active" : "idle")
+                  : "not_connected",
+                statusLabel: itMonitorAct.totalCalls > 0
+                  ? (itMonitorAct.recentlyActive ? "活躍" : "閒置")
+                  : "未接入",
+                statusHint: itMonitorAct.totalCalls > 0
+                  ? `Internal API 已有 ${itMonitorAct.totalCalls} 次呼叫`
+                  : "尚未有外部系統呼叫 Internal API",
+                useCases: ["API 健康", "異常量監控", "排班同步狀態", "系統整體狀態"],
+                endpoints: [
+                  "GET /api/internal/admin/overview",
+                  "GET /api/internal/export/schedules",
+                  "GET /api/internal/export/snapshot",
+                ],
+                totalCalls: itMonitorAct.totalCalls,
+                lastCalledAtIso: itMonitorAct.lastCalledAtIso,
+              },
+              {
+                key: "ai-analysis",
+                icon: <Bot className="h-5 w-5 text-purple-500" />,
+                name: "AI 排班分析",
+                desc: "外部 AI 模型拉取歷史資料做排班優化與預測",
+                status: aiAct.totalCalls > 0
+                  ? (aiAct.recentlyActive ? "active" : "idle")
+                  : "not_connected",
+                statusLabel: aiAct.totalCalls > 0
+                  ? (aiAct.recentlyActive ? "活躍" : "閒置")
+                  : "未接入",
+                statusHint: aiAct.totalCalls > 0
+                  ? `Internal API 已有 ${aiAct.totalCalls} 次呼叫`
+                  : "尚未有外部 AI 系統呼叫 Internal API",
+                useCases: ["哪館最缺人", "哪時段最忙", "哪個人常請假", "哪館 turnover 高"],
+                endpoints: [
+                  "GET /api/internal/export/schedules",
+                  "GET /api/internal/export/employees",
+                  "GET /api/internal/export/snapshot",
+                  "GET /api/internal/export/changes",
+                ],
+                totalCalls: aiAct.totalCalls,
+                lastCalledAtIso: aiAct.lastCalledAtIso,
               },
             ];
 
+            const activeCount = clients.filter((c) => c.status === "active").length;
+
             return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {clients.map((client) => {
-                  const act = clientActivity(client.endpoints);
-                  return (
+              <>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>共 {clients.length} 個服務・</span>
+                  <span className="text-green-600 dark:text-green-400 font-medium">{activeCount} 個運作中</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {clients.map((client) => (
                     <Card key={client.key} data-testid={`card-api-client-${client.key}`}>
                       <CardHeader className="pb-2">
                         <div className="flex items-start justify-between gap-2">
@@ -396,15 +476,18 @@ export default function ObservabilityPage() {
                             {client.icon}
                             {client.name}
                           </CardTitle>
-                          {act.totalCalls > 0 ? (
-                            act.active
-                              ? <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 shrink-0">活躍</Badge>
-                              : <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 shrink-0">閒置</Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-muted-foreground shrink-0">未接入</Badge>
+                          {client.status === "active" && (
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 shrink-0">{client.statusLabel}</Badge>
+                          )}
+                          {client.status === "idle" && (
+                            <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 shrink-0">{client.statusLabel}</Badge>
+                          )}
+                          {client.status === "not_connected" && (
+                            <Badge variant="outline" className="text-muted-foreground shrink-0">{client.statusLabel}</Badge>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">{client.desc}</p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400">{client.statusHint}</p>
                       </CardHeader>
                       <CardContent className="text-xs space-y-2">
                         <div className="flex flex-wrap gap-1">
@@ -413,19 +496,19 @@ export default function ObservabilityPage() {
                           ))}
                         </div>
                         <div className="border-t pt-2 space-y-1 text-muted-foreground">
-                          <p>呼叫次數：<span className="text-foreground font-medium">{act.totalCalls}</span></p>
-                          <p>最後呼叫：{formatTs(act.lastCalledAtIso)}</p>
+                          <p>Internal API 呼叫次數：<span className="text-foreground font-medium">{client.totalCalls}</span></p>
+                          <p>最後呼叫：{formatTs(client.lastCalledAtIso)}</p>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {client.endpoints.map((ep) => (
-                              <code key={ep} className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono">{ep.replace("GET ", "").replace("POST ", "")}</code>
+                              <code key={ep} className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono">{ep.replace(/^(GET|POST) /, "")}</code>
                             ))}
                           </div>
                         </div>
                       </CardContent>
                     </Card>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              </>
             );
           })()}
         </TabsContent>
