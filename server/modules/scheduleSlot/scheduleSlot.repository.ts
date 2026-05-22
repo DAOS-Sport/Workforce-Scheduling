@@ -6,7 +6,18 @@ import {
   type ScheduleSlot,
   type InsertScheduleSlot,
 } from "@shared/schema";
+import { normalizeScheduleRole } from "@shared/scheduleMapping";
 import { venueRepository } from "../venue/venue.repository";
+
+function normalizeSlotRoleData<T extends Partial<InsertScheduleSlot>>(data: T): T {
+  if (data.role === undefined) return data;
+  return { ...data, role: normalizeScheduleRole(data.role) || data.role } as T;
+}
+
+async function assertVenueExists(venueId: number): Promise<void> {
+  const [venue] = await db.select({ id: venues.id }).from(venues).where(eq(venues.id, venueId));
+  if (!venue) throw new Error(`Invalid schedule slot venueId ${venueId}: venue does not exist`);
+}
 
 export const scheduleSlotRepository = {
   async getScheduleSlotsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<ScheduleSlot[]> {
@@ -32,12 +43,16 @@ export const scheduleSlotRepository = {
   },
 
   async createScheduleSlot(data: InsertScheduleSlot): Promise<ScheduleSlot> {
-    const [slot] = await db.insert(scheduleSlots).values(data).returning();
+    const normalizedData = normalizeSlotRoleData(data);
+    await assertVenueExists(normalizedData.venueId);
+    const [slot] = await db.insert(scheduleSlots).values(normalizedData).returning();
     return slot;
   },
 
   async updateScheduleSlot(id: number, data: Partial<InsertScheduleSlot>): Promise<ScheduleSlot | undefined> {
-    const [slot] = await db.update(scheduleSlots).set(data).where(eq(scheduleSlots.id, id)).returning();
+    const normalizedData = normalizeSlotRoleData(data);
+    if (normalizedData.venueId !== undefined) await assertVenueExists(normalizedData.venueId);
+    const [slot] = await db.update(scheduleSlots).set(normalizedData).where(eq(scheduleSlots.id, id)).returning();
     return slot;
   },
 

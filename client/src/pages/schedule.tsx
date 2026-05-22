@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { GoogleSheetsImportDialog } from "@/components/GoogleSheetsImportDialog";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
+import { NON_WORK_ROLES, isNonWorkRole, normalizeScheduleRole, shiftOverlapsScheduleSlot } from "@shared/scheduleMapping";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
@@ -86,7 +87,7 @@ const ROLE_LABELS: Record<string, string> = {
   "守望": "守望",
 };
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
+const LEAVE_TYPES: string[] = [...NON_WORK_ROLES];
 
 const LEAVE_COLORS: Record<string, string> = {
   "休假": "bg-slate-100 dark:bg-slate-800/40 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400",
@@ -668,8 +669,7 @@ export default function SchedulePage() {
 
   const precheckParams = useMemo(() => {
     if (!shiftDialogOpen || !shiftDate || !shiftStartTime || !shiftEndTime || !shiftEmployeeId) return null;
-    const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
-    if (LEAVE_TYPES.includes(shiftRole)) return null;
+    if (isNonWorkRole(shiftRole)) return null;
     return { employeeId: shiftEmployeeId, date: shiftDate, startTime: shiftStartTime, endTime: shiftEndTime, shiftIdToExclude: editingShift?.id || null };
   }, [shiftDialogOpen, shiftDate, shiftStartTime, shiftEndTime, shiftEmployeeId, shiftRole, editingShift]);
 
@@ -764,34 +764,12 @@ export default function SchedulePage() {
     return ids;
   }, [scheduleSlots]);
 
-  const timeToMin = (t: string) => {
-    const [h, m] = t.substring(0, 5).split(":").map(Number);
-    return h * 60 + m;
-  };
-
   const shiftOverlapsSlot = (sh: Shift, slot: ScheduleSlot) => {
-    const shStart = timeToMin(sh.startTime);
-    const shEnd = timeToMin(sh.endTime);
-    const slStart = timeToMin(slot.startTime);
-    const slEnd = timeToMin(slot.endTime);
-    const overlapStart = Math.max(shStart, slStart);
-    const overlapEnd = Math.min(shEnd, slEnd);
-    const overlap = overlapEnd - overlapStart;
-    const slotDuration = slEnd - slStart;
-    return overlap >= slotDuration * 0.5;
+    return shiftOverlapsScheduleSlot(sh, slot);
   };
 
   const dispatchOverlapsSlot = (ds: DispatchShift, slot: ScheduleSlot) => {
-    if (!ds.startTime || !ds.endTime) return false;
-    const shStart = timeToMin(ds.startTime);
-    const shEnd = timeToMin(ds.endTime);
-    const slStart = timeToMin(slot.startTime);
-    const slEnd = timeToMin(slot.endTime);
-    const overlapStart = Math.max(shStart, slStart);
-    const overlapEnd = Math.min(shEnd, slEnd);
-    const overlap = overlapEnd - overlapStart;
-    const slotDuration = slEnd - slStart;
-    return slotDuration > 0 && overlap >= slotDuration * 0.5;
+    return !!ds.startTime && !!ds.endTime && shiftOverlapsScheduleSlot(ds, slot);
   };
 
   const venueDateShortage = useMemo(() => {
@@ -807,7 +785,8 @@ export default function SchedulePage() {
       if (shortage > 0) {
         if (!map.has(key)) map.set(key, new Map());
         const roleMap = map.get(key)!;
-        roleMap.set(slot.role, (roleMap.get(slot.role) || 0) + shortage);
+        const roleKey = normalizeScheduleRole(slot.role) || slot.role;
+        roleMap.set(roleKey, (roleMap.get(roleKey) || 0) + shortage);
       }
     });
     return map;
@@ -2172,13 +2151,14 @@ export default function SchedulePage() {
                     const slots = slotsByVenueDate.get(`${shift.venueId}-${shiftDateStr}`) || [];
                     const sStart = shift.startTime.substring(0, 5);
                     const sEnd = shift.endTime.substring(0, 5);
-                    const isLeave = LEAVE_TYPES.includes(shift.role);
-                    const matchedSlot = slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sl.endTime.substring(0, 5) >= sEnd)
-                      || slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
-                    const shiftRoleVal = isLeave ? shift.role : (shift.role || matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role);
+                    const shiftRole = normalizeScheduleRole(shift.role) || shift.role;
+                    const isLeave = LEAVE_TYPES.includes(shiftRole);
+                    const matchedSlot = slots.find(sl => shiftOverlapsScheduleSlot(shift, sl))
+                      || slots.find(sl => normalizeScheduleRole(sl.role) === shiftRole && sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
+                    const shiftRoleVal = isLeave ? shiftRole : (shiftRole || normalizeScheduleRole(matchedSlot?.role) || ROLE_LABELS[emp.role] || emp.role);
                     const roleShort = ROLE_SHORT[shiftRoleVal] || shiftRoleVal.slice(0, 1);
                     const roleColor = isLeave ? null : getRoleColor(shiftRoleVal, shift.isDispatch ?? false);
-                    const cardColor = isLeave ? (LEAVE_COLORS[shift.role] || LEAVE_COLORS["休假"]) : roleColor!.card;
+                    const cardColor = isLeave ? (LEAVE_COLORS[shiftRole] || LEAVE_COLORS["休假"]) : roleColor!.card;
                     const isDragging = draggedShiftId === shift.id;
                     const isSelected = selectedShiftIds.has(shift.id);
 
@@ -2548,7 +2528,8 @@ export default function SchedulePage() {
                                 const venue = ds.venueId ? venueMap.get(ds.venueId) : null;
                                 const sStart = ds.startTime.substring(0, 5);
                                 const sEnd = ds.endTime.substring(0, 5);
-                                const roleShort = ROLE_SHORT[ds.role] || ds.role.slice(0, 1);
+                                const dispatchRole = normalizeScheduleRole(ds.role) || ds.role;
+                                const roleShort = ROLE_SHORT[dispatchRole] || dispatchRole.slice(0, 1);
                                 return (
                                   <div
                                     key={ds.id}
@@ -2561,7 +2542,7 @@ export default function SchedulePage() {
                                       <div className="font-semibold leading-tight text-[11px] truncate text-purple-700 dark:text-purple-300">
                                         {venue?.shortName || "未指定"}
                                       </div>
-                                      <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 shrink-0 ${getRoleColor(ds.role).badge}`}>
+                                      <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 shrink-0 ${getRoleColor(dispatchRole).badge}`}>
                                         {roleShort}
                                       </span>
                                     </div>
@@ -3848,8 +3829,9 @@ export default function SchedulePage() {
                         _dispatchForSlot.filter((ds) => dispatchOverlapsSlot(ds, slot)).length;
                       const shortage = slot.requiredCount - assignedCount;
                       const isFull = shortage <= 0;
-                      const isRescue = slot.role === "救生";
-                      const isGuard = slot.role === "守望";
+                      const normalizedSlotRole = normalizeScheduleRole(slot.role) || slot.role;
+                      const isRescue = normalizedSlotRole === "救生";
+                      const isGuard = normalizedSlotRole === "守望";
                       const borderColor = isRescue ? "border-l-red-500" : isGuard ? "border-l-amber-500" : "border-l-blue-500";
                       return (
                         <div

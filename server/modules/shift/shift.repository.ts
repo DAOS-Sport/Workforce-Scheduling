@@ -1,26 +1,47 @@
 import { db } from "../../db";
 import { eq, and, gte, lte, inArray, desc } from "drizzle-orm";
 import {
+  employees,
   shifts,
   shiftAuditLog,
-  employees,
   venues,
   type Shift,
   type InsertShift,
   type ShiftAuditLog,
 } from "@shared/schema";
-import { employeeRepository } from "../employee/employee.repository";
+import { normalizeScheduleRole } from "@shared/scheduleMapping";
 import { venueRepository } from "../venue/venue.repository";
+import { isLeaveRole } from "./shift.types";
+
+function normalizeShiftRoleData<T extends Partial<InsertShift>>(data: T): T {
+  if (data.role === undefined) return data;
+  return { ...data, role: normalizeScheduleRole(data.role) || data.role } as T;
+}
+
+async function assertShiftReferences(data: Pick<InsertShift, "employeeId" | "venueId" | "role">): Promise<void> {
+  const [[employee], [venue]] = await Promise.all([
+    db.select({ id: employees.id, regionId: employees.regionId, status: employees.status }).from(employees).where(eq(employees.id, data.employeeId)),
+    db.select({ id: venues.id, regionId: venues.regionId }).from(venues).where(eq(venues.id, data.venueId)),
+  ]);
+  if (!employee) throw new Error(`Invalid shift employeeId ${data.employeeId}: employee does not exist`);
+  if (!venue) throw new Error(`Invalid shift venueId ${data.venueId}: venue does not exist`);
+  if (employee.status !== "active") {
+    throw new Error(`Invalid shift employeeId ${data.employeeId}: employee status is ${employee.status}`);
+  }
+  if (!isLeaveRole(data.role) && employee.regionId !== venue.regionId) {
+    throw new Error(`Invalid shift mapping: employee ${data.employeeId} region ${employee.regionId} does not match venue ${data.venueId} region ${venue.regionId}`);
+  }
+}
 
 export const shiftRepository = {
   async getShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<Shift[]> {
-    const regionEmployees = await employeeRepository.getEmployeesByRegion(regionId);
-    const empIds = regionEmployees.map((e) => e.id);
-    if (empIds.length === 0) return [];
+    const regionVenues = await venueRepository.getVenuesByRegion(regionId);
+    const venueIds = regionVenues.map((v) => v.id);
+    if (venueIds.length === 0) return [];
 
     return db.select().from(shifts).where(
       and(
-        inArray(shifts.employeeId, empIds),
+        inArray(shifts.venueId, venueIds),
         gte(shifts.date, startDate),
         lte(shifts.date, endDate),
         eq(shifts.status, "active")
@@ -72,7 +93,9 @@ export const shiftRepository = {
   },
 
   async createShift(data: InsertShift, actor: string = "system"): Promise<Shift> {
-    const [shift] = await db.insert(shifts).values(data).returning();
+    const normalizedData = normalizeShiftRoleData(data);
+    await assertShiftReferences(normalizedData);
+    const [shift] = await db.insert(shifts).values(normalizedData).returning();
     if (shift) {
       try {
         await db.insert(shiftAuditLog).values({
@@ -97,14 +120,22 @@ export const shiftRepository = {
     if (before?.status === "active" && !force) {
       throw new Error(`actor '${actor}' refused to mutate active shift ${id} without force=true (Task #50 protection)`);
     }
-    const [shift] = await db.update(shifts).set(data).where(eq(shifts.id, id)).returning();
+    const normalizedData = normalizeShiftRoleData(data);
+    if (before) {
+      await assertShiftReferences({
+        employeeId: normalizedData.employeeId ?? before.employeeId,
+        venueId: normalizedData.venueId ?? before.venueId,
+        role: normalizedData.role ?? before.role,
+      });
+    }
+    const [shift] = await db.update(shifts).set(normalizedData).where(eq(shifts.id, id)).returning();
     if (shift) {
       try {
         await db.insert(shiftAuditLog).values({
           shiftId: id,
           action: "update",
           actor,
-          payload: { before, after: shift, changes: data },
+          payload: { before, after: shift, changes: normalizedData },
         });
       } catch (e) {
         console.error("[shift-audit] update log failed", e);
@@ -182,12 +213,12 @@ export const shiftRepository = {
   },
 
   async getCancelledShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<Shift[]> {
-    const regionEmployees = await employeeRepository.getEmployeesByRegion(regionId);
-    const empIds = regionEmployees.map((e) => e.id);
-    if (empIds.length === 0) return [];
+    const regionVenues = await venueRepository.getVenuesByRegion(regionId);
+    const venueIds = regionVenues.map((v) => v.id);
+    if (venueIds.length === 0) return [];
     return db.select().from(shifts).where(
       and(
-        inArray(shifts.employeeId, empIds),
+        inArray(shifts.venueId, venueIds),
         gte(shifts.date, startDate),
         lte(shifts.date, endDate),
         eq(shifts.status, "cancelled")

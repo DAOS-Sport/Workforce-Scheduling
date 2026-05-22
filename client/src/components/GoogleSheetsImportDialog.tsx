@@ -11,6 +11,7 @@ import { parseTSV, type ParsedEmployeeRow, type ParsedShiftCell, LEAVE_CODES } f
 import type { Venue } from "@shared/schema";
 import { CheckCircle2, XCircle, AlertTriangle, FileSpreadsheet, ChevronRight, ChevronLeft, Loader2, FileUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { normalizeScheduleRole } from "@shared/scheduleMapping";
 
 interface GoogleSheetsImportDialogProps {
   open: boolean;
@@ -58,7 +59,7 @@ const ROLE_CODE_MAP: Record<string, string> = {
 };
 
 function buildShiftRole(roleCode: string): string {
-  return ROLE_CODE_MAP[roleCode] || "救生";
+  return normalizeScheduleRole(ROLE_CODE_MAP[roleCode] || "救生");
 }
 
 const LEAVE_ROLE_VALUES = new Set(Object.values(LEAVE_CODES));

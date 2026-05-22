@@ -8,6 +8,11 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "verify:schedule-mapping": "tsx scripts/verify-schedule-mapping.ts",
+    "verify:schedule-mapping:details": "tsx scripts/verify-schedule-mapping.ts --details",
+    "audit:feedback-case": "tsx scripts/audit-feedback-case.ts",
+    "audit:feedback-case:strict": "tsx scripts/audit-feedback-case.ts --strict",
+    "repair:schedule-roles": "tsx scripts/repair-schedule-roles.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

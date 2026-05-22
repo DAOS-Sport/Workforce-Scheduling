@@ -4,6 +4,7 @@ import {
   guidelines,
   guidelineAcknowledgments,
   employees,
+  venues,
   type Guideline,
   type InsertGuideline,
   type GuidelineAck,
@@ -21,6 +22,21 @@ export interface GuidelineAckDetail {
   employeeCode: string | null;
 }
 
+async function assertGuidelineVenueExists(venueId: number | null | undefined): Promise<void> {
+  if (venueId == null) return;
+  const [venue] = await db.select({ id: venues.id }).from(venues).where(eq(venues.id, venueId));
+  if (!venue) throw new Error(`Invalid guideline venueId ${venueId}: venue does not exist`);
+}
+
+async function assertGuidelineAckReferences(data: InsertGuidelineAck): Promise<void> {
+  const [[guideline], [employee]] = await Promise.all([
+    db.select({ id: guidelines.id }).from(guidelines).where(eq(guidelines.id, data.guidelineId)),
+    db.select({ id: employees.id }).from(employees).where(eq(employees.id, data.employeeId)),
+  ]);
+  if (!guideline) throw new Error(`Invalid guideline acknowledgment guidelineId ${data.guidelineId}: guideline does not exist`);
+  if (!employee) throw new Error(`Invalid guideline acknowledgment employeeId ${data.employeeId}: employee does not exist`);
+}
+
 export const guidelineRepository = {
   async getGuidelines(category?: string): Promise<Guideline[]> {
     if (category) {
@@ -35,11 +51,13 @@ export const guidelineRepository = {
   },
 
   async createGuideline(data: InsertGuideline): Promise<Guideline> {
+    await assertGuidelineVenueExists(data.venueId);
     const [g] = await db.insert(guidelines).values(data).returning();
     return g;
   },
 
   async updateGuideline(id: number, data: Partial<InsertGuideline>): Promise<Guideline | undefined> {
+    if (data.venueId !== undefined) await assertGuidelineVenueExists(data.venueId);
     const [g] = await db.update(guidelines).set({ ...data, updatedAt: new Date() }).where(eq(guidelines.id, id)).returning();
     return g;
   },
@@ -55,6 +73,7 @@ export const guidelineRepository = {
   },
 
   async createGuidelineAck(data: InsertGuidelineAck): Promise<GuidelineAck> {
+    await assertGuidelineAckReferences(data);
     const [ack] = await db.insert(guidelineAcknowledgments).values(data).returning();
     return ack;
   },

@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
+import { NON_WORK_ROLES, normalizeCoworkerGroupRole } from "@shared/scheduleMapping";
 
 interface PortalEmployee {
   id: number;
@@ -29,6 +30,7 @@ interface PortalEmployee {
   role: string;
   lineUserId?: string;
   employmentType?: string;
+  regionId?: number;
 }
 
 interface OutingRecord {
@@ -1959,7 +1961,9 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
         reason: fullReason,
         isSystemIssue,
         evidenceImageUrl: evidencePreview,
-        shiftId: selectedEntry?.isDispatch ? null : (selectedEntry?.shiftId ?? null),
+        shiftId: selectedEntry
+          ? (selectedEntry.isDispatch ? -Math.abs(selectedEntry.shiftId) : selectedEntry.shiftId)
+          : null,
         originalClockRecordId: selectedEntry?.originalClockRecordId ?? null,
       });
       toast({ title: "補打卡申請已送出" });
@@ -2500,7 +2504,7 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
   );
 }
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"] as const;
+const LEAVE_TYPES: string[] = [...NON_WORK_ROLES];
 const CERTIFICATE_REQUIRED = ["病假", "生理假"];
 
 const STATUS_LABEL: Record<string, string> = {
@@ -4044,7 +4048,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     const roleGroups = new Map<string, typeof day.coworkers>();
                     day.coworkers.forEach((cw) => {
                       const rawRole = cw.role || "其他";
-                      const key = rawRole === "守望" ? "救生" : rawRole;
+                      const key = normalizeCoworkerGroupRole(rawRole) || rawRole;
                       if (!roleGroups.has(key)) roleGroups.set(key, []);
                       roleGroups.get(key)!.push(cw);
                     });

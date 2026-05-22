@@ -2,12 +2,13 @@ import { storage } from "../../storage";
 import { calcShiftHours, sumScheduledHours, getAllPeriodsForMonth } from "@shared/schema";
 import { pushToLine } from "../line/linePush.service";
 import { db } from "../../db";
-import { isNotNull, and, gte, lte } from "drizzle-orm";
+import { isNotNull, and, gte, lte, ne } from "drizzle-orm";
 import { dispatchShifts as dispatchShiftsTable } from "@shared/schema";
+import { NON_WORK_ROLES, isNonWorkRole, normalizeScheduleRole } from "@shared/scheduleMapping";
 import { sendAnomalyEmail } from "../../shared/email/sendAnomalyEmail";
 import ExcelJS from "exceljs";
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
+const LEAVE_TYPES: string[] = [...NON_WORK_ROLES];
 
 function err(status: number, message: string): Error {
   const e: any = new Error(message);
@@ -44,8 +45,18 @@ export const systemService = {
     const allStart = periods.reduce((min, p) => p.start < min ? p.start : min, periods[0].start);
     const allEnd = periods.reduce((max, p) => p.end > max ? p.end : max, periods[0].end);
 
-    const allShifts = await storage.getAllShiftsByDateRange(allStart, allEnd);
-    const approvedOT = await storage.getApprovedOvertimeByDateRange(allStart, allEnd);
+    const [allShifts, linkedDispatch, approvedOT] = await Promise.all([
+      storage.getAllShiftsByDateRange(allStart, allEnd),
+      db.select().from(dispatchShiftsTable).where(
+        and(
+          gte(dispatchShiftsTable.date, allStart),
+          lte(dispatchShiftsTable.date, allEnd),
+          isNotNull(dispatchShiftsTable.linkedEmployeeId),
+          ne(dispatchShiftsTable.status, "cancelled"),
+        ),
+      ),
+      storage.getApprovedOvertimeByDateRange(allStart, allEnd),
+    ]);
     const allEmployees = await storage.getAllEmployees();
     const allRegions = await storage.getRegions();
     const regionMap = new Map(allRegions.map(r => [r.id, r]));
@@ -58,14 +69,18 @@ export const systemService = {
     });
 
     const empIdsWithShifts = new Set<number>();
-    for (const s of allShifts) if (!LEAVE_TYPES.includes(s.role)) empIdsWithShifts.add(s.employeeId);
+    for (const s of allShifts) if (!isNonWorkRole(s.role)) empIdsWithShifts.add(s.employeeId);
+    for (const d of linkedDispatch) empIdsWithShifts.add(d.linkedEmployeeId!);
     for (const ot of approvedOT) empIdsWithShifts.add(ot.employeeId);
 
     const periodResults = periods.map(period => {
       const employees = [];
       for (const emp of activeEmps) {
         if (!empIdsWithShifts.has(emp.id)) continue;
-        const scheduledHours = sumScheduledHours(allShifts, emp.id, period.start, period.end, LEAVE_TYPES);
+        const dispatchHours = linkedDispatch
+          .filter(d => d.linkedEmployeeId === emp.id && d.date >= period.start && d.date <= period.end)
+          .reduce((total, d) => total + calcShiftHours(d.startTime, d.endTime), 0);
+        const scheduledHours = Math.round((sumScheduledHours(allShifts, emp.id, period.start, period.end, LEAVE_TYPES) + dispatchHours) * 10) / 10;
         let overtimeHours = 0;
         for (const ot of approvedOT) {
           if (ot.employeeId !== emp.id) continue;
@@ -149,8 +164,6 @@ export const systemService = {
     for (const e of allEmployees) empMap.set(e.id, e);
 
     const workRolesSet = new Set<string>();
-    const leaveSet = new Set<string>(LEAVE_TYPES);
-
     type EmpStats = {
       id: number; name: string; employeeCode: string; region: string;
       hours: Record<string, number>; leaves: Record<string, number>;
@@ -172,20 +185,22 @@ export const systemService = {
       }
       const entry = stats.get(s.employeeId)!;
       entry.shiftCount++;
-      if (leaveSet.has(s.role)) {
-        entry.leaves[s.role] = (entry.leaves[s.role] || 0) + 1;
+      if (isNonWorkRole(s.role)) {
+        const leaveRole = normalizeScheduleRole(s.role) || s.role;
+        entry.leaves[leaveRole] = (entry.leaves[leaveRole] || 0) + 1;
         entry.totalLeaveDays++;
       } else {
+        const role = normalizeScheduleRole(s.role) || s.role;
         const hrs = rawHours(s.startTime, s.endTime);
-        entry.hours[s.role] = (entry.hours[s.role] || 0) + hrs;
+        entry.hours[role] = (entry.hours[role] || 0) + hrs;
         entry.totalWorkHours = Math.round((entry.totalWorkHours + hrs) * 10) / 10;
-        workRolesSet.add(s.role);
+        workRolesSet.add(role);
       }
     }
 
     const empShiftIntervals = new Map<number, Array<{ start: number; end: number; date: string }>>();
     for (const s of allShifts) {
-      if (!empMap.has(s.employeeId) || leaveSet.has(s.role)) continue;
+      if (!empMap.has(s.employeeId) || isNonWorkRole(s.role)) continue;
       if (!empShiftIntervals.has(s.employeeId)) empShiftIntervals.set(s.employeeId, []);
       const [sh2, sm2] = s.startTime.split(":").map(Number);
       const [eh2, em2] = s.endTime.split(":").map(Number);
@@ -233,7 +248,8 @@ export const systemService = {
       and(
         gte(dispatchShiftsTable.date, startDate),
         lte(dispatchShiftsTable.date, endDate),
-        isNotNull(dispatchShiftsTable.linkedEmployeeId)
+        isNotNull(dispatchShiftsTable.linkedEmployeeId),
+        ne(dispatchShiftsTable.status, "cancelled"),
       )
     );
     for (const ds of linkedDispatch) {
@@ -249,7 +265,7 @@ export const systemService = {
         });
       }
       const entry = stats.get(empId)!;
-      const role = ds.role || "派遣";
+      const role = normalizeScheduleRole(ds.role) || ds.role || "派遣";
       const hrs = rawHours(ds.startTime, ds.endTime);
       entry.hours[role] = Math.round(((entry.hours[role] || 0) + hrs) * 10) / 10;
       entry.totalWorkHours = Math.round((entry.totalWorkHours + hrs) * 10) / 10;
@@ -259,7 +275,7 @@ export const systemService = {
 
     for (const s of allShifts) {
       if (!empMap.has(s.employeeId)) continue;
-      if (leaveSet.has(s.role)) continue;
+      if (isNonWorkRole(s.role)) continue;
       if (!passesNoon(s.startTime, s.endTime)) continue;
       const entry = stats.get(s.employeeId);
       if (!entry) continue;
@@ -315,6 +331,7 @@ export const systemService = {
         gte(dispatchShiftsTable.date, startDate),
         lte(dispatchShiftsTable.date, endDate),
         isNotNull(dispatchShiftsTable.linkedEmployeeId),
+        ne(dispatchShiftsTable.status, "cancelled"),
       )
     );
 
@@ -404,21 +421,31 @@ export const systemService = {
       return d.toISOString().split("T")[0];
     })();
     const allShifts = await storage.getAllShiftsByDateRange(weekStart, weekEnd);
+    const allDispatchShifts = await db.select().from(dispatchShiftsTable)
+      .where(and(
+        gte(dispatchShiftsTable.date, weekStart),
+        lte(dispatchShiftsTable.date, weekEnd),
+        isNotNull(dispatchShiftsTable.linkedEmployeeId),
+        ne(dispatchShiftsTable.status, "cancelled"),
+      ));
     const clockRecords = await storage.getClockRecordsByDateRange(weekStart, weekEnd);
     const allEmployees = await storage.getAllEmployees();
     const allVenues = await storage.getAllVenues();
-    return { weekEnd, allShifts, clockRecords, allEmployees, allVenues };
+    return { weekEnd, allShifts, allDispatchShifts, clockRecords, allEmployees, allVenues };
   },
 
   async weeklyAttendance(weekStart: string) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || isNaN(new Date(weekStart + "T00:00:00Z").getTime())) {
       throw err(400, "weekStart 格式不正確 (YYYY-MM-DD)");
     }
-    const { weekEnd, allShifts, clockRecords, allEmployees, allVenues } = await this._buildWeeklyData(weekStart);
+    const { weekEnd, allShifts, allDispatchShifts, clockRecords, allEmployees, allVenues } = await this._buildWeeklyData(weekStart);
     const empMap = new Map(allEmployees.map(e => [e.id, e]));
     const venueMap = new Map(allVenues.map(v => [v.id, v]));
 
-    const employeeIds = new Set(allShifts.map(s => s.employeeId));
+    const employeeIds = new Set([
+      ...allShifts.map(s => s.employeeId),
+      ...allDispatchShifts.map(s => s.linkedEmployeeId!),
+    ]);
     const dates: string[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(weekStart + "T00:00:00Z");
@@ -438,20 +465,28 @@ export const systemService = {
       if (!emp || emp.status === "inactive") return null;
       const days = dates.map(date => {
         const dayShifts = allShifts.filter(s => s.employeeId === empId && s.date === date);
+        const dayDispatchShifts = allDispatchShifts.filter(s => s.linkedEmployeeId === empId && s.date === date);
         const dayClock = clockByEmpDate.get(`${empId}-${date}`) || [];
         const clockIns = dayClock.filter(c => c.clockType === "in");
         const clockOuts = dayClock.filter(c => c.clockType === "out");
-        if (dayShifts.length === 0) return { date, status: "no_shift" as const, shifts: [], clockIns: [], clockOuts: [] };
-        const isLeave = dayShifts.every(s => LEAVE_TYPES.includes(s.role));
+        if (dayShifts.length === 0 && dayDispatchShifts.length === 0) return { date, status: "no_shift" as const, shifts: [], clockIns: [], clockOuts: [] };
+        const isLeave = dayDispatchShifts.length === 0 && dayShifts.every(s => isNonWorkRole(s.role));
         if (isLeave) return {
           date, status: "leave" as const, leaveType: dayShifts[0].role,
           shifts: dayShifts.map(s => ({ startTime: s.startTime, endTime: s.endTime, role: s.role, venueId: s.venueId, venueName: venueMap.get(s.venueId)?.shortName || "未知" })),
           clockIns: [], clockOuts: [],
         };
-        const shiftData = dayShifts.map(s => ({
+        const workShifts = dayShifts.filter(s => !isNonWorkRole(s.role));
+        const shiftData = [
+          ...workShifts.map(s => ({
           startTime: s.startTime, endTime: s.endTime, role: s.role,
-          venueId: s.venueId, venueName: venueMap.get(s.venueId)?.shortName || "未知",
-        }));
+          venueId: s.venueId, venueName: venueMap.get(s.venueId)?.shortName || "未知", isDispatch: false,
+          })),
+          ...dayDispatchShifts.map(s => ({
+            startTime: s.startTime, endTime: s.endTime, role: s.role,
+            venueId: s.venueId, venueName: s.venueId ? venueMap.get(s.venueId)?.shortName || "未知" : "派遣", isDispatch: true,
+          })),
+        ];
         const clockInData = clockIns.map(c => ({
           time: new Date(c.clockTime!).toLocaleTimeString("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit" }),
           status: c.status, venue: c.matchedVenueName || "", failReason: c.failReason || "",
@@ -480,11 +515,14 @@ export const systemService = {
     if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || isNaN(new Date(weekStart + "T00:00:00Z").getTime())) {
       throw err(400, "缺少或格式不正確的 weekStart (YYYY-MM-DD)");
     }
-    const { weekEnd, allShifts, clockRecords, allEmployees, allVenues } = await this._buildWeeklyData(weekStart);
+    const { weekEnd, allShifts, allDispatchShifts, clockRecords, allEmployees, allVenues } = await this._buildWeeklyData(weekStart);
     const empMap = new Map(allEmployees.map(e => [e.id, e]));
     const venueMap = new Map(allVenues.map(v => [v.id, v]));
 
-    const employeeIds = new Set(allShifts.map(s => s.employeeId));
+    const employeeIds = new Set([
+      ...allShifts.map(s => s.employeeId),
+      ...allDispatchShifts.map(s => s.linkedEmployeeId!),
+    ]);
     const dates: string[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(weekStart + "T00:00:00Z");
@@ -515,23 +553,29 @@ export const systemService = {
       let hasAnomaly = false;
       for (const date of dates) {
         const dayShifts = allShifts.filter(s => s.employeeId === empId && s.date === date);
+        const dayDispatchShifts = allDispatchShifts.filter(s => s.linkedEmployeeId === empId && s.date === date);
         const dayClock = clockByEmpDate.get(`${empId}-${date}`) || [];
         const clockIns = dayClock.filter(c => c.clockType === "in");
-        if (dayShifts.length === 0) { dayResults.push({ date, status: "➖", detail: "無班" }); continue; }
-        const isLeave = dayShifts.every(s => LEAVE_TYPES.includes(s.role));
+        if (dayShifts.length === 0 && dayDispatchShifts.length === 0) { dayResults.push({ date, status: "➖", detail: "無班" }); continue; }
+        const isLeave = dayDispatchShifts.length === 0 && dayShifts.every(s => isNonWorkRole(s.role));
         if (isLeave) { dayResults.push({ date, status: "🟡", detail: dayShifts[0].role }); continue; }
-        const venue = venueMap.get(dayShifts[0].venueId);
-        const vName = venue?.shortName || "未知";
-        const shiftTime = `${dayShifts[0].startTime.substring(0, 5)}-${dayShifts[0].endTime.substring(0, 5)}`;
+        const firstWorkShift = dayShifts.find(s => !isNonWorkRole(s.role));
+        const firstDispatchShift = dayDispatchShifts[0];
+        const assignment = firstWorkShift || firstDispatchShift;
+        const venueId = assignment?.venueId ?? null;
+        const venue = venueId ? venueMap.get(venueId) : null;
+        const vName = venue?.shortName || (firstDispatchShift ? "派遣" : "未知");
+        const shiftTime = assignment ? `${assignment.startTime.substring(0, 5)}-${assignment.endTime.substring(0, 5)}` : "";
+        const dispatchSuffix = !firstWorkShift && firstDispatchShift ? " 派遣" : "";
         const hasSuccessIn = clockIns.some(c => c.status === "success" || c.status === "warning");
         if (!hasSuccessIn) {
-          dayResults.push({ date, status: "🔴", detail: `${vName} ${shiftTime} 未打卡` });
+          dayResults.push({ date, status: "🔴", detail: `${vName} ${shiftTime}${dispatchSuffix} 未打卡` });
           hasAnomaly = true;
         } else if (clockIns.some(c => c.failReason?.includes("遲到"))) {
-          dayResults.push({ date, status: "⚠️", detail: `${vName} ${shiftTime} 遲到` });
+          dayResults.push({ date, status: "⚠️", detail: `${vName} ${shiftTime}${dispatchSuffix} 遲到` });
           hasAnomaly = true;
         } else {
-          dayResults.push({ date, status: "✅", detail: `${vName} ${shiftTime}` });
+          dayResults.push({ date, status: "✅", detail: `${vName} ${shiftTime}${dispatchSuffix}` });
         }
       }
       const summaryLine = dayResults.map(d => d.status).join(" ");

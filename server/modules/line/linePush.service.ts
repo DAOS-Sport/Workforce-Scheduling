@@ -1,9 +1,10 @@
 import nodemailer from "nodemailer";
 import { storage } from "../../storage";
-import type { Venue, Shift, Employee } from "@shared/schema";
-import { getTaiwanNow, formatTaiwanDate, LEAVE_TYPES } from "./lineHelpers";
+import type { Venue, Shift, Employee, DispatchShift } from "@shared/schema";
+import { getTaiwanNow, formatTaiwanDate } from "./lineHelpers";
 import { isValidLineUserId } from "./lineSignature";
 import { availabilityRepository } from "../availability/availability.repository";
+import { isNonWorkRole } from "@shared/scheduleMapping";
 
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 
@@ -48,13 +49,17 @@ export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: str
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
 
-    const [allGuidelines, acks, empShifts] = await Promise.all([
+    const [allGuidelines, acks, empShifts, empDispatchShifts] = await Promise.all([
       storage.getGuidelines(),
       storage.getGuidelineAcksByEmployee(employeeId),
       storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd),
+      storage.getDispatchShiftsByLinkedEmployee(employeeId, monthStart, monthEnd),
     ]);
 
-    const myVenueIds = Array.from(new Set(empShifts.map(s => s.venueId)));
+    const myVenueIds = Array.from(new Set([
+      ...empShifts.filter(s => !isNonWorkRole(s.role)).map(s => s.venueId),
+      ...empDispatchShifts.map(s => s.venueId).filter((venueId): venueId is number => venueId != null),
+    ]));
 
     const thisMonthAckedIds = new Set(
       acks.filter(a => {
@@ -115,7 +120,7 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
   const displayDate = `${tomorrow.getMonth() + 1}/${tomorrow.getDate()}（${tomorrowDay}）`;
 
   const allShifts = await storage.getShiftsByDate(tomorrowStr);
-  const workShifts = allShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+  const workShifts = allShifts.filter(s => !isNonWorkRole(s.role));
 
   const allVenues = await storage.getAllVenues();
   const venueMap = new Map<number, Venue>();
@@ -260,13 +265,23 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   const currentMinute = taipeiNow.getMinutes();
   const currentTimeStr = `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
 
-  const allShifts = await storage.getShiftsByDate(todayStr);
+  const [allShifts, allRegions] = await Promise.all([
+    storage.getShiftsByDate(todayStr),
+    storage.getRegions(),
+  ]);
+  const dispatchNested = await Promise.all(
+    allRegions.map((region) => storage.getDispatchShifts(region.id, todayStr, todayStr)),
+  );
   const workShifts = allShifts.filter(s =>
-    !LEAVE_TYPES.includes(s.role) &&
+    !isNonWorkRole(s.role) &&
     s.startTime.substring(0, 5) !== s.endTime.substring(0, 5)
   );
+  const linkedDispatchShifts = dispatchNested.flat().filter((d) =>
+    d.linkedEmployeeId != null &&
+    d.startTime.substring(0, 5) !== d.endTime.substring(0, 5)
+  );
 
-  if (workShifts.length === 0) {
+  if (workShifts.length === 0 && linkedDispatchShifts.length === 0) {
     console.log(`[未打卡提醒] ${todayStr} 無上班班次`);
     return { notified: 0, skipped: 0 };
   }
@@ -279,43 +294,70 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
     }
   }
   console.log(`[未打卡提醒] 今日有效上班打卡人數: ${clockedInEmployees.size}，員工ID列表: [${Array.from(clockedInEmployees).join(", ")}]`);
-  console.log(`[未打卡提醒] 今日班次總數: ${workShifts.length}，當前時間: ${currentTimeStr}`);
+  console.log(`[未打卡提醒] 今日班次總數: ${workShifts.length + linkedDispatchShifts.length}，當前時間: ${currentTimeStr}`);
 
   const allVenues = await storage.getAllVenues();
   const venueMap = new Map<number, Venue>();
   for (const v of allVenues) venueMap.set(v.id, v);
 
-  const missingEmployees: Array<{ emp: Employee; shift: Shift; venueName: string }> = [];
+  type MissingClockAssignment = {
+    employeeId: number;
+    assignmentId: number;
+    startTime: string;
+    endTime: string;
+    venueId: number | null;
+    isDispatch: boolean;
+  };
+  const assignments: MissingClockAssignment[] = [
+    ...workShifts.map((shift) => ({
+      employeeId: shift.employeeId,
+      assignmentId: shift.id,
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      venueId: shift.venueId,
+      isDispatch: false,
+    })),
+    ...linkedDispatchShifts.map((shift) => ({
+      employeeId: shift.linkedEmployeeId!,
+      assignmentId: -shift.id,
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      venueId: shift.venueId,
+      isDispatch: true,
+    })),
+  ];
 
-  for (const shift of workShifts) {
-    const shiftStart = shift.startTime.substring(0, 5);
+  const missingEmployees: Array<{ emp: Employee; assignment: MissingClockAssignment; venueName: string }> = [];
+
+  for (const assignment of assignments) {
+    const shiftStart = assignment.startTime.substring(0, 5);
     const [shiftH, shiftM] = shiftStart.split(":").map(Number);
     const lateThresholdMin = (shiftH * 60 + shiftM) + 15;
     const currentMin = currentHour * 60 + currentMinute;
 
     if (currentMin < lateThresholdMin) {
-      console.log(`[未打卡提醒] 跳過（未到閾值）: 員工ID=${shift.employeeId} 班次=${shiftStart} 閾值=${Math.floor(lateThresholdMin/60)}:${String(lateThresholdMin%60).padStart(2,"0")}`);
+      console.log(`[未打卡提醒] 跳過（未到閾值）: 員工ID=${assignment.employeeId} 班次=${shiftStart} 閾值=${Math.floor(lateThresholdMin/60)}:${String(lateThresholdMin%60).padStart(2,"0")}`);
       continue;
     }
 
-    if (clockedInEmployees.has(shift.employeeId)) {
-      console.log(`[未打卡提醒] 跳過（已打卡）: 員工ID=${shift.employeeId} 班次=${shiftStart}`);
+    if (clockedInEmployees.has(assignment.employeeId)) {
+      console.log(`[未打卡提醒] 跳過（已打卡）: 員工ID=${assignment.employeeId} 班次=${shiftStart}`);
       continue;
     }
 
-    const notifyKey = `${shift.employeeId}-${shift.id}`;
+    const notifyKey = `${assignment.employeeId}-${assignment.assignmentId}`;
     if (alreadySentKeys.has(notifyKey)) {
-      console.log(`[未打卡提醒] 跳過（DB已記錄通知過）: 員工ID=${shift.employeeId} 班次=${shiftStart}`);
+      console.log(`[未打卡提醒] 跳過（DB已記錄通知過）: 員工ID=${assignment.employeeId} 班次=${shiftStart}`);
       continue;
     }
 
-    const emp = await storage.getEmployee(shift.employeeId);
+    const emp = await storage.getEmployee(assignment.employeeId);
     if (!emp || emp.status !== "active") continue;
 
-    const venue = venueMap.get(shift.venueId);
-    const venueName = venue?.shortName || venue?.name || "未知場館";
+    const venue = assignment.venueId ? venueMap.get(assignment.venueId) : null;
+    const venueName = venue?.shortName || venue?.name || (assignment.isDispatch ? "派遣" : "未知場館");
 
-    missingEmployees.push({ emp, shift, venueName });
+    missingEmployees.push({ emp, assignment, venueName });
     // Mark in local set so within this run we don't double-process
     alreadySentKeys.add(notifyKey);
   }
@@ -327,9 +369,9 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   let notified = 0;
   let skipped = 0;
 
-  for (const { emp, shift, venueName } of missingEmployees) {
-    const shiftStart = shift.startTime.substring(0, 5);
-    const shiftEnd = shift.endTime.substring(0, 5);
+  for (const { emp, assignment, venueName } of missingEmployees) {
+    const shiftStart = assignment.startTime.substring(0, 5);
+    const shiftEnd = assignment.endTime.substring(0, 5);
 
     console.log(`[未打卡提醒] 發送通知: ${emp.name}（ID=${emp.id}）班次=${shiftStart}-${shiftEnd} 場館=${venueName} lineId=${emp.lineId ? "有" : "無"}`);
     if (emp.lineId) {
@@ -353,8 +395,8 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
     }
 
     // Persist to DB so server restarts don't cause re-notification for this shift
-    await storage.createMissingClockNotification(todayStr, emp.id, shift.id).catch((e) =>
-      console.error(`[未打卡提醒] DB 寫入失敗 empId=${emp.id} shiftId=${shift.id}:`, e)
+    await storage.createMissingClockNotification(todayStr, emp.id, assignment.assignmentId).catch((e) =>
+      console.error(`[未打卡提醒] DB 寫入失敗 empId=${emp.id} shiftId=${assignment.assignmentId}:`, e)
     );
     notified++;
   }
@@ -367,9 +409,9 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
       const dayName = dayNames[taipeiNow.getDay()];
       const displayDate = `${taipeiNow.getMonth() + 1}/${taipeiNow.getDate()}（${dayName}）`;
 
-      const tableRows = missingEmployees.map(({ emp, shift, venueName }) => {
-        const shiftStart = shift.startTime.substring(0, 5);
-        const shiftEnd = shift.endTime.substring(0, 5);
+      const tableRows = missingEmployees.map(({ emp, assignment, venueName }) => {
+        const shiftStart = assignment.startTime.substring(0, 5);
+        const shiftEnd = assignment.endTime.substring(0, 5);
         return `<tr>
           <td style="padding: 8px; border: 1px solid #e5e7eb;">${emp.name}</td>
           <td style="padding: 8px; border: 1px solid #e5e7eb;">${emp.employeeCode}</td>
@@ -433,10 +475,17 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
   fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
   await storage.clearOldWeeklyPushNotifications(formatTaiwanDate(fourWeeksAgo)).catch(() => {});
 
-  const weekShifts = await storage.getAllShiftsByDateRange(weekStartStr, weekEndStr);
-  const workShifts = weekShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+  const [weekShifts, regions] = await Promise.all([
+    storage.getAllShiftsByDateRange(weekStartStr, weekEndStr),
+    storage.getRegions(),
+  ]);
+  const weekDispatch = await Promise.all(
+    regions.map((region) => storage.getDispatchShifts(region.id, weekStartStr, weekEndStr)),
+  );
+  const workShifts = weekShifts.filter(s => !isNonWorkRole(s.role));
+  const linkedDispatch = weekDispatch.flat().filter((d) => d.linkedEmployeeId != null);
 
-  if (workShifts.length === 0) {
+  if (workShifts.length === 0 && linkedDispatch.length === 0) {
     console.log(`[週班表推播] ${weekStartStr}~${weekEndStr} 無班次，跳過`);
     return { sent: 0, skipped: 0, noLineId: 0 };
   }
@@ -451,11 +500,19 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
     arr.push(s);
     shiftsByEmployee.set(s.employeeId, arr);
   }
+  const dispatchByEmployee = new Map<number, DispatchShift[]>();
+  for (const d of linkedDispatch) {
+    const empId = d.linkedEmployeeId!;
+    const arr = dispatchByEmployee.get(empId) || [];
+    arr.push(d);
+    dispatchByEmployee.set(empId, arr);
+  }
 
   const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
   let sent = 0, skipped = 0, noLineId = 0;
 
-  for (const [empId, empShifts] of shiftsByEmployee) {
+  const employeeIds = new Set([...shiftsByEmployee.keys(), ...dispatchByEmployee.keys()]);
+  for (const empId of employeeIds) {
     if (!force) {
       const alreadySent = await storage.hasWeeklyPushNotification(weekStartStr, empId, "schedule");
       if (alreadySent) { skipped++; continue; }
@@ -465,11 +522,19 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
     if (!emp) { skipped++; continue; }
     if (!emp.lineId) { noLineId++; continue; }
 
+    const empShifts = shiftsByEmployee.get(empId) || [];
+    const empDispatch = dispatchByEmployee.get(empId) || [];
     const shiftsByDate = new Map<string, Shift[]>();
     for (const s of empShifts) {
       const arr = shiftsByDate.get(s.date) || [];
       arr.push(s);
       shiftsByDate.set(s.date, arr);
+    }
+    const dispatchByDate = new Map<string, DispatchShift[]>();
+    for (const d of empDispatch) {
+      const arr = dispatchByDate.get(d.date) || [];
+      arr.push(d);
+      dispatchByDate.set(d.date, arr);
     }
 
     const lines: string[] = [];
@@ -482,7 +547,8 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
       d.setDate(nextMonday.getDate() + i);
       const dateStr = formatTaiwanDate(d);
       const dayShifts = (shiftsByDate.get(dateStr) || []).sort((a, b) => a.startTime.localeCompare(b.startTime));
-      if (dayShifts.length === 0) continue;
+      const dayDispatch = (dispatchByDate.get(dateStr) || []).sort((a, b) => a.startTime.localeCompare(b.startTime));
+      if (dayShifts.length === 0 && dayDispatch.length === 0) continue;
 
       const dayName = dayNames[d.getDay()];
       lines.push(`▸ ${d.getMonth() + 1}/${d.getDate()}（${dayName}）`);
@@ -494,6 +560,14 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
         const end   = shift.endTime.substring(0, 5);
         lines.push(`  🏢 ${venueName}  ${start}-${end}`);
         if (shift.isDispatch) lines.push(`  🔸 派遣`);
+      }
+      for (const ds of dayDispatch) {
+        const venue = ds.venueId ? venueMap.get(ds.venueId) : null;
+        const venueName = venue?.shortName || venue?.name || "外派場館";
+        const start = ds.startTime.substring(0, 5);
+        const end = ds.endTime.substring(0, 5);
+        lines.push(`  🏢 ${venueName}  ${start}-${end}`);
+        lines.push(`  🔸 外部派遣班次`);
       }
       lines.push("");
     }
@@ -540,8 +614,15 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
   const weekStartStr = formatTaiwanDate(lastMonday);
   const weekEndStr   = formatTaiwanDate(lastSunday);
 
-  const weekShifts = await storage.getAllShiftsByDateRange(weekStartStr, weekEndStr);
-  const workShifts = weekShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+  const [weekShifts, regions] = await Promise.all([
+    storage.getAllShiftsByDateRange(weekStartStr, weekEndStr),
+    storage.getRegions(),
+  ]);
+  const weekDispatch = await Promise.all(
+    regions.map((region) => storage.getDispatchShifts(region.id, weekStartStr, weekEndStr)),
+  );
+  const workShifts = weekShifts.filter(s => !isNonWorkRole(s.role));
+  const linkedDispatch = weekDispatch.flat().filter((d) => d.linkedEmployeeId != null);
 
   const clockRecs = await storage.getClockRecordsByDateRange(weekStartStr, weekEndStr);
 
@@ -565,12 +646,37 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
     clocksByEmpDate.set(key, entry);
   }
 
-  // Group shifts by employee
-  const shiftsByEmployee = new Map<number, Shift[]>();
+  // Group work assignments by employee.
+  type WorkAssignment = {
+    employeeId: number;
+    date: string;
+    startTime: string;
+    endTime: string;
+    isDispatch: boolean;
+  };
+  const assignmentsByEmployee = new Map<number, WorkAssignment[]>();
   for (const s of workShifts) {
-    const arr = shiftsByEmployee.get(s.employeeId) || [];
-    arr.push(s);
-    shiftsByEmployee.set(s.employeeId, arr);
+    const arr = assignmentsByEmployee.get(s.employeeId) || [];
+    arr.push({
+      employeeId: s.employeeId,
+      date: s.date,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      isDispatch: false,
+    });
+    assignmentsByEmployee.set(s.employeeId, arr);
+  }
+  for (const d of linkedDispatch) {
+    const employeeId = d.linkedEmployeeId!;
+    const arr = assignmentsByEmployee.get(employeeId) || [];
+    arr.push({
+      employeeId,
+      date: d.date,
+      startTime: d.startTime,
+      endTime: d.endTime,
+      isDispatch: true,
+    });
+    assignmentsByEmployee.set(employeeId, arr);
   }
 
   const LATE_THRESHOLD_MIN  = 10;
@@ -578,7 +684,7 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
 
   let sent = 0, skipped = 0, noLineId = 0;
 
-  for (const [empId, empShifts] of shiftsByEmployee) {
+  for (const [empId, empAssignments] of assignmentsByEmployee) {
     if (!force) {
       const alreadySent = await storage.hasWeeklyPushNotification(weekStartStr, empId, "late_report");
       if (alreadySent) { skipped++; continue; }
@@ -589,13 +695,13 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
     const anomalies: AnomalyEntry[] = [];
     const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
 
-    for (const shift of empShifts) {
-      const key: ClockKey = `${empId}:${shift.date}`;
+    for (const assignment of empAssignments) {
+      const key: ClockKey = `${empId}:${assignment.date}`;
       const clocks = clocksByEmpDate.get(key);
       const issues: string[] = [];
 
-      const [sh, sm] = shift.startTime.split(":").map(Number);
-      const [eh, em] = shift.endTime.split(":").map(Number);
+      const [sh, sm] = assignment.startTime.split(":").map(Number);
+      const [eh, em] = assignment.endTime.split(":").map(Number);
       const shiftStartMin = sh * 60 + sm;
       const shiftEndMin   = eh * 60 + em;
 
@@ -604,7 +710,7 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
         const clockInMin = h * 60 + m;
         if (clockInMin - shiftStartMin > LATE_THRESHOLD_MIN) {
           const lateBy = clockInMin - shiftStartMin;
-          issues.push(`遲到 ${lateBy} 分鐘（${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")} 上班，預計 ${shift.startTime.substring(0,5)}）`);
+          issues.push(`遲到 ${lateBy} 分鐘（${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")} 上班，預計 ${assignment.startTime.substring(0,5)}）`);
         }
       }
 
@@ -613,19 +719,19 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
         const clockOutMin = h * 60 + m;
         if (shiftEndMin - clockOutMin > EARLY_THRESHOLD_MIN) {
           const earlyBy = shiftEndMin - clockOutMin;
-          issues.push(`早退 ${earlyBy} 分鐘（${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")} 下班，預計 ${shift.endTime.substring(0,5)}）`);
+          issues.push(`早退 ${earlyBy} 分鐘（${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")} 下班，預計 ${assignment.endTime.substring(0,5)}）`);
         }
       }
 
       if (issues.length > 0) {
-        const d = new Date(shift.date + "T00:00:00+08:00");
+        const d = new Date(assignment.date + "T00:00:00+08:00");
         const dayName = dayNames[d.getDay()];
         const m2 = d.getMonth() + 1;
         const dd = d.getDate();
         anomalies.push({
-          date: shift.date,
+          date: assignment.date,
           dayName,
-          shiftLabel: `${m2}/${dd}（${dayName}）${shift.startTime.substring(0,5)}-${shift.endTime.substring(0,5)}`,
+          shiftLabel: `${m2}/${dd}（${dayName}）${assignment.startTime.substring(0,5)}-${assignment.endTime.substring(0,5)}${assignment.isDispatch ? " 派遣" : ""}`,
           issues,
         });
       }

@@ -54,7 +54,7 @@ export function mountEmployeeRoutes(_httpServer: Server, app: Express): void {
       if (!deleted) return res.status(404).json({ message: "Employee not found" });
       res.json({ message: "Employee deleted" });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      res.status(err.status || 500).json({ message: err.message });
     }
   });
 }

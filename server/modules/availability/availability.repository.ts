@@ -1,10 +1,16 @@
 import { db } from "../../db";
 import { eq, and, gte, lte, inArray, sql } from "drizzle-orm";
 import {
+  employees,
   shiftAvailabilities,
   type ShiftAvailability,
   type InsertShiftAvailability,
 } from "@shared/schema";
+
+async function assertEmployeeExists(employeeId: number): Promise<void> {
+  const [employee] = await db.select({ id: employees.id }).from(employees).where(eq(employees.id, employeeId));
+  if (!employee) throw new Error(`Invalid availability employeeId ${employeeId}: employee does not exist`);
+}
 
 export const availabilityRepository = {
   async getByEmployeeAndYearMonth(employeeId: number, yearMonth: string): Promise<ShiftAvailability[]> {
@@ -43,6 +49,7 @@ export const availabilityRepository = {
   },
 
   async create(data: InsertShiftAvailability): Promise<ShiftAvailability> {
+    await assertEmployeeExists(data.employeeId);
     const [row] = await db.insert(shiftAvailabilities).values(data).returning();
     return row;
   },

@@ -1,5 +1,4 @@
 import { storage } from "../../storage";
-import type { Shift } from "@shared/schema";
 import { getTaiwanNow, formatTaiwanTime, formatTaiwanDate } from "./lineHelpers";
 
 let _venueCache: { venues: import("@shared/schema").Venue[]; cachedAt: number } | null = null;
@@ -32,7 +31,15 @@ function haversineDistance(
   return R * c;
 }
 
-function isTimeInShiftWindow(now: Date, shift: Shift, bufferMinutes: number = 30): boolean {
+type ClockableShift = {
+  id: number;
+  venueId: number | null;
+  startTime: string;
+  endTime: string;
+  isDispatch: boolean;
+};
+
+function isTimeInShiftWindow(now: Date, shift: ClockableShift, bufferMinutes: number = 30): boolean {
   const [sh, sm] = shift.startTime.split(":").map(Number);
   const [eh, em] = shift.endTime.split(":").map(Number);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -41,7 +48,7 @@ function isTimeInShiftWindow(now: Date, shift: Shift, bufferMinutes: number = 30
   return nowMinutes >= shiftStart && nowMinutes <= shiftEnd;
 }
 
-function determineClockType(now: Date, shifts: Shift[]): "in" | "out" {
+function determineClockType(now: Date, shifts: ClockableShift[]): "in" | "out" {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   // Pick the shift whose midpoint is closest to the current time,
@@ -280,8 +287,27 @@ export async function processClockIn(
     };
   }
 
-  const todayShifts = await storage.getShiftsByEmployeeAndDateRange(employee.id, todayStr, todayStr);
-  const venueShifts = todayShifts.filter((s) => s.venueId === closestVenue.id);
+  const [todayShifts, todayDispatchShifts] = await Promise.all([
+    storage.getShiftsByEmployeeAndDateRange(employee.id, todayStr, todayStr),
+    storage.getDispatchShiftsByLinkedEmployee(employee.id, todayStr, todayStr),
+  ]);
+  const clockableShifts: ClockableShift[] = [
+    ...todayShifts.map((s) => ({
+      id: s.id,
+      venueId: s.venueId,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      isDispatch: false,
+    })),
+    ...todayDispatchShifts.map((s) => ({
+      id: s.id,
+      venueId: s.venueId,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      isDispatch: true,
+    })),
+  ];
+  const venueShifts = clockableShifts.filter((s) => s.venueId === closestVenue.id);
   const matchingShift = venueShifts.find((s) => isTimeInShiftWindow(now, s));
 
   if (venueShifts.length === 0) {
@@ -382,7 +408,7 @@ export async function processClockIn(
   const clockRecord = await storage.createClockRecord({
     employeeId: employee.id,
     venueId: closestVenue.id,
-    shiftId: matchingShift?.id || venueShifts[0].id,
+    shiftId: shiftInfo.isDispatch ? null : shiftInfo.id,
     clockType,
     latitude: lat,
     longitude: lng,

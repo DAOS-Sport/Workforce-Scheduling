@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { Users, Building2, Calendar, CheckCircle2, Clock, Shield, TrendingUp, Zap, Send, AlertTriangle, RotateCcw } from "lucide-react";
-import type { Employee, Venue, Shift, ScheduleSlot } from "@shared/schema";
+import type { Employee, Venue, Shift, ScheduleSlot, DispatchShift } from "@shared/schema";
+import { countAssignedToScheduleSlot } from "@shared/scheduleMapping";
 import { useMemo, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -73,26 +74,33 @@ export default function DashboardPage() {
   const { data: employees = [], isLoading: empLoading } = useQuery<Employee[]>({ queryKey: ["/api/employees", activeRegion] });
   const { data: venues = [], isLoading: venLoading } = useQuery<Venue[]>({ queryKey: ["/api/venues", activeRegion] });
   const { data: shifts = [], isLoading: shiftLoading } = useQuery<Shift[]>({ queryKey: ["/api/shifts", activeRegion, dateRange.start, dateRange.end] });
+  const { data: dispatchShiftRows = [], isLoading: dispatchLoading } = useQuery<DispatchShift[]>({ queryKey: ["/api/dispatch-shifts", activeRegion, dateRange.start, dateRange.end] });
   const { data: monthSlots = [] } = useQuery<ScheduleSlot[]>({ queryKey: ["/api/schedule-slots", activeRegion, monthRange.start, monthRange.end] });
   const { data: monthShifts = [] } = useQuery<Shift[]>({ queryKey: ["/api/shifts", activeRegion, monthRange.start, monthRange.end] });
+  const { data: monthDispatchShiftRows = [] } = useQuery<DispatchShift[]>({ queryKey: ["/api/dispatch-shifts", activeRegion, monthRange.start, monthRange.end] });
 
   const activeCount = employees.filter((e) => e.status === "active").length;
-  const totalShifts = shifts.length;
-  const dispatchShifts = shifts.filter((s) => s.isDispatch).length;
+  const totalShifts = shifts.length + dispatchShiftRows.length;
+  const dispatchShifts = shifts.filter((s) => s.isDispatch).length + dispatchShiftRows.length;
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const todayShifts = shifts.filter((s) => s.date === todayStr);
-  const isLoading = empLoading || venLoading || shiftLoading;
+  const todayDispatchShiftRows = dispatchShiftRows.filter((s) => s.date === todayStr);
+  const todayScheduleEntries = [
+    ...todayShifts.map((shift) => ({ kind: "shift" as const, shift })),
+    ...todayDispatchShiftRows.map((shift) => ({ kind: "dispatch" as const, shift })),
+  ];
+  const isLoading = empLoading || venLoading || shiftLoading || dispatchLoading;
 
   const filledSlots = useMemo(() => {
     let filled = 0;
     let total = 0;
     monthSlots.forEach((slot) => {
-      const slotShifts = monthShifts.filter((sh) => sh.venueId === slot.venueId && sh.date === slot.date && sh.startTime.substring(0, 5) <= slot.startTime && sh.endTime.substring(0, 5) >= slot.endTime);
+      const assignedCount = countAssignedToScheduleSlot(slot, monthShifts, monthDispatchShiftRows);
       total += slot.requiredCount;
-      filled += Math.min(slotShifts.length, slot.requiredCount);
+      filled += Math.min(assignedCount, slot.requiredCount);
     });
     return { filled, total };
-  }, [monthSlots, monthShifts]);
+  }, [monthSlots, monthShifts, monthDispatchShiftRows]);
 
   return (
     <div className="flex flex-col h-full overflow-auto">
@@ -112,7 +120,7 @@ export default function DashboardPage() {
             { label: "在職員工", value: activeCount, total: employees.length, icon: Users, color: "#3B82F6", ringColor: "hsl(217 91% 60%)" },
             { label: "管轄場館", value: venues.length, total: venues.length, icon: Building2, color: "#10B981", ringColor: "hsl(160 84% 39%)" },
             { label: "本週排班", value: totalShifts, total: Math.max(totalShifts, activeCount * 5), subtitle: dispatchShifts > 0 ? `含 ${dispatchShifts} 派遣` : undefined, icon: Calendar, color: "#8B5CF6", ringColor: "hsl(258 90% 66%)" },
-            { label: "今日出勤", value: todayShifts.length, total: activeCount, subtitle: todayShifts.filter((s) => s.isDispatch).length > 0 ? `${todayShifts.filter((s) => s.isDispatch).length} 派遣` : undefined, icon: Clock, color: "#F59E0B", ringColor: "hsl(38 92% 50%)" },
+            { label: "今日出勤", value: todayScheduleEntries.length, total: activeCount, subtitle: dispatchShifts > 0 ? `${todayScheduleEntries.filter((entry) => entry.kind === "dispatch" || entry.shift.isDispatch).length} 派遣` : undefined, icon: Clock, color: "#F59E0B", ringColor: "hsl(38 92% 50%)" },
           ].map((stat, i) => (
             <Card key={stat.label} className="p-4 rounded-xl shadow-md border-border/50 animate-fade-in-up" style={{ animationDelay: `${i * 80}ms` }}>
               <div className="flex items-center justify-between gap-2">
@@ -205,38 +213,42 @@ export default function DashboardPage() {
                   <Skeleton key={i} className="h-12 w-full rounded-lg" />
                 ))}
               </div>
-            ) : todayShifts.length === 0 ? (
+            ) : todayScheduleEntries.length === 0 ? (
               <div className="text-center py-10 text-muted-foreground text-sm">
                 <Calendar className="h-8 w-8 mx-auto mb-2 opacity-30" />
                 今日無排班記錄
               </div>
             ) : (
               <div className="space-y-2 max-h-[300px] overflow-auto">
-                {todayShifts.map((s, i) => {
-                  const emp = employees.find((e) => e.id === s.employeeId);
-                  const venue = venues.find((v) => v.id === s.venueId);
+                {todayScheduleEntries.map((entry, i) => {
+                  const isDispatchEntry = entry.kind === "dispatch" || entry.shift.isDispatch;
+                  const emp = entry.kind === "dispatch"
+                    ? employees.find((e) => e.id === entry.shift.linkedEmployeeId)
+                    : employees.find((e) => e.id === entry.shift.employeeId);
+                  const venue = entry.shift.venueId == null ? null : venues.find((v) => v.id === entry.shift.venueId);
+                  const displayName = entry.kind === "dispatch" ? entry.shift.dispatchName : emp?.name;
                   return (
                     <div
-                      key={s.id}
+                      key={`${entry.kind}-${entry.shift.id}`}
                       className={`flex items-center justify-between gap-2 rounded-lg p-3 text-sm animate-fade-in-up ${
-                        s.isDispatch
+                        isDispatchEntry
                           ? "bg-amber-500/5 border border-amber-500/20"
                           : "bg-muted/30 border border-border/50"
                       }`}
                       style={{ animationDelay: `${i * 50}ms` }}
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <div className={`h-2 w-2 rounded-full shrink-0 ${s.isDispatch ? "bg-amber-500" : "bg-primary"}`} />
-                        <span className="font-medium truncate">{emp?.name || "—"}</span>
-                        {s.isDispatch && (
+                        <div className={`h-2 w-2 rounded-full shrink-0 ${isDispatchEntry ? "bg-amber-500" : "bg-primary"}`} />
+                        <span className="font-medium truncate">{displayName || "—"}</span>
+                        {isDispatchEntry && (
                           <Badge className="text-[10px] bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border-0 shrink-0">
                             派遣
                           </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-muted-foreground shrink-0">
-                        <span className="text-xs font-medium">{venue?.shortName}</span>
-                        <span className="text-xs">{s.startTime.substring(0, 5)}-{s.endTime.substring(0, 5)}</span>
+                        <span className="text-xs font-medium">{venue?.shortName || "未指定"}</span>
+                        <span className="text-xs">{entry.shift.startTime.substring(0, 5)}-{entry.shift.endTime.substring(0, 5)}</span>
                       </div>
                     </div>
                   );
