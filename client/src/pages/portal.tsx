@@ -3401,7 +3401,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
 
   interface AvailWindowEntry { openFrom: string; openUntil: string; }
   interface AvailWindow { targetYearMonth: string; windows: AvailWindowEntry[]; openFrom?: string; openUntil?: string; }
-  interface PortalAvail { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; note: string | null; createdAt: string | null; }
+  interface PortalAvail { id: number; employeeId: number; date: string; entryType: string; leaveType: string | null; startTime: string | null; endTime: string | null; note: string | null; createdAt: string | null; }
 
   const { data: availWindow } = useQuery<AvailWindow | null>({
     queryKey: ["/api/portal/availability-window"],
@@ -3504,7 +3504,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-line-user-id": portalLineUserId },
             credentials: "include",
-            body: JSON.stringify({ employeeId: employee.id, date, startTime: slot.startTime, endTime: slot.endTime, entryType: slot.entryType, note: slot.note }),
+            body: JSON.stringify({ employeeId: employee.id, date, startTime: slot.startTime, endTime: slot.endTime, entryType: slot.entryType, leaveType: slot.leaveType, note: slot.leaveType || slot.note }),
           });
           if (!res.ok) throw new Error(await res.text());
           return res.json();
@@ -4219,7 +4219,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                           const isPast = dateStr < format(new Date(), "yyyy-MM-dd");
                           const isHoliday = holidaySet.has(dateStr);
-                          const leaveColor = offReq?.note === "特休" ? "orange" : offReq?.note === "休假" ? "slate" : "blue";
+                          const leaveColor = (offReq?.leaveType || offReq?.note) === "特休" ? "orange" : (offReq?.leaveType || offReq?.note) === "休假" ? "slate" : (offReq?.leaveType || offReq?.note) === "病假" ? "green" : "blue";
                           const isSelected = leaveTypeSheet === dateStr;
                           return (
                             <div key={dateStr}
@@ -4243,8 +4243,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                               <div className={`text-[11px] font-mono ${isHoliday ? "text-red-500 font-semibold" : isWeekend ? "text-amber-600" : offReq ? (leaveColor === "orange" ? "text-orange-600 font-semibold" : leaveColor === "slate" ? "text-slate-600 font-semibold" : "text-blue-600 font-semibold") : "text-juns-navy"}`}>{d.getDate()}</div>
                               {isHoliday && <div className="rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 bg-red-100 text-red-600">休館</div>}
                               {offReq && !isHoliday && (
-                                <div className={`rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 ${leaveColor === "orange" ? "bg-orange-100 text-orange-700" : leaveColor === "slate" ? "bg-slate-200 text-slate-700" : "bg-blue-100 text-blue-700"}`}>
-                                  {offReq.note || "休"}
+                                <div className={`rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 ${leaveColor === "orange" ? "bg-orange-100 text-orange-700" : leaveColor === "slate" ? "bg-slate-200 text-slate-700" : leaveColor === "green" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>
+                                  {offReq.leaveType || offReq.note || "休"}
                                 </div>
                               )}
                             </div>
@@ -4261,7 +4261,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                             </div>
                             <div className="grid grid-cols-3 gap-2">
                               {(["特休", "事假", "休假"] as const).map(lt => {
-                                const isCurrent = sheetOffReq?.note === lt;
+                                const isCurrent = (sheetOffReq?.leaveType || sheetOffReq?.note) === lt;
                                 return (
                                   <button key={lt}
                                     className={`h-11 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-40 ${

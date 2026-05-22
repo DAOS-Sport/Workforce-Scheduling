@@ -72,10 +72,10 @@ export const availabilityRepository = {
     return row?.cnt ?? 0;
   },
 
-  /** 計算某員工在指定年度中，特定假別（note 完全符合）的事假天數 */
+  /** 計算某員工在指定年度中，特定假別的天數（leaveType 欄位） */
   async countOffRequestsByNoteAndYear(
     employeeId: number,
-    note: string,
+    leaveType: string,
     year: number
   ): Promise<number> {
     const yearStart = `${year}-01-01`;
@@ -87,7 +87,7 @@ export const availabilityRepository = {
         and(
           eq(shiftAvailabilities.employeeId, employeeId),
           eq(shiftAvailabilities.entryType, "off_request"),
-          eq(shiftAvailabilities.note, note),
+          eq(shiftAvailabilities.leaveType, leaveType),
           gte(shiftAvailabilities.date, yearStart),
           lte(shiftAvailabilities.date, yearEnd)
         )

@@ -7,6 +7,7 @@ import {
   ensureOutingRecordsTable,
   ensureShiftAvailabilitiesTable,
   ensureAvailabilityEntryTypeColumn,
+  ensureAvailabilityLeaveTypeColumn,
   ensureVenueOperatingHoursColumns,
 } from "../storage";
 import { log } from "../shared/log";
@@ -73,6 +74,14 @@ export async function runStartupMigrations(): Promise<void> {
     await ensureAvailabilityEntryTypeColumn();
   } catch (err: any) {
     log(`shift_availabilities entry_type 欄位建立失敗: ${err.message}`, "db");
+  }
+
+  // Shift availabilities leave_type column + data migration from note field
+  try {
+    await ensureAvailabilityLeaveTypeColumn();
+    log("shift_availabilities leave_type 欄位確認完成", "db");
+  } catch (err: any) {
+    log(`shift_availabilities leave_type 欄位建立失敗: ${err.message}`, "db");
   }
 
   // Venue operating hours columns (open_time, close_time)

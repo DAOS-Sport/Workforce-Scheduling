@@ -180,14 +180,15 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
           }
         }
       }
-      const leaveType = isOffRequest ? (note?.trim() || null) : null;
+      const resolvedLeaveType = isOffRequest ? (note?.trim() || "休假") : null;
       const row = await availabilityRepository.create({
         employeeId: Number(employeeId),
         date,
         entryType: isOffRequest ? "off_request" : "available",
+        leaveType: resolvedLeaveType,
         startTime: isOffRequest ? null : startTime,
         endTime: isOffRequest ? null : endTime,
-        note: isOffRequest ? leaveType : (note?.trim() || null),
+        note: isOffRequest ? resolvedLeaveType : (note?.trim() || null),
       });
       created(res, row);
     } catch (err: any) {
