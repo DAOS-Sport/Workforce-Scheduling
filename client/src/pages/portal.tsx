@@ -1396,6 +1396,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
   const [stage, setStage] = useState<"idle" | "scanning" | "submitting" | "done" | "error">("idle");
   const [result, setResult] = useState<ClockInResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [errorCode, setErrorCode] = useState<number | null>(null);
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [scanAngle, setScanAngle] = useState(0);
   const [reasonSubmitted, setReasonSubmitted] = useState(false);
@@ -1527,6 +1528,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
         setCountdown(60);
       }
     } catch (err: any) {
+      setErrorCode(err.code ?? null);
       if (err.code === 1) {
         setErrorMsg("請允許位置存取權限");
       } else if (err.code === 2) {
@@ -1775,10 +1777,17 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
               <XCircle className="h-5 w-5 text-red-500 shrink-0" />
               <span className="font-medium text-sm text-red-500">{errorMsg}</span>
             </div>
-            <AnomalyReportButton employee={employee} errorMsg={errorMsg} accuracy={accuracy} context="打卡錯誤" />
+            {errorCode === 1 ? (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 mb-3 text-sm text-amber-800 space-y-1">
+                <p className="font-medium">如何開啟位置權限：</p>
+                <p>請至手機「設定 → 隱私權 → 位置服務」，找到 LINE 並選擇「使用 App 期間」，再回來重試。</p>
+              </div>
+            ) : (
+              <AnomalyReportButton employee={employee} errorMsg={errorMsg} accuracy={accuracy} context="打卡錯誤" />
+            )}
             <button
               className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all mt-2"
-              onClick={() => { setStage("idle"); setErrorMsg(""); }}
+              onClick={() => { setStage("idle"); setErrorMsg(""); setErrorCode(null); }}
               data-testid="button-retry-clock"
             >
               重試
