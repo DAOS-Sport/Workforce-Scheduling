@@ -1403,6 +1403,8 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
   const [reasonSubmitting, setReasonSubmitting] = useState(false);
   const [lockedClock, setLockedClock] = useState<{ clockType: "in" | "out"; timeStr: string; timestamp: number } | null>(null);
   const [countdown, setCountdown] = useState(0);
+  const [cachedPosition, setCachedPosition] = useState<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
+  const [gpsReady, setGpsReady] = useState<"unknown" | "ok" | "denied">("unknown");
   const { toast } = useToast();
 
   const storageKey = `last_clock_${employee.id}`;
@@ -1484,6 +1486,28 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     }
   }, [stage]);
 
+  useEffect(() => {
+    if (!navigator.geolocation) { setGpsReady("denied"); return; }
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setCachedPosition({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          acc: Math.round(pos.coords.accuracy),
+          ts: Date.now(),
+        });
+        setGpsReady("ok");
+      },
+      (err) => {
+        if (err.code === 1) setGpsReady("denied");
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  const CACHED_POS_MAX_AGE = 60 * 1000;
+
   const handleClockIn = useCallback(async (clockType: "in" | "out" = "in") => {
     setStage("scanning");
     setResult(null);
@@ -1491,23 +1515,33 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     setReasonSubmitted(false);
 
     try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0,
-        });
-      });
+      let latitude: number, longitude: number, acc: number;
 
-      const { latitude, longitude, accuracy: acc } = position.coords;
-      setAccuracy(Math.round(acc));
+      if (cachedPosition && Date.now() - cachedPosition.ts < CACHED_POS_MAX_AGE) {
+        latitude = cachedPosition.lat;
+        longitude = cachedPosition.lng;
+        acc = cachedPosition.acc;
+      } else {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0,
+          });
+        });
+        latitude = position.coords.latitude;
+        longitude = position.coords.longitude;
+        acc = Math.round(position.coords.accuracy);
+      }
+
+      setAccuracy(acc);
       onPositionUpdate?.(latitude, longitude);
       setStage("submitting");
 
       const resp = await fetch("/api/liff/clock-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId: employee.id, latitude, longitude, accuracy: Math.round(acc), clockType }),
+        body: JSON.stringify({ employeeId: employee.id, latitude, longitude, accuracy: acc, clockType }),
       });
 
       if (!resp.ok) {
@@ -1540,7 +1574,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
       }
       setStage("error");
     }
-  }, [employee.id, storageKey]);
+  }, [employee.id, storageKey, cachedPosition]);
 
   const clockContent = (
     <div className={hideCard ? "" : "p-4"}>
@@ -1559,40 +1593,60 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
           const btnHDone = hideCard ? "h-20" : "h-14";
 
           return (
-            <div className="grid grid-cols-2 gap-3">
-              {clockInLocked ? (
-                <button disabled className={`${btnHDone} rounded-xl bg-emerald-100 border-2 border-emerald-400 text-emerald-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-in">
-                  <div className="flex items-center gap-1">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span className={hideCard ? "text-base" : "text-sm"}>上班已打卡</span>
-                  </div>
-                  {clockInTime && <span className={`font-bold ${hideCard ? "text-lg" : "text-xs"}`}>{clockInTime}</span>}
-                </button>
-              ) : (
-                <button
-                  className={`${btnH} rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all`}
-                  onClick={() => handleClockIn("in")}
-                  data-testid="button-clock-in"
-                >
-                  <span className={hideCard ? "text-lg" : "text-base"}>↑ 上班</span>
-                </button>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                {clockInLocked ? (
+                  <button disabled className={`${btnHDone} rounded-xl bg-emerald-100 border-2 border-emerald-400 text-emerald-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-in">
+                    <div className="flex items-center gap-1">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className={hideCard ? "text-base" : "text-sm"}>上班已打卡</span>
+                    </div>
+                    {clockInTime && <span className={`font-bold ${hideCard ? "text-lg" : "text-xs"}`}>{clockInTime}</span>}
+                  </button>
+                ) : (
+                  <button
+                    className={`${btnH} rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all`}
+                    onClick={() => handleClockIn("in")}
+                    data-testid="button-clock-in"
+                  >
+                    <span className={hideCard ? "text-lg" : "text-base"}>↑ 上班</span>
+                  </button>
+                )}
+                {clockOutLocked ? (
+                  <button disabled className={`${btnHDone} rounded-xl bg-blue-100 border-2 border-blue-400 text-blue-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-out">
+                    <div className="flex items-center gap-1">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className={hideCard ? "text-base" : "text-sm"}>下班已打卡</span>
+                    </div>
+                    {clockOutTime && <span className={`font-bold ${hideCard ? "text-lg" : "text-xs"}`}>{clockOutTime}</span>}
+                  </button>
+                ) : (
+                  <button
+                    className={`${btnH} rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all`}
+                    onClick={() => handleClockIn("out")}
+                    data-testid="button-clock-out"
+                  >
+                    <span className={hideCard ? "text-lg" : "text-base"}>↓ 下班</span>
+                  </button>
+                )}
+              </div>
+              {gpsReady === "ok" && cachedPosition && (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-600" data-testid="text-gps-ready">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span>GPS 已就緒（精度 ±{cachedPosition.acc}m）</span>
+                </div>
               )}
-              {clockOutLocked ? (
-                <button disabled className={`${btnHDone} rounded-xl bg-blue-100 border-2 border-blue-400 text-blue-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-out">
-                  <div className="flex items-center gap-1">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span className={hideCard ? "text-base" : "text-sm"}>下班已打卡</span>
-                  </div>
-                  {clockOutTime && <span className={`font-bold ${hideCard ? "text-lg" : "text-xs"}`}>{clockOutTime}</span>}
-                </button>
-              ) : (
-                <button
-                  className={`${btnH} rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all`}
-                  onClick={() => handleClockIn("out")}
-                  data-testid="button-clock-out"
-                >
-                  <span className={hideCard ? "text-lg" : "text-base"}>↓ 下班</span>
-                </button>
+              {gpsReady === "denied" && (
+                <div className="flex items-center gap-1.5 text-xs text-red-500" data-testid="text-gps-denied">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                  <span>位置存取被拒，請至手機設定開啟 LINE 定位權限</span>
+                </div>
+              )}
+              {gpsReady === "unknown" && (
+                <div className="flex items-center gap-1.5 text-xs text-slate-400" data-testid="text-gps-loading">
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse shrink-0" />
+                  <span>正在取得 GPS 定位...</span>
+                </div>
               )}
             </div>
           );

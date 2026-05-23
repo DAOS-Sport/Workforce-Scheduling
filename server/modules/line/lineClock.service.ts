@@ -101,6 +101,8 @@ export interface ClockInResult {
   lateMinutes?: number;
 }
 
+const TAIWAN_BOUNDS = { minLat: 21.5, maxLat: 25.5, minLng: 119.5, maxLng: 122.5 };
+
 export async function processClockIn(
   params: { lineUserId?: string; employeeId?: number },
   lat: number,
@@ -110,6 +112,28 @@ export async function processClockIn(
   const now = getTaiwanNow();
   const todayStr = formatTaiwanDate(now);
   const timeStr = formatTaiwanTime(now);
+
+  if (
+    lat < TAIWAN_BOUNDS.minLat || lat > TAIWAN_BOUNDS.maxLat ||
+    lng < TAIWAN_BOUNDS.minLng || lng > TAIWAN_BOUNDS.maxLng
+  ) {
+    console.warn(`[Clock-in] 座標超出台灣範圍: lat=${lat}, lng=${lng}`);
+    return {
+      status: "fail",
+      clockType: forcedClockType || "in",
+      venueName: null,
+      distance: null,
+      time: timeStr,
+      date: todayStr,
+      shiftInfo: null,
+      failReason: "座標不在有效範圍內，請確認 GPS 定位正確",
+      employeeName: null,
+      radius: null,
+      nearbyVenues: [],
+      userLat: lat,
+      userLng: lng,
+    };
+  }
 
   let employee;
   if (params.employeeId) {
