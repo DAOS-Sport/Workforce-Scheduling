@@ -516,7 +516,11 @@ export const portalService = {
         return ds === todayStr;
       })
       .sort((a, b) => new Date(b.clockTime!).getTime() - new Date(a.clockTime!).getTime());
-    const latestClockToday = todayClocks[0] ?? null;
+    // Prefer the most recent success/warning record so the portal's "已打卡" lock
+    // is seeded from a real successful clock-in, not from a transient fail that
+    // happens to be the very last attempt (e.g. user tapped clock-out by mistake).
+    const latestClockToday =
+      todayClocks.find((cr) => cr.status === "success" || cr.status === "warning") ?? todayClocks[0] ?? null;
     const todayClockInRecord = todayClocks.find(cr => cr.clockType === "in" && (cr.status === "success" || cr.status === "warning")) ?? null;
     const todayClockOutRecord = [...todayClocks].find(cr => cr.clockType === "out" && (cr.status === "success" || cr.status === "warning")) ?? null;
 
@@ -607,7 +611,7 @@ export const portalService = {
       anomaly: allRows.filter((r) => r.hasAnomaly).length,
       leave: records.filter((r) => r.leaveHours && r.leaveHours.trim() !== "").length,
       todayLatestClock: latestClockToday
-        ? { clockType: latestClockToday.clockType, clockTime: latestClockToday.clockTime!.toISOString() }
+        ? { clockType: latestClockToday.clockType, clockTime: latestClockToday.clockTime!.toISOString(), status: latestClockToday.status }
         : null,
       todayClockIn: todayClockInRecord ? { clockTime: todayClockInRecord.clockTime!.toISOString() } : null,
       todayClockOut: todayClockOutRecord ? { clockTime: todayClockOutRecord.clockTime!.toISOString() } : null,

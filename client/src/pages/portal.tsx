@@ -1388,7 +1388,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
   employee: PortalEmployee;
   onPositionUpdate?: (lat: number, lng: number) => void;
   onResult?: (r: ClockInResult) => void;
-  todayLatestClock?: { clockType: string; clockTime: string } | null;
+  todayLatestClock?: { clockType: string; clockTime: string; status?: string } | null;
   todayClockIn?: { clockTime: string } | null;
   todayClockOut?: { clockTime: string } | null;
   hideCard?: boolean;
@@ -1424,7 +1424,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
         localStorage.removeItem(storageKey);
       }
     }
-    if (!lockInfo && todayLatestClock) {
+    if (!lockInfo && todayLatestClock && (todayLatestClock.status === "success" || todayLatestClock.status === "warning")) {
       const ts = new Date(todayLatestClock.clockTime).getTime();
       if (Date.now() - ts < CLOCK_LOCK_MS) {
         const timeStr = new Date(todayLatestClock.clockTime).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false });
@@ -2899,8 +2899,9 @@ function HomeView({
           onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })}
           onResult={(result) => {
             setClockInResult(result);
+            // Always refresh attendance so UI reflects DB truth, even when status is "fail".
+            queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", employee.id] });
             if (result.status === "success" || result.status === "warning") {
-              queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", employee.id] });
               queryClient.invalidateQueries({ queryKey: ["/api/portal/upcoming-coworkers", employee.id] });
             }
           }}

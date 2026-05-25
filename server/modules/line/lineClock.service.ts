@@ -103,6 +103,27 @@ export interface ClockInResult {
 
 const TAIWAN_BOUNDS = { minLat: 21.5, maxLat: 25.5, minLng: 119.5, maxLng: 122.5 };
 
+function logClockAttempt(stage: string, info: {
+  employeeId?: number | null;
+  employeeName?: string | null;
+  status: string;
+  clockType: string;
+  failReason?: string | null;
+  recordId?: number | null;
+  lat: number;
+  lng: number;
+  venueName?: string | null;
+  distance?: number | null;
+}) {
+  const ts = new Date().toISOString();
+  console.log(
+    `[ClockLog] ${ts} stage=${stage} emp=${info.employeeName ?? "?"}(#${info.employeeId ?? "?"}) ` +
+    `status=${info.status} type=${info.clockType} venue=${info.venueName ?? "-"} ` +
+    `dist=${info.distance ?? "-"}m lat=${info.lat.toFixed(6)} lng=${info.lng.toFixed(6)} ` +
+    `recordId=${info.recordId ?? "-"} reason="${info.failReason ?? ""}"`
+  );
+}
+
 export async function processClockIn(
   params: { lineUserId?: string; employeeId?: number },
   lat: number,
@@ -202,8 +223,9 @@ export async function processClockIn(
           // Persist an audit-only fail record so admins can see the employee
           // actually tried to clock in but was blocked by the dedup rule.
           // Without this the attempt vanishes from the DB entirely.
+          let dedupRecordId: number | null = null;
           try {
-            await storage.createClockRecord({
+            const rec = await storage.createClockRecord({
               employeeId: employee.id,
               venueId: lastValidRecord.venueId ?? null,
               shiftId: null,
@@ -215,9 +237,16 @@ export async function processClockIn(
               failReason,
               matchedVenueName: lastValidRecord.matchedVenueName || null,
             });
+            dedupRecordId = rec.id;
           } catch (err) {
             console.error("[clock] failed to write dedup audit record", err);
           }
+          logClockAttempt("dedup", {
+            employeeId: employee.id, employeeName: employee.name,
+            status: "fail", clockType: forcedClockType || lastValidRecord.clockType,
+            failReason, recordId: dedupRecordId, lat, lng,
+            venueName: lastValidRecord.matchedVenueName, distance: null,
+          });
           return {
             status: "fail",
             clockType: forcedClockType || lastValidRecord.clockType,
@@ -281,7 +310,7 @@ export async function processClockIn(
 
   if (closestDistance > effectiveRadius) {
     const failClockType = forcedClockType || "in";
-    await storage.createClockRecord({
+    const outOfRangeRec = await storage.createClockRecord({
       employeeId: employee.id,
       venueId: null,
       shiftId: null,
@@ -292,6 +321,13 @@ export async function processClockIn(
       status: "fail",
       failReason: "不在任何場館範圍內",
       matchedVenueName: closestVenue.shortName,
+    });
+    logClockAttempt("out-of-range", {
+      employeeId: employee.id, employeeName: employee.name,
+      status: "fail", clockType: failClockType,
+      failReason: `不在任何場館範圍內 (最近=${closestVenue.shortName} 距離=${Math.round(closestDistance)}m radius=${effectiveRadius}m)`,
+      recordId: outOfRangeRec.id, lat, lng,
+      venueName: closestVenue.shortName, distance: Math.round(closestDistance),
     });
 
     return {
@@ -336,7 +372,7 @@ export async function processClockIn(
 
   if (venueShifts.length === 0) {
     const warnClockType = forcedClockType || "in";
-    await storage.createClockRecord({
+    const warnRec = await storage.createClockRecord({
       employeeId: employee.id,
       venueId: closestVenue.id,
       shiftId: null,
@@ -347,6 +383,12 @@ export async function processClockIn(
       status: "warning",
       failReason: "今日無排班",
       matchedVenueName: closestVenue.shortName,
+    });
+    logClockAttempt("no-shift", {
+      employeeId: employee.id, employeeName: employee.name,
+      status: "warning", clockType: warnClockType,
+      failReason: "今日無排班", recordId: warnRec.id, lat, lng,
+      venueName: closestVenue.shortName, distance: Math.round(closestDistance),
     });
 
     return {
@@ -440,6 +482,12 @@ export async function processClockIn(
     status: "success",
     failReason: lateReason,
     matchedVenueName: closestVenue.shortName,
+  });
+  logClockAttempt("success", {
+    employeeId: employee.id, employeeName: employee.name,
+    status: "success", clockType, failReason: lateReason,
+    recordId: clockRecord.id, lat, lng,
+    venueName: closestVenue.shortName, distance: Math.round(closestDistance),
   });
 
   return {

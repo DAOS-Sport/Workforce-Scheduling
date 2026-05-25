@@ -287,13 +287,49 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   }
 
   const clockRecords = await storage.getClockRecordsByDateRange(todayStr, todayStr);
-  const clockedInEmployees = new Set<number>();
+  // shift-level check: only valid "in" records (success/warning), grouped per employee with full record info.
+  // We can't just use a Set keyed on employeeId because a single employee may have
+  // multiple shifts at different venues/times and may only have clocked in for one of them.
+  const validInRecordsByEmp = new Map<number, typeof clockRecords>();
   for (const cr of clockRecords) {
-    if (cr.clockType === "in" && (cr.status === "success" || cr.status === "warning")) {
-      clockedInEmployees.add(cr.employeeId);
+    if (cr.clockType === "in" && (cr.status === "success" || cr.status === "warning") && cr.clockTime) {
+      if (!validInRecordsByEmp.has(cr.employeeId)) validInRecordsByEmp.set(cr.employeeId, []);
+      validInRecordsByEmp.get(cr.employeeId)!.push(cr);
     }
   }
-  console.log(`[未打卡提醒] 今日有效上班打卡人數: ${clockedInEmployees.size}，員工ID列表: [${Array.from(clockedInEmployees).join(", ")}]`);
+  console.log(`[未打卡提醒] 今日有效上班打卡員工數: ${validInRecordsByEmp.size}`);
+
+  // Helper: does this employee have a valid "in" clock-in that matches THIS specific shift?
+  // A clock-in matches a shift if it's at the same venue (or any venue for dispatch shifts)
+  // AND its time falls between (shiftStart - 30min) and (shiftEnd + 30min).
+  function hasClockInForShift(
+    empId: number,
+    shift: { startTime: string; endTime: string; venueId: number | null; isDispatch: boolean },
+    records: typeof clockRecords,
+  ): boolean {
+    const recs = (records.length ? records : validInRecordsByEmp.get(empId) || []);
+    const [sh, sm] = shift.startTime.split(":").map(Number);
+    const [eh, em] = shift.endTime.split(":").map(Number);
+    const startMin = sh * 60 + sm - 30;
+    const endMinRaw = eh * 60 + em + 30;
+    // Overnight shifts (e.g. 22:00-06:00) wrap past midnight. Treat the window as
+    // [startMin, 24*60) ∪ [0, endMinRaw - 24*60]. We only see today's records
+    // here; clock-ins before midnight match the first half of the window.
+    const overnight = endMinRaw <= startMin || (eh * 60 + em) < (sh * 60 + sm);
+    for (const cr of recs) {
+      if (cr.clockType !== "in" || (cr.status !== "success" && cr.status !== "warning") || !cr.clockTime) continue;
+      // Venue match: dispatch shifts may not enforce venue, regular shifts must match.
+      if (!shift.isDispatch && shift.venueId != null && cr.venueId !== shift.venueId) continue;
+      const d = new Date(new Date(cr.clockTime).toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+      const recMin = d.getHours() * 60 + d.getMinutes();
+      if (overnight) {
+        if (recMin >= startMin || recMin <= Math.max(0, endMinRaw - 24 * 60)) return true;
+      } else {
+        if (recMin >= startMin && recMin <= endMinRaw) return true;
+      }
+    }
+    return false;
+  }
   console.log(`[未打卡提醒] 今日班次總數: ${workShifts.length + linkedDispatchShifts.length}，當前時間: ${currentTimeStr}`);
 
   const allVenues = await storage.getAllVenues();
@@ -340,8 +376,8 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
       continue;
     }
 
-    if (clockedInEmployees.has(assignment.employeeId)) {
-      console.log(`[未打卡提醒] 跳過（已打卡）: 員工ID=${assignment.employeeId} 班次=${shiftStart}`);
+    if (hasClockInForShift(assignment.employeeId, assignment, validInRecordsByEmp.get(assignment.employeeId) || [])) {
+      console.log(`[未打卡提醒] 跳過（此班次已打卡）: 員工ID=${assignment.employeeId} 班次=${shiftStart}-${assignment.endTime.substring(0,5)} 場館=${assignment.venueId}`);
       continue;
     }
 
@@ -372,6 +408,15 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   for (const { emp, assignment, venueName } of missingEmployees) {
     const shiftStart = assignment.startTime.substring(0, 5);
     const shiftEnd = assignment.endTime.substring(0, 5);
+
+    // Re-verify just before sending: between batch snapshot and now (could be
+    // several seconds) the employee may have just clocked in. Re-query fresh.
+    const freshRecords = await storage.getClockRecordsByEmployee(emp.id, todayStr, todayStr).catch(() => [] as typeof clockRecords);
+    if (hasClockInForShift(emp.id, assignment, freshRecords)) {
+      console.log(`[未打卡提醒] 發送前再確認：${emp.name} 已於通知前完成此班次打卡，取消發送`);
+      skipped++;
+      continue;
+    }
 
     console.log(`[未打卡提醒] 發送通知: ${emp.name}（ID=${emp.id}）班次=${shiftStart}-${shiftEnd} 場館=${venueName} lineId=${emp.lineId ? "有" : "無"}`);
     if (emp.lineId) {
