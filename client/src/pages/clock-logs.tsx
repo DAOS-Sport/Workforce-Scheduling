@@ -206,6 +206,15 @@ export default function ClockLogsPage() {
                       <div className="col-span-1 text-[10px] font-mono text-slate-400 text-right">
                         #{r.id}
                         <div>{r.latitude.toFixed(4)},{r.longitude.toFixed(4)}</div>
+                        {r.gpsCapturedAt && (() => {
+                          const latencyMs = new Date(r.clockTime).getTime() - new Date(r.gpsCapturedAt).getTime();
+                          if (!isFinite(latencyMs)) return null;
+                          const latencyS = Math.round(latencyMs / 1000);
+                          const cls = latencyS > 60 ? "text-amber-600" : "text-slate-400";
+                          return (
+                            <div className={cls} title="GPS 取得時刻 → 送出時刻延遲">Δ{latencyS}s</div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );

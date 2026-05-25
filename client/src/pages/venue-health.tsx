@@ -30,6 +30,8 @@ interface VenueHealthRow {
   centroidLat: number | null;
   centroidLng: number | null;
   drift: number | null;
+  dispersion: number | null;
+  lastSuccessAt: string | null;
   duplicateOf: number[];
   label: "ok" | "no_data" | "drift" | "duplicate" | "no_coord" | "inactive";
 }
@@ -172,8 +174,11 @@ export default function VenueHealthPage() {
                         <div>實際 {r.centroidLat != null ? `${r.centroidLat.toFixed(5)}, ${r.centroidLng!.toFixed(5)}` : "—"}</div>
                         {r.drift != null && (
                           <div className={r.drift > 200 ? "text-rose-600 font-semibold" : "text-slate-500"}>
-                            偏移 {r.drift}m
+                            偏移 {r.drift}m{r.dispersion != null && <span className="text-slate-400">（散佈 ±{r.dispersion}m）</span>}
                           </div>
+                        )}
+                        {r.lastSuccessAt && (
+                          <div className="text-slate-400">最近成功 {new Date(r.lastSuccessAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</div>
                         )}
                       </div>
                       <div className="col-span-2 flex flex-col items-end gap-1.5">

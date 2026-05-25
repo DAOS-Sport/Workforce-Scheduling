@@ -1384,13 +1384,14 @@ const LATE_DEPARTURE_REASONS = [
 
 const CLOCK_LOCK_MS = 60 * 60 * 1000;
 
-function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, todayClockIn, todayClockOut, hideCard }: {
+function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, todayClockIn, todayClockOut, todayShifts, hideCard }: {
   employee: PortalEmployee;
   onPositionUpdate?: (lat: number, lng: number) => void;
   onResult?: (r: ClockInResult) => void;
   todayLatestClock?: { clockType: string; clockTime: string; status?: string } | null;
   todayClockIn?: { clockTime: string } | null;
   todayClockOut?: { clockTime: string } | null;
+  todayShifts?: PortalShift[];
   hideCard?: boolean;
 }) {
   const [stage, setStage] = useState<"idle" | "scanning" | "submitting" | "done" | "error">("idle");
@@ -1521,11 +1522,15 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", clearGpsState);
+    window.addEventListener("beforeunload", clearGpsState);
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", clearGpsState);
-      if (watchId != null) navigator.geolocation.clearWatch(watchId);
+      window.removeEventListener("beforeunload", clearGpsState);
+      // Final teardown: drop any in-memory GPS state when the component
+      // unmounts so re-mounting always starts from a clean slate.
+      clearGpsState();
     };
   }, []);
 
@@ -1780,6 +1785,43 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
                 </div>
               </div>
             )}
+
+            {result.status === "fail" && todayShifts && todayShifts.length > 0 && (() => {
+              // Surface the employee's scheduled venue for today + distance
+              // (from the server-supplied nearbyVenues list) so they know
+              // exactly where to go when the fail is "not in range".
+              const scheduled = todayShifts.find((s) => s.venue);
+              if (!scheduled?.venue) return null;
+              const matchInfo = result.nearbyVenues?.find(
+                (v) => v.id === scheduled.venue!.id || v.shortName === scheduled.venue!.shortName,
+              );
+              return (
+                <div className="mb-3 p-3 rounded-lg bg-blue-50 border border-blue-200" data-testid="card-scheduled-venue-guide">
+                  <div className="flex items-start gap-2">
+                    <CalendarDays className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                    <div className="text-xs text-blue-800 space-y-0.5 flex-1">
+                      <div className="font-semibold">今日班次場館：{scheduled.venue.shortName}</div>
+                      <div>班別 {scheduled.startTime.slice(0,5)} ~ {scheduled.endTime.slice(0,5)}</div>
+                      {matchInfo && (
+                        <div>距離目前位置 <span className="font-mono font-semibold">{matchInfo.distance}m</span>{matchInfo.inRange ? "（在範圍內）" : "（超出範圍）"}</div>
+                      )}
+                      {result.userLat !== null && result.userLng !== null && (
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&origin=${result.userLat},${result.userLng}&destination=${encodeURIComponent(scheduled.venue.name)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded bg-blue-600 text-white text-[11px] font-medium hover:bg-blue-700"
+                          data-testid="link-directions-scheduled"
+                        >
+                          <Navigation className="h-3 w-3" />
+                          開啟導航到此場館
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {result.nearbyVenues && result.nearbyVenues.length > 0 && (
               <div className="border border-juns-border rounded-lg overflow-hidden mb-3">
@@ -2942,6 +2984,7 @@ function HomeView({
           todayLatestClock={attendance?.todayLatestClock}
           todayClockIn={todayClockIn}
           todayClockOut={todayClockOut}
+          todayShifts={todayShifts}
         />
       </div>
 

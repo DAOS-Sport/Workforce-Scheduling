@@ -71,6 +71,11 @@ export function mountVenueHealthRoutes(_httpServer: Server, app: Express): void 
         let centroidLat: number | null = null;
         let centroidLng: number | null = null;
         let drift: number | null = null;
+        // Dispersion = mean distance from each success point to the centroid
+        // (≈ standard radius of the cluster). Helps admins decide whether
+        // the venue radius is too tight or whether GPS drift is just noisy.
+        let dispersion: number | null = null;
+        let lastSuccessAt: string | null = null;
         const validSuccess = success.filter((r) => r.latitude != null && r.longitude != null);
         if (validSuccess.length > 0) {
           centroidLat = validSuccess.reduce((s, r) => s + (r.latitude as number), 0) / validSuccess.length;
@@ -78,6 +83,14 @@ export function mountVenueHealthRoutes(_httpServer: Server, app: Express): void 
           if (v.latitude != null && v.longitude != null) {
             drift = Math.round(haversine(v.latitude, v.longitude, centroidLat, centroidLng));
           }
+          dispersion = Math.round(
+            validSuccess.reduce((s, r) => s + haversine(r.latitude as number, r.longitude as number, centroidLat!, centroidLng!), 0)
+              / validSuccess.length,
+          );
+          lastSuccessAt = validSuccess
+            .map((r) => r.clockTime as unknown as string)
+            .sort()
+            .pop() ?? null;
         }
         let label: "ok" | "no_data" | "drift" | "duplicate" | "no_coord" | "inactive" = "ok";
         if (v.isActive === false) label = "inactive";
@@ -103,6 +116,8 @@ export function mountVenueHealthRoutes(_httpServer: Server, app: Express): void 
           centroidLat: centroidLat != null ? Number(centroidLat.toFixed(6)) : null,
           centroidLng: centroidLng != null ? Number(centroidLng.toFixed(6)) : null,
           drift,
+          dispersion,
+          lastSuccessAt,
           duplicateOf: dupGroups.get(v.id) || [],
           label,
         };
