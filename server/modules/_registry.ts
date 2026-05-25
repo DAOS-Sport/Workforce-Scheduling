@@ -29,6 +29,7 @@ import { mountAdminAuthRoutes } from "./admin/admin.routes";
 import { mountRegionRoutes } from "./region/region.routes";
 import { mountEmployeeRoutes } from "./employee/employee.routes";
 import { mountVenueRoutes } from "./venue/venue.routes";
+import { mountVenueHealthRoutes } from "./venue/venue.health.routes";
 import { mountDispatchRoutes } from "./dispatch/dispatch.routes";
 import { mountScheduleSlotRoutes } from "./scheduleSlot/scheduleSlot.routes";
 import { mountAttendanceRoutes } from "./attendance/attendance.routes";
@@ -56,6 +57,7 @@ export function registerModuleRoutes(httpServer: Server, app: Express): void {
   mountRegionRoutes(httpServer, app);
   mountEmployeeRoutes(httpServer, app);
   mountVenueRoutes(httpServer, app);
+  mountVenueHealthRoutes(httpServer, app);
   mountDispatchRoutes(httpServer, app);
   mountScheduleSlotRoutes(httpServer, app);
   mountAttendanceRoutes(httpServer, app);

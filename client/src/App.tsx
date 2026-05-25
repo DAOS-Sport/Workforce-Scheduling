@@ -18,6 +18,7 @@ import AttendancePage from "@/pages/attendance";
 import GuidelinesPage from "@/pages/guidelines";
 import ClockRecordsPage from "@/pages/clock-records";
 import ClockLogsPage from "@/pages/clock-logs";
+import VenueHealthPage from "@/pages/venue-health";
 import AnomalyReportsPage from "@/pages/anomaly-reports";
 import WeeklyAttendancePage from "@/pages/weekly-attendance";
 import SalaryReportPage from "@/pages/salary-report";
@@ -45,6 +46,7 @@ function AdminRouter() {
       <Route path="/guidelines" component={GuidelinesPage} />
       <Route path="/clock-records" component={ClockRecordsPage} />
       <Route path="/clock-logs" component={ClockLogsPage} />
+      <Route path="/venue-health" component={VenueHealthPage} />
       <Route path="/anomaly-reports" component={AnomalyReportsPage} />
       <Route path="/weekly-attendance" component={WeeklyAttendancePage} />
       <Route path="/salary-report" component={SalaryReportPage} />

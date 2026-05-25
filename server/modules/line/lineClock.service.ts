@@ -99,6 +99,14 @@ export interface ClockInResult {
   earlyMinutes?: number;
   lateDeparture?: boolean;
   lateMinutes?: number;
+  accuracy?: number | null;
+  accuracyBufferApplied?: boolean;
+  suspiciousLocation?: boolean;
+}
+
+export interface ClockInExtras {
+  accuracy?: number | null;
+  gpsCapturedAt?: string | Date | null;
 }
 
 const TAIWAN_BOUNDS = { minLat: 21.5, maxLat: 25.5, minLng: 119.5, maxLng: 122.5 };
@@ -128,8 +136,13 @@ export async function processClockIn(
   params: { lineUserId?: string; employeeId?: number },
   lat: number,
   lng: number,
-  forcedClockType?: "in" | "out"
+  forcedClockType?: "in" | "out",
+  extras?: ClockInExtras,
 ): Promise<ClockInResult> {
+  const accuracyRaw = extras?.accuracy != null && Number.isFinite(extras.accuracy) ? Number(extras.accuracy) : null;
+  // Cap the buffer at 100m to prevent abuse from devices reporting wildly large accuracy values.
+  const accuracyBuffer = accuracyRaw != null ? Math.min(Math.max(accuracyRaw, 0), 100) : 0;
+  const gpsCapturedAt = extras?.gpsCapturedAt ? new Date(extras.gpsCapturedAt) : null;
   const now = getTaiwanNow();
   const todayStr = formatTaiwanDate(now);
   const timeStr = formatTaiwanTime(now);
@@ -236,6 +249,10 @@ export async function processClockIn(
               status: "fail",
               failReason,
               matchedVenueName: lastValidRecord.matchedVenueName || null,
+              accuracy: accuracyRaw,
+              accuracyBufferApplied: false,
+              suspiciousLocation: false,
+              gpsCapturedAt,
             });
             dedupRecordId = rec.id;
           } catch (err) {
@@ -268,7 +285,9 @@ export async function processClockIn(
   }
 
   const allVenues = await getCachedVenues();
-  const validVenues = allVenues.filter((v) => v.latitude && v.longitude);
+  // Skip de-activated venues so admins can hide unused/duplicate locations
+  // without deleting historical records.
+  const validVenues = allVenues.filter((v) => v.latitude && v.longitude && (v as any).isActive !== false);
 
   const venueDistances = validVenues.map((v) => ({
     venue: v,
@@ -308,7 +327,12 @@ export async function processClockIn(
   const closestDistance = closest.distance;
   const effectiveRadius = closestVenue.radius || 300;
 
-  if (closestDistance > effectiveRadius) {
+  // Accuracy buffer: if device-reported accuracy explains the over-shoot,
+  // allow it through and mark accuracyBufferApplied. Capped at 100m above.
+  const adjustedDistance = Math.max(0, closestDistance - accuracyBuffer);
+  const accuracyBufferApplied = closestDistance > effectiveRadius && adjustedDistance <= effectiveRadius;
+
+  if (adjustedDistance > effectiveRadius) {
     const failClockType = forcedClockType || "in";
     const outOfRangeRec = await storage.createClockRecord({
       employeeId: employee.id,
@@ -319,8 +343,14 @@ export async function processClockIn(
       longitude: lng,
       distance: Math.round(closestDistance),
       status: "fail",
-      failReason: "不在任何場館範圍內",
+      failReason: accuracyRaw != null
+        ? `不在任何場館範圍內（距離 ${Math.round(closestDistance)}m / 容許 ${effectiveRadius}m / GPS 精度 ±${Math.round(accuracyRaw)}m）`
+        : "不在任何場館範圍內",
       matchedVenueName: closestVenue.shortName,
+      accuracy: accuracyRaw,
+      accuracyBufferApplied: false,
+      suspiciousLocation: false,
+      gpsCapturedAt,
     });
     logClockAttempt("out-of-range", {
       employeeId: employee.id, employeeName: employee.name,
@@ -338,12 +368,16 @@ export async function processClockIn(
       time: timeStr,
       date: todayStr,
       shiftInfo: null,
-      failReason: "不在任何場館範圍內",
+      failReason: accuracyRaw != null
+        ? `不在任何場館範圍內（距離 ${Math.round(closestDistance)}m / 容許 ${effectiveRadius}m / GPS 精度 ±${Math.round(accuracyRaw)}m）`
+        : "不在任何場館範圍內",
       employeeName: employee.name,
       radius: effectiveRadius,
       nearbyVenues,
       userLat: lat,
       userLng: lng,
+      accuracy: accuracyRaw,
+      accuracyBufferApplied: false,
     };
   }
 
@@ -383,6 +417,10 @@ export async function processClockIn(
       status: "warning",
       failReason: "今日無排班",
       matchedVenueName: closestVenue.shortName,
+      accuracy: accuracyRaw,
+      accuracyBufferApplied,
+      suspiciousLocation: false,
+      gpsCapturedAt,
     });
     logClockAttempt("no-shift", {
       employeeId: employee.id, employeeName: employee.name,
@@ -471,6 +509,25 @@ export async function processClockIn(
     }
   }
 
+  // Suspicious-location: compare current point with this employee's last 30d
+  // successful clocks at this venue. If far from the historical centroid the
+  // record is flagged but still accepted (admins can audit later).
+  let suspiciousLocation = false;
+  try {
+    const thirty = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const thirtyStr = formatTaiwanDate(thirty);
+    const prior = (await storage.getClockRecordsByEmployee(employee.id, thirtyStr, todayStr))
+      .filter((r) => r.status === "success" && r.venueId === closestVenue.id && r.latitude != null && r.longitude != null);
+    if (prior.length >= 5) {
+      const cLat = prior.reduce((s, r) => s + (r.latitude as number), 0) / prior.length;
+      const cLng = prior.reduce((s, r) => s + (r.longitude as number), 0) / prior.length;
+      const drift = haversineDistance(lat, lng, cLat, cLng);
+      if (drift > 500) suspiciousLocation = true;
+    }
+  } catch (e) {
+    console.error("[clock] suspicious-location check failed", e);
+  }
+
   const clockRecord = await storage.createClockRecord({
     employeeId: employee.id,
     venueId: closestVenue.id,
@@ -482,6 +539,10 @@ export async function processClockIn(
     status: "success",
     failReason: lateReason,
     matchedVenueName: closestVenue.shortName,
+    accuracy: accuracyRaw,
+    accuracyBufferApplied,
+    suspiciousLocation,
+    gpsCapturedAt,
   });
   logClockAttempt("success", {
     employeeId: employee.id, employeeName: employee.name,
@@ -509,6 +570,9 @@ export async function processClockIn(
     earlyMinutes,
     lateDeparture,
     lateMinutes,
+    accuracy: accuracyRaw,
+    accuracyBufferApplied,
+    suspiciousLocation,
   };
 }
 

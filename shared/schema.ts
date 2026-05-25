@@ -27,6 +27,7 @@ export const venues = pgTable("venues", {
   operationType: text("operation_type"),
   openTime: text("open_time"),
   closeTime: text("close_time"),
+  isActive: boolean("is_active").default(true),
 });
 
 export const insertVenueSchema = createInsertSchema(venues).omit({ id: true });
@@ -243,6 +244,10 @@ export const clockRecords = pgTable("clock_records", {
   lateDepartureReason: text("late_departure_reason"),
   amendedTime: timestamp("amended_time"),
   amendmentId: integer("amendment_id"),
+  accuracy: real("accuracy"),
+  accuracyBufferApplied: boolean("accuracy_buffer_applied").default(false),
+  suspiciousLocation: boolean("suspicious_location").default(false),
+  gpsCapturedAt: timestamp("gps_captured_at"),
 });
 
 export const insertClockRecordSchema = createInsertSchema(clockRecords).omit({ id: true });

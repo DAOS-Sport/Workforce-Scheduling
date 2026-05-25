@@ -1488,7 +1488,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
 
   useEffect(() => {
     if (!navigator.geolocation) { setGpsReady("denied"); return; }
-    const watchId = navigator.geolocation.watchPosition(
+    let watchId: number | null = navigator.geolocation.watchPosition(
       (pos) => {
         setCachedPosition({
           lat: pos.coords.latitude,
@@ -1503,10 +1503,35 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
     );
-    return () => navigator.geolocation.clearWatch(watchId);
+
+    // Defensive cleanup: when the user navigates away, hides the tab, or
+    // backgrounds the app we drop the cached GPS fix so the next open always
+    // starts from a fresh position rather than relying on stale coordinates.
+    const clearGpsState = () => {
+      if (watchId != null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      setCachedPosition(null);
+      setAccuracy(null);
+      setGpsReady("unknown");
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") clearGpsState();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", clearGpsState);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", clearGpsState);
+      if (watchId != null) navigator.geolocation.clearWatch(watchId);
+    };
   }, []);
 
-  const CACHED_POS_MAX_AGE = 60 * 1000;
+  // Tightened: only accept cache for 15s. Beyond that we re-acquire so each
+  // clock attempt reflects the user's actual current position.
+  const CACHED_POS_MAX_AGE = 15 * 1000;
 
   const handleClockIn = useCallback(async (clockType: "in" | "out" = "in") => {
     setStage("scanning");
@@ -1515,12 +1540,13 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     setReasonSubmitted(false);
 
     try {
-      let latitude: number, longitude: number, acc: number;
+      let latitude: number, longitude: number, acc: number, capturedAtMs: number;
 
       if (cachedPosition && Date.now() - cachedPosition.ts < CACHED_POS_MAX_AGE) {
         latitude = cachedPosition.lat;
         longitude = cachedPosition.lng;
         acc = cachedPosition.acc;
+        capturedAtMs = cachedPosition.ts;
       } else {
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -1532,6 +1558,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
         latitude = position.coords.latitude;
         longitude = position.coords.longitude;
         acc = Math.round(position.coords.accuracy);
+        capturedAtMs = position.timestamp || Date.now();
       }
 
       setAccuracy(acc);
@@ -1541,7 +1568,14 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
       const resp = await fetch("/api/liff/clock-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId: employee.id, latitude, longitude, accuracy: acc, clockType }),
+        body: JSON.stringify({
+          employeeId: employee.id,
+          latitude,
+          longitude,
+          accuracy: acc,
+          clockType,
+          gpsCapturedAt: new Date(capturedAtMs).toISOString(),
+        }),
       });
 
       if (!resp.ok) {

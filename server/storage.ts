@@ -823,6 +823,19 @@ export async function ensureVenueOperatingHoursColumns(): Promise<void> {
   console.log("[db] venues open_time/close_time 欄位確認完成");
 }
 
+// Task #98 — GPS clock-in 全面性融通: accuracy buffer, suspicious flag,
+// GPS capture timestamp on clock_records; isActive toggle on venues.
+export async function ensureGpsClockColumns(): Promise<void> {
+  await pool.query(`
+    ALTER TABLE clock_records ADD COLUMN IF NOT EXISTS accuracy REAL;
+    ALTER TABLE clock_records ADD COLUMN IF NOT EXISTS accuracy_buffer_applied BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE clock_records ADD COLUMN IF NOT EXISTS suspicious_location BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE clock_records ADD COLUMN IF NOT EXISTS gps_captured_at TIMESTAMP;
+    ALTER TABLE venues ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+  `);
+  console.log("[db] clock_records GPS columns + venues.is_active 確認完成");
+}
+
 /**
  * Ensures the weekly_push_notifications table exists with the required unique constraint.
  * Called at server startup so the table is guaranteed to exist before any cron/API access.

@@ -9,6 +9,7 @@ import {
   ensureAvailabilityEntryTypeColumn,
   ensureAvailabilityLeaveTypeColumn,
   ensureVenueOperatingHoursColumns,
+  ensureGpsClockColumns,
 } from "../storage";
 import { log } from "../shared/log";
 import { pool } from "../infra/db";
@@ -89,6 +90,13 @@ export async function runStartupMigrations(): Promise<void> {
     await ensureVenueOperatingHoursColumns();
   } catch (err: any) {
     log(`venues open_time/close_time 欄位建立失敗: ${err.message}`, "db");
+  }
+
+  // GPS clock-in columns (Task #98)
+  try {
+    await ensureGpsClockColumns();
+  } catch (err: any) {
+    log(`GPS clock 欄位建立失敗: ${err.message}`, "db");
   }
 
   // Observability tables (Task #97)

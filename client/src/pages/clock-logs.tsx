@@ -24,6 +24,10 @@ interface ClockLogRow {
   failReason: string | null;
   clockTime: string;
   matchedVenueName: string | null;
+  accuracy: number | null;
+  accuracyBufferApplied: boolean | null;
+  suspiciousLocation: boolean | null;
+  gpsCapturedAt: string | null;
 }
 
 const statusMeta: Record<string, { label: string; cls: string; icon: any }> = {
@@ -179,6 +183,15 @@ export default function ClockLogsPage() {
                         <div className="text-slate-400 flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
                           {r.distance != null ? `${r.distance}m` : "—"}
+                          {r.accuracy != null && <span className="text-slate-300">±{Math.round(r.accuracy)}m</span>}
+                        </div>
+                        <div className="flex gap-1 mt-0.5 flex-wrap">
+                          {r.accuracyBufferApplied && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 bg-sky-50 text-sky-700 border-sky-200" data-testid={`badge-buffer-${r.id}`}>套精度</Badge>
+                          )}
+                          {r.suspiciousLocation && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 bg-amber-50 text-amber-700 border-amber-200" data-testid={`badge-suspicious-${r.id}`}>可疑位置</Badge>
+                          )}
                         </div>
                       </div>
                       <div className="col-span-3 text-xs text-slate-600">
