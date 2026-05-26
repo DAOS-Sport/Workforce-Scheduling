@@ -1510,38 +1510,48 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
     );
 
-    // Defensive cleanup: when the user navigates away, hides the tab, or
-    // backgrounds the app we drop the cached GPS fix so the next open always
-    // starts from a fresh position rather than relying on stale coordinates.
-    const clearGpsState = () => {
+    // When the tab is hidden (user switches app, screen dims, LINE notification)
+    // stop the geolocation watch to save battery — but keep cachedPosition so
+    // the user doesn't have to wait for a fresh GPS fix when they return.
+    // On pagehide (iOS SPA back-swipe) we do a full stop; the component will
+    // remount with clean state anyway when re-entered.
+    const stopWatch = () => {
       if (watchId != null) {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
       }
-      setCachedPosition(null);
-      setAccuracy(null);
-      setGpsReady("unknown");
     };
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") clearGpsState();
+      if (document.visibilityState === "hidden") stopWatch();
+      // When the tab becomes visible again after the watch was stopped,
+      // restart watching so GPS stays fresh. We do NOT clear cachedPosition
+      // here — the existing fix is still usable within CACHED_POS_MAX_AGE.
+      if (document.visibilityState === "visible" && watchId == null) {
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            setCachedPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: Math.round(pos.coords.accuracy), ts: Date.now() });
+            setGpsReady("ok");
+          },
+          (err) => { if (err.code === 1) setGpsReady("denied"); else setGpsReady("denied"); },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
+        );
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pagehide", clearGpsState);
-    window.addEventListener("beforeunload", clearGpsState);
+    window.addEventListener("pagehide", stopWatch);
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pagehide", clearGpsState);
-      window.removeEventListener("beforeunload", clearGpsState);
-      // Final teardown: drop any in-memory GPS state when the component
-      // unmounts so re-mounting always starts from a clean slate.
-      clearGpsState();
+      window.removeEventListener("pagehide", stopWatch);
+      stopWatch();
     };
   }, []);
 
-  // Tightened: only accept cache for 15s. Beyond that we re-acquire so each
-  // clock attempt reflects the user's actual current position.
-  const CACHED_POS_MAX_AGE = 15 * 1000;
+  // 60s matches the pre-Task-#98 behaviour. GPS on mobile (especially
+  // inside buildings via LINE in-app browser) can take 5-20s to stabilise;
+  // a 15s TTL caused the cache to expire before employees tapped the button,
+  // forcing a fresh getCurrentPosition that frequently timed out.
+  const CACHED_POS_MAX_AGE = 60 * 1000;
 
   const handleClockIn = useCallback(async (clockType: "in" | "out" = "in") => {
     setStage("scanning");
