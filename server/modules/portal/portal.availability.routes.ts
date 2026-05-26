@@ -205,13 +205,6 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
       if (windowErr) return fail(res, 403, windowErr);
       const auth = await portalService.verifyCaller(row.employeeId, extractLineUserId(req));
       if (!auth.ok) return fail(res, auth.status, auth.message ?? "未授權", { code: auth.code });
-      // 送出超過 4 小時後，員工不得自行刪除，需由管理員操作
-      if (row.createdAt) {
-        const ageMs = Date.now() - new Date(row.createdAt).getTime();
-        if (ageMs > 4 * 60 * 60 * 1000) {
-          return fail(res, 403, "送出超過 4 小時，請聯繫管理員刪除", { code: "LOCKED" });
-        }
-      }
       await availabilityRepository.delete(id);
       ok(res, { success: true });
     } catch (err: any) {

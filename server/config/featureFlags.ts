@@ -34,6 +34,9 @@ export const featureFlags = {
 
   /** Outing (外出簽到) feature in the employee portal. */
   outingSignIn: flag("FEATURE_OUTING_SIGN_IN"),
+
+  /** Availability reminder — daily LINE push to employees who haven't submitted shift availability. */
+  availabilityReminder: flag("FEATURE_AVAILABILITY_REMINDER"),
 } as const;
 
 export type FeatureFlags = typeof featureFlags;

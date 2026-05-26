@@ -202,11 +202,11 @@ export default function AvailabilityPage() {
     setViewYearMonth(format(d, "yyyy-MM"));
   }
 
-  const COL_WIDTH = 64;
-  const EMP_COL_WIDTH = 100;
+  const COL_WIDTH = 52;
+  const EMP_COL_WIDTH = 90;
 
   return (
-    <div className="h-full overflow-auto p-4 space-y-4">
+    <div className="h-full overflow-y-auto p-4 space-y-4">
       <div className="flex items-center gap-3">
         <CalendarDays className="h-5 w-5 text-primary" />
         <h1 className="text-xl font-bold">排班意願管理</h1>
@@ -352,7 +352,7 @@ export default function AvailabilityPage() {
       </Card>
 
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <button className="p-1 rounded-md hover:bg-muted transition-colors" onClick={prevMonth} data-testid="button-prev-month">
               <ChevronLeft className="h-4 w-4" />
@@ -374,17 +374,26 @@ export default function AvailabilityPage() {
         ) : activeEmployees.length === 0 ? (
           <div className="text-sm text-muted-foreground text-center py-8">此區域無員工資料</div>
         ) : (
-          <div className="border rounded-lg overflow-auto">
-            <table className="border-collapse text-xs">
+          <div
+            className="border rounded-lg overflow-auto"
+            style={{
+              WebkitOverflowScrolling: "touch",
+              touchAction: "pan-x pan-y",
+              overscrollBehavior: "contain",
+              maxHeight: "65vh",
+            }}
+          >
+            <table className="border-collapse text-xs" style={{ minWidth: "max-content" }}>
               <thead>
-                <tr className="bg-muted/50">
-                  <th className="sticky left-0 z-10 bg-muted/50 px-2 py-2 text-left font-semibold border-b border-r" style={{ minWidth: EMP_COL_WIDTH, width: EMP_COL_WIDTH }}>
+                <tr>
+                  <th className="sticky top-0 left-0 z-30 bg-muted/95 backdrop-blur-sm px-2 py-2 text-left font-semibold border-b border-r" style={{ minWidth: EMP_COL_WIDTH, width: EMP_COL_WIDTH }}>
                     員工
                   </th>
                   {monthDates.map((d, i) => {
                     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                     return (
-                      <th key={i} className={`border-b border-r px-1 py-1 text-center font-medium ${isWeekend ? "bg-amber-50 dark:bg-amber-950/20" : ""}`}
+                      <th key={i}
+                        className={`sticky top-0 z-20 border-b border-r px-1 py-1 text-center font-medium backdrop-blur-sm ${isWeekend ? "bg-amber-50/95 dark:bg-amber-950/80" : "bg-muted/95"}`}
                         style={{ minWidth: COL_WIDTH, width: COL_WIDTH }}>
                         <div className="text-[10px] text-muted-foreground">{DAY_NAMES[d.getDay()]}</div>
                         <div>{d.getDate()}</div>

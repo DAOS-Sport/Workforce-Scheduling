@@ -3527,9 +3527,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     },
   });
 
-  function isAvailLocked(createdAt: string | null): boolean {
-    if (!createdAt) return false;
-    return Date.now() - new Date(createdAt).getTime() > 4 * 60 * 60 * 1000;
+  function isAvailLocked(_createdAt: string | null): boolean {
+    return false;
   }
 
   const availByDate = useMemo(() => {
@@ -4209,7 +4208,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     return (
                     <>
                       <div className="mb-2 text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-                        <div>點擊日期選擇假別（<span className="font-semibold text-orange-600">特休</span> / <span className="font-semibold text-blue-600">事假</span> / <span className="font-semibold text-slate-600">休假</span>），再次點擊取消</div>
+                        <div>點擊日期選擇假別（<span className="font-semibold text-orange-600">特休</span> / <span className="font-semibold text-blue-600">事假</span> / <span className="font-semibold text-slate-600">休假</span>），點擊已選日期可修改或取消</div>
                       </div>
                       <div className="grid grid-cols-7 gap-px">
                         {availCalendarDays.map((d, idx) => {
@@ -4220,34 +4219,31 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                           const isPast = dateStr < format(new Date(), "yyyy-MM-dd");
                           const isHoliday = holidaySet.has(dateStr);
-                          const leaveColor = offReq?.note === "特休" ? "orange" : "blue";
-                          const offReqLocked = offReq ? isAvailLocked(offReq.createdAt) : false;
+                          const leaveColor = offReq?.note === "特休" ? "orange" : offReq?.note === "休假" ? "slate" : "blue";
+                          const isSelected = leaveTypeSheet === dateStr;
                           return (
                             <div key={dateStr}
                               className={`min-h-[52px] rounded-md p-1 border transition-all ${
                                 isHoliday ? "border-red-300 bg-red-50 cursor-not-allowed opacity-70" :
-                                offReq ? (leaveColor === "orange" ? "border-orange-300 bg-orange-50 cursor-pointer" : "border-blue-300 bg-blue-50 cursor-pointer") :
+                                isSelected ? "border-juns-navy bg-juns-navy/10 ring-2 ring-juns-navy/30 cursor-pointer" :
+                                offReq ? (
+                                  leaveColor === "orange" ? "border-orange-300 bg-orange-50 cursor-pointer" :
+                                  leaveColor === "slate" ? "border-slate-300 bg-slate-100 cursor-pointer" :
+                                  "border-blue-300 bg-blue-50 cursor-pointer"
+                                ) :
                                 isWeekend ? "border-slate-200 bg-amber-50/40 cursor-pointer" :
                                 "border-slate-100 bg-white hover:border-slate-300 cursor-pointer"
                               } ${isPast ? "opacity-40 pointer-events-none" : ""}`}
                               onClick={() => {
                                 if (!isAvailWindowOpen || isPast || isHoliday) return;
-                                if (offReq) {
-                                  if (offReqLocked) {
-                                    toast({ title: "送出超過 4 小時，請聯繫管理員刪除", variant: "destructive" });
-                                    return;
-                                  }
-                                  deleteAvailMutation.mutate(offReq.id);
-                                } else {
-                                  setLeaveTypeSheet(dateStr);
-                                }
+                                setLeaveTypeSheet(prev => prev === dateStr ? null : dateStr);
                               }}
                               data-testid={`avail-day-${dateStr}`}
                             >
-                              <div className={`text-[11px] font-mono ${isHoliday ? "text-red-500 font-semibold" : isWeekend ? "text-amber-600" : offReq ? (leaveColor === "orange" ? "text-orange-600 font-semibold" : "text-blue-600 font-semibold") : "text-juns-navy"}`}>{d.getDate()}</div>
+                              <div className={`text-[11px] font-mono ${isHoliday ? "text-red-500 font-semibold" : isWeekend ? "text-amber-600" : offReq ? (leaveColor === "orange" ? "text-orange-600 font-semibold" : leaveColor === "slate" ? "text-slate-600 font-semibold" : "text-blue-600 font-semibold") : "text-juns-navy"}`}>{d.getDate()}</div>
                               {isHoliday && <div className="rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 bg-red-100 text-red-600">休館</div>}
                               {offReq && !isHoliday && (
-                                <div className={`rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 ${leaveColor === "orange" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
+                                <div className={`rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 ${leaveColor === "orange" ? "bg-orange-100 text-orange-700" : leaveColor === "slate" ? "bg-slate-200 text-slate-700" : "bg-blue-100 text-blue-700"}`}>
                                   {offReq.note || "休"}
                                 </div>
                               )}
@@ -4257,28 +4253,63 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                       </div>
 
                       {leaveTypeSheet && isAvailWindowOpen && (() => {
+                        const sheetOffReq = (availByDate.get(leaveTypeSheet) || []).find(s => s.entryType === "off_request");
                         return (
                           <div className="mt-3 border border-slate-200 rounded-xl bg-white p-4 shadow-sm space-y-3" data-testid="card-leave-type">
-                            <div className="text-xs font-semibold text-slate-700">{leaveTypeSheet} — 請選擇假別</div>
-                            <div className="grid grid-cols-3 gap-2">
-                              {(["特休", "事假", "休假"] as const).map(lt => (
-                                <button key={lt}
-                                  className={`h-11 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-40 ${lt === "特休" ? "bg-orange-500 hover:bg-orange-600 text-white" : lt === "事假" ? "bg-blue-500 hover:bg-blue-600 text-white" : "bg-slate-500 hover:bg-slate-600 text-white"}`}
-                                  disabled={addAvailMutation.isPending}
-                                  onClick={() => {
-                                    addAvailMutation.mutate({ date: leaveTypeSheet, entryType: "off_request", note: lt });
-                                  }}
-                                  data-testid={`button-leave-type-${lt}`}
-                                >
-                                  {addAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : (
-                                    <>
-                                      <span>{lt}</span>
-                                      {lt === "事假" ? <span className="text-[9px] font-normal opacity-80">每年上限14天</span> : null}
-                                    </>
-                                  )}
-                                </button>
-                              ))}
+                            <div className="text-xs font-semibold text-slate-700">
+                              {leaveTypeSheet} — {sheetOffReq ? "修改或取消假別" : "請選擇假別"}
                             </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              {(["特休", "事假", "休假"] as const).map(lt => {
+                                const isCurrent = sheetOffReq?.note === lt;
+                                return (
+                                  <button key={lt}
+                                    className={`h-11 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-40 ${
+                                      lt === "特休"
+                                        ? isCurrent ? "bg-orange-600 ring-2 ring-orange-400 text-white" : "bg-orange-500 hover:bg-orange-600 text-white"
+                                        : lt === "事假"
+                                        ? isCurrent ? "bg-blue-600 ring-2 ring-blue-400 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"
+                                        : isCurrent ? "bg-slate-600 ring-2 ring-slate-400 text-white" : "bg-slate-500 hover:bg-slate-600 text-white"
+                                    }`}
+                                    disabled={addAvailMutation.isPending || deleteAvailMutation.isPending}
+                                    onClick={() => {
+                                      if (isCurrent) { setLeaveTypeSheet(null); return; }
+                                      const doAdd = () => addAvailMutation.mutate({ date: leaveTypeSheet, entryType: "off_request", note: lt });
+                                      if (sheetOffReq) {
+                                        fetch(`/api/portal/availability/${sheetOffReq.id}`, {
+                                          method: "DELETE",
+                                          headers: { "x-line-user-id": portalLineUserId },
+                                          credentials: "include",
+                                        }).then(r => {
+                                          if (r.ok) { doAdd(); } else { r.text().then(msg => toast({ title: msg || "刪除失敗", variant: "destructive" })); }
+                                        }).catch(() => toast({ title: "刪除失敗", variant: "destructive" }));
+                                      } else {
+                                        doAdd();
+                                      }
+                                      setLeaveTypeSheet(null);
+                                    }}
+                                    data-testid={`button-leave-type-${lt}`}
+                                  >
+                                    {(addAvailMutation.isPending || deleteAvailMutation.isPending) ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                                      <>
+                                        <span>{lt}</span>
+                                        {lt === "事假" ? <span className="text-[9px] font-normal opacity-80">每年上限14天</span> : null}
+                                      </>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {sheetOffReq && (
+                              <button
+                                className="w-full h-10 rounded-xl text-sm font-semibold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 active:scale-[0.97] transition-all disabled:opacity-40"
+                                disabled={deleteAvailMutation.isPending}
+                                onClick={() => { deleteAvailMutation.mutate(sheetOffReq.id); setLeaveTypeSheet(null); }}
+                                data-testid="button-leave-type-delete"
+                              >
+                                {deleteAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "取消此假別"}
+                              </button>
+                            )}
                             <button className="w-full text-xs text-slate-400 hover:text-slate-600 transition-colors" onClick={() => setLeaveTypeSheet(null)} data-testid="button-leave-type-cancel">取消</button>
                           </div>
                         );
@@ -4449,7 +4480,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 <Copy className="h-4 w-4" />
                                 複製此時段到其他日期
                               </button>
-                              {slotLocked && <div className="text-[10px] text-center text-slate-400">送出超過 4 小時，無法複製</div>}
+                              {slotLocked && <div className="text-[10px] text-center text-slate-400">填報期間已結束，無法修改</div>}
                               {!slotLocked && (
                                 <button
                                   className="w-full h-9 rounded-lg border border-red-200 text-red-500 text-sm hover:bg-red-50 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"

@@ -6,6 +6,7 @@ import {
   resetMissingClockInTracker,
   sendWeeklySchedulePush,
   sendWeeklyLateReport,
+  sendAvailabilityReminders,
 } from "../modules/line/linePush.service";
 import { featureFlags } from "../config/featureFlags";
 import { IS_PRODUCTION } from "../config/env";
@@ -128,6 +129,31 @@ export function registerCronJobs(): void {
       { timezone: "Asia/Taipei" },
     );
     log("已排程每週日 12:00 (台灣時間) 自動推播下週班表", "cron");
+  }
+
+  // 10:00 daily — remind employees who haven't submitted shift availability.
+  if (featureFlags.availabilityReminder) {
+    cron.schedule(
+      "0 10 * * *",
+      async () => {
+        log("開始執行意願填報未填提醒...", "cron");
+        try {
+          const result = await sendAvailabilityReminders();
+          if (result.windowClosed) {
+            log("意願提醒：目前無符合條件的開放視窗，略過", "cron");
+          } else {
+            log(
+              `意願填報提醒完成: 發送 ${result.sent}, 跳過 ${result.skipped}, 無LINE ${result.noLineId}`,
+              "cron",
+            );
+          }
+        } catch (err: any) {
+          log(`意願填報提醒失敗: ${err.message}`, "cron");
+        }
+      },
+      { timezone: "Asia/Taipei" },
+    );
+    log("已排程每日 10:00 (台灣時間) 自動提醒尚未填報意願的員工", "cron");
   }
 
   // Monday 09:00 — push last-week late report.

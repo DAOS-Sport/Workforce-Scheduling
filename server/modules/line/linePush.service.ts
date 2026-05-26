@@ -3,6 +3,7 @@ import { storage } from "../../storage";
 import type { Venue, Shift, Employee } from "@shared/schema";
 import { getTaiwanNow, formatTaiwanDate, LEAVE_TYPES } from "./lineHelpers";
 import { isValidLineUserId } from "./lineSignature";
+import { availabilityRepository } from "../availability/availability.repository";
 
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 
@@ -664,4 +665,118 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
 
   console.log(`[週遲到報告] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
   return { sent, skipped, noLineId };
+}
+
+// ── 意願填報截止前提醒（每日 10:00 檢查）────────────────────────────────────
+
+interface AvailWindowEntry { openFrom: string; openUntil: string; }
+interface AvailWindowConfig {
+  targetYearMonth: string;
+  windows?: AvailWindowEntry[];
+  openFrom?: string;
+  openUntil?: string;
+}
+
+/**
+ * 若目前有開放中的意願填寫視窗且距截止日 ≤ reminderDaysBeforeClose 天，
+ * 對尚未在該視窗對應月份填過任何意願的活躍員工發送 LINE 提醒。
+ */
+export async function sendAvailabilityReminders(
+  force = false,
+  reminderDaysBeforeClose = 3
+): Promise<{ sent: number; skipped: number; noLineId: number; windowClosed: boolean }> {
+  const taipeiNow = getTaiwanNow();
+  const todayStr = formatTaiwanDate(taipeiNow);
+
+  const cfg = await storage.getSystemConfig("availability_window");
+  if (!cfg?.value) {
+    console.log("[意願提醒] 尚未設定意願填寫視窗，略過");
+    return { sent: 0, skipped: 0, noLineId: 0, windowClosed: true };
+  }
+
+  let raw: AvailWindowConfig;
+  try { raw = JSON.parse(cfg.value) as AvailWindowConfig; } catch {
+    console.log("[意願提醒] 意願填寫設定格式錯誤，略過");
+    return { sent: 0, skipped: 0, noLineId: 0, windowClosed: true };
+  }
+
+  if (!/^\d{4}-\d{2}$/.test(raw.targetYearMonth)) {
+    console.log("[意願提醒] targetYearMonth 格式錯誤，略過");
+    return { sent: 0, skipped: 0, noLineId: 0, windowClosed: true };
+  }
+
+  // Support both new shape (windows array) and legacy flat shape (openFrom/openUntil at top level)
+  const windows: AvailWindowEntry[] = raw.windows ??
+    (raw.openFrom ? [{ openFrom: raw.openFrom, openUntil: raw.openUntil ?? "" }] : []);
+
+  // Find a window that is currently open AND closes within reminderDaysBeforeClose days
+  const activeWindow = windows.find(w => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(w.openFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(w.openUntil)) return false;
+    if (todayStr < w.openFrom || todayStr > w.openUntil) return false;
+    const closeDate = new Date(w.openUntil + "T00:00:00+08:00");
+    const today = new Date(todayStr + "T00:00:00+08:00");
+    const daysLeft = Math.round((closeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return force || daysLeft <= reminderDaysBeforeClose;
+  });
+
+  if (!activeWindow) {
+    console.log(`[意願提醒] 目前無符合提醒條件的開放視窗（今日=${todayStr}，提醒條件：距截止 ≤ ${reminderDaysBeforeClose} 天），略過`);
+    return { sent: 0, skipped: 0, noLineId: 0, windowClosed: true };
+  }
+
+  const { targetYearMonth } = raw;
+  console.log(`[意願提醒] 視窗 ${activeWindow.openFrom}~${activeWindow.openUntil}，目標月份 ${targetYearMonth}，開始檢查未填員工`);
+
+  const [allEmployees, submittedEntries] = await Promise.all([
+    storage.getAllEmployees(),
+    availabilityRepository.getByYearMonth(targetYearMonth),
+  ]);
+
+  const submittedEmployeeIds = new Set(submittedEntries.map(e => e.employeeId));
+
+  const activeEmployees = allEmployees.filter(e => e.status === "active");
+  const unsubmitted = activeEmployees.filter(e => !submittedEmployeeIds.has(e.id));
+
+  console.log(`[意願提醒] 活躍員工 ${activeEmployees.length} 人，已填 ${submittedEmployeeIds.size} 人，未填 ${unsubmitted.length} 人`);
+
+  if (unsubmitted.length === 0) {
+    return { sent: 0, skipped: 0, noLineId: 0, windowClosed: false };
+  }
+
+  const [y, mStr] = targetYearMonth.split("-");
+  const monthLabel = `${y} 年 ${parseInt(mStr, 10)} 月`;
+  const deadlineLabel = `${activeWindow.openUntil.slice(5, 7)}/${activeWindow.openUntil.slice(8, 10)}`;
+  const sysLink = getSystemLink();
+
+  let sent = 0, skipped = 0, noLineId = 0;
+
+  for (const emp of unsubmitted) {
+    if (!emp.lineId) { noLineId++; continue; }
+    if (!isValidLineUserId(emp.lineId)) { noLineId++; continue; }
+
+    const lines: string[] = [
+      `📝 排班意願填報提醒`,
+      ``,
+      `${emp.name} 您好，`,
+      `${monthLabel}的排班意願填報視窗尚未截止，`,
+      `但系統顯示您尚未填寫任何意願。`,
+      ``,
+      `📅 截止日期：${deadlineLabel}`,
+      ``,
+      `請盡快登入員工入口完成填報，謝謝！`,
+    ];
+    if (sysLink) lines.push(`🔗 ${sysLink}`);
+
+    const message = lines.join("\n");
+    const ok = await pushToLine(emp.lineId, message);
+    if (ok) {
+      sent++;
+    } else {
+      console.error(`[意願提醒] LINE 推播失敗 empId=${emp.id}`);
+      skipped++;
+    }
+  }
+
+  console.log(`[意願提醒] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
+  return { sent, skipped, noLineId, windowClosed: false };
 }
