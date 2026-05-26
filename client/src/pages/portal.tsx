@@ -1500,7 +1500,12 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
         setGpsReady("ok");
       },
       (err) => {
+        // Reflect any geolocation failure so the UI doesn't sit at
+        // "正在取得 GPS..." forever. Denied = needs OS settings; the
+        // other codes (POSITION_UNAVAILABLE / TIMEOUT) still surface as
+        // denied-style guidance so users know to act, not wait.
         if (err.code === 1) setGpsReady("denied");
+        else setGpsReady("denied");
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
     );
@@ -1907,14 +1912,28 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
               <XCircle className="h-5 w-5 text-red-500 shrink-0" />
               <span className="font-medium text-sm text-red-500">{errorMsg}</span>
             </div>
-            {errorCode === 1 ? (
+            {errorCode === 1 && (
               <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 mb-3 text-sm text-amber-800 space-y-1">
                 <p className="font-medium">如何開啟位置權限：</p>
                 <p>請至手機「設定 → 隱私權 → 位置服務」，找到 LINE 並選擇「使用 App 期間」，再回來重試。</p>
               </div>
-            ) : (
-              <AnomalyReportButton employee={employee} errorMsg={errorMsg} accuracy={accuracy} context="打卡錯誤" />
             )}
+            {/* Today scheduled venue context (helps users orient even when GPS is blocked). */}
+            {todayShifts && todayShifts.length > 0 && (() => {
+              const scheduled = todayShifts.find((s) => s.venue);
+              if (!scheduled?.venue) return null;
+              return (
+                <div className="mb-3 p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-800" data-testid="card-scheduled-venue-error">
+                  <div className="font-semibold mb-0.5">今日班次場館：{scheduled.venue.shortName}</div>
+                  <div>班別 {scheduled.startTime.slice(0,5)} ~ {scheduled.endTime.slice(0,5)}</div>
+                </div>
+              );
+            })()}
+            {/* Always provide an anomaly-report escape hatch so an employee
+                whose phone genuinely cannot return GPS (denied / no signal /
+                timeout / device fault) can still log their attendance for
+                manual review — nobody should be unable to clock in. */}
+            <AnomalyReportButton employee={employee} errorMsg={errorMsg} accuracy={accuracy} context={errorCode === 1 ? "無法定位（權限）" : "打卡錯誤"} />
             <button
               className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all mt-2"
               onClick={() => { setStage("idle"); setErrorMsg(""); setErrorCode(null); }}
