@@ -21,7 +21,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
-import { NON_WORK_ROLES, normalizeCoworkerGroupRole } from "@shared/scheduleMapping";
 
 interface PortalEmployee {
   id: number;
@@ -30,7 +29,6 @@ interface PortalEmployee {
   role: string;
   lineUserId?: string;
   employmentType?: string;
-  regionId?: number;
 }
 
 interface OutingRecord {
@@ -1384,20 +1382,18 @@ const LATE_DEPARTURE_REASONS = [
 
 const CLOCK_LOCK_MS = 60 * 60 * 1000;
 
-function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, todayClockIn, todayClockOut, todayShifts, hideCard }: {
+function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, todayClockIn, todayClockOut, hideCard }: {
   employee: PortalEmployee;
   onPositionUpdate?: (lat: number, lng: number) => void;
   onResult?: (r: ClockInResult) => void;
-  todayLatestClock?: { clockType: string; clockTime: string; status?: string } | null;
+  todayLatestClock?: { clockType: string; clockTime: string } | null;
   todayClockIn?: { clockTime: string } | null;
   todayClockOut?: { clockTime: string } | null;
-  todayShifts?: PortalShift[];
   hideCard?: boolean;
 }) {
   const [stage, setStage] = useState<"idle" | "scanning" | "submitting" | "done" | "error">("idle");
   const [result, setResult] = useState<ClockInResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
-  const [errorCode, setErrorCode] = useState<number | null>(null);
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [scanAngle, setScanAngle] = useState(0);
   const [reasonSubmitted, setReasonSubmitted] = useState(false);
@@ -1423,7 +1419,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
         localStorage.removeItem(storageKey);
       }
     }
-    if (!lockInfo && todayLatestClock && (todayLatestClock.status === "success" || todayLatestClock.status === "warning")) {
+    if (!lockInfo && todayLatestClock) {
       const ts = new Date(todayLatestClock.clockTime).getTime();
       if (Date.now() - ts < CLOCK_LOCK_MS) {
         const timeStr = new Date(todayLatestClock.clockTime).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false });
@@ -1492,38 +1488,23 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     setReasonSubmitted(false);
 
     try {
-      let latitude: number, longitude: number, acc: number, capturedAtMs: number;
-
-      // Always do a fresh GPS acquisition on every clock-in tap.
-      // No caching — each open of the page re-requests permission and position.
-      if (!navigator.geolocation) throw Object.assign(new Error("此裝置不支援定位功能"), { code: 2 });
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 20000,
+          timeout: 15000,
           maximumAge: 0,
         });
       });
-      latitude = position.coords.latitude;
-      longitude = position.coords.longitude;
-      acc = Math.round(position.coords.accuracy);
-      capturedAtMs = position.timestamp || Date.now();
 
-      setAccuracy(acc);
+      const { latitude, longitude, accuracy: acc } = position.coords;
+      setAccuracy(Math.round(acc));
       onPositionUpdate?.(latitude, longitude);
       setStage("submitting");
 
       const resp = await fetch("/api/liff/clock-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: employee.id,
-          latitude,
-          longitude,
-          accuracy: acc,
-          clockType,
-          gpsCapturedAt: new Date(capturedAtMs).toISOString(),
-        }),
+        body: JSON.stringify({ employeeId: employee.id, latitude, longitude, accuracy: Math.round(acc), clockType }),
       });
 
       if (!resp.ok) {
@@ -1544,7 +1525,6 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
         setCountdown(60);
       }
     } catch (err: any) {
-      setErrorCode(err.code ?? null);
       if (err.code === 1) {
         setErrorMsg("請允許位置存取權限");
       } else if (err.code === 2) {
@@ -1575,47 +1555,41 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
           const btnHDone = hideCard ? "h-20" : "h-14";
 
           return (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                {clockInLocked ? (
-                  <button disabled className={`${btnHDone} rounded-xl bg-emerald-100 border-2 border-emerald-400 text-emerald-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-in">
-                    <div className="flex items-center gap-1">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span className={hideCard ? "text-base" : "text-sm"}>上班已打卡</span>
-                    </div>
-                    {clockInTime && <span className={`font-bold ${hideCard ? "text-lg" : "text-xs"}`}>{clockInTime}</span>}
-                  </button>
-                ) : (
-                  <button
-                    className={`${btnH} rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all`}
-                    onClick={() => handleClockIn("in")}
-                    data-testid="button-clock-in"
-                  >
-                    <span className={hideCard ? "text-lg" : "text-base"}>↑ 上班</span>
-                  </button>
-                )}
-                {clockOutLocked ? (
-                  <button disabled className={`${btnHDone} rounded-xl bg-blue-100 border-2 border-blue-400 text-blue-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-out">
-                    <div className="flex items-center gap-1">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span className={hideCard ? "text-base" : "text-sm"}>下班已打卡</span>
-                    </div>
-                    {clockOutTime && <span className={`font-bold ${hideCard ? "text-lg" : "text-xs"}`}>{clockOutTime}</span>}
-                  </button>
-                ) : (
-                  <button
-                    className={`${btnH} rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all`}
-                    onClick={() => handleClockIn("out")}
-                    data-testid="button-clock-out"
-                  >
-                    <span className={hideCard ? "text-lg" : "text-base"}>↓ 下班</span>
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-400" data-testid="text-gps-info">
-                <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
-                <span>點按按鈕後即時取得 GPS 定位</span>
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              {clockInLocked ? (
+                <button disabled className={`${btnHDone} rounded-xl bg-emerald-100 border-2 border-emerald-400 text-emerald-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-in">
+                  <div className="flex items-center gap-1">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span className={hideCard ? "text-base" : "text-sm"}>上班已打卡</span>
+                  </div>
+                  {clockInTime && <span className={`font-bold ${hideCard ? "text-lg" : "text-xs"}`}>{clockInTime}</span>}
+                </button>
+              ) : (
+                <button
+                  className={`${btnH} rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all`}
+                  onClick={() => handleClockIn("in")}
+                  data-testid="button-clock-in"
+                >
+                  <span className={hideCard ? "text-lg" : "text-base"}>↑ 上班</span>
+                </button>
+              )}
+              {clockOutLocked ? (
+                <button disabled className={`${btnHDone} rounded-xl bg-blue-100 border-2 border-blue-400 text-blue-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-out">
+                  <div className="flex items-center gap-1">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span className={hideCard ? "text-base" : "text-sm"}>下班已打卡</span>
+                  </div>
+                  {clockOutTime && <span className={`font-bold ${hideCard ? "text-lg" : "text-xs"}`}>{clockOutTime}</span>}
+                </button>
+              ) : (
+                <button
+                  className={`${btnH} rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all`}
+                  onClick={() => handleClockIn("out")}
+                  data-testid="button-clock-out"
+                >
+                  <span className={hideCard ? "text-lg" : "text-base"}>↓ 下班</span>
+                </button>
+              )}
             </div>
           );
         })()}
@@ -1715,43 +1689,6 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
               </div>
             )}
 
-            {result.status === "fail" && todayShifts && todayShifts.length > 0 && (() => {
-              // Surface the employee's scheduled venue for today + distance
-              // (from the server-supplied nearbyVenues list) so they know
-              // exactly where to go when the fail is "not in range".
-              const scheduled = todayShifts.find((s) => s.venue);
-              if (!scheduled?.venue) return null;
-              const matchInfo = result.nearbyVenues?.find(
-                (v) => v.id === scheduled.venue!.id || v.shortName === scheduled.venue!.shortName,
-              );
-              return (
-                <div className="mb-3 p-3 rounded-lg bg-blue-50 border border-blue-200" data-testid="card-scheduled-venue-guide">
-                  <div className="flex items-start gap-2">
-                    <CalendarDays className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
-                    <div className="text-xs text-blue-800 space-y-0.5 flex-1">
-                      <div className="font-semibold">今日班次場館：{scheduled.venue.shortName}</div>
-                      <div>班別 {scheduled.startTime.slice(0,5)} ~ {scheduled.endTime.slice(0,5)}</div>
-                      {matchInfo && (
-                        <div>距離目前位置 <span className="font-mono font-semibold">{matchInfo.distance}m</span>{matchInfo.inRange ? "（在範圍內）" : "（超出範圍）"}</div>
-                      )}
-                      {result.userLat !== null && result.userLng !== null && (
-                        <a
-                          href={`https://www.google.com/maps/dir/?api=1&origin=${result.userLat},${result.userLng}&destination=${encodeURIComponent(scheduled.venue.name)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded bg-blue-600 text-white text-[11px] font-medium hover:bg-blue-700"
-                          data-testid="link-directions-scheduled"
-                        >
-                          <Navigation className="h-3 w-3" />
-                          開啟導航到此場館
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
             {result.nearbyVenues && result.nearbyVenues.length > 0 && (
               <div className="border border-juns-border rounded-lg overflow-hidden mb-3">
                 <div className="px-3 py-1.5 bg-slate-50 border-b border-juns-border">
@@ -1836,31 +1773,10 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
               <XCircle className="h-5 w-5 text-red-500 shrink-0" />
               <span className="font-medium text-sm text-red-500">{errorMsg}</span>
             </div>
-            {errorCode === 1 && (
-              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 mb-3 text-sm text-amber-800 space-y-1">
-                <p className="font-medium">如何開啟位置權限：</p>
-                <p>請至手機「設定 → 隱私權 → 位置服務」，找到 LINE 並選擇「使用 App 期間」，再回來重試。</p>
-              </div>
-            )}
-            {/* Today scheduled venue context (helps users orient even when GPS is blocked). */}
-            {todayShifts && todayShifts.length > 0 && (() => {
-              const scheduled = todayShifts.find((s) => s.venue);
-              if (!scheduled?.venue) return null;
-              return (
-                <div className="mb-3 p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-800" data-testid="card-scheduled-venue-error">
-                  <div className="font-semibold mb-0.5">今日班次場館：{scheduled.venue.shortName}</div>
-                  <div>班別 {scheduled.startTime.slice(0,5)} ~ {scheduled.endTime.slice(0,5)}</div>
-                </div>
-              );
-            })()}
-            {/* Always provide an anomaly-report escape hatch so an employee
-                whose phone genuinely cannot return GPS (denied / no signal /
-                timeout / device fault) can still log their attendance for
-                manual review — nobody should be unable to clock in. */}
-            <AnomalyReportButton employee={employee} errorMsg={errorMsg} accuracy={accuracy} context={errorCode === 1 ? "無法定位（權限）" : "打卡錯誤"} />
+            <AnomalyReportButton employee={employee} errorMsg={errorMsg} accuracy={accuracy} context="打卡錯誤" />
             <button
               className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all mt-2"
-              onClick={() => { setStage("idle"); setErrorMsg(""); setErrorCode(null); }}
+              onClick={() => { setStage("idle"); setErrorMsg(""); }}
               data-testid="button-retry-clock"
             >
               重試
@@ -2043,9 +1959,7 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
         reason: fullReason,
         isSystemIssue,
         evidenceImageUrl: evidencePreview,
-        shiftId: selectedEntry
-          ? (selectedEntry.isDispatch ? -Math.abs(selectedEntry.shiftId) : selectedEntry.shiftId)
-          : null,
+        shiftId: selectedEntry?.isDispatch ? null : (selectedEntry?.shiftId ?? null),
         originalClockRecordId: selectedEntry?.originalClockRecordId ?? null,
       });
       toast({ title: "補打卡申請已送出" });
@@ -2586,7 +2500,7 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
   );
 }
 
-const LEAVE_TYPES: string[] = [...NON_WORK_ROLES];
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"] as const;
 const CERTIFICATE_REQUIRED = ["病假", "生理假"];
 
 const STATUS_LABEL: Record<string, string> = {
@@ -2918,16 +2832,14 @@ function HomeView({
           onPositionUpdate={(lat, lng) => setUserPos({ lat, lng })}
           onResult={(result) => {
             setClockInResult(result);
-            // Always refresh attendance so UI reflects DB truth, even when status is "fail".
-            queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", employee.id] });
             if (result.status === "success" || result.status === "warning") {
+              queryClient.invalidateQueries({ queryKey: ["/api/portal/my-attendance", employee.id] });
               queryClient.invalidateQueries({ queryKey: ["/api/portal/upcoming-coworkers", employee.id] });
             }
           }}
           todayLatestClock={attendance?.todayLatestClock}
           todayClockIn={todayClockIn}
           todayClockOut={todayClockOut}
-          todayShifts={todayShifts}
         />
       </div>
 
@@ -3489,7 +3401,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
 
   interface AvailWindowEntry { openFrom: string; openUntil: string; }
   interface AvailWindow { targetYearMonth: string; windows: AvailWindowEntry[]; openFrom?: string; openUntil?: string; }
-  interface PortalAvail { id: number; employeeId: number; date: string; entryType: string; leaveType: string | null; startTime: string | null; endTime: string | null; note: string | null; createdAt: string | null; }
+  interface PortalAvail { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; note: string | null; createdAt: string | null; }
 
   const { data: availWindow } = useQuery<AvailWindow | null>({
     queryKey: ["/api/portal/availability-window"],
@@ -3592,7 +3504,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-line-user-id": portalLineUserId },
             credentials: "include",
-            body: JSON.stringify({ employeeId: employee.id, date, startTime: slot.startTime, endTime: slot.endTime, entryType: slot.entryType, leaveType: slot.leaveType, note: slot.leaveType || slot.note }),
+            body: JSON.stringify({ employeeId: employee.id, date, startTime: slot.startTime, endTime: slot.endTime, entryType: slot.entryType, note: slot.note }),
           });
           if (!res.ok) throw new Error(await res.text());
           return res.json();
@@ -3615,8 +3527,9 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     },
   });
 
-  function isAvailLocked(_createdAt: string | null): boolean {
-    return false;
+  function isAvailLocked(createdAt: string | null): boolean {
+    if (!createdAt) return false;
+    return Date.now() - new Date(createdAt).getTime() > 4 * 60 * 60 * 1000;
   }
 
   const availByDate = useMemo(() => {
@@ -4132,7 +4045,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     const roleGroups = new Map<string, typeof day.coworkers>();
                     day.coworkers.forEach((cw) => {
                       const rawRole = cw.role || "其他";
-                      const key = normalizeCoworkerGroupRole(rawRole) || rawRole;
+                      const key = rawRole === "守望" ? "救生" : rawRole;
                       if (!roleGroups.has(key)) roleGroups.set(key, []);
                       roleGroups.get(key)!.push(cw);
                     });
@@ -4296,7 +4209,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     return (
                     <>
                       <div className="mb-2 text-[11px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-                        <div>點擊日期選擇假別（<span className="font-semibold text-orange-600">特休</span> / <span className="font-semibold text-blue-600">事假</span> / <span className="font-semibold text-slate-600">休假</span>），點擊已選日期可修改或取消</div>
+                        <div>點擊日期選擇假別（<span className="font-semibold text-orange-600">特休</span> / <span className="font-semibold text-blue-600">事假</span> / <span className="font-semibold text-slate-600">休假</span>），再次點擊取消</div>
                       </div>
                       <div className="grid grid-cols-7 gap-px">
                         {availCalendarDays.map((d, idx) => {
@@ -4307,32 +4220,35 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                           const isPast = dateStr < format(new Date(), "yyyy-MM-dd");
                           const isHoliday = holidaySet.has(dateStr);
-                          const leaveColor = (offReq?.leaveType || offReq?.note) === "特休" ? "orange" : (offReq?.leaveType || offReq?.note) === "休假" ? "slate" : (offReq?.leaveType || offReq?.note) === "病假" ? "green" : "blue";
-                          const isSelected = leaveTypeSheet === dateStr;
+                          const leaveColor = offReq?.note === "特休" ? "orange" : "blue";
+                          const offReqLocked = offReq ? isAvailLocked(offReq.createdAt) : false;
                           return (
                             <div key={dateStr}
                               className={`min-h-[52px] rounded-md p-1 border transition-all ${
                                 isHoliday ? "border-red-300 bg-red-50 cursor-not-allowed opacity-70" :
-                                isSelected ? "border-juns-navy bg-juns-navy/10 ring-2 ring-juns-navy/30 cursor-pointer" :
-                                offReq ? (
-                                  leaveColor === "orange" ? "border-orange-300 bg-orange-50 cursor-pointer" :
-                                  leaveColor === "slate" ? "border-slate-300 bg-slate-100 cursor-pointer" :
-                                  "border-blue-300 bg-blue-50 cursor-pointer"
-                                ) :
+                                offReq ? (leaveColor === "orange" ? "border-orange-300 bg-orange-50 cursor-pointer" : "border-blue-300 bg-blue-50 cursor-pointer") :
                                 isWeekend ? "border-slate-200 bg-amber-50/40 cursor-pointer" :
                                 "border-slate-100 bg-white hover:border-slate-300 cursor-pointer"
                               } ${isPast ? "opacity-40 pointer-events-none" : ""}`}
                               onClick={() => {
                                 if (!isAvailWindowOpen || isPast || isHoliday) return;
-                                setLeaveTypeSheet(prev => prev === dateStr ? null : dateStr);
+                                if (offReq) {
+                                  if (offReqLocked) {
+                                    toast({ title: "送出超過 4 小時，請聯繫管理員刪除", variant: "destructive" });
+                                    return;
+                                  }
+                                  deleteAvailMutation.mutate(offReq.id);
+                                } else {
+                                  setLeaveTypeSheet(dateStr);
+                                }
                               }}
                               data-testid={`avail-day-${dateStr}`}
                             >
-                              <div className={`text-[11px] font-mono ${isHoliday ? "text-red-500 font-semibold" : isWeekend ? "text-amber-600" : offReq ? (leaveColor === "orange" ? "text-orange-600 font-semibold" : leaveColor === "slate" ? "text-slate-600 font-semibold" : "text-blue-600 font-semibold") : "text-juns-navy"}`}>{d.getDate()}</div>
+                              <div className={`text-[11px] font-mono ${isHoliday ? "text-red-500 font-semibold" : isWeekend ? "text-amber-600" : offReq ? (leaveColor === "orange" ? "text-orange-600 font-semibold" : "text-blue-600 font-semibold") : "text-juns-navy"}`}>{d.getDate()}</div>
                               {isHoliday && <div className="rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 bg-red-100 text-red-600">休館</div>}
                               {offReq && !isHoliday && (
-                                <div className={`rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 ${leaveColor === "orange" ? "bg-orange-100 text-orange-700" : leaveColor === "slate" ? "bg-slate-200 text-slate-700" : leaveColor === "green" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>
-                                  {offReq.leaveType || offReq.note || "休"}
+                                <div className={`rounded text-[9px] leading-tight px-0.5 py-px font-bold text-center mt-0.5 ${leaveColor === "orange" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
+                                  {offReq.note || "休"}
                                 </div>
                               )}
                             </div>
@@ -4341,63 +4257,28 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                       </div>
 
                       {leaveTypeSheet && isAvailWindowOpen && (() => {
-                        const sheetOffReq = (availByDate.get(leaveTypeSheet) || []).find(s => s.entryType === "off_request");
                         return (
                           <div className="mt-3 border border-slate-200 rounded-xl bg-white p-4 shadow-sm space-y-3" data-testid="card-leave-type">
-                            <div className="text-xs font-semibold text-slate-700">
-                              {leaveTypeSheet} — {sheetOffReq ? "修改或取消假別" : "請選擇假別"}
-                            </div>
+                            <div className="text-xs font-semibold text-slate-700">{leaveTypeSheet} — 請選擇假別</div>
                             <div className="grid grid-cols-3 gap-2">
-                              {(["特休", "事假", "休假"] as const).map(lt => {
-                                const isCurrent = (sheetOffReq?.leaveType || sheetOffReq?.note) === lt;
-                                return (
-                                  <button key={lt}
-                                    className={`h-11 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-40 ${
-                                      lt === "特休"
-                                        ? isCurrent ? "bg-orange-600 ring-2 ring-orange-400 text-white" : "bg-orange-500 hover:bg-orange-600 text-white"
-                                        : lt === "事假"
-                                        ? isCurrent ? "bg-blue-600 ring-2 ring-blue-400 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"
-                                        : isCurrent ? "bg-slate-600 ring-2 ring-slate-400 text-white" : "bg-slate-500 hover:bg-slate-600 text-white"
-                                    }`}
-                                    disabled={addAvailMutation.isPending || deleteAvailMutation.isPending}
-                                    onClick={() => {
-                                      if (isCurrent) { setLeaveTypeSheet(null); return; }
-                                      const doAdd = () => addAvailMutation.mutate({ date: leaveTypeSheet, entryType: "off_request", note: lt });
-                                      if (sheetOffReq) {
-                                        fetch(`/api/portal/availability/${sheetOffReq.id}`, {
-                                          method: "DELETE",
-                                          headers: { "x-line-user-id": portalLineUserId },
-                                          credentials: "include",
-                                        }).then(r => {
-                                          if (r.ok) { doAdd(); } else { r.text().then(msg => toast({ title: msg || "刪除失敗", variant: "destructive" })); }
-                                        }).catch(() => toast({ title: "刪除失敗", variant: "destructive" }));
-                                      } else {
-                                        doAdd();
-                                      }
-                                      setLeaveTypeSheet(null);
-                                    }}
-                                    data-testid={`button-leave-type-${lt}`}
-                                  >
-                                    {(addAvailMutation.isPending || deleteAvailMutation.isPending) ? <Loader2 className="h-4 w-4 animate-spin" /> : (
-                                      <>
-                                        <span>{lt}</span>
-                                        {lt === "事假" ? <span className="text-[9px] font-normal opacity-80">每年上限14天</span> : null}
-                                      </>
-                                    )}
-                                  </button>
-                                );
-                              })}
+                              {(["特休", "事假", "休假"] as const).map(lt => (
+                                <button key={lt}
+                                  className={`h-11 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-40 ${lt === "特休" ? "bg-orange-500 hover:bg-orange-600 text-white" : lt === "事假" ? "bg-blue-500 hover:bg-blue-600 text-white" : "bg-slate-500 hover:bg-slate-600 text-white"}`}
+                                  disabled={addAvailMutation.isPending}
+                                  onClick={() => {
+                                    addAvailMutation.mutate({ date: leaveTypeSheet, entryType: "off_request", note: lt });
+                                  }}
+                                  data-testid={`button-leave-type-${lt}`}
+                                >
+                                  {addAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                                    <>
+                                      <span>{lt}</span>
+                                      {lt === "事假" ? <span className="text-[9px] font-normal opacity-80">每年上限14天</span> : null}
+                                    </>
+                                  )}
+                                </button>
+                              ))}
                             </div>
-                            {sheetOffReq && (
-                              <button
-                                className="w-full h-10 rounded-xl text-sm font-semibold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 active:scale-[0.97] transition-all disabled:opacity-40"
-                                disabled={deleteAvailMutation.isPending}
-                                onClick={() => { deleteAvailMutation.mutate(sheetOffReq.id); setLeaveTypeSheet(null); }}
-                                data-testid="button-leave-type-delete"
-                              >
-                                {deleteAvailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "取消此假別"}
-                              </button>
-                            )}
                             <button className="w-full text-xs text-slate-400 hover:text-slate-600 transition-colors" onClick={() => setLeaveTypeSheet(null)} data-testid="button-leave-type-cancel">取消</button>
                           </div>
                         );
@@ -4568,7 +4449,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 <Copy className="h-4 w-4" />
                                 複製此時段到其他日期
                               </button>
-                              {slotLocked && <div className="text-[10px] text-center text-slate-400">填報期間已結束，無法修改</div>}
+                              {slotLocked && <div className="text-[10px] text-center text-slate-400">送出超過 4 小時，無法複製</div>}
                               {!slotLocked && (
                                 <button
                                   className="w-full h-9 rounded-lg border border-red-200 text-red-500 text-sm hover:bg-red-50 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"

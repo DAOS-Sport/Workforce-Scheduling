@@ -1,5 +1,6 @@
 import { storage } from "../../storage";
-import { isNonWorkRole } from "@shared/scheduleMapping";
+
+const LEAVE_ROLES = ["休假", "特休", "病假", "事假", "公假", "喪假", "育嬰", "留職停薪"];
 
 function err(status: number, message: string): Error {
   const e: any = new Error(message);
@@ -89,19 +90,14 @@ export const clockService = {
     const lastDay = new Date(yr, mo, 0).getDate();
     const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
 
-    const [allShifts, allRegions, clockRecords, allAmendments, allEmployees, allVenues] = await Promise.all([
+    const [allShifts, clockRecords, allAmendments, allEmployees, allVenues] = await Promise.all([
       storage.getAllShiftsByDateRange(monthStart, monthEnd),
-      storage.getRegions(),
       storage.getClockRecordsByDateRange(monthStart, monthEnd),
       storage.getClockAmendments(),
       storage.getAllEmployees(),
       storage.getAllVenues(),
     ]);
-    const dispatchNested = await Promise.all(
-      allRegions.map((region) => storage.getDispatchShifts(region.id, monthStart, monthEnd)),
-    );
-    const workShifts = allShifts.filter(s => !isNonWorkRole(s.role));
-    const linkedDispatchShifts = dispatchNested.flat().filter((s) => s.linkedEmployeeId != null);
+    const workShifts = allShifts.filter(s => !LEAVE_ROLES.includes(s.role));
     const employeeMap = new Map(allEmployees.map(e => [e.id, e]));
     const venueMap = new Map(allVenues.map(v => [v.id, v]));
 
@@ -140,52 +136,25 @@ export const clockService = {
       || list.find(a => a.status === "pending")
       || list.find(a => a.status === "rejected")
       || null;
-    const getBestAssignmentAmendment = (list: typeof allAmendments, assignmentShiftId: number) => {
-      const unlinked = list.filter(a => !a.originalClockRecordId);
-      return getBestAmendment(unlinked.filter(a => a.shiftId === assignmentShiftId))
-        || getBestAmendment(unlinked.filter(a => a.shiftId == null));
-    };
 
     const anomalies: any[] = [];
-    const assignments = [
-      ...workShifts.map((shift) => ({
-        employeeId: shift.employeeId,
-        date: String(shift.date),
-        startTime: shift.startTime,
-        endTime: shift.endTime,
-        venueId: shift.venueId,
-        assignmentShiftId: shift.id,
-        isDispatch: false,
-      })),
-      ...linkedDispatchShifts.map((shift) => ({
-        employeeId: shift.linkedEmployeeId!,
-        date: String(shift.date),
-        startTime: shift.startTime,
-        endTime: shift.endTime,
-        venueId: shift.venueId,
-        assignmentShiftId: -Math.abs(shift.id),
-        isDispatch: true,
-      })),
-    ];
-
-    for (const shift of assignments) {
+    for (const shift of workShifts) {
       const employee = employeeMap.get(shift.employeeId);
       if (!employee || employee.status !== "active") continue;
-      const venue = shift.venueId ? venueMap.get(shift.venueId) : null;
-      const shiftDate = shift.date;
+      const venue = venueMap.get(shift.venueId);
+      const shiftDate = String(shift.date);
       const baseInfo = {
         employeeId: shift.employeeId, employeeName: employee.name, employeeCode: employee.employeeCode,
         date: shiftDate, shiftStart: shift.startTime, shiftEnd: shift.endTime,
-        venueName: venue?.shortName || (shift.isDispatch ? "派遣" : ""),
-        isDispatch: shift.isDispatch,
+        venueName: venue?.shortName || "",
       };
 
       const inRecords = (clockMap.get(`${shift.employeeId}:${shiftDate}:in`) || []).filter(r => r.status === "success" || r.status === "warning");
       const outRecords = (clockMap.get(`${shift.employeeId}:${shiftDate}:out`) || []).filter(r => r.status === "success" || r.status === "warning");
       const inAmendments = amendmentMap.get(`${shift.employeeId}:${shiftDate}:in`) || [];
       const outAmendments = amendmentMap.get(`${shift.employeeId}:${shiftDate}:out`) || [];
-      const bestIn = getBestAssignmentAmendment(inAmendments, shift.assignmentShiftId);
-      const bestOut = getBestAssignmentAmendment(outAmendments, shift.assignmentShiftId);
+      const bestIn = getBestAmendment(inAmendments);
+      const bestOut = getBestAmendment(outAmendments);
 
       if (inRecords.length === 0) {
         anomalies.push({
@@ -279,9 +248,7 @@ export const clockService = {
       if (originalClockRecordId && a.originalClockRecordId === originalClockRecordId) return true;
       if (!originalClockRecordId && !a.originalClockRecordId) {
         const aDate = toTaipeiDate(a.requestedTime instanceof Date ? a.requestedTime : new Date(a.requestedTime as string));
-        if (aDate !== requestedDate || a.clockType !== clockType) return false;
-        if (shiftId && a.shiftId) return a.shiftId === shiftId;
-        return !shiftId || !a.shiftId;
+        return aDate === requestedDate && a.clockType === clockType;
       }
       return false;
     });
@@ -317,7 +284,7 @@ export const clockService = {
       storage.getAllVenues(),
     ]);
 
-    const workShifts = empShifts.filter(s => !isNonWorkRole(s.role));
+    const workShifts = empShifts.filter(s => !LEAVE_ROLES.includes(s.role));
     const venueMap = new Map(allVenues.map(v => [v.id, v]));
 
     const clockMap = new Map<string, typeof empClockRecords>();
@@ -359,7 +326,7 @@ export const clockService = {
     type ShiftLike = { id: number; date: string; startTime: string; endTime: string; venueId: number | null; isDispatch: boolean };
     const allShifts: ShiftLike[] = [
       ...workShifts.map(s => ({ id: s.id, date: String(s.date), startTime: s.startTime, endTime: s.endTime, venueId: s.venueId, isDispatch: false })),
-      ...empDispatchShifts.map(s => ({ id: s.id, date: String(s.date), startTime: s.startTime, endTime: s.endTime, venueId: s.venueId, isDispatch: true })),
+      ...empDispatchShifts.map(s => ({ id: s.id, date: String(s.date), startTime: s.startTime, endTime: s.endTime, venueId: null as number | null, isDispatch: true })),
     ];
 
     type Eligible = {
@@ -373,8 +340,7 @@ export const clockService = {
 
     const classify = (shift: ShiftLike, direction: "in" | "out", records: typeof empClockRecords): Eligible | null => {
       const venue = shift.venueId ? venueMap.get(shift.venueId) : null;
-      const venueName = shift.isDispatch ? (venue?.shortName || "派遣") : (venue?.shortName || "");
-      const assignmentShiftId = shift.isDispatch ? -Math.abs(shift.id) : shift.id;
+      const venueName = shift.isDispatch ? "派遣" : (venue?.shortName || "");
       const validRecs = records.filter(r => r.status === "success" || r.status === "warning");
       const sortedRecs = [...validRecs].sort((a, b) =>
         new Date(a.clockTime ?? 0).getTime() - new Date(b.clockTime ?? 0).getTime()
@@ -386,11 +352,8 @@ export const clockService = {
         venueName, shiftId: shift.id, isDispatch: shift.isDispatch,
       };
       if (!pick) {
-        const sameDateTypeAmendments = (amendmentMap.get(`${shift.date}:${direction}`) || [])
-          .filter(a => !a.originalClockRecordId);
-        const shiftSpecific = sameDateTypeAmendments.filter(a => a.shiftId === assignmentShiftId);
-        const legacyUnassigned = sameDateTypeAmendments.filter(a => a.shiftId == null);
-        const best = (shiftSpecific.length ? shiftSpecific : legacyUnassigned)
+        const best = (amendmentMap.get(`${shift.date}:${direction}`) || [])
+          .filter(a => !a.originalClockRecordId)
           .sort((a, b) => (a.status === "approved" ? -1 : b.status === "approved" ? 1 : 0))[0];
         return {
           ...base, anomalyType: "missing", originalClockRecordId: null, originalClockTime: null,
@@ -519,9 +482,7 @@ export const clockService = {
           await storage.applyClockRecordAmendment(updated.originalClockRecordId, amendedTime, updated.id, newFailReason);
         } else {
           await storage.createClockRecord({
-            employeeId: updated.employeeId,
-            venueId: updated.venueId,
-            shiftId: updated.shiftId && updated.shiftId > 0 ? updated.shiftId : null,
+            employeeId: updated.employeeId, venueId: updated.venueId, shiftId: updated.shiftId,
             clockType: updated.clockType, latitude: 0, longitude: 0, distance: 0,
             status: "success", failReason: "補打卡", matchedVenueName: null,
             clockTime: updated.requestedTime,

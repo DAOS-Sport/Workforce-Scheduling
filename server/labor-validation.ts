@@ -1,6 +1,7 @@
 import type { Shift, ShiftValidationError } from "@shared/schema";
 import { getFourWeekPeriod, calcShiftHours } from "@shared/schema";
-import { isNonWorkRole } from "@shared/scheduleMapping";
+
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
 
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(":").map(Number);
@@ -26,7 +27,7 @@ function validateSevenDayRest(
   existingShifts: Shift[]
 ): ShiftValidationError | null {
   const employeeShifts = existingShifts.filter(
-    (s) => s.employeeId === employeeId && !isNonWorkRole(s.role)
+    (s) => s.employeeId === employeeId && !LEAVE_TYPES.includes(s.role)
   );
   let consecutiveDays = 0;
   for (let i = 1; i <= 6; i++) {
@@ -82,7 +83,7 @@ function validateRestGap(
 ): ShiftValidationError | null {
   const prevDate = addDaysToDate(date, -1);
   const prevDayShifts = existingShifts.filter(
-    (s) => s.employeeId === employeeId && s.date === prevDate && !isNonWorkRole(s.role)
+    (s) => s.employeeId === employeeId && s.date === prevDate && !LEAVE_TYPES.includes(s.role)
   );
   if (prevDayShifts.length === 0) return null;
 
@@ -118,7 +119,7 @@ function validateFourWeekLimit(
   const period = getFourWeekPeriod(date, referenceDate);
 
   const periodShifts = existingShifts.filter(
-    (s) => s.employeeId === employeeId && s.date >= period.start && s.date <= period.end && !isNonWorkRole(s.role)
+    (s) => s.employeeId === employeeId && s.date >= period.start && s.date <= period.end && !LEAVE_TYPES.includes(s.role)
   );
 
   let totalHours = calcShiftHours(startTime, endTime);

@@ -1,10 +1,7 @@
 import { db } from "../../db";
 import { eq, and, lte } from "drizzle-orm";
 import {
-  employees,
-  dispatchShifts,
   salaryRateConfigs,
-  shifts,
   systemConfigs,
   missingClockNotifications,
   weeklyPushNotifications,
@@ -13,31 +10,6 @@ import {
   type MissingClockNotification,
   type WeeklyPushNotification,
 } from "@shared/schema";
-import { normalizeScheduleRole } from "@shared/scheduleMapping";
-
-async function assertEmployeeExists(employeeId: number, label: string): Promise<void> {
-  const [employee] = await db.select({ id: employees.id }).from(employees).where(eq(employees.id, employeeId));
-  if (!employee) throw new Error(`Invalid notification ${label} ${employeeId}: employee does not exist`);
-}
-
-async function assertShiftMatchesEmployee(shiftId: number, employeeId: number): Promise<void> {
-  if (shiftId < 0) {
-    const dispatchId = Math.abs(shiftId);
-    const [dispatchShift] = await db.select({ id: dispatchShifts.id, linkedEmployeeId: dispatchShifts.linkedEmployeeId })
-      .from(dispatchShifts)
-      .where(eq(dispatchShifts.id, dispatchId));
-    if (!dispatchShift) throw new Error(`Invalid notification dispatch shiftId ${shiftId}: dispatch shift does not exist`);
-    if (dispatchShift.linkedEmployeeId !== employeeId) {
-      throw new Error(`Invalid notification mapping: dispatch shift ${dispatchId} belongs to employee ${dispatchShift.linkedEmployeeId}, not ${employeeId}`);
-    }
-    return;
-  }
-  const [shift] = await db.select({ id: shifts.id, employeeId: shifts.employeeId }).from(shifts).where(eq(shifts.id, shiftId));
-  if (!shift) throw new Error(`Invalid notification shiftId ${shiftId}: shift does not exist`);
-  if (shift.employeeId !== employeeId) {
-    throw new Error(`Invalid notification mapping: shift ${shiftId} belongs to employee ${shift.employeeId}, not ${employeeId}`);
-  }
-}
 
 export const systemRepository = {
   async getSalaryRates(): Promise<SalaryRateConfig[]> {
@@ -45,17 +17,16 @@ export const systemRepository = {
   },
 
   async upsertSalaryRate(role: string, ratePerHour: number, label?: string): Promise<SalaryRateConfig> {
-    const normalizedRole = normalizeScheduleRole(role) || role;
-    const existing = await db.select().from(salaryRateConfigs).where(eq(salaryRateConfigs.role, normalizedRole));
+    const existing = await db.select().from(salaryRateConfigs).where(eq(salaryRateConfigs.role, role));
     if (existing.length > 0) {
       const [updated] = await db.update(salaryRateConfigs)
         .set({ ratePerHour, label, updatedAt: new Date() })
-        .where(eq(salaryRateConfigs.role, normalizedRole))
+        .where(eq(salaryRateConfigs.role, role))
         .returning();
       return updated;
     } else {
       const [created] = await db.insert(salaryRateConfigs)
-        .values({ role: normalizedRole, ratePerHour, label })
+        .values({ role, ratePerHour, label })
         .returning();
       return created;
     }
@@ -95,8 +66,6 @@ export const systemRepository = {
   },
 
   async createMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<void> {
-    await assertEmployeeExists(employeeId, "employeeId");
-    await assertShiftMatchesEmployee(shiftId, employeeId);
     await db.insert(missingClockNotifications)
       .values({ date, employeeId, shiftId })
       .onConflictDoNothing();
@@ -128,7 +97,6 @@ export const systemRepository = {
   },
 
   async createWeeklyPushNotification(weekStartDate: string, employeeId: number, pushType: string): Promise<void> {
-    await assertEmployeeExists(employeeId, "employeeId");
     await db.insert(weeklyPushNotifications)
       .values({ weekStartDate, employeeId, pushType })
       .onConflictDoNothing();

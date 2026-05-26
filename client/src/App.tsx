@@ -17,8 +17,6 @@ import VenuesPage from "@/pages/venues";
 import AttendancePage from "@/pages/attendance";
 import GuidelinesPage from "@/pages/guidelines";
 import ClockRecordsPage from "@/pages/clock-records";
-import ClockLogsPage from "@/pages/clock-logs";
-import VenueHealthPage from "@/pages/venue-health";
 import AnomalyReportsPage from "@/pages/anomaly-reports";
 import WeeklyAttendancePage from "@/pages/weekly-attendance";
 import SalaryReportPage from "@/pages/salary-report";
@@ -32,7 +30,6 @@ import MobileHrPage from "@/pages/mobile-hr";
 import GuidelineAcksPage from "@/pages/guideline-acks";
 import SopPage from "@/pages/sop";
 import AvailabilityPage from "@/pages/availability";
-import ObservabilityPage from "@/pages/IT/Observability";
 import { Loader2 } from "lucide-react";
 
 function AdminRouter() {
@@ -45,8 +42,6 @@ function AdminRouter() {
       <Route path="/attendance" component={AttendancePage} />
       <Route path="/guidelines" component={GuidelinesPage} />
       <Route path="/clock-records" component={ClockRecordsPage} />
-      <Route path="/clock-logs" component={ClockLogsPage} />
-      <Route path="/venue-health" component={VenueHealthPage} />
       <Route path="/anomaly-reports" component={AnomalyReportsPage} />
       <Route path="/weekly-attendance" component={WeeklyAttendancePage} />
       <Route path="/salary-report" component={SalaryReportPage} />
@@ -55,7 +50,6 @@ function AdminRouter() {
       <Route path="/guideline-acks" component={GuidelineAcksPage} />
       <Route path="/sop" component={SopPage} />
       <Route path="/availability" component={AvailabilityPage} />
-      <Route path="/IT/observability" component={ObservabilityPage} />
       <Route path="/announcements">{() => <Redirect to="/guidelines" />}</Route>
       <Route component={NotFound} />
     </Switch>

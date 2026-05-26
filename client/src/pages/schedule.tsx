@@ -26,7 +26,6 @@ import {
 } from "lucide-react";
 import { GoogleSheetsImportDialog } from "@/components/GoogleSheetsImportDialog";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
-import { NON_WORK_ROLES, isNonWorkRole, normalizeScheduleRole, shiftOverlapsScheduleSlot } from "@shared/scheduleMapping";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
@@ -87,7 +86,7 @@ const ROLE_LABELS: Record<string, string> = {
   "守望": "守望",
 };
 
-const LEAVE_TYPES: string[] = [...NON_WORK_ROLES];
+const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
 
 const LEAVE_COLORS: Record<string, string> = {
   "休假": "bg-slate-100 dark:bg-slate-800/40 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400",
@@ -506,7 +505,7 @@ export default function SchedulePage() {
     queryKey: ["/api/schedule-slots", selectedRegionsKey, dateRange.start, dateRange.end],
   });
 
-  interface ScheduleAvailability { id: number; employeeId: number; date: string; entryType: string; leaveType: string | null; startTime: string | null; endTime: string | null; note: string | null; }
+  interface ScheduleAvailability { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; }
   const availYearMonth = format(currentMonth, "yyyy-MM");
   const { data: availabilities = [] } = useQuery<ScheduleAvailability[]>({
     queryKey: ["/api/availabilities", selectedRegionsKey, availYearMonth],
@@ -669,7 +668,8 @@ export default function SchedulePage() {
 
   const precheckParams = useMemo(() => {
     if (!shiftDialogOpen || !shiftDate || !shiftStartTime || !shiftEndTime || !shiftEmployeeId) return null;
-    if (isNonWorkRole(shiftRole)) return null;
+    const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
+    if (LEAVE_TYPES.includes(shiftRole)) return null;
     return { employeeId: shiftEmployeeId, date: shiftDate, startTime: shiftStartTime, endTime: shiftEndTime, shiftIdToExclude: editingShift?.id || null };
   }, [shiftDialogOpen, shiftDate, shiftStartTime, shiftEndTime, shiftEmployeeId, shiftRole, editingShift]);
 
@@ -764,12 +764,34 @@ export default function SchedulePage() {
     return ids;
   }, [scheduleSlots]);
 
+  const timeToMin = (t: string) => {
+    const [h, m] = t.substring(0, 5).split(":").map(Number);
+    return h * 60 + m;
+  };
+
   const shiftOverlapsSlot = (sh: Shift, slot: ScheduleSlot) => {
-    return shiftOverlapsScheduleSlot(sh, slot);
+    const shStart = timeToMin(sh.startTime);
+    const shEnd = timeToMin(sh.endTime);
+    const slStart = timeToMin(slot.startTime);
+    const slEnd = timeToMin(slot.endTime);
+    const overlapStart = Math.max(shStart, slStart);
+    const overlapEnd = Math.min(shEnd, slEnd);
+    const overlap = overlapEnd - overlapStart;
+    const slotDuration = slEnd - slStart;
+    return overlap >= slotDuration * 0.5;
   };
 
   const dispatchOverlapsSlot = (ds: DispatchShift, slot: ScheduleSlot) => {
-    return !!ds.startTime && !!ds.endTime && shiftOverlapsScheduleSlot(ds, slot);
+    if (!ds.startTime || !ds.endTime) return false;
+    const shStart = timeToMin(ds.startTime);
+    const shEnd = timeToMin(ds.endTime);
+    const slStart = timeToMin(slot.startTime);
+    const slEnd = timeToMin(slot.endTime);
+    const overlapStart = Math.max(shStart, slStart);
+    const overlapEnd = Math.min(shEnd, slEnd);
+    const overlap = overlapEnd - overlapStart;
+    const slotDuration = slEnd - slStart;
+    return slotDuration > 0 && overlap >= slotDuration * 0.5;
   };
 
   const venueDateShortage = useMemo(() => {
@@ -785,8 +807,7 @@ export default function SchedulePage() {
       if (shortage > 0) {
         if (!map.has(key)) map.set(key, new Map());
         const roleMap = map.get(key)!;
-        const roleKey = normalizeScheduleRole(slot.role) || slot.role;
-        roleMap.set(roleKey, (roleMap.get(roleKey) || 0) + shortage);
+        roleMap.set(slot.role, (roleMap.get(slot.role) || 0) + shortage);
       }
     });
     return map;
@@ -2151,14 +2172,13 @@ export default function SchedulePage() {
                     const slots = slotsByVenueDate.get(`${shift.venueId}-${shiftDateStr}`) || [];
                     const sStart = shift.startTime.substring(0, 5);
                     const sEnd = shift.endTime.substring(0, 5);
-                    const shiftRole = normalizeScheduleRole(shift.role) || shift.role;
-                    const isLeave = LEAVE_TYPES.includes(shiftRole);
-                    const matchedSlot = slots.find(sl => shiftOverlapsScheduleSlot(shift, sl))
-                      || slots.find(sl => normalizeScheduleRole(sl.role) === shiftRole && sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
-                    const shiftRoleVal = isLeave ? shiftRole : (shiftRole || normalizeScheduleRole(matchedSlot?.role) || ROLE_LABELS[emp.role] || emp.role);
+                    const isLeave = LEAVE_TYPES.includes(shift.role);
+                    const matchedSlot = slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sl.endTime.substring(0, 5) >= sEnd)
+                      || slots.find(sl => sl.startTime.substring(0, 5) <= sStart && sStart < sl.endTime.substring(0, 5));
+                    const shiftRoleVal = isLeave ? shift.role : (shift.role || matchedSlot?.role || ROLE_LABELS[emp.role] || emp.role);
                     const roleShort = ROLE_SHORT[shiftRoleVal] || shiftRoleVal.slice(0, 1);
                     const roleColor = isLeave ? null : getRoleColor(shiftRoleVal, shift.isDispatch ?? false);
-                    const cardColor = isLeave ? (LEAVE_COLORS[shiftRole] || LEAVE_COLORS["休假"]) : roleColor!.card;
+                    const cardColor = isLeave ? (LEAVE_COLORS[shift.role] || LEAVE_COLORS["休假"]) : roleColor!.card;
                     const isDragging = draggedShiftId === shift.id;
                     const isSelected = selectedShiftIds.has(shift.id);
 
@@ -2327,8 +2347,8 @@ export default function SchedulePage() {
                                 <div className="mb-0.5 space-y-px">
                                   {cellAvail.map(a => (
                                     a.entryType === "off_request" ? (
-                                      <div key={a.id} className={`rounded px-1 py-px text-[9px] leading-tight font-bold text-center border ${a.leaveType === "特休" ? "bg-orange-100/80 dark:bg-orange-900/40 border-orange-200 dark:border-orange-700 text-orange-600 dark:text-orange-300" : a.leaveType === "事假" ? "bg-blue-100/80 dark:bg-blue-900/40 border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-300" : a.leaveType === "病假" ? "bg-green-100/80 dark:bg-green-900/40 border-green-200 dark:border-green-700 text-green-600 dark:text-green-300" : "bg-red-100/80 dark:bg-red-900/40 border-red-200 dark:border-red-700 text-red-600 dark:text-red-300"}`} title={a.leaveType ? `希望${a.leaveType}` : "希望休假"}>
-                                        {a.leaveType || "休"}
+                                      <div key={a.id} className={`rounded px-1 py-px text-[9px] leading-tight font-bold text-center border ${a.note === "特休" ? "bg-orange-100/80 dark:bg-orange-900/40 border-orange-200 dark:border-orange-700 text-orange-600 dark:text-orange-300" : a.note === "事假" ? "bg-blue-100/80 dark:bg-blue-900/40 border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-300" : "bg-red-100/80 dark:bg-red-900/40 border-red-200 dark:border-red-700 text-red-600 dark:text-red-300"}`} title={a.note ? `希望${a.note}` : "希望休假"}>
+                                        {a.note || "休"}
                                       </div>
                                     ) : (
                                       <div key={a.id} className="rounded px-1 py-px text-[9px] leading-tight bg-purple-100/80 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-300 truncate" title={`意願：${a.startTime ? a.startTime.slice(0,5) : ""}–${a.endTime ? a.endTime.slice(0,5) : ""}`}>
@@ -2528,8 +2548,7 @@ export default function SchedulePage() {
                                 const venue = ds.venueId ? venueMap.get(ds.venueId) : null;
                                 const sStart = ds.startTime.substring(0, 5);
                                 const sEnd = ds.endTime.substring(0, 5);
-                                const dispatchRole = normalizeScheduleRole(ds.role) || ds.role;
-                                const roleShort = ROLE_SHORT[dispatchRole] || dispatchRole.slice(0, 1);
+                                const roleShort = ROLE_SHORT[ds.role] || ds.role.slice(0, 1);
                                 return (
                                   <div
                                     key={ds.id}
@@ -2542,7 +2561,7 @@ export default function SchedulePage() {
                                       <div className="font-semibold leading-tight text-[11px] truncate text-purple-700 dark:text-purple-300">
                                         {venue?.shortName || "未指定"}
                                       </div>
-                                      <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 shrink-0 ${getRoleColor(dispatchRole).badge}`}>
+                                      <span className={`text-[8px] font-bold px-1 py-0 rounded-full leading-4 shrink-0 ${getRoleColor(ds.role).badge}`}>
                                         {roleShort}
                                       </span>
                                     </div>
@@ -3829,9 +3848,8 @@ export default function SchedulePage() {
                         _dispatchForSlot.filter((ds) => dispatchOverlapsSlot(ds, slot)).length;
                       const shortage = slot.requiredCount - assignedCount;
                       const isFull = shortage <= 0;
-                      const normalizedSlotRole = normalizeScheduleRole(slot.role) || slot.role;
-                      const isRescue = normalizedSlotRole === "救生";
-                      const isGuard = normalizedSlotRole === "守望";
+                      const isRescue = slot.role === "救生";
+                      const isGuard = slot.role === "守望";
                       const borderColor = isRescue ? "border-l-red-500" : isGuard ? "border-l-amber-500" : "border-l-blue-500";
                       return (
                         <div

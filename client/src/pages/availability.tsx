@@ -19,7 +19,6 @@ interface ShiftAvailability {
   employeeId: number;
   date: string;
   entryType: string;
-  leaveType: string | null;
   startTime: string | null;
   endTime: string | null;
   note: string | null;
@@ -203,11 +202,11 @@ export default function AvailabilityPage() {
     setViewYearMonth(format(d, "yyyy-MM"));
   }
 
-  const COL_WIDTH = 52;
-  const EMP_COL_WIDTH = 90;
+  const COL_WIDTH = 64;
+  const EMP_COL_WIDTH = 100;
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-4">
+    <div className="h-full overflow-auto p-4 space-y-4">
       <div className="flex items-center gap-3">
         <CalendarDays className="h-5 w-5 text-primary" />
         <h1 className="text-xl font-bold">排班意願管理</h1>
@@ -353,7 +352,7 @@ export default function AvailabilityPage() {
       </Card>
 
       <div className="space-y-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button className="p-1 rounded-md hover:bg-muted transition-colors" onClick={prevMonth} data-testid="button-prev-month">
               <ChevronLeft className="h-4 w-4" />
@@ -375,26 +374,17 @@ export default function AvailabilityPage() {
         ) : activeEmployees.length === 0 ? (
           <div className="text-sm text-muted-foreground text-center py-8">此區域無員工資料</div>
         ) : (
-          <div
-            className="border rounded-lg overflow-auto"
-            style={{
-              WebkitOverflowScrolling: "touch",
-              touchAction: "pan-x pan-y",
-              overscrollBehavior: "contain",
-              maxHeight: "65vh",
-            }}
-          >
-            <table className="border-collapse text-xs" style={{ minWidth: "max-content" }}>
+          <div className="border rounded-lg overflow-auto">
+            <table className="border-collapse text-xs">
               <thead>
-                <tr>
-                  <th className="sticky top-0 left-0 z-30 bg-muted/95 backdrop-blur-sm px-2 py-2 text-left font-semibold border-b border-r" style={{ minWidth: EMP_COL_WIDTH, width: EMP_COL_WIDTH }}>
+                <tr className="bg-muted/50">
+                  <th className="sticky left-0 z-10 bg-muted/50 px-2 py-2 text-left font-semibold border-b border-r" style={{ minWidth: EMP_COL_WIDTH, width: EMP_COL_WIDTH }}>
                     員工
                   </th>
                   {monthDates.map((d, i) => {
                     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                     return (
-                      <th key={i}
-                        className={`sticky top-0 z-20 border-b border-r px-1 py-1 text-center font-medium backdrop-blur-sm ${isWeekend ? "bg-amber-50/95 dark:bg-amber-950/80" : "bg-muted/95"}`}
+                      <th key={i} className={`border-b border-r px-1 py-1 text-center font-medium ${isWeekend ? "bg-amber-50 dark:bg-amber-950/20" : ""}`}
                         style={{ minWidth: COL_WIDTH, width: COL_WIDTH }}>
                         <div className="text-[10px] text-muted-foreground">{DAY_NAMES[d.getDay()]}</div>
                         <div>{d.getDate()}</div>
@@ -425,8 +415,8 @@ export default function AvailabilityPage() {
                             <div className="space-y-0.5">
                               {slots.map(s => (
                                 s.entryType === "off_request" ? (
-                                  <div key={s.id} className={`rounded px-1 py-0.5 text-[10px] leading-tight font-bold text-center border ${s.leaveType === "特休" ? "bg-orange-100 border-orange-200 text-orange-700 dark:bg-orange-900/40 dark:border-orange-700 dark:text-orange-300" : s.leaveType === "事假" ? "bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-300" : s.leaveType === "病假" ? "bg-green-100 border-green-200 text-green-700 dark:bg-green-900/40 dark:border-green-700 dark:text-green-300" : "bg-red-100 border-red-200 text-red-700 dark:bg-red-900/40 dark:border-red-700 dark:text-red-300"}`}>
-                                    {s.leaveType || "休"}
+                                  <div key={s.id} className={`rounded px-1 py-0.5 text-[10px] leading-tight font-bold text-center border ${s.note === "特休" ? "bg-orange-100 border-orange-200 text-orange-700 dark:bg-orange-900/40 dark:border-orange-700 dark:text-orange-300" : s.note === "事假" ? "bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-300" : "bg-red-100 border-red-200 text-red-700 dark:bg-red-900/40 dark:border-red-700 dark:text-red-300"}`}>
+                                    {s.note || "休"}
                                   </div>
                                 ) : (
                                   <div key={s.id} className="rounded bg-purple-100 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 px-1 py-0.5 text-[10px] text-purple-700 dark:text-purple-300 leading-tight">
@@ -448,24 +438,12 @@ export default function AvailabilityPage() {
 
         <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-orange-100 border border-orange-200" />
-            <span className="text-orange-700 font-semibold">特休</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-blue-100 border border-blue-200" />
-            <span className="text-blue-700 font-semibold">事假</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-green-100 border border-green-200" />
-            <span className="text-green-700 font-semibold">病假</span>
+            <div className="w-3 h-3 rounded bg-purple-100 border border-purple-200" />
+            <span>紫色：可上班時段（兼職）</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
-            <span>休假</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-purple-100 border border-purple-200" />
-            <span>可上班時段（兼職）</span>
+            <span>紅色「休」：希望休假（正職）</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-[9px] px-1 py-0 rounded font-bold bg-amber-100 text-amber-700">兼</span>

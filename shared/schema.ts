@@ -27,7 +27,6 @@ export const venues = pgTable("venues", {
   operationType: text("operation_type"),
   openTime: text("open_time"),
   closeTime: text("close_time"),
-  isActive: boolean("is_active").default(true),
 });
 
 export const insertVenueSchema = createInsertSchema(venues).omit({ id: true });
@@ -244,10 +243,6 @@ export const clockRecords = pgTable("clock_records", {
   lateDepartureReason: text("late_departure_reason"),
   amendedTime: timestamp("amended_time"),
   amendmentId: integer("amendment_id"),
-  accuracy: real("accuracy"),
-  accuracyBufferApplied: boolean("accuracy_buffer_applied").default(false),
-  suspiciousLocation: boolean("suspicious_location").default(false),
-  gpsCapturedAt: timestamp("gps_captured_at"),
 });
 
 export const insertClockRecordSchema = createInsertSchema(clockRecords).omit({ id: true });
@@ -569,7 +564,6 @@ export const shiftAvailabilities = pgTable("shift_availabilities", {
   employeeId: integer("employee_id").notNull(),
   date: text("date").notNull(),
   entryType: text("entry_type").notNull().default("available"),
-  leaveType: text("leave_type"),
   startTime: text("start_time"),
   endTime: text("end_time"),
   note: text("note"),
@@ -588,53 +582,3 @@ export interface VacancyInfo {
   assigned: number;
   shortage: number;
 }
-
-export const appLogs = pgTable("app_logs", {
-  id: serial("id").primaryKey(),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-  level: text("level").notNull(),
-  service: text("service").notNull(),
-  environment: text("environment").notNull(),
-  module: text("module"),
-  action: text("action"),
-  requestId: text("request_id"),
-  route: text("route"),
-  method: text("method"),
-  statusCode: integer("status_code"),
-  durationMs: integer("duration_ms"),
-  errorCode: text("error_code"),
-  errorMessage: text("error_message"),
-  externalService: text("external_service"),
-  safeContext: jsonb("safe_context"),
-  message: text("message").notNull(),
-});
-export type AppLog = typeof appLogs.$inferSelect;
-
-export const auditLogs = pgTable("audit_logs", {
-  id: serial("id").primaryKey(),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-  requestId: text("request_id"),
-  actorUserId: text("actor_user_id"),
-  actorRole: text("actor_role"),
-  action: text("action").notNull(),
-  targetType: text("target_type"),
-  targetId: text("target_id"),
-  beforeState: jsonb("before_state"),
-  afterState: jsonb("after_state"),
-  message: text("message").notNull(),
-});
-export type AuditLog = typeof auditLogs.$inferSelect;
-
-export const userErrorEvents = pgTable("user_error_events", {
-  id: serial("id").primaryKey(),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-  requestId: text("request_id"),
-  userId: text("user_id"),
-  userRole: text("user_role"),
-  action: text("action"),
-  errorCode: text("error_code"),
-  messageShown: text("message_shown"),
-  route: text("route"),
-  formStateSnapshot: jsonb("form_state_snapshot"),
-});
-export type UserErrorEvent = typeof userErrorEvents.$inferSelect;

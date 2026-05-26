@@ -25,7 +25,7 @@ import {
   type VenueShiftTemplate,
   type ShiftAuditLog,
 } from "@shared/schema";
-import { and, gte, lte, inArray, asc, ne } from "drizzle-orm";
+import { and, gte, lte, inArray, asc } from "drizzle-orm";
 
 const VALID_REGION_CODES = REGIONS_DATA.map((r) => r.code) as readonly string[];
 const TPE_OFFSET = "+08:00";
@@ -225,10 +225,6 @@ function mapRegularShift(s: Shift, b: EnrichmentBundle) {
     sourceTable: "shifts",
     sourceRowId: s.id,
     date: s.date,
-    role: employee?.role ?? null,
-    period,
-    venueName: venue?.name ?? null,
-    venueShortName: venue?.shortName ?? null,
     region,
     venue: venueDto(venue),
     shift: {
@@ -277,10 +273,6 @@ function mapDispatchShift(d: DispatchShift, b: EnrichmentBundle) {
     sourceTable: "dispatch_shifts",
     sourceRowId: d.id,
     date: d.date,
-    role: d.role ?? null,
-    period,
-    venueName: venue?.name ?? null,
-    venueShortName: venue?.shortName ?? null,
     region: region ? { id: region.id, code: region.code, name: region.name } : null,
     venue: venueDto(venue),
     shift: {
@@ -307,7 +299,7 @@ function mapDispatchShift(d: DispatchShift, b: EnrichmentBundle) {
         },
     assignment: {
       kind: "dispatch",
-      status: d.status === "cancelled" ? "cancelled" : "scheduled",
+      status: "scheduled",
       isDispatch: true,
       isSubstitute: false,
       dispatchFromVenue: d.dispatchCompany ?? null,
@@ -317,8 +309,8 @@ function mapDispatchShift(d: DispatchShift, b: EnrichmentBundle) {
     audit: {
       createdAt: null,
       updatedAt: null,
-      deletedAt: d.cancelledAt ? (d.cancelledAt as unknown as Date)?.toISOString?.() ?? String(d.cancelledAt) : null,
-      updatedBy: d.cancelledBy ?? "",
+      deletedAt: null,
+      updatedBy: "",
     },
     raw: d,
   };
@@ -403,7 +395,11 @@ export const internalService = {
 
     const regularOut = shiftsToday
       .filter((s: Shift) => s.status === "active")
-      .filter((s: Shift) => venueIdSet.has(s.venueId))
+      .filter((s: Shift) => {
+        if (venueIdSet.has(s.venueId)) return true;
+        const emp = employeeById.get(s.employeeId);
+        return !!emp && emp.regionId === region.id;
+      })
       .map((s: Shift) => {
         const emp = employeeById.get(s.employeeId);
         const v = venueById.get(s.venueId);
@@ -414,7 +410,6 @@ export const internalService = {
           startTime: s.startTime,
           endTime: s.endTime,
           role: s.role,
-          period: periodFromTimes(s.startTime ?? "", s.endTime ?? ""),
           employee: emp ? { id: emp.id, name: emp.name, employeeCode: emp.employeeCode, phone: emp.phone } : null,
           venue: v ? { id: v.id, name: v.name, shortName: v.shortName } : { id: s.venueId, name: null, shortName: null },
           isDispatch: !!s.isDispatch,
@@ -436,7 +431,6 @@ export const internalService = {
           startTime: d.startTime,
           endTime: d.endTime,
           role: d.role,
-          period: periodFromTimes(d.startTime ?? "", d.endTime ?? ""),
           dispatch: { name: d.dispatchName, company: d.dispatchCompany, phone: d.dispatchPhone },
           linkedEmployeeId: d.linkedEmployeeId,
           venue: v
@@ -478,18 +472,18 @@ export const internalService = {
     let dispatchRows: DispatchShift[] = [];
     if (includeDispatch) {
       dispatchRows = await db.select().from(dispatchShiftsTable)
-        .where(and(
-          gte(dispatchShiftsTable.date, from),
-          lte(dispatchShiftsTable.date, to),
-          ...(includeDeleted ? [] : [ne(dispatchShiftsTable.status, "cancelled")]),
-        ));
+        .where(and(gte(dispatchShiftsTable.date, from), lte(dispatchShiftsTable.date, to)));
     }
 
     let regularItems = shifts;
     if (!includeDeleted) regularItems = regularItems.filter((s) => s.status === "active");
     if (regionFilter) {
       const venueIdsInRegion = new Set(bundle.venues.filter((v) => v.regionId === regionFilter!.id).map((v) => v.id));
-      regularItems = regularItems.filter((s) => venueIdsInRegion.has(s.venueId));
+      regularItems = regularItems.filter((s) => {
+        if (venueIdsInRegion.has(s.venueId)) return true;
+        const emp = bundle.employeeById.get(s.employeeId);
+        return !!emp && emp.regionId === regionFilter!.id;
+      });
     }
     if (employeeNumber) {
       const emp = bundle.employees.find((e) => e.employeeCode === employeeNumber);
@@ -655,7 +649,11 @@ export const internalService = {
     let inRangeShifts = shifts;
     if (regionId != null) {
       const venueIdsInRegion = new Set(bundle.venues.filter((v) => v.regionId === regionId).map((v) => v.id));
-      inRangeShifts = inRangeShifts.filter((s) => venueIdsInRegion.has(s.venueId));
+      inRangeShifts = inRangeShifts.filter((s) => {
+        if (venueIdsInRegion.has(s.venueId)) return true;
+        const emp = bundle.employeeById.get(s.employeeId);
+        return !!emp && emp.regionId === regionId;
+      });
     }
     const shiftById = new Map(inRangeShifts.map((s) => [s.id, s]));
     const ids = Array.from(shiftById.keys());
@@ -781,17 +779,17 @@ export const internalService = {
 
     const allRegular = await storage.getAllShiftsByDateRange(from, to);
     const allDispatch = await db.select().from(dispatchShiftsTable)
-      .where(and(
-        gte(dispatchShiftsTable.date, from),
-        lte(dispatchShiftsTable.date, to),
-        ne(dispatchShiftsTable.status, "cancelled"),
-      ));
+      .where(and(gte(dispatchShiftsTable.date, from), lte(dispatchShiftsTable.date, to)));
 
     let regularItems = allRegular.filter((s) => s.status === "active");
     let dispatchRows = allDispatch as DispatchShift[];
     if (regionFilter) {
       const venueIdsInRegion = new Set(venues.map((v) => v.id));
-      regularItems = regularItems.filter((s) => venueIdsInRegion.has(s.venueId));
+      regularItems = regularItems.filter((s) => {
+        if (venueIdsInRegion.has(s.venueId)) return true;
+        const emp = bundle.employeeById.get(s.employeeId);
+        return !!emp && emp.regionId === regionFilter!.id;
+      });
       dispatchRows = dispatchRows.filter((d) => d.regionId === regionFilter!.id);
     }
 

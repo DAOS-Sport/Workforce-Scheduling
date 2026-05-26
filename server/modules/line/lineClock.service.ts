@@ -1,4 +1,5 @@
 import { storage } from "../../storage";
+import type { Shift } from "@shared/schema";
 import { getTaiwanNow, formatTaiwanTime, formatTaiwanDate } from "./lineHelpers";
 
 let _venueCache: { venues: import("@shared/schema").Venue[]; cachedAt: number } | null = null;
@@ -31,15 +32,7 @@ function haversineDistance(
   return R * c;
 }
 
-type ClockableShift = {
-  id: number;
-  venueId: number | null;
-  startTime: string;
-  endTime: string;
-  isDispatch: boolean;
-};
-
-function isTimeInShiftWindow(now: Date, shift: ClockableShift, bufferMinutes: number = 30): boolean {
+function isTimeInShiftWindow(now: Date, shift: Shift, bufferMinutes: number = 30): boolean {
   const [sh, sm] = shift.startTime.split(":").map(Number);
   const [eh, em] = shift.endTime.split(":").map(Number);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -48,7 +41,7 @@ function isTimeInShiftWindow(now: Date, shift: ClockableShift, bufferMinutes: nu
   return nowMinutes >= shiftStart && nowMinutes <= shiftEnd;
 }
 
-function determineClockType(now: Date, shifts: ClockableShift[]): "in" | "out" {
+function determineClockType(now: Date, shifts: Shift[]): "in" | "out" {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   // Pick the shift whose midpoint is closest to the current time,
@@ -99,75 +92,17 @@ export interface ClockInResult {
   earlyMinutes?: number;
   lateDeparture?: boolean;
   lateMinutes?: number;
-  accuracy?: number | null;
-  accuracyBufferApplied?: boolean;
-  suspiciousLocation?: boolean;
-}
-
-export interface ClockInExtras {
-  accuracy?: number | null;
-  gpsCapturedAt?: string | Date | null;
-}
-
-const TAIWAN_BOUNDS = { minLat: 21.5, maxLat: 25.5, minLng: 119.5, maxLng: 122.5 };
-
-function logClockAttempt(stage: string, info: {
-  employeeId?: number | null;
-  employeeName?: string | null;
-  status: string;
-  clockType: string;
-  failReason?: string | null;
-  recordId?: number | null;
-  lat: number;
-  lng: number;
-  venueName?: string | null;
-  distance?: number | null;
-}) {
-  const ts = new Date().toISOString();
-  console.log(
-    `[ClockLog] ${ts} stage=${stage} emp=${info.employeeName ?? "?"}(#${info.employeeId ?? "?"}) ` +
-    `status=${info.status} type=${info.clockType} venue=${info.venueName ?? "-"} ` +
-    `dist=${info.distance ?? "-"}m lat=${info.lat.toFixed(6)} lng=${info.lng.toFixed(6)} ` +
-    `recordId=${info.recordId ?? "-"} reason="${info.failReason ?? ""}"`
-  );
 }
 
 export async function processClockIn(
   params: { lineUserId?: string; employeeId?: number },
   lat: number,
   lng: number,
-  forcedClockType?: "in" | "out",
-  extras?: ClockInExtras,
+  forcedClockType?: "in" | "out"
 ): Promise<ClockInResult> {
-  const accuracyRaw = extras?.accuracy != null && Number.isFinite(extras.accuracy) ? Number(extras.accuracy) : null;
-  // Cap the buffer at 100m to prevent abuse from devices reporting wildly large accuracy values.
-  const accuracyBuffer = accuracyRaw != null ? Math.min(Math.max(accuracyRaw, 0), 100) : 0;
-  const gpsCapturedAt = extras?.gpsCapturedAt ? new Date(extras.gpsCapturedAt) : null;
   const now = getTaiwanNow();
   const todayStr = formatTaiwanDate(now);
   const timeStr = formatTaiwanTime(now);
-
-  if (
-    lat < TAIWAN_BOUNDS.minLat || lat > TAIWAN_BOUNDS.maxLat ||
-    lng < TAIWAN_BOUNDS.minLng || lng > TAIWAN_BOUNDS.maxLng
-  ) {
-    console.warn(`[Clock-in] 座標超出台灣範圍: lat=${lat}, lng=${lng}`);
-    return {
-      status: "fail",
-      clockType: forcedClockType || "in",
-      venueName: null,
-      distance: null,
-      time: timeStr,
-      date: todayStr,
-      shiftInfo: null,
-      failReason: "座標不在有效範圍內，請確認 GPS 定位正確",
-      employeeName: null,
-      radius: null,
-      nearbyVenues: [],
-      userLat: lat,
-      userLng: lng,
-    };
-  }
 
   let employee;
   if (params.employeeId) {
@@ -236,9 +171,8 @@ export async function processClockIn(
           // Persist an audit-only fail record so admins can see the employee
           // actually tried to clock in but was blocked by the dedup rule.
           // Without this the attempt vanishes from the DB entirely.
-          let dedupRecordId: number | null = null;
           try {
-            const rec = await storage.createClockRecord({
+            await storage.createClockRecord({
               employeeId: employee.id,
               venueId: lastValidRecord.venueId ?? null,
               shiftId: null,
@@ -249,21 +183,10 @@ export async function processClockIn(
               status: "fail",
               failReason,
               matchedVenueName: lastValidRecord.matchedVenueName || null,
-              accuracy: accuracyRaw,
-              accuracyBufferApplied: false,
-              suspiciousLocation: false,
-              gpsCapturedAt,
             });
-            dedupRecordId = rec.id;
           } catch (err) {
             console.error("[clock] failed to write dedup audit record", err);
           }
-          logClockAttempt("dedup", {
-            employeeId: employee.id, employeeName: employee.name,
-            status: "fail", clockType: forcedClockType || lastValidRecord.clockType,
-            failReason, recordId: dedupRecordId, lat, lng,
-            venueName: lastValidRecord.matchedVenueName, distance: null,
-          });
           return {
             status: "fail",
             clockType: forcedClockType || lastValidRecord.clockType,
@@ -285,9 +208,7 @@ export async function processClockIn(
   }
 
   const allVenues = await getCachedVenues();
-  // Skip de-activated venues so admins can hide unused/duplicate locations
-  // without deleting historical records.
-  const validVenues = allVenues.filter((v) => v.latitude && v.longitude && (v as any).isActive !== false);
+  const validVenues = allVenues.filter((v) => v.latitude && v.longitude);
 
   const venueDistances = validVenues.map((v) => ({
     venue: v,
@@ -327,14 +248,9 @@ export async function processClockIn(
   const closestDistance = closest.distance;
   const effectiveRadius = closestVenue.radius || 300;
 
-  // Accuracy buffer: if device-reported accuracy explains the over-shoot,
-  // allow it through and mark accuracyBufferApplied. Capped at 100m above.
-  const adjustedDistance = Math.max(0, closestDistance - accuracyBuffer);
-  const accuracyBufferApplied = closestDistance > effectiveRadius && adjustedDistance <= effectiveRadius;
-
-  if (adjustedDistance > effectiveRadius) {
+  if (closestDistance > effectiveRadius) {
     const failClockType = forcedClockType || "in";
-    const outOfRangeRec = await storage.createClockRecord({
+    await storage.createClockRecord({
       employeeId: employee.id,
       venueId: null,
       shiftId: null,
@@ -343,21 +259,8 @@ export async function processClockIn(
       longitude: lng,
       distance: Math.round(closestDistance),
       status: "fail",
-      failReason: accuracyRaw != null
-        ? `不在任何場館範圍內（距離 ${Math.round(closestDistance)}m / 容許 ${effectiveRadius}m / GPS 精度 ±${Math.round(accuracyRaw)}m）`
-        : "不在任何場館範圍內",
+      failReason: "不在任何場館範圍內",
       matchedVenueName: closestVenue.shortName,
-      accuracy: accuracyRaw,
-      accuracyBufferApplied: false,
-      suspiciousLocation: false,
-      gpsCapturedAt,
-    });
-    logClockAttempt("out-of-range", {
-      employeeId: employee.id, employeeName: employee.name,
-      status: "fail", clockType: failClockType,
-      failReason: `不在任何場館範圍內 (最近=${closestVenue.shortName} 距離=${Math.round(closestDistance)}m radius=${effectiveRadius}m)`,
-      recordId: outOfRangeRec.id, lat, lng,
-      venueName: closestVenue.shortName, distance: Math.round(closestDistance),
     });
 
     return {
@@ -368,45 +271,22 @@ export async function processClockIn(
       time: timeStr,
       date: todayStr,
       shiftInfo: null,
-      failReason: accuracyRaw != null
-        ? `不在任何場館範圍內（距離 ${Math.round(closestDistance)}m / 容許 ${effectiveRadius}m / GPS 精度 ±${Math.round(accuracyRaw)}m）`
-        : "不在任何場館範圍內",
+      failReason: "不在任何場館範圍內",
       employeeName: employee.name,
       radius: effectiveRadius,
       nearbyVenues,
       userLat: lat,
       userLng: lng,
-      accuracy: accuracyRaw,
-      accuracyBufferApplied: false,
     };
   }
 
-  const [todayShifts, todayDispatchShifts] = await Promise.all([
-    storage.getShiftsByEmployeeAndDateRange(employee.id, todayStr, todayStr),
-    storage.getDispatchShiftsByLinkedEmployee(employee.id, todayStr, todayStr),
-  ]);
-  const clockableShifts: ClockableShift[] = [
-    ...todayShifts.map((s) => ({
-      id: s.id,
-      venueId: s.venueId,
-      startTime: s.startTime,
-      endTime: s.endTime,
-      isDispatch: false,
-    })),
-    ...todayDispatchShifts.map((s) => ({
-      id: s.id,
-      venueId: s.venueId,
-      startTime: s.startTime,
-      endTime: s.endTime,
-      isDispatch: true,
-    })),
-  ];
-  const venueShifts = clockableShifts.filter((s) => s.venueId === closestVenue.id);
+  const todayShifts = await storage.getShiftsByEmployeeAndDateRange(employee.id, todayStr, todayStr);
+  const venueShifts = todayShifts.filter((s) => s.venueId === closestVenue.id);
   const matchingShift = venueShifts.find((s) => isTimeInShiftWindow(now, s));
 
   if (venueShifts.length === 0) {
     const warnClockType = forcedClockType || "in";
-    const warnRec = await storage.createClockRecord({
+    await storage.createClockRecord({
       employeeId: employee.id,
       venueId: closestVenue.id,
       shiftId: null,
@@ -417,16 +297,6 @@ export async function processClockIn(
       status: "warning",
       failReason: "今日無排班",
       matchedVenueName: closestVenue.shortName,
-      accuracy: accuracyRaw,
-      accuracyBufferApplied,
-      suspiciousLocation: false,
-      gpsCapturedAt,
-    });
-    logClockAttempt("no-shift", {
-      employeeId: employee.id, employeeName: employee.name,
-      status: "warning", clockType: warnClockType,
-      failReason: "今日無排班", recordId: warnRec.id, lat, lng,
-      venueName: closestVenue.shortName, distance: Math.round(closestDistance),
     });
 
     return {
@@ -509,29 +379,10 @@ export async function processClockIn(
     }
   }
 
-  // Suspicious-location: compare current point with this employee's last 30d
-  // successful clocks at this venue. If far from the historical centroid the
-  // record is flagged but still accepted (admins can audit later).
-  let suspiciousLocation = false;
-  try {
-    const thirty = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const thirtyStr = formatTaiwanDate(thirty);
-    const prior = (await storage.getClockRecordsByEmployee(employee.id, thirtyStr, todayStr))
-      .filter((r) => r.status === "success" && r.venueId === closestVenue.id && r.latitude != null && r.longitude != null);
-    if (prior.length >= 5) {
-      const cLat = prior.reduce((s, r) => s + (r.latitude as number), 0) / prior.length;
-      const cLng = prior.reduce((s, r) => s + (r.longitude as number), 0) / prior.length;
-      const drift = haversineDistance(lat, lng, cLat, cLng);
-      if (drift > 500) suspiciousLocation = true;
-    }
-  } catch (e) {
-    console.error("[clock] suspicious-location check failed", e);
-  }
-
   const clockRecord = await storage.createClockRecord({
     employeeId: employee.id,
     venueId: closestVenue.id,
-    shiftId: shiftInfo.isDispatch ? null : shiftInfo.id,
+    shiftId: matchingShift?.id || venueShifts[0].id,
     clockType,
     latitude: lat,
     longitude: lng,
@@ -539,16 +390,6 @@ export async function processClockIn(
     status: "success",
     failReason: lateReason,
     matchedVenueName: closestVenue.shortName,
-    accuracy: accuracyRaw,
-    accuracyBufferApplied,
-    suspiciousLocation,
-    gpsCapturedAt,
-  });
-  logClockAttempt("success", {
-    employeeId: employee.id, employeeName: employee.name,
-    status: "success", clockType, failReason: lateReason,
-    recordId: clockRecord.id, lat, lng,
-    venueName: closestVenue.shortName, distance: Math.round(closestDistance),
   });
 
   return {
@@ -570,9 +411,6 @@ export async function processClockIn(
     earlyMinutes,
     lateDeparture,
     lateMinutes,
-    accuracy: accuracyRaw,
-    accuracyBufferApplied,
-    suspiciousLocation,
   };
 }
 

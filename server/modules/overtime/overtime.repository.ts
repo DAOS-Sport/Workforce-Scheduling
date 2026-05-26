@@ -1,31 +1,13 @@
 import { db } from "../../db";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import {
-  clockRecords,
-  employees,
   overtimeRequests,
   type OvertimeRequest,
   type InsertOvertimeRequest,
 } from "@shared/schema";
 
-async function assertEmployeeExists(employeeId: number, label: string): Promise<void> {
-  const [employee] = await db.select({ id: employees.id }).from(employees).where(eq(employees.id, employeeId));
-  if (!employee) throw new Error(`Invalid overtime request ${label} ${employeeId}: employee does not exist`);
-}
-
-async function assertClockRecordMatches(clockRecordId: number | null | undefined, employeeId: number): Promise<void> {
-  if (clockRecordId == null) return;
-  const [record] = await db.select({ id: clockRecords.id, employeeId: clockRecords.employeeId }).from(clockRecords).where(eq(clockRecords.id, clockRecordId));
-  if (!record) throw new Error(`Invalid overtime request clockRecordId ${clockRecordId}: clock record does not exist`);
-  if (record.employeeId !== employeeId) {
-    throw new Error(`Invalid overtime request mapping: clockRecordId ${clockRecordId} belongs to employee ${record.employeeId}, not ${employeeId}`);
-  }
-}
-
 export const overtimeRepository = {
   async createOvertimeRequest(data: InsertOvertimeRequest): Promise<OvertimeRequest> {
-    await assertEmployeeExists(data.employeeId, "employeeId");
-    await assertClockRecordMatches(data.clockRecordId, data.employeeId);
     const [record] = await db.insert(overtimeRequests).values(data).returning();
     return record;
   },
@@ -51,7 +33,6 @@ export const overtimeRepository = {
   },
 
   async updateOvertimeRequestStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<OvertimeRequest | undefined> {
-    await assertEmployeeExists(reviewedBy, "reviewedBy");
     const [record] = await db.update(overtimeRequests).set({
       status,
       reviewedBy,

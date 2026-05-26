@@ -21,7 +21,6 @@ import {
   type Shift,
   type ShiftValidationError,
 } from "@shared/schema";
-import { normalizeScheduleRole } from "@shared/scheduleMapping";
 import { LEAVE_TYPES } from "./shift.types";
 
 export function mountShiftRoutes(app: Express): void {
@@ -277,7 +276,6 @@ export function mountShiftRoutes(app: Express): void {
       }
       const actor = req.session.adminName || "admin";
       let deletedCount = 0;
-      const normalizedRole = role ? normalizeScheduleRole(role) || role : null;
       for (const date of targetDates) {
         const shifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
         const matching = shifts.filter(
@@ -285,7 +283,7 @@ export function mountShiftRoutes(app: Express): void {
             (!venueId || s.venueId === Number(venueId)) &&
             (!startTime || s.startTime === startTime) &&
             (!endTime || s.endTime === endTime) &&
-            (!normalizedRole || (normalizeScheduleRole(s.role) || s.role) === normalizedRole),
+            (!role || s.role === role),
         );
         for (const s of matching) {
           await storage.deleteShift(s.id, actor, reason, true);
@@ -475,23 +473,6 @@ export function mountShiftRoutes(app: Express): void {
           : Promise.resolve([]),
         storage.getApprovedOvertimeByDateRange(otRangeStart, otRangeEnd),
       ]);
-      const existingDispatchForMonth = uniqueEmployeeIds.length > 0
-        ? (await Promise.all(uniqueEmployeeIds.map((id) => storage.getDispatchShiftsByLinkedEmployee(id, preloadStart, monthEnd)))).flat()
-        : [];
-      const existingWorkForValidation = [
-        ...existingShiftsForMonth,
-        ...existingDispatchForMonth.map((d) => ({
-          id: -d.id,
-          employeeId: d.linkedEmployeeId!,
-          venueId: d.venueId ?? 0,
-          date: d.date,
-          startTime: d.startTime,
-          endTime: d.endTime,
-          role: d.role,
-          isDispatch: true,
-          status: d.status,
-        } as Shift)),
-      ];
 
       const otRecords = approvedOT.map((ot) => ({
         employeeId: ot.employeeId,
@@ -505,12 +486,6 @@ export function mountShiftRoutes(app: Express): void {
       for (const s of existingShiftsForMonth) {
         if (s.date >= monthStart) {
           existingByKey.set(`${s.employeeId}:${s.date}`, s);
-        }
-      }
-      const existingDispatchByKey = new Map<string, (typeof existingDispatchForMonth)[0]>();
-      for (const d of existingDispatchForMonth) {
-        if (d.date >= monthStart) {
-          existingDispatchByKey.set(`${d.linkedEmployeeId}:${d.date}`, d);
         }
       }
 
@@ -529,7 +504,7 @@ export function mountShiftRoutes(app: Express): void {
 
         const isLeave = LEAVE_TYPES.includes(role);
         if (!isLeave) {
-          const empShifts = existingWorkForValidation.filter((s) => s.employeeId === employeeId);
+          const empShifts = existingShiftsForMonth.filter((s) => s.employeeId === employeeId);
           const allErrors = validateAllRules(
             employeeId,
             date,
@@ -587,18 +562,7 @@ export function mountShiftRoutes(app: Express): void {
                   dispatchPhone: null,
                   role,
                   notes: `匯入轉派遣（${reason}）`,
-                  linkedEmployeeId: employee.id,
                 });
-                existingWorkForValidation.push({
-                  id: 0,
-                  employeeId: employee.id,
-                  venueId,
-                  date,
-                  startTime,
-                  endTime,
-                  role,
-                  isDispatch: true,
-                } as Shift);
                 dispatched.push(`${date} ${employee.name}（${reason}）`);
               } catch {
                 errors.push(`${date} ${employee.name}：${reason}（派遣轉換失敗）`);
@@ -622,18 +586,7 @@ export function mountShiftRoutes(app: Express): void {
                   dispatchPhone: null,
                   role,
                   notes: `匯入轉派遣（${reason}）`,
-                  linkedEmployeeId: employee.id,
                 });
-                existingWorkForValidation.push({
-                  id: 0,
-                  employeeId: employee.id,
-                  venueId,
-                  date,
-                  startTime,
-                  endTime,
-                  role,
-                  isDispatch: true,
-                } as Shift);
                 dispatched.push(`${date} ${employee.name}（${reason}）`);
               } catch {
                 warnings.push(`${date} ${employee.name}：派遣轉換失敗，${reason}`);
@@ -645,15 +598,6 @@ export function mountShiftRoutes(app: Express): void {
 
         const existingKey = `${employeeId}:${date}`;
         const existingShift = existingByKey.get(existingKey);
-        const existingDispatchShift = existingDispatchByKey.get(existingKey);
-        if (existingDispatchShift) {
-          if (skipExisting) {
-            skipped.push({ date, employeeId });
-          } else {
-            errors.push(`${date} ${employee.name}：已有派遣班次，請至派遣班表調整`);
-          }
-          continue;
-        }
         if (existingShift) {
           if (skipExisting) {
             skipped.push({ date, employeeId });
@@ -670,8 +614,6 @@ export function mountShiftRoutes(app: Express): void {
               existingByKey.set(existingKey, updated);
               const idx = existingShiftsForMonth.findIndex((s) => s.id === existingShift.id);
               if (idx >= 0) Object.assign(existingShiftsForMonth[idx], updated);
-              const validationIdx = existingWorkForValidation.findIndex((s) => s.id === existingShift.id);
-              if (validationIdx >= 0) Object.assign(existingWorkForValidation[validationIdx], updated);
             }
             continue;
           }
@@ -684,7 +626,6 @@ export function mountShiftRoutes(app: Express): void {
         created.push(shift);
         existingByKey.set(existingKey, shift);
         existingShiftsForMonth.push(shift);
-        existingWorkForValidation.push(shift);
       }
 
       res.json({ created: created.length, skipped: skipped.length, errors, warnings, dispatched, shifts: created });
@@ -795,7 +736,7 @@ export function mountShiftRoutes(app: Express): void {
                 s.venueId === Number(matchVenueId) &&
                 s.startTime.substring(0, 5) === matchStartTime &&
                 s.endTime.substring(0, 5) === matchEndTime &&
-                (normalizeScheduleRole(s.role) || s.role) === (normalizeScheduleRole(matchRole) || matchRole),
+                s.role === matchRole,
             ) ||
               dayShifts.find(
                 (s) =>

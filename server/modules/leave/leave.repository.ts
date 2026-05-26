@@ -1,20 +1,13 @@
 import { db } from "../../db";
 import { eq, desc } from "drizzle-orm";
 import {
-  employees,
   leaveRequests,
   type LeaveRequest,
   type InsertLeaveRequest,
 } from "@shared/schema";
 
-async function assertEmployeeExists(employeeId: number, label: string): Promise<void> {
-  const [employee] = await db.select({ id: employees.id }).from(employees).where(eq(employees.id, employeeId));
-  if (!employee) throw new Error(`Invalid leave request ${label} ${employeeId}: employee does not exist`);
-}
-
 export const leaveRepository = {
   async createLeaveRequest(data: InsertLeaveRequest): Promise<LeaveRequest> {
-    await assertEmployeeExists(data.employeeId, "employeeId");
     const [row] = await db.insert(leaveRequests).values(data).returning();
     return row;
   },
@@ -36,7 +29,6 @@ export const leaveRepository = {
   },
 
   async updateLeaveRequestStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<LeaveRequest | undefined> {
-    await assertEmployeeExists(reviewedBy, "reviewedBy");
     const [row] = await db.update(leaveRequests)
       .set({ status, reviewedBy, reviewedByName, reviewNote: reviewNote || null, reviewedAt: new Date() })
       .where(eq(leaveRequests.id, id))

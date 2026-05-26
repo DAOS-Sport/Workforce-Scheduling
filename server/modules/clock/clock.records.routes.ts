@@ -25,20 +25,6 @@ export function mountClockRecordsRoutes(_httpServer: Server, app: Express): void
     }
   });
 
-  // Live log feed: today's clock attempts (incl. fail / warning) sorted newest first.
-  // Used by the admin "打卡即時日誌" page for real-time monitoring.
-  app.get("/api/clock-logs/today", async (_req, res) => {
-    try {
-      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      const result = await clockService.listRecords({ startDate: today, endDate: today });
-      result.sort((a: any, b: any) => new Date(b.clockTime || 0).getTime() - new Date(a.clockTime || 0).getTime());
-      res.json(result);
-    } catch (err: any) {
-      res.status(err.status || 500).json({ message: err.message });
-    }
-  });
-
   app.get("/api/reports/clock-records", async (req, res) => {
     try {
       const result = await clockService.listClockReports({

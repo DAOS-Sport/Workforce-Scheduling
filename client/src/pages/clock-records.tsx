@@ -31,10 +31,6 @@ interface ClockRecord {
   latitude: number;
   longitude: number;
   distance: number | null;
-  accuracy: number | null;
-  accuracyBufferApplied: boolean | null;
-  suspiciousLocation: boolean | null;
-  gpsCapturedAt: string | null;
   status: string;
   failReason: string | null;
   clockTime: string;
@@ -466,18 +462,7 @@ export default function ClockRecordsPage() {
                             </div>
                           </td>
                           <td className="p-3">
-                            <div>{r.distance !== null ? `${r.distance}m` : "—"}</div>
-                            {r.accuracy != null && (
-                              <div className="text-[10px] text-muted-foreground">±{Math.round(r.accuracy)}m</div>
-                            )}
-                            <div className="flex gap-1 mt-0.5 flex-wrap">
-                              {r.accuracyBufferApplied && (
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 bg-sky-50 text-sky-700 border-sky-200" data-testid={`badge-buffer-${r.id}`}>套精度</Badge>
-                              )}
-                              {r.suspiciousLocation && (
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 bg-amber-50 text-amber-700 border-amber-200" data-testid={`badge-suspicious-${r.id}`}>可疑</Badge>
-                              )}
-                            </div>
+                            {r.distance !== null ? `${r.distance}m` : "—"}
                           </td>
                           <td className="p-3">
                             {r.status === "success" && !isEarlyArrival(r) && !isLateDeparture(r) && (

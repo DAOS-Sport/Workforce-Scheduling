@@ -22,7 +22,6 @@ export interface LiffClockInPayload {
   longitude: number;
   accuracy?: number;
   clockType?: string;
-  gpsCapturedAt?: string;
 }
 
 export const liffService = {
@@ -36,7 +35,7 @@ export const liffService = {
   },
 
   async processLiffClockIn(payload: LiffClockInPayload) {
-    const { lineUserId, employeeId, latitude, longitude, accuracy, clockType, gpsCapturedAt } = payload;
+    const { lineUserId, employeeId, latitude, longitude, accuracy, clockType } = payload;
     if ((!lineUserId && !employeeId) || latitude === undefined || longitude === undefined) {
       const err: any = new Error("lineUserId or employeeId, latitude, longitude are required");
       err.status = 400;
@@ -49,7 +48,7 @@ export const liffService = {
 
     const params = employeeId ? { employeeId: Number(employeeId) } : { lineUserId: lineUserId! };
     const forcedType = clockType === "in" || clockType === "out" ? (clockType as "in" | "out") : undefined;
-    const result = await processClockIn(params, latitude, longitude, forcedType, { accuracy, gpsCapturedAt });
+    const result = await processClockIn(params, latitude, longitude, forcedType);
 
     if (result.status === "success" || result.status === "warning") {
       try {

@@ -1,5 +1,3 @@
-import { NON_WORK_ROLES } from "@shared/scheduleMapping";
-
 export function getTaiwanNow(): Date {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
 }
@@ -17,4 +15,4 @@ export function formatTaiwanDate(date: Date): string {
   return `${y}-${mo}-${d}`;
 }
 
-export const LEAVE_TYPES: string[] = [...NON_WORK_ROLES];
+export const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];

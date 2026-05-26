@@ -15,11 +15,9 @@ import {
   insertVenueShiftTemplateSchema,
   type Venue,
   type ScheduleSlot,
-  type VenueShiftTemplate,
   type InsertScheduleSlot,
   type InsertVenueShiftTemplate,
 } from "@shared/schema";
-import { normalizeScheduleRole } from "@shared/scheduleMapping";
 
 export interface VirtualSlot {
   id: number;
@@ -30,39 +28,6 @@ export interface VirtualSlot {
   role: string;
   requiredCount: number;
   _fromTemplate: true;
-}
-
-type TemplateLike = Pick<VenueShiftTemplate, "venueId" | "dayType" | "shiftLabel" | "startTime" | "endTime" | "role"> & {
-  id?: number;
-  requiredCount?: number;
-};
-type DedupeTemplate<T extends TemplateLike> = T & { role: string; requiredCount: number };
-
-function templateKey(t: TemplateLike): string {
-  return [
-    t.venueId,
-    t.dayType.toLowerCase(),
-    t.startTime.slice(0, 5),
-    t.endTime.slice(0, 5),
-    normalizeScheduleRole(t.role) || t.role,
-  ].join("|");
-}
-
-function dedupeTemplates<T extends TemplateLike>(templates: T[]): Array<DedupeTemplate<T>> {
-  const byKey = new Map<string, DedupeTemplate<T>>();
-  for (const t of templates) {
-    const normalized = {
-      ...t,
-      role: normalizeScheduleRole(t.role) || t.role,
-      requiredCount: t.requiredCount ?? 1,
-    } as DedupeTemplate<T>;
-    const key = templateKey(normalized);
-    const existing = byKey.get(key);
-    if (!existing || normalized.requiredCount > existing.requiredCount) {
-      byKey.set(key, normalized);
-    }
-  }
-  return Array.from(byKey.values());
 }
 
 export const scheduleSlotService = {
@@ -93,7 +58,7 @@ export const scheduleSlotService = {
     const allTemplates: Record<number, any[]> = {};
     for (const v of allRegionVenues) {
       const tpls = await storage.getVenueShiftTemplates(v.id);
-      if (tpls.length > 0) allTemplates[v.id] = dedupeTemplates(tpls);
+      if (tpls.length > 0) allTemplates[v.id] = tpls;
     }
 
     const realSlotDates = new Set<string>();
@@ -162,19 +127,16 @@ export const scheduleSlotService = {
     const templates = await storage.getVenueShiftTemplates(venueId);
     const d = new Date(date + "T00:00:00");
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-    const matched = dedupeTemplates(templates.filter((t) => {
+    const matched = templates.filter((t) => {
       const dt = t.dayType.toLowerCase();
       return isWeekend ? (dt === "weekend" || dt === "假日") : (dt === "weekday" || dt === "平日");
-    }));
+    });
 
     const excludeSlots = (excludeTemplateIds || []) as Array<{ startTime: string; endTime: string; role: string }>;
     const results: ScheduleSlot[] = [];
     for (const t of matched) {
       const isExcluded = excludeSlots.some(
-        (ex) =>
-          ex.startTime.slice(0, 5) === t.startTime.slice(0, 5) &&
-          ex.endTime.slice(0, 5) === t.endTime.slice(0, 5) &&
-          normalizeScheduleRole(ex.role) === normalizeScheduleRole(t.role),
+        (ex) => ex.startTime === t.startTime && ex.endTime === t.endTime && ex.role === t.role,
       );
       if (isExcluded) continue;
       const slot = await storage.createScheduleSlot({
@@ -215,12 +177,8 @@ export const scheduleSlotService = {
     for (const vid of resolvedVenueIds) {
       for (const date of targetDates) {
         const existing = await storage.getScheduleSlotsByVenueAndDate(vid, date);
-        const normalizedRole = normalizeScheduleRole(role) || role;
         const duplicate = existing.find(
-          (s) =>
-            s.startTime === startTime &&
-            s.endTime === endTime &&
-            (normalizeScheduleRole(s.role) || s.role) === normalizedRole,
+          (s) => s.startTime === startTime && s.endTime === endTime && s.role === role,
         );
         if (duplicate) {
           skipped++;
@@ -239,9 +197,7 @@ export const scheduleSlotService = {
     return storage.getVenueRequirementsByRegion(region.id);
   },
 
-  async templatesByVenue(venueId: number) {
-    return dedupeTemplates(await storage.getVenueShiftTemplates(venueId));
-  },
+  templatesByVenue: (venueId: number) => storage.getVenueShiftTemplates(venueId),
 
   async createTemplate(payload: unknown) {
     const parsed = insertVenueShiftTemplateSchema.parse(payload);
@@ -256,10 +212,7 @@ export const scheduleSlotService = {
     }
     await storage.deleteVenueShiftTemplatesByVenue(venueId);
     const results = [];
-    const parsedTemplates = templates.map((t) =>
-      insertVenueShiftTemplateSchema.parse({ ...t, venueId } satisfies InsertVenueShiftTemplate)
-    );
-    for (const t of dedupeTemplates(parsedTemplates)) {
+    for (const t of templates) {
       const parsed = insertVenueShiftTemplateSchema.parse({ ...t, venueId } satisfies InsertVenueShiftTemplate);
       results.push(await storage.createVenueShiftTemplate(parsed));
     }

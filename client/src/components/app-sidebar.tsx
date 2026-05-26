@@ -1,4 +1,4 @@
-import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff, PenLine, ListChecks, ClipboardList, MonitorDot, Activity, MapPinned } from "lucide-react";
+import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff, PenLine, ListChecks, ClipboardList } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +29,6 @@ const reportItems = [
 
 const systemItems = [
   { title: "系統 SOP 說明", url: "/sop", icon: ListChecks },
-  { title: "IT 監控", url: "/IT/observability", icon: MonitorDot },
 ];
 
 interface PendingCounts {
@@ -57,8 +56,6 @@ export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
   const toolItems = [
     { title: "考勤稽核", url: "/attendance", icon: ClipboardCheck },
     { title: "GPS 打卡", url: "/clock-records", icon: MapPin, badge: (pendingCounts?.clockAmendments ?? 0) + (pendingCounts?.overtimeRequests ?? 0) || undefined },
-    { title: "打卡即時日誌", url: "/clock-logs", icon: Activity },
-    { title: "場館定位健康", url: "/venue-health", icon: MapPinned },
     { title: "打卡異常", url: "/anomaly-reports", icon: ShieldAlert, badge: pendingCounts?.anomalyReports },
     { title: "週報打卡", url: "/weekly-attendance", icon: CalendarCheck },
     { title: "工時總表", url: "/salary-report", icon: Clock },

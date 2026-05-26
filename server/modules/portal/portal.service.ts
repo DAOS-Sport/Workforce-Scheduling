@@ -1,6 +1,5 @@
 import { storage } from "../../storage";
 import { isValidLineUserId } from "../line/lineSignature";
-import { isNonWorkRole, normalizeScheduleRole } from "@shared/scheduleMapping";
 
 function err(status: number, message: string, code?: string): Error {
   const e: any = new Error(message);
@@ -10,6 +9,15 @@ function err(status: number, message: string, code?: string): Error {
 }
 
 const isDevMode = process.env.NODE_ENV !== "production";
+
+const empRoleMap: Record<string, string> = {
+  lifeguard: "救生", counter: "櫃檯", cleaning: "清潔", manager: "管理",
+  救生: "救生", 守望: "守望",
+  櫃台: "櫃檯", 櫃檯: "櫃檯", 櫃臺: "櫃檯",
+  清潔: "清潔", 主管職: "管理", 教練: "教練", 無職: "無職",
+  行政: "行政", 指導員: "教練", 機電: "機電", 行政專員: "行政", 資訊工程師: "資訊",
+  資訊班: "資訊", 在校實習: "無職",
+};
 
 type WorkmateMyShift = {
   id: number; venueId: number | null; venueName: string | null; role: string;
@@ -62,7 +70,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
   if (!emp) return baseEmpty;
 
   const myRegularAll = await storage.getShiftsByEmployeeAndDateRange(employeeId, date, date);
-  const myRegular = myRegularAll.filter(s => !isDayOff(s.startTime, s.endTime) && !isNonWorkRole(s.role));
+  const myRegular = myRegularAll.filter(s => !isDayOff(s.startTime, s.endTime));
   const myDispatchAll = await storage.getDispatchShiftsByLinkedEmployee(employeeId, date, date);
   const myDispatch = myDispatchAll.filter(ds => !isDayOff(ds.startTime, ds.endTime));
 
@@ -78,8 +86,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
     myInterval = toInterval(date, s.startTime, s.endTime);
     myShift = {
       id: s.id, venueId: s.venueId, venueName: venue?.shortName ?? null,
-      role: normalizeScheduleRole(s.role) || s.role,
-      startTime: s.startTime.slice(0, 5), endTime: s.endTime.slice(0, 5),
+      role: s.role, startTime: s.startTime.slice(0, 5), endTime: s.endTime.slice(0, 5),
       shiftBand: shiftBand(s.startTime), isDispatch: false,
     };
   } else {
@@ -89,8 +96,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
     myInterval = toInterval(date, ds.startTime, ds.endTime);
     myShift = {
       id: -ds.id, venueId: ds.venueId, venueName: venue?.shortName ?? null,
-      role: normalizeScheduleRole(ds.role) || ds.role,
-      startTime: ds.startTime.slice(0, 5), endTime: ds.endTime.slice(0, 5),
+      role: ds.role, startTime: ds.startTime.slice(0, 5), endTime: ds.endTime.slice(0, 5),
       shiftBand: shiftBand(ds.startTime), isDispatch: true,
     };
   }
@@ -107,7 +113,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
 
   const coworkerEmpIds = Array.from(new Set(
     venueShifts
-      .filter(s => s.employeeId !== employeeId && !isDayOff(s.startTime, s.endTime) && !isNonWorkRole(s.role) && shiftBand(s.startTime) === myBand)
+      .filter(s => s.employeeId !== employeeId && !isDayOff(s.startTime, s.endTime) && shiftBand(s.startTime) === myBand)
       .map(s => s.employeeId)
   ));
   const coworkerEmps = await Promise.all(coworkerEmpIds.map(id => storage.getEmployee(id)));
@@ -117,7 +123,6 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
   for (const s of venueShifts) {
     if (s.employeeId === employeeId) continue;
     if (isDayOff(s.startTime, s.endTime)) continue;
-    if (isNonWorkRole(s.role)) continue;
     if (shiftBand(s.startTime) !== myBand) continue;
     if (!overlaps(toInterval(date, s.startTime, s.endTime), myInterval)) continue;
     const co = empById.get(s.employeeId);
@@ -125,8 +130,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
     const cwStart = s.startTime.slice(0, 5);
     const cwEnd = s.endTime.slice(0, 5);
     coworkers.push({
-      employeeId: co.id, name: co.name, phone: co.phone,
-      role: normalizeScheduleRole(s.role) || s.role,
+      employeeId: co.id, name: co.name, phone: co.phone, role: s.role,
       startTime: cwStart, endTime: cwEnd,
       shiftTime: isAllDay(s.startTime, s.endTime) ? "全天" : `${cwStart}-${cwEnd}`,
       venueName: myVenue?.shortName ?? null, isDispatch: false,
@@ -140,25 +144,13 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
     const cwStart = ds.startTime.slice(0, 5);
     const cwEnd = ds.endTime.slice(0, 5);
     coworkers.push({
-      employeeId: -ds.id, name: ds.dispatchName, phone: ds.dispatchPhone ?? null,
-      role: normalizeScheduleRole(ds.role) || ds.role,
+      employeeId: -ds.id, name: ds.dispatchName, phone: ds.dispatchPhone ?? null, role: ds.role,
       startTime: cwStart, endTime: cwEnd,
       shiftTime: isAllDay(ds.startTime, ds.endTime) ? "全天" : `${cwStart}-${cwEnd}`,
       venueName: myVenue?.shortName ?? null, isDispatch: true,
     });
   }
   return { date, timezone: "Asia/Taipei", myShift, coworkers };
-}
-
-async function getEmployeeVenueIdsForMonth(employeeId: number, monthStart: string, monthEnd: string): Promise<number[]> {
-  const [myShifts, myDispatchShifts] = await Promise.all([
-    storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd),
-    storage.getDispatchShiftsByLinkedEmployee(employeeId, monthStart, monthEnd),
-  ]);
-  return Array.from(new Set([
-    ...myShifts.map((s) => s.venueId),
-    ...myDispatchShifts.map((s) => s.venueId).filter((venueId): venueId is number => venueId != null),
-  ]));
 }
 
 export const portalService = {
@@ -283,15 +275,12 @@ export const portalService = {
       const slots = await getSlotsForVenueDate(s.venueId, s.date);
       const shiftStart = s.startTime.slice(0, 5);
       const shiftEnd = s.endTime.slice(0, 5);
-      const shiftRole = normalizeScheduleRole(s.role);
-      const roleCompatibleSlots = slots.filter((sl) => normalizeScheduleRole(sl.role) === shiftRole);
-      const candidateSlots = roleCompatibleSlots.length > 0 ? roleCompatibleSlots : slots;
-      const matchedSlot = candidateSlots.find((sl) =>
+      const matchedSlot = slots.find((sl) =>
         sl.startTime.slice(0, 5) <= shiftStart && sl.endTime.slice(0, 5) >= shiftEnd
-      ) || candidateSlots.find((sl) =>
+      ) || slots.find((sl) =>
         sl.startTime.slice(0, 5) <= shiftStart && shiftStart < sl.endTime.slice(0, 5)
       );
-      const assignedRole = shiftRole || normalizeScheduleRole(matchedSlot?.role) || (emp ? normalizeScheduleRole(emp.role) : null) || null;
+      const assignedRole = matchedSlot?.role || (emp ? empRoleMap[emp.role] : null) || null;
       return { ...s, venue: venueMap[s.venueId] || null, assignedRole, _isDispatchRecord: false };
     }));
 
@@ -300,7 +289,7 @@ export const portalService = {
       startTime: ds.startTime, endTime: ds.endTime, role: ds.role, notes: ds.notes || null,
       isDispatch: true, certificateImageUrl: null,
       venue: ds.venueId ? (venueMap[ds.venueId] || null) : null,
-      assignedRole: normalizeScheduleRole(ds.role) || null,
+      assignedRole: empRoleMap[ds.role] || ds.role || null,
       _isDispatchRecord: true,
     }));
 
@@ -385,7 +374,7 @@ export const portalService = {
     const venue = result.myShift.venueId ? await storage.getVenue(result.myShift.venueId) : null;
     const coworkers = result.coworkers.map((c) => ({
       id: c.employeeId, name: c.name, phone: c.phone, role: c.role,
-      shiftRole: normalizeScheduleRole(c.role) || c.role,
+      shiftRole: empRoleMap[c.role] || c.role,
       shiftTime: c.shiftTime, isDispatch: c.isDispatch,
     }));
     return [{ venue: venue ? { id: venue.id, shortName: venue.shortName } : null, coworkers }];
@@ -398,7 +387,8 @@ export const portalService = {
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
 
-    const myVenueIds = await getEmployeeVenueIdsForMonth(employeeId, monthStart, monthEnd);
+    const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
+    const myVenueIds = Array.from(new Set(myShifts.map((s) => s.venueId)));
 
     const allGuidelines = await storage.getGuidelines();
     const activeGuidelines = allGuidelines.filter((g) => g.isActive);
@@ -446,7 +436,8 @@ export const portalService = {
     const monthStart = `${yearMonth}-01`;
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
-    const myVenueIds = await getEmployeeVenueIdsForMonth(employeeId, monthStart, monthEnd);
+    const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
+    const myVenueIds = Array.from(new Set(myShifts.map((s) => s.venueId)));
 
     const isRelevant =
       (item.category === "fixed" && (!item.venueId || myVenueIds.includes(item.venueId))) ||
@@ -488,24 +479,7 @@ export const portalService = {
 
     const records = await storage.getAttendanceRecordsByDateRange(monthStart, monthEnd, [employee.employeeCode]);
     const clockRecords = await storage.getClockRecordsByEmployee(employeeId, monthStart, monthEnd);
-    const [shifts, dispatchShifts] = await Promise.all([
-      storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd),
-      storage.getDispatchShiftsByLinkedEmployee(employeeId, monthStart, monthEnd),
-    ]);
-    const assignments = [
-      ...shifts.filter((s) => !isNonWorkRole(s.role)).map((s) => ({
-        date: String(s.date),
-        startTime: s.startTime,
-        endTime: s.endTime,
-        isDispatch: false,
-      })),
-      ...dispatchShifts.map((s) => ({
-        date: String(s.date),
-        startTime: s.startTime,
-        endTime: s.endTime,
-        isDispatch: true,
-      })),
-    ].sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+    const shifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
 
     const todayStr = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
     const todayClocks = clockRecords
@@ -516,11 +490,7 @@ export const portalService = {
         return ds === todayStr;
       })
       .sort((a, b) => new Date(b.clockTime!).getTime() - new Date(a.clockTime!).getTime());
-    // Prefer the most recent success/warning record so the portal's "已打卡" lock
-    // is seeded from a real successful clock-in, not from a transient fail that
-    // happens to be the very last attempt (e.g. user tapped clock-out by mistake).
-    const latestClockToday =
-      todayClocks.find((cr) => cr.status === "success" || cr.status === "warning") ?? todayClocks[0] ?? null;
+    const latestClockToday = todayClocks[0] ?? null;
     const todayClockInRecord = todayClocks.find(cr => cr.clockType === "in" && (cr.status === "success" || cr.status === "warning")) ?? null;
     const todayClockOutRecord = [...todayClocks].find(cr => cr.clockType === "out" && (cr.status === "success" || cr.status === "warning")) ?? null;
 
@@ -535,9 +505,9 @@ export const portalService = {
 
     const xlsxDates = new Set(records.map((r) => r.date));
     const xlsxRows = records.map((r) => {
-      const dateAssignments = assignments.filter((s) => s.date === r.date);
-      const shiftInfo = dateAssignments.length > 0
-        ? dateAssignments.map((s) => `${s.startTime.substring(0, 5)}-${s.endTime.substring(0, 5)}${s.isDispatch ? " 派遣" : ""}`).join(", ")
+      const dateShifts = shifts.filter((s) => s.date === r.date);
+      const shiftInfo = dateShifts.length > 0
+        ? dateShifts.map((s) => `${s.startTime.substring(0, 5)}-${s.endTime.substring(0, 5)}`).join(", ")
         : r.scheduledStart && r.scheduledEnd
           ? `${r.scheduledStart}-${r.scheduledEnd}`
           : null;
@@ -568,9 +538,9 @@ export const portalService = {
       const clockInRecord = validClocks.find((cr) => cr.clockType === "in");
       const clockOutRecord = [...validClocks].reverse().find((cr) => cr.clockType === "out");
       if (!clockInRecord) continue;
-      const dateAssignments = assignments.filter((s) => s.date === dateStr);
-      const shiftInfo = dateAssignments.length > 0
-        ? dateAssignments.map((s) => `${s.startTime.substring(0, 5)}-${s.endTime.substring(0, 5)}${s.isDispatch ? " 派遣" : ""}`).join(", ")
+      const dateShifts = shifts.filter((s) => s.date === dateStr);
+      const shiftInfo = dateShifts.length > 0
+        ? dateShifts.map((s) => `${s.startTime.substring(0, 5)}-${s.endTime.substring(0, 5)}`).join(", ")
         : null;
       const gpsMissingOut = !clockOutRecord;
       const clockInStr = new Date(clockInRecord.clockTime!).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" });
@@ -580,8 +550,8 @@ export const portalService = {
       let gpsIsLate = false;
       let gpsIsEarlyLeave = false;
       let gpsHasAnomaly = gpsMissingOut && dateStr < todayStr;
-      if (dateAssignments.length > 0) {
-        const sched = dateAssignments[0];
+      if (dateShifts.length > 0) {
+        const sched = dateShifts[0];
         const schedStart = sched.startTime.slice(0, 5);
         const schedEnd = sched.endTime.slice(0, 5);
         const [sH, sM] = schedStart.split(":").map(Number);
@@ -611,7 +581,7 @@ export const portalService = {
       anomaly: allRows.filter((r) => r.hasAnomaly).length,
       leave: records.filter((r) => r.leaveHours && r.leaveHours.trim() !== "").length,
       todayLatestClock: latestClockToday
-        ? { clockType: latestClockToday.clockType, clockTime: latestClockToday.clockTime!.toISOString(), status: latestClockToday.status }
+        ? { clockType: latestClockToday.clockType, clockTime: latestClockToday.clockTime!.toISOString() }
         : null,
       todayClockIn: todayClockInRecord ? { clockTime: todayClockInRecord.clockTime!.toISOString() } : null,
       todayClockOut: todayClockOutRecord ? { clockTime: todayClockOutRecord.clockTime!.toISOString() } : null,

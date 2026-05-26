@@ -795,45 +795,12 @@ export async function ensureAvailabilityEntryTypeColumn(): Promise<void> {
   console.log("[db] shift_availabilities entry_type 欄位確認完成");
 }
 
-export async function ensureAvailabilityLeaveTypeColumn(): Promise<void> {
-  await pool.query(`
-    ALTER TABLE shift_availabilities ADD COLUMN IF NOT EXISTS leave_type TEXT;
-  `);
-  await pool.query(`
-    UPDATE shift_availabilities
-    SET leave_type = note
-    WHERE entry_type = 'off_request'
-      AND note IN ('特休','事假','休假','病假','喪假','公假','生理假','婚假','國定假')
-      AND leave_type IS NULL;
-  `);
-  await pool.query(`
-    UPDATE shift_availabilities
-    SET leave_type = '休假'
-    WHERE entry_type = 'off_request'
-      AND leave_type IS NULL;
-  `);
-  console.log("[db] shift_availabilities leave_type 欄位確認完成");
-}
-
 export async function ensureVenueOperatingHoursColumns(): Promise<void> {
   await pool.query(`
     ALTER TABLE venues ADD COLUMN IF NOT EXISTS open_time TEXT;
     ALTER TABLE venues ADD COLUMN IF NOT EXISTS close_time TEXT;
   `);
   console.log("[db] venues open_time/close_time 欄位確認完成");
-}
-
-// Task #98 — GPS clock-in 全面性融通: accuracy buffer, suspicious flag,
-// GPS capture timestamp on clock_records; isActive toggle on venues.
-export async function ensureGpsClockColumns(): Promise<void> {
-  await pool.query(`
-    ALTER TABLE clock_records ADD COLUMN IF NOT EXISTS accuracy REAL;
-    ALTER TABLE clock_records ADD COLUMN IF NOT EXISTS accuracy_buffer_applied BOOLEAN NOT NULL DEFAULT FALSE;
-    ALTER TABLE clock_records ADD COLUMN IF NOT EXISTS suspicious_location BOOLEAN NOT NULL DEFAULT FALSE;
-    ALTER TABLE clock_records ADD COLUMN IF NOT EXISTS gps_captured_at TIMESTAMP;
-    ALTER TABLE venues ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
-  `);
-  console.log("[db] clock_records GPS columns + venues.is_active 確認完成");
 }
 
 /**

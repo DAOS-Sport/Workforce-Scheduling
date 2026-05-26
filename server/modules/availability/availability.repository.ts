@@ -1,16 +1,10 @@
 import { db } from "../../db";
 import { eq, and, gte, lte, inArray, sql } from "drizzle-orm";
 import {
-  employees,
   shiftAvailabilities,
   type ShiftAvailability,
   type InsertShiftAvailability,
 } from "@shared/schema";
-
-async function assertEmployeeExists(employeeId: number): Promise<void> {
-  const [employee] = await db.select({ id: employees.id }).from(employees).where(eq(employees.id, employeeId));
-  if (!employee) throw new Error(`Invalid availability employeeId ${employeeId}: employee does not exist`);
-}
 
 export const availabilityRepository = {
   async getByEmployeeAndYearMonth(employeeId: number, yearMonth: string): Promise<ShiftAvailability[]> {
@@ -49,7 +43,6 @@ export const availabilityRepository = {
   },
 
   async create(data: InsertShiftAvailability): Promise<ShiftAvailability> {
-    await assertEmployeeExists(data.employeeId);
     const [row] = await db.insert(shiftAvailabilities).values(data).returning();
     return row;
   },
@@ -79,10 +72,10 @@ export const availabilityRepository = {
     return row?.cnt ?? 0;
   },
 
-  /** 計算某員工在指定年度中，特定假別的天數（leaveType 欄位） */
+  /** 計算某員工在指定年度中，特定假別（note 完全符合）的事假天數 */
   async countOffRequestsByNoteAndYear(
     employeeId: number,
-    leaveType: string,
+    note: string,
     year: number
   ): Promise<number> {
     const yearStart = `${year}-01-01`;
@@ -94,29 +87,12 @@ export const availabilityRepository = {
         and(
           eq(shiftAvailabilities.employeeId, employeeId),
           eq(shiftAvailabilities.entryType, "off_request"),
-          eq(shiftAvailabilities.leaveType, leaveType),
+          eq(shiftAvailabilities.note, note),
           gte(shiftAvailabilities.date, yearStart),
           lte(shiftAvailabilities.date, yearEnd)
         )
       );
     return row?.cnt ?? 0;
-  },
-
-  /** 取得某年月所有員工的意願填寫記錄（用於計算未填人員） */
-  async getByYearMonth(yearMonth: string): Promise<ShiftAvailability[]> {
-    const start = `${yearMonth}-01`;
-    const [y, m] = yearMonth.split("-").map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    const end = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
-    return db
-      .select()
-      .from(shiftAvailabilities)
-      .where(
-        and(
-          gte(shiftAvailabilities.date, start),
-          lte(shiftAvailabilities.date, end)
-        )
-      );
   },
 
   /** 檢查同一員工在同一天是否已有任何填寫記錄（防止重複） */
