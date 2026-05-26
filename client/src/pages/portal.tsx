@@ -1404,8 +1404,6 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
   const [reasonSubmitting, setReasonSubmitting] = useState(false);
   const [lockedClock, setLockedClock] = useState<{ clockType: "in" | "out"; timeStr: string; timestamp: number } | null>(null);
   const [countdown, setCountdown] = useState(0);
-  const [cachedPosition, setCachedPosition] = useState<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
-  const [gpsReady, setGpsReady] = useState<"unknown" | "ok" | "denied">("unknown");
   const { toast } = useToast();
 
   const storageKey = `last_clock_${employee.id}`;
@@ -1487,72 +1485,6 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     }
   }, [stage]);
 
-  useEffect(() => {
-    if (!navigator.geolocation) { setGpsReady("denied"); return; }
-    let watchId: number | null = navigator.geolocation.watchPosition(
-      (pos) => {
-        setCachedPosition({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          acc: Math.round(pos.coords.accuracy),
-          ts: Date.now(),
-        });
-        setGpsReady("ok");
-      },
-      (err) => {
-        // Reflect any geolocation failure so the UI doesn't sit at
-        // "正在取得 GPS..." forever. Denied = needs OS settings; the
-        // other codes (POSITION_UNAVAILABLE / TIMEOUT) still surface as
-        // denied-style guidance so users know to act, not wait.
-        if (err.code === 1) setGpsReady("denied");
-        else setGpsReady("denied");
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
-    );
-
-    // When the tab is hidden (user switches app, screen dims, LINE notification)
-    // stop the geolocation watch to save battery — but keep cachedPosition so
-    // the user doesn't have to wait for a fresh GPS fix when they return.
-    // On pagehide (iOS SPA back-swipe) we do a full stop; the component will
-    // remount with clean state anyway when re-entered.
-    const stopWatch = () => {
-      if (watchId != null) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-      }
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") stopWatch();
-      // When the tab becomes visible again after the watch was stopped,
-      // restart watching so GPS stays fresh. We do NOT clear cachedPosition
-      // here — the existing fix is still usable within CACHED_POS_MAX_AGE.
-      if (document.visibilityState === "visible" && watchId == null) {
-        watchId = navigator.geolocation.watchPosition(
-          (pos) => {
-            setCachedPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: Math.round(pos.coords.accuracy), ts: Date.now() });
-            setGpsReady("ok");
-          },
-          (err) => { if (err.code === 1) setGpsReady("denied"); else setGpsReady("denied"); },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
-        );
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pagehide", stopWatch);
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pagehide", stopWatch);
-      stopWatch();
-    };
-  }, []);
-
-  // 60s matches the pre-Task-#98 behaviour. GPS on mobile (especially
-  // inside buildings via LINE in-app browser) can take 5-20s to stabilise;
-  // a 15s TTL caused the cache to expire before employees tapped the button,
-  // forcing a fresh getCurrentPosition that frequently timed out.
-  const CACHED_POS_MAX_AGE = 60 * 1000;
-
   const handleClockIn = useCallback(async (clockType: "in" | "out" = "in") => {
     setStage("scanning");
     setResult(null);
@@ -1562,24 +1494,20 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     try {
       let latitude: number, longitude: number, acc: number, capturedAtMs: number;
 
-      if (cachedPosition && Date.now() - cachedPosition.ts < CACHED_POS_MAX_AGE) {
-        latitude = cachedPosition.lat;
-        longitude = cachedPosition.lng;
-        acc = cachedPosition.acc;
-        capturedAtMs = cachedPosition.ts;
-      } else {
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 0,
-          });
+      // Always do a fresh GPS acquisition on every clock-in tap.
+      // No caching — each open of the page re-requests permission and position.
+      if (!navigator.geolocation) throw Object.assign(new Error("此裝置不支援定位功能"), { code: 2 });
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 20000,
+          maximumAge: 0,
         });
-        latitude = position.coords.latitude;
-        longitude = position.coords.longitude;
-        acc = Math.round(position.coords.accuracy);
-        capturedAtMs = position.timestamp || Date.now();
-      }
+      });
+      latitude = position.coords.latitude;
+      longitude = position.coords.longitude;
+      acc = Math.round(position.coords.accuracy);
+      capturedAtMs = position.timestamp || Date.now();
 
       setAccuracy(acc);
       onPositionUpdate?.(latitude, longitude);
@@ -1628,7 +1556,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
       }
       setStage("error");
     }
-  }, [employee.id, storageKey, cachedPosition]);
+  }, [employee.id, storageKey]);
 
   const clockContent = (
     <div className={hideCard ? "" : "p-4"}>
@@ -1684,24 +1612,10 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
                   </button>
                 )}
               </div>
-              {gpsReady === "ok" && cachedPosition && (
-                <div className="flex items-center gap-1.5 text-xs text-emerald-600" data-testid="text-gps-ready">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                  <span>GPS 已就緒（精度 ±{cachedPosition.acc}m）</span>
-                </div>
-              )}
-              {gpsReady === "denied" && (
-                <div className="flex items-center gap-1.5 text-xs text-red-500" data-testid="text-gps-denied">
-                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
-                  <span>位置存取被拒，請至手機設定開啟 LINE 定位權限</span>
-                </div>
-              )}
-              {gpsReady === "unknown" && (
-                <div className="flex items-center gap-1.5 text-xs text-slate-400" data-testid="text-gps-loading">
-                  <div className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse shrink-0" />
-                  <span>正在取得 GPS 定位...</span>
-                </div>
-              )}
+              <div className="flex items-center gap-1.5 text-xs text-slate-400" data-testid="text-gps-info">
+                <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                <span>點按按鈕後即時取得 GPS 定位</span>
+              </div>
             </div>
           );
         })()}
