@@ -48,7 +48,7 @@ export const liffService = {
 
     const params = employeeId ? { employeeId: Number(employeeId) } : { lineUserId: lineUserId! };
     const forcedType = clockType === "in" || clockType === "out" ? (clockType as "in" | "out") : undefined;
-    const result = await processClockIn(params, latitude, longitude, forcedType);
+    const result = await processClockIn(params, latitude, longitude, forcedType, accuracy);
 
     if (result.status === "success" || result.status === "warning") {
       try {

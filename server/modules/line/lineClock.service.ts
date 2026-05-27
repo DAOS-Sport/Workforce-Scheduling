@@ -8,7 +8,9 @@ const VENUE_CACHE_TTL = 5 * 60 * 1000;
 async function getCachedVenues(): Promise<import("@shared/schema").Venue[]> {
   const now = Date.now();
   if (_venueCache && now - _venueCache.cachedAt < VENUE_CACHE_TTL) return _venueCache.venues;
-  const venues = await storage.getAllVenues();
+  const all = await storage.getAllVenues();
+  // Only active venues should participate in GPS clock-in matching.
+  const venues = all.filter((v) => v.isActive !== false);
   _venueCache = { venues, cachedAt: now };
   return venues;
 }
@@ -41,27 +43,20 @@ function isTimeInShiftWindow(now: Date, shift: Shift, bufferMinutes: number = 30
   return nowMinutes >= shiftStart && nowMinutes <= shiftEnd;
 }
 
-function determineClockType(now: Date, shifts: Shift[]): "in" | "out" {
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-  // Pick the shift whose midpoint is closest to the current time,
-  // then determine in/out based on that shift alone.
-  let bestShift = shifts[0];
-  let bestDist = Infinity;
-  for (const shift of shifts) {
-    const [sh, sm] = shift.startTime.split(":").map(Number);
-    const [eh, em] = shift.endTime.split(":").map(Number);
-    const midpoint = ((sh * 60 + sm) + (eh * 60 + em)) / 2;
-    const dist = Math.abs(nowMinutes - midpoint);
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestShift = shift;
-    }
-  }
-  const [bsh, bsm] = bestShift.startTime.split(":").map(Number);
-  const [beh, bem] = bestShift.endTime.split(":").map(Number);
-  const midpoint = ((bsh * 60 + bsm) + (beh * 60 + bem)) / 2;
-  return nowMinutes >= midpoint ? "out" : "in";
+function determineClockType(
+  todayRecords: { clockType: string; clockTime: any; status: string }[]
+): "in" | "out" {
+  // Use the most recent *successful* record to decide the next direction.
+  // This is more reliable than the midpoint heuristic: a severely late employee
+  // clocking in past the shift midpoint would otherwise be mislabelled as "out".
+  const successRecords = todayRecords
+    .filter((r) => r.status === "success")
+    .sort(
+      (a, b) =>
+        new Date(b.clockTime ?? 0).getTime() - new Date(a.clockTime ?? 0).getTime()
+    );
+  if (successRecords.length === 0) return "in";
+  return successRecords[0].clockType === "in" ? "out" : "in";
 }
 
 export interface NearbyVenue {
@@ -98,7 +93,8 @@ export async function processClockIn(
   params: { lineUserId?: string; employeeId?: number },
   lat: number,
   lng: number,
-  forcedClockType?: "in" | "out"
+  forcedClockType?: "in" | "out",
+  accuracy?: number
 ): Promise<ClockInResult> {
   const now = getTaiwanNow();
   const todayStr = formatTaiwanDate(now);
@@ -179,6 +175,7 @@ export async function processClockIn(
               clockType: forcedClockType || lastValidRecord.clockType,
               latitude: lat,
               longitude: lng,
+              accuracy: accuracy ?? null,
               distance: null,
               status: "fail",
               failReason,
@@ -249,7 +246,7 @@ export async function processClockIn(
   const effectiveRadius = closestVenue.radius || 300;
 
   if (closestDistance > effectiveRadius) {
-    const failClockType = forcedClockType || "in";
+    const failClockType = forcedClockType || determineClockType(recentRecords);
     await storage.createClockRecord({
       employeeId: employee.id,
       venueId: null,
@@ -257,6 +254,7 @@ export async function processClockIn(
       clockType: failClockType,
       latitude: lat,
       longitude: lng,
+      accuracy: accuracy ?? null,
       distance: Math.round(closestDistance),
       status: "fail",
       failReason: "不在任何場館範圍內",
@@ -285,7 +283,7 @@ export async function processClockIn(
   const matchingShift = venueShifts.find((s) => isTimeInShiftWindow(now, s));
 
   if (venueShifts.length === 0) {
-    const warnClockType = forcedClockType || "in";
+    const warnClockType = forcedClockType || determineClockType(recentRecords);
     await storage.createClockRecord({
       employeeId: employee.id,
       venueId: closestVenue.id,
@@ -293,6 +291,7 @@ export async function processClockIn(
       clockType: warnClockType,
       latitude: lat,
       longitude: lng,
+      accuracy: accuracy ?? null,
       distance: Math.round(closestDistance),
       status: "warning",
       failReason: "今日無排班",
@@ -316,7 +315,7 @@ export async function processClockIn(
     };
   }
 
-  const clockType = forcedClockType || determineClockType(now, venueShifts);
+  const clockType = forcedClockType || determineClockType(recentRecords);
   const shiftInfo = matchingShift || venueShifts[0];
 
   let lateReason: string | null = null;
@@ -386,6 +385,7 @@ export async function processClockIn(
     clockType,
     latitude: lat,
     longitude: lng,
+    accuracy: accuracy ?? null,
     distance: Math.round(closestDistance),
     status: "success",
     failReason: lateReason,
