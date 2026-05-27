@@ -53,6 +53,11 @@ export default function LiffClockInPage() {
         pictureUrl: userProfile.pictureUrl,
       });
       setStage("ready");
+      navigator.geolocation.getCurrentPosition(() => {}, () => {}, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      });
     } catch (err: any) {
       console.error("LIFF init error:", err);
       setErrorMsg(err.message || "LIFF 初始化失敗");
@@ -277,6 +282,34 @@ export default function LiffClockInPage() {
           </Card>
         ) : null}
 
+        {stage === "error" && profile && (() => {
+          const twNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+          const pad = (n: number) => String(n).padStart(2, "0");
+          return (
+            <PhotoProofSection
+              result={{
+                status: "fail",
+                clockType: "in",
+                venueName: null,
+                distance: null,
+                time: `${pad(twNow.getHours())}:${pad(twNow.getMinutes())}`,
+                date: `${twNow.getFullYear()}-${pad(twNow.getMonth() + 1)}-${pad(twNow.getDate())}`,
+                shiftInfo: null,
+                failReason: errorMsg,
+                employeeName: profile.displayName,
+                radius: null,
+              }}
+              lineUserId={profile.userId}
+              displayName={profile.displayName}
+              subtitle={
+                errorCode === 1
+                  ? "位置權限被拒，無法 GPS 打卡，請拍攝現場照片送交主管確認"
+                  : "定位發生問題，請拍攝現場照片說明狀況，送交主管確認"
+              }
+            />
+          );
+        })()}
+
         <p className="text-center text-white/30 text-xs mt-6">
           駿斯運動 GPS 打卡系統
         </p>
@@ -285,7 +318,7 @@ export default function LiffClockInPage() {
   );
 }
 
-// ── Photo proof section (shown when GPS fail due to distance) ─────────────────
+// ── Photo proof section (shown on any fail / error so admin can review) ──────
 
 type ProofStage = "idle" | "submitting" | "submitted" | "error";
 
@@ -293,10 +326,12 @@ function PhotoProofSection({
   result,
   lineUserId,
   displayName,
+  subtitle,
 }: {
   result: ClockInResult;
   lineUserId?: string;
   displayName?: string;
+  subtitle?: string;
 }) {
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
@@ -330,7 +365,7 @@ function PhotoProofSection({
     try {
       const formData = new FormData();
       const payload = {
-        context: "拍照證明 — GPS 超出打卡範圍",
+        context: subtitle ?? "拍照證明 — GPS 超出打卡範圍",
         employee: {
           name: displayName || result.employeeName || "未知",
           lineUserId: lineUserId || "",
@@ -383,7 +418,7 @@ function PhotoProofSection({
           </div>
           <div>
             <p className="text-amber-300 font-semibold text-sm leading-tight">請拍照證明您目前在場館內執勤</p>
-            <p className="text-amber-200/60 text-[11px] mt-0.5">GPS 定位超出範圍，請拍攝現場照片送交主管確認</p>
+            <p className="text-amber-200/60 text-[11px] mt-0.5">{subtitle ?? "GPS 定位超出範圍，請拍攝現場照片送交主管確認"}</p>
           </div>
         </div>
       </div>
@@ -591,12 +626,16 @@ function ResultCard({
         </Button>
       </Card>
 
-      {/* Photo proof section — shown only when distance fail (not an unbound-account fail) */}
-      {isDistanceFail && (
+      {isFail && (
         <PhotoProofSection
           result={result}
           lineUserId={lineUserId}
           displayName={displayName}
+          subtitle={
+            isDistanceFail
+              ? "GPS 定位超出範圍，請拍攝現場照片送交主管確認"
+              : "請拍攝現場照片說明狀況，送交主管確認"
+          }
         />
       )}
     </div>
