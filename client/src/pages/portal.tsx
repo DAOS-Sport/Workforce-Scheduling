@@ -1473,19 +1473,6 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     }
   };
 
-  // 每次進到打卡元件就立即靜默請求一次 GPS：
-  // 若 LINE WebView 在新 session 清除了權限，這裡會自動跳出同意視窗；
-  // 若已授權，則預熱定位硬體讓後續打卡更快。maximumAge:0 確保不用快取。
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        () => {},
-        () => {},
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    }
-  }, []);
-
   useEffect(() => {
     if (stage === "scanning" || stage === "submitting") {
       const interval = setInterval(() => {
