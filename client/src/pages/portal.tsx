@@ -1473,6 +1473,18 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     }
   };
 
+  // 元件掛載時立即要求定位服務：
+  // 若 LINE WebView 還沒給過同意（新 session 或清過快取），瀏覽器會自動跳出同意視窗。
+  // maximumAge:0 確保每次都重新取得位置，不使用快取。
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      () => {},
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  }, []);
+
   useEffect(() => {
     if (stage === "scanning" || stage === "submitting") {
       const interval = setInterval(() => {
@@ -1483,6 +1495,11 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
   }, [stage]);
 
   const handleClockIn = useCallback(async (clockType: "in" | "out" = "in") => {
+    if (!navigator.geolocation) {
+      setErrorMsg("此裝置或瀏覽器不支援定位功能");
+      setStage("error");
+      return;
+    }
     setStage("scanning");
     setResult(null);
     setScanAngle(0);
