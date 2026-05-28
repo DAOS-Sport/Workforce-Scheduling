@@ -1394,6 +1394,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
   const [stage, setStage] = useState<"idle" | "scanning" | "submitting" | "done" | "error">("idle");
   const [result, setResult] = useState<ClockInResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [errorCode, setErrorCode] = useState<number | null>(null);
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [scanAngle, setScanAngle] = useState(0);
   const [reasonSubmitted, setReasonSubmitted] = useState(false);
@@ -1525,8 +1526,9 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
         setCountdown(60);
       }
     } catch (err: any) {
+      setErrorCode(err.code ?? null);
       if (err.code === 1) {
-        setErrorMsg("請允許位置存取權限");
+        setErrorMsg("位置存取權限被拒絕");
       } else if (err.code === 2) {
         setErrorMsg("無法取得位置，請確認 GPS 已開啟");
       } else if (err.code === 3) {
@@ -1773,13 +1775,48 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
               <XCircle className="h-5 w-5 text-red-500 shrink-0" />
               <span className="font-medium text-sm text-red-500">{errorMsg}</span>
             </div>
+
+            {errorCode === 1 && (
+              <div className="mb-3 rounded-xl border border-orange-200 bg-orange-50 overflow-hidden text-xs">
+                <div className="px-3 py-2 bg-orange-100 border-b border-orange-200 flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                  <span className="font-semibold text-orange-700">需要開啟位置權限，請依步驟操作</span>
+                </div>
+                <div className="p-3 space-y-3">
+                  <div>
+                    <p className="font-semibold text-slate-600 mb-1.5">📱 iPhone 步驟</p>
+                    <ol className="space-y-1 text-slate-500 list-none">
+                      {["開啟手機「設定」App", "往下找到「LINE」→ 點進去", "點「位置」→ 選「使用 App 時」", "回到此頁點「我已開啟，重試」"].map((s, i) => (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-orange-200 text-orange-700 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-600 mb-1.5">🤖 Android 步驟</p>
+                    <ol className="space-y-1 text-slate-500 list-none">
+                      {["長按 LINE 圖示 → 點「App 資訊」", "點「權限」→「位置」", "選「只在使用中允許」", "回到此頁點「我已開啟，重試」"].map((s, i) => (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-orange-200 text-orange-700 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                  <p className="text-slate-400 text-[11px]">若開啟後仍無法定位，請至 LINE 設定 → 說明 → 清除快取，再重試。</p>
+                </div>
+              </div>
+            )}
+
             <AnomalyReportButton employee={employee} errorMsg={errorMsg} accuracy={accuracy} context="打卡錯誤" />
             <button
               className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all mt-2"
-              onClick={() => { setStage("idle"); setErrorMsg(""); }}
+              onClick={() => { setStage("idle"); setErrorMsg(""); setErrorCode(null); }}
               data-testid="button-retry-clock"
             >
-              重試
+              {errorCode === 1 ? "我已開啟，重試" : "重試"}
             </button>
           </div>
         )}
