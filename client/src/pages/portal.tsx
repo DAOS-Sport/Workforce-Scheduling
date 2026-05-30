@@ -1498,10 +1498,25 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     setReasonSubmitted(false);
 
     try {
+      // 兩階段定位策略：
+      // 第一階段：高精度 GPS，不使用快取（適合室外、訊號良好）。
+      // 第二階段（code 2/3 時 fallback）：低精度（WiFi/基地台），允許 2 分鐘快取。
+      // 這樣室內或訊號弱的裝置（code 2 位置無法取得、code 3 逾時）可以透過第二階段成功打卡，
+      // 同時避免第一階段因 enableHighAccuracy:false 失去精度而讓室外使用者距離計算偏差。
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
+        navigator.geolocation.getCurrentPosition(resolve, (err) => {
+          if (err.code === 2 || err.code === 3) {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: false,
+              timeout: 20000,
+              maximumAge: 120000,
+            });
+          } else {
+            reject(err);
+          }
+        }, {
           enableHighAccuracy: true,
-          timeout: 15000,
+          timeout: 10000,
           maximumAge: 0,
         });
       });
