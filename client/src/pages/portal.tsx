@@ -1473,18 +1473,10 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
     }
   };
 
-  // 元件掛載時立即要求定位服務：
-  // 若 LINE WebView 還沒給過同意（新 session 或清過快取），瀏覽器會自動跳出同意視窗。
-  // maximumAge:0 確保每次都重新取得位置，不使用快取。
-  useEffect(() => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      () => {},
-      () => {},
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  }, []);
-
+  // 不在元件掛載時背景請求定位權限：
+  // 使用者常在還沒看懂畫面時誤按「拒絕」，而瀏覽器/LINE WebView 會永久記住該拒絕，
+  // 之後再也不會跳出請求、打卡只會直接失敗（error code 1），且網頁端無法強制重新詢問。
+  // 因此改為只在使用者主動點打卡按鈕時（handleClockIn）才請求權限，確保情境明確、降低誤按。
   useEffect(() => {
     if (stage === "scanning" || stage === "submitting") {
       const interval = setInterval(() => {
@@ -3296,17 +3288,8 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [certShiftId, setCertShiftId] = useState<number | null>(null);
   const [certPreviewShiftId, setCertPreviewShiftId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserPos({ lat: position.coords.latitude, lng: position.coords.longitude });
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    }
-  }, []);
+  // 不在 portal 載入時自動請求定位（只為地圖標點而請求權限，會讓員工一進畫面就誤按拒絕、
+  // 進而被瀏覽器永久封鎖打卡）。地圖會在使用者主動打卡時透過 onPositionUpdate 更新位置。
 
   const monthStart = format(startOfMonth(currentMonth), "yyyy-MM-dd");
   const monthEnd = format(endOfMonth(currentMonth), "yyyy-MM-dd");

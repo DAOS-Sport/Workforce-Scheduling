@@ -53,11 +53,9 @@ export default function LiffClockInPage() {
         pictureUrl: userProfile.pictureUrl,
       });
       setStage("ready");
-      navigator.geolocation.getCurrentPosition(() => {}, () => {}, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      });
+      // 不在載入時背景請求 GPS 權限：使用者常會在還沒看懂畫面時誤按「拒絕」，
+      // 一旦拒絕瀏覽器會永久記住、之後無法再跳出請求。改為只在使用者主動
+      // 點「GPS 打卡」按鈕時（handleClockIn）才請求，確保權限視窗出現在明確情境下。
     } catch (err: any) {
       console.error("LIFF init error:", err);
       setErrorMsg(err.message || "LIFF 初始化失敗");
