@@ -268,6 +268,15 @@ export default function SchedulePage() {
     } catch { return new Set(); }
   });
   const [neiQinEmployeeIds, setNeiQinEmployeeIds] = useState<Set<number>>(new Set());
+  // Employees we've already auto-revealed because they had a shift this region.
+  // Persisted so a manual hide / 清空 is NOT undone on the next shifts refetch or
+  // page reload — each scheduled employee is auto-added exactly once.
+  const [scheduleSeenEmployeeIds, setScheduleSeenEmployeeIds] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem(`schedule_seen_${activeRegion}`);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
   const [crossRegionDialogOpen, setCrossRegionDialogOpen] = useState(false);
   const [crossRegionSearch, setCrossRegionSearch] = useState("");
   const [crossRegionTab, setCrossRegionTab] = useState("");
@@ -468,9 +477,12 @@ export default function SchedulePage() {
       setScheduleVisibleEmployeeIds(savedVisible ? new Set(JSON.parse(savedVisible)) : new Set());
       const savedCross = localStorage.getItem(`schedule_cross_${activeRegion}`);
       setCrossRegionEmployeeIds(savedCross ? new Set(JSON.parse(savedCross)) : new Set());
+      const savedSeen = localStorage.getItem(`schedule_seen_${activeRegion}`);
+      setScheduleSeenEmployeeIds(savedSeen ? new Set(JSON.parse(savedSeen)) : new Set());
     } catch {
       setScheduleVisibleEmployeeIds(new Set());
       setCrossRegionEmployeeIds(new Set());
+      setScheduleSeenEmployeeIds(new Set());
     }
   }, [activeRegion]);
 
@@ -481,6 +493,15 @@ export default function SchedulePage() {
   useEffect(() => {
     localStorage.setItem(`schedule_cross_${activeRegion}`, JSON.stringify([...crossRegionEmployeeIds]));
   }, [crossRegionEmployeeIds, activeRegion]);
+
+  useEffect(() => {
+    localStorage.setItem(`schedule_seen_${activeRegion}`, JSON.stringify([...scheduleSeenEmployeeIds]));
+  }, [scheduleSeenEmployeeIds, activeRegion]);
+
+  // Live mirror of the "seen" set so the shifts effect below reads the latest
+  // value without re-subscribing (and without re-running on every seen change).
+  const seenRef = useRef(scheduleSeenEmployeeIds);
+  seenRef.current = scheduleSeenEmployeeIds;
 
   useEffect(() => {
     if (activeRegion === "D" || allSystemEmployees.length === 0 || regionsData.length === 0) {
@@ -505,7 +526,7 @@ export default function SchedulePage() {
     queryKey: ["/api/schedule-slots", selectedRegionsKey, dateRange.start, dateRange.end],
   });
 
-  interface ScheduleAvailability { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; }
+  interface ScheduleAvailability { id: number; employeeId: number; date: string; entryType: string; startTime: string | null; endTime: string | null; note: string | null; }
   const availYearMonth = format(currentMonth, "yyyy-MM");
   const { data: availabilities = [] } = useQuery<ScheduleAvailability[]>({
     queryKey: ["/api/availabilities", selectedRegionsKey, availYearMonth],
@@ -637,11 +658,24 @@ export default function SchedulePage() {
       return next;
     });
     if (shifts.length > 0) {
-      setScheduleVisibleEmployeeIds(prev => {
-        const next = new Set(prev);
-        shiftEmpIds.forEach(id => next.add(id));
-        return next;
-      });
+      // Auto-reveal each scheduled employee only ONCE (the first time their shift
+      // appears). After that, respect manual hides / 清空 — do not force them back
+      // into the visible set on subsequent refetches. `seen` is persisted, so this
+      // also survives page reloads.
+      const seen = seenRef.current;
+      const newly = [...shiftEmpIds].filter(id => !seen.has(id));
+      if (newly.length > 0) {
+        setScheduleVisibleEmployeeIds(prev => {
+          const next = new Set(prev);
+          newly.forEach(id => next.add(id));
+          return next;
+        });
+        setScheduleSeenEmployeeIds(prev => {
+          const next = new Set(prev);
+          shiftEmpIds.forEach(id => next.add(id));
+          return next;
+        });
+      }
     }
   }, [shifts, employees, empLoading]);
 
@@ -2347,12 +2381,12 @@ export default function SchedulePage() {
                                 <div className="mb-0.5 space-y-px">
                                   {cellAvail.map(a => (
                                     a.entryType === "off_request" ? (
-                                      <div key={a.id} className={`rounded px-1 py-px text-[9px] leading-tight font-bold text-center border ${a.note === "特休" ? "bg-orange-100/80 dark:bg-orange-900/40 border-orange-200 dark:border-orange-700 text-orange-600 dark:text-orange-300" : a.note === "事假" ? "bg-blue-100/80 dark:bg-blue-900/40 border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-300" : "bg-red-100/80 dark:bg-red-900/40 border-red-200 dark:border-red-700 text-red-600 dark:text-red-300"}`} title={a.note ? `希望${a.note}` : "希望休假"}>
+                                      <div key={a.id} className={`rounded px-1 py-px text-[9px] leading-tight font-bold text-center border ${a.note === "特休" ? "bg-orange-100/80 dark:bg-orange-900/40 border-orange-200 dark:border-orange-700 text-orange-600 dark:text-orange-300" : a.note === "事假" ? "bg-blue-100/80 dark:bg-blue-900/40 border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-300" : a.note === "休假" ? "bg-slate-100/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300" : "bg-red-100/80 dark:bg-red-900/40 border-red-200 dark:border-red-700 text-red-600 dark:text-red-300"}`} title={a.note ? `希望${a.note}` : "希望休假"}>
                                         {a.note || "休"}
                                       </div>
                                     ) : (
-                                      <div key={a.id} className="rounded px-1 py-px text-[9px] leading-tight bg-purple-100/80 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-300 truncate" title={`意願：${a.startTime ? a.startTime.slice(0,5) : ""}–${a.endTime ? a.endTime.slice(0,5) : ""}`}>
-                                        {a.startTime ? a.startTime.slice(0,5) : ""}–{a.endTime ? a.endTime.slice(0,5) : ""}
+                                      <div key={a.id} className="rounded px-1 py-px text-[9px] leading-tight bg-purple-100/80 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-300 truncate" title={`意願：${a.note === "都可以" && !a.startTime ? "都可以" : `${a.startTime ? a.startTime.slice(0,5) : ""}–${a.endTime ? a.endTime.slice(0,5) : ""}`}`}>
+                                        {a.note === "都可以" && !a.startTime ? "都可以" : `${a.startTime ? a.startTime.slice(0,5) : ""}–${a.endTime ? a.endTime.slice(0,5) : ""}`}
                                       </div>
                                     )
                                   ))}

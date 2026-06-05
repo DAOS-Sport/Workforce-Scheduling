@@ -31,6 +31,19 @@ const VALID_REGION_CODES = REGIONS_DATA.map((r) => r.code) as readonly string[];
 const TPE_OFFSET = "+08:00";
 const DEFAULT_LIMIT = 5000;
 
+/**
+ * Roles that actually mean "not working" (leave) when stored on a shift row.
+ * Mirrors LEAVE_TYPES/LEAVE_ROLES used elsewhere (labor-validation, clock,
+ * system report). A shift whose role is one of these must never be surfaced
+ * as a working shift to the CMS — otherwise it would falsely mark the employee
+ * "on shift" and pollute on-shift gating.
+ */
+const LEAVE_ROLES = new Set<string>([
+  "休假", "特休", "病假", "事假", "公假", "喪假", "生理假", "國定假", "育嬰", "留職停薪", "補休",
+]);
+
+const PERIOD_LABEL: Record<string, string> = { early: "早班", mid: "中班", late: "晚班" };
+
 // ---------------------------------------------------------------------
 // Public helpers (also re-exported for the route layer to use directly
 // when parsing/validating query params).
@@ -100,20 +113,51 @@ function nextDateStr(date: string): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
-function buildStartEndAt(date: string, startTime: string, endTime: string): { startAt: string; endAt: string } {
+/**
+ * Build ISO start/end timestamps (Asia/Taipei) from a date + HH:MM[:SS] pair,
+ * and decide whether the pair represents a REAL, length-bearing shift time.
+ *
+ * On-shift gating contract (Smart Schedule → CMS, 2026-06): a shift stored as
+ * 00:00–00:00, with equal start/end, or with an empty side is NOT a real
+ * working time. We surface it honestly — equal endpoints stay on the SAME day
+ * (so startAt === endAt) or are emitted as null, with hasValidTime=false — so
+ * the CMS marks it "時間待確認", excludes it from on-shift gating, and never lets
+ * it pollute the early/late buckets. Only strictly ordered pairs (including a
+ * legitimate overnight shift) are emitted as valid.
+ */
+export function buildShiftTime(
+  date: string,
+  startTime: string | null | undefined,
+  endTime: string | null | undefined,
+): { startAt: string | null; endAt: string | null; hasValidTime: boolean } {
   const sNorm = normTime(startTime);
-  let eNorm = normTime(endTime);
-  let endDate = date;
+  const eNorm = normTime(endTime);
+  const startAt = sNorm ? `${date}T${sNorm}${TPE_OFFSET}` : null;
+  let endAt: string | null = null;
   if (eNorm === "24:00:00") {
-    eNorm = "00:00:00";
-    endDate = nextDateStr(date);
-  } else if (eNorm <= sNorm) {
-    endDate = nextDateStr(date);
+    endAt = `${nextDateStr(date)}T00:00:00${TPE_OFFSET}`;
+  } else if (eNorm) {
+    // Roll to next day ONLY for a genuine overnight shift (end strictly before
+    // a present start). Equal start/end stays same-day so it reads as invalid
+    // instead of becoming a fake 24-hour shift.
+    const endDate = sNorm && eNorm < sNorm ? nextDateStr(date) : date;
+    endAt = `${endDate}T${eNorm}${TPE_OFFSET}`;
   }
-  return {
-    startAt: `${date}T${sNorm}${TPE_OFFSET}`,
-    endAt: `${endDate}T${eNorm}${TPE_OFFSET}`,
-  };
+  const hasValidTime = !!startAt && !!endAt && startAt < endAt;
+  return { startAt, endAt, hasValidTime };
+}
+
+/** Human-facing label for a schedule row (e.g. 早班 / 08:30-17:30 / leave type). */
+export function deriveShiftLabel(
+  period: string,
+  startTime: string,
+  endTime: string,
+  leaveType: string | null,
+): string | null {
+  if (leaveType) return leaveType;
+  if (PERIOD_LABEL[period]) return PERIOD_LABEL[period];
+  if (startTime && endTime) return `${startTime.slice(0, 5)}-${endTime.slice(0, 5)}`;
+  return null;
 }
 
 function periodFromTimes(startTime: string, endTime: string): "early" | "mid" | "late" | "custom" {
@@ -151,7 +195,7 @@ function paginate<T>(items: T[], limit: number, offset: number): { slice: T[]; n
   return { slice, nextCursor: hasMore ? encodeCursor(newOffset) : null, hasMore };
 }
 
-interface EnrichmentBundle {
+export interface EnrichmentBundle {
   regions: Region[];
   regionById: Map<number, Region>;
   regionByCode: Map<string, Region>;
@@ -207,7 +251,7 @@ function employeeDto(e: Employee | undefined) {
   };
 }
 
-function mapRegularShift(s: Shift, b: EnrichmentBundle) {
+export function mapRegularShift(s: Shift, b: EnrichmentBundle) {
   const venue = b.venueById.get(s.venueId);
   const employee = b.employeeById.get(s.employeeId);
   const region = regionDtoFromVenue(venue, b)
@@ -217,15 +261,28 @@ function mapRegularShift(s: Shift, b: EnrichmentBundle) {
     })() : null);
   const startTime = normTime(s.startTime);
   const endTime = normTime(s.endTime);
-  const { startAt, endAt } = buildStartEndAt(s.date, startTime, endTime);
-  const period = periodFromTimes(startTime, endTime);
+  const { startAt, endAt, hasValidTime } = buildShiftTime(s.date, startTime, endTime);
+  // CMS groups by the SHIFT's functional role (櫃台 / 救生 / 守望), not the
+  // employee's default title.
+  const role = s.role ?? employee?.role ?? null;
+  const leaveType = role && LEAVE_ROLES.has(role) ? role : null;
+  // Invalid-time rows must not be classified into early/late (防呆).
+  const period = hasValidTime ? periodFromTimes(startTime, endTime) : "custom";
+  const label = deriveShiftLabel(period, startTime, endTime, leaveType);
+  // A leave row gets a 請假(...) status so the CMS discards it from on-shift
+  // gating; cancelled rows (only reachable via includeDeleted) likewise.
+  const status = leaveType
+    ? `請假(${leaveType})`
+    : s.status === "cancelled"
+      ? "cancelled"
+      : "scheduled";
 
   return {
     rawId: `shift_${s.id}`,
     sourceTable: "shifts",
     sourceRowId: s.id,
     date: s.date,
-    role: employee?.role ?? null,
+    role,
     period,
     venueName: venue?.name ?? null,
     venueShortName: venue?.shortName ?? null,
@@ -234,19 +291,21 @@ function mapRegularShift(s: Shift, b: EnrichmentBundle) {
     shift: {
       id: `shift_${s.id}`,
       code: null,
-      name: null,
-      label: null,
+      name: label,
+      label,
       startTime,
       endTime,
       startAt,
       endAt,
       period,
+      hasValidTime,
       rawPeriod: null,
     },
     employee: employeeDto(employee),
     assignment: {
       kind: s.isDispatch ? "dispatch" : "regular",
-      status: s.status === "cancelled" ? "cancelled" : "scheduled",
+      status,
+      leaveType,
       isDispatch: !!s.isDispatch,
       isSubstitute: false,
       dispatchFromVenue: null,
@@ -269,15 +328,18 @@ function mapDispatchShift(d: DispatchShift, b: EnrichmentBundle) {
   const linkedEmployee = d.linkedEmployeeId != null ? b.employeeById.get(d.linkedEmployeeId) : undefined;
   const startTime = normTime(d.startTime);
   const endTime = normTime(d.endTime);
-  const { startAt, endAt } = buildStartEndAt(d.date, startTime, endTime);
-  const period = periodFromTimes(startTime, endTime);
+  const { startAt, endAt, hasValidTime } = buildShiftTime(d.date, startTime, endTime);
+  const role = d.role ?? null;
+  const leaveType = role && LEAVE_ROLES.has(role) ? role : null;
+  const period = hasValidTime ? periodFromTimes(startTime, endTime) : "custom";
+  const label = deriveShiftLabel(period, startTime, endTime, leaveType);
 
   return {
     rawId: `dispatch_${d.id}`,
     sourceTable: "dispatch_shifts",
     sourceRowId: d.id,
     date: d.date,
-    role: d.role ?? null,
+    role,
     period,
     venueName: venue?.name ?? null,
     venueShortName: venue?.shortName ?? null,
@@ -286,13 +348,14 @@ function mapDispatchShift(d: DispatchShift, b: EnrichmentBundle) {
     shift: {
       id: `dispatch_${d.id}`,
       code: null,
-      name: null,
-      label: null,
+      name: label,
+      label,
       startTime,
       endTime,
       startAt,
       endAt,
       period,
+      hasValidTime,
       rawPeriod: null,
     },
     employee: linkedEmployee
@@ -307,7 +370,8 @@ function mapDispatchShift(d: DispatchShift, b: EnrichmentBundle) {
         },
     assignment: {
       kind: "dispatch",
-      status: "scheduled",
+      status: leaveType ? `請假(${leaveType})` : "scheduled",
+      leaveType,
       isDispatch: true,
       isSubstitute: false,
       dispatchFromVenue: d.dispatchCompany ?? null,
@@ -411,15 +475,29 @@ export const internalService = {
       .map((s: Shift) => {
         const emp = employeeById.get(s.employeeId);
         const v = venueById.get(s.venueId);
+        const { startAt, endAt, hasValidTime } = buildShiftTime(s.date, s.startTime, s.endTime);
+        const role = s.role ?? emp?.role ?? null;
+        const leaveType = role && LEAVE_ROLES.has(role) ? role : null;
         return {
           kind: "regular" as const,
           shiftId: s.id,
           date: s.date,
+          // ISO start/end (with tz) for robust on-shift gating (spec: startsAt/endsAt).
+          startsAt: startAt,
+          endsAt: endAt,
+          hasValidTime,
+          // Raw HH:MM kept for backward compatibility.
           startTime: s.startTime,
           endTime: s.endTime,
-          role: s.role,
-          period: periodFromTimes(s.startTime ?? "", s.endTime ?? ""),
-          employee: emp ? { id: emp.id, name: emp.name, employeeCode: emp.employeeCode, phone: emp.phone } : null,
+          role,
+          leaveType,
+          // Discard signal for the CMS (status containing 請假 is dropped from
+          // on-shift gating), mirroring the snapshot endpoint.
+          status: leaveType ? `請假(${leaveType})` : "scheduled",
+          period: hasValidTime ? periodFromTimes(s.startTime ?? "", s.endTime ?? "") : "custom",
+          employee: emp
+            ? { id: emp.id, name: emp.name, employeeNumber: emp.employeeCode, employeeCode: emp.employeeCode, phone: emp.phone }
+            : null,
           venue: v ? { id: v.id, name: v.name, shortName: v.shortName } : { id: s.venueId, name: null, shortName: null },
           isDispatch: !!s.isDispatch,
           dispatch: s.isDispatch
@@ -433,14 +511,28 @@ export const internalService = {
       .filter((d: DispatchShift) => d.regionId === region.id)
       .map((d: DispatchShift) => {
         const v = d.venueId != null ? venueById.get(d.venueId) : undefined;
+        const linked = d.linkedEmployeeId != null ? employeeById.get(d.linkedEmployeeId) : undefined;
+        const { startAt, endAt, hasValidTime } = buildShiftTime(d.date, d.startTime, d.endTime);
+        const role = d.role ?? null;
+        const leaveType = role && LEAVE_ROLES.has(role) ? role : null;
         return {
           kind: "dispatch" as const,
           shiftId: d.id,
           date: d.date,
+          startsAt: startAt,
+          endsAt: endAt,
+          hasValidTime,
           startTime: d.startTime,
           endTime: d.endTime,
-          role: d.role,
-          period: periodFromTimes(d.startTime ?? "", d.endTime ?? ""),
+          role,
+          leaveType,
+          status: leaveType ? `請假(${leaveType})` : "scheduled",
+          period: hasValidTime ? periodFromTimes(d.startTime ?? "", d.endTime ?? "") : "custom",
+          // Resolve the linked employee so the CMS can match employeeNumber for
+          // on-shift gating; otherwise carry the dispatch name (number unknown).
+          employee: linked
+            ? { id: linked.id, name: linked.name, employeeNumber: linked.employeeCode, employeeCode: linked.employeeCode, phone: linked.phone }
+            : { id: null, name: d.dispatchName, employeeNumber: null, employeeCode: null, phone: d.dispatchPhone },
           dispatch: { name: d.dispatchName, company: d.dispatchCompany, phone: d.dispatchPhone },
           linkedEmployeeId: d.linkedEmployeeId,
           venue: v

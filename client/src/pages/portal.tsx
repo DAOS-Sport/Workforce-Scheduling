@@ -29,6 +29,7 @@ interface PortalEmployee {
   role: string;
   lineUserId?: string;
   employmentType?: string;
+  regionId?: number;
 }
 
 interface OutingRecord {
@@ -53,6 +54,9 @@ interface PortalShift {
   isDispatch: boolean;
   venue: { id: number; name: string; shortName: string } | null;
   assignedRole: string | null;
+  role?: string | null;
+  isLeave?: boolean;
+  leaveType?: string | null;
   certificateImageUrl?: string | null;
   notes?: string | null;
   _isDispatchRecord?: boolean;
@@ -164,9 +168,28 @@ const ROLE_DISPLAY: Record<string, { label: string; taskLabel: string; color: st
   "資訊": { label: "資訊", taskLabel: "資訊系統", color: "#6366F1", bgClass: "bg-indigo-500/10", borderClass: "border-l-indigo-500", textClass: "text-indigo-500", badgeBg: "bg-indigo-500/15 text-indigo-400" },
 };
 
+// Leave types stored on a shift row mean the person is OFF — render them with a
+// distinct gray treatment and their own label, never a working-role style.
+const LEAVE_ROLE_SET = new Set(["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假", "育嬰", "留職停薪", "補休"]);
+const LEAVE_DISPLAY = {
+  label: "休假", taskLabel: "休假", color: "#94A3B8",
+  bgClass: "bg-slate-100", borderClass: "border-l-slate-300",
+  textClass: "text-slate-500", badgeBg: "bg-slate-200 text-slate-600",
+};
+
 function getRoleDisplay(role: string | null | undefined) {
   if (!role) return ROLE_DISPLAY["救生"];
+  if (LEAVE_ROLE_SET.has(role)) return { ...LEAVE_DISPLAY, label: role };
   return ROLE_DISPLAY[role] || ROLE_DISPLAY["救生"];
+}
+
+/** Authoritative leave detection: trust the server flag, fall back to the leave
+ *  role / 00:00–00:00 sentinel for older cached payloads. */
+function isLeaveShift(s: { isLeave?: boolean; assignedRole?: string | null; startTime: string; endTime: string }): boolean {
+  return s.isLeave ?? (
+    LEAVE_ROLE_SET.has(s.assignedRole || "") ||
+    (s.startTime.slice(0, 5) === "00:00" && s.endTime.slice(0, 5) === "00:00")
+  );
 }
 
 const DAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
@@ -3869,7 +3892,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                         {dayShifts.map((s, i) => {
                           const rd = getRoleDisplay(s.assignedRole);
                           const roleAbbrev = ROLE_SHORT[s.assignedRole || ""] || "班";
-                          const isLeave = s.startTime.slice(0, 5) === "00:00" && s.endTime.slice(0, 5) === "00:00";
+                          const isLeave = isLeaveShift(s);
                           return (
                             <div key={i} className={`mb-0.5 rounded text-center py-0.5 px-0.5 ${rd.bgClass}`}>
                               <div className={`text-[10px] font-bold leading-tight ${rd.textClass}`}>{roleAbbrev}</div>
@@ -3903,7 +3926,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     </div>
                     {(shiftsByDate.get(selectedDateStr) || []).map(s => {
                       const rd = getRoleDisplay(s.assignedRole);
-                      const isLeave = s.startTime.slice(0, 5) === "00:00" && s.endTime.slice(0, 5) === "00:00";
+                      const isLeave = isLeaveShift(s);
                       return (
                         <div key={s.id} className="px-3 py-2.5 flex items-center gap-3 border-b border-slate-50 last:border-0">
                           <div className="w-1.5 h-10 rounded-full shrink-0" style={{ backgroundColor: rd.color }} />
@@ -3947,6 +3970,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                       const d = parseISO(s.date);
                       const dayLabel = DAY_LABELS[getDay(d)];
                       const rd = getRoleDisplay(s.assignedRole);
+                      const isLeave = isLeaveShift(s);
                       const hasCert = !!s.certificateImageUrl;
                       return (
                         <div key={s.id} className="space-y-1">
@@ -3963,16 +3987,23 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                               </div>
                             </div>
                             <div className={`w-0.5 h-6 rounded-full shrink-0`} style={{ backgroundColor: rd.color }} />
-                            <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden">
-                              <span className="text-sm font-medium text-juns-navy shrink-0">{s.venue?.shortName || "未知"}</span>
-                              <span className="text-slate-300 shrink-0">·</span>
-                              <span className={`text-xs shrink-0 ${rd.textClass}`}>{rd.label}</span>
-                              <span className="text-slate-300 shrink-0">·</span>
-                              <span className="text-xs text-slate-400 font-mono truncate">
-                                {s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}
-                              </span>
-                              {s.isDispatch && <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-600 shrink-0 ml-1">派遣</span>}
-                            </div>
+                            {isLeave ? (
+                              <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
+                                <span className={`text-sm font-semibold shrink-0 ${rd.textClass}`}>{s.leaveType || s.assignedRole || "休假"}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600 shrink-0">休假</span>
+                              </div>
+                            ) : (
+                              <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden">
+                                <span className="text-sm font-medium text-juns-navy shrink-0">{s.venue?.shortName || "未知"}</span>
+                                <span className="text-slate-300 shrink-0">·</span>
+                                <span className={`text-xs shrink-0 ${rd.textClass}`}>{rd.label}</span>
+                                <span className="text-slate-300 shrink-0">·</span>
+                                <span className="text-xs text-slate-400 font-mono truncate">
+                                  {s.startTime.slice(0, 5)}-{s.endTime.slice(0, 5)}
+                                </span>
+                                {s.isDispatch && <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-600 shrink-0 ml-1">派遣</span>}
+                              </div>
+                            )}
                             {!s._isDispatchRecord && hasCert ? (
                               <button
                                 type="button"
@@ -4291,7 +4322,18 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                     disabled={addAvailMutation.isPending || deleteAvailMutation.isPending}
                                     onClick={() => {
                                       if (isCurrent) { setLeaveTypeSheet(null); return; }
-                                      const doAdd = () => addAvailMutation.mutate({ date: leaveTypeSheet, entryType: "off_request", note: lt });
+                                      // Capture now — setLeaveTypeSheet(null) below runs before the async callbacks.
+                                      const targetDate = leaveTypeSheet;
+                                      const originalNote = sheetOffReq?.note ?? null;
+                                      // Switching type requires delete-then-add (server rejects same-day duplicates).
+                                      // If the replacement add is rejected (e.g. 事假 已達年度上限), restore the
+                                      // original entry so the day is never left blank.
+                                      const doAdd = () => addAvailMutation.mutate(
+                                        { date: targetDate, entryType: "off_request", note: lt },
+                                        originalNote ? {
+                                          onError: () => addAvailMutation.mutate({ date: targetDate, entryType: "off_request", note: originalNote }),
+                                        } : undefined
+                                      );
                                       if (sheetOffReq) {
                                         fetch(`/api/portal/availability/${sheetOffReq.id}`, {
                                           method: "DELETE",

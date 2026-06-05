@@ -11,7 +11,9 @@ function timeToMinutes(time: string): number {
 function shiftDurationMinutes(startTime: string, endTime: string): number {
   const start = timeToMinutes(startTime);
   let end = timeToMinutes(endTime);
-  if (end <= start) end += 24 * 60;
+  // Equal start/end is zero-length (unset), not a 24h overnight shift; only roll
+  // when the end is STRICTLY earlier than the start.
+  if (end < start) end += 24 * 60;
   return end - start;
 }
 

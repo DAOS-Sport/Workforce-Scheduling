@@ -19,6 +19,36 @@ const empRoleMap: Record<string, string> = {
   資訊班: "資訊", 在校實習: "無職",
 };
 
+// A shift row whose role is one of these means the person is OFF (leave), not
+// working. The leave type must be surfaced verbatim, never replaced by a working
+// role or a venue slot role.
+const LEAVE_ROLES = new Set<string>([
+  "休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假", "育嬰", "留職停薪", "補休",
+]);
+
+// Operationally 守望 (watch) and 救生 (lifeguard) are NOT distinguished — the
+// cloud DB may register 守望, but the EMPLOYEE-facing portal shows both as 救生.
+// This collapse is intentional and applies ONLY to the portal display; the admin
+// grid and the CMS export keep the registered 守望 (the data layer is unchanged).
+function toPortalDisplayRole<T extends string | null | undefined>(role: T): T {
+  return (role === "守望" ? "救生" : role) as T;
+}
+
+/** Canonical display role for a regular shift in the employee portal: the shift's
+ *  OWN working role, with 守望→救生 collapsed; leave types are returned verbatim. */
+function resolveRegularRole(
+  shiftRole: string | null | undefined,
+  matchedSlotRole: string | null | undefined,
+  employeeRole: string | null | undefined,
+): string | null {
+  const raw = (shiftRole || "").trim();
+  if (raw && LEAVE_ROLES.has(raw)) return raw;
+  const base = raw
+    ? (empRoleMap[raw] || raw)
+    : (matchedSlotRole || (employeeRole ? empRoleMap[employeeRole] : null) || null);
+  return toPortalDisplayRole(base);
+}
+
 type WorkmateMyShift = {
   id: number; venueId: number | null; venueName: string | null; role: string;
   startTime: string; endTime: string; shiftBand: "early" | "late"; isDispatch: boolean;
@@ -86,7 +116,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
     myInterval = toInterval(date, s.startTime, s.endTime);
     myShift = {
       id: s.id, venueId: s.venueId, venueName: venue?.shortName ?? null,
-      role: s.role, startTime: s.startTime.slice(0, 5), endTime: s.endTime.slice(0, 5),
+      role: toPortalDisplayRole(empRoleMap[s.role] || s.role), startTime: s.startTime.slice(0, 5), endTime: s.endTime.slice(0, 5),
       shiftBand: shiftBand(s.startTime), isDispatch: false,
     };
   } else {
@@ -96,7 +126,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
     myInterval = toInterval(date, ds.startTime, ds.endTime);
     myShift = {
       id: -ds.id, venueId: ds.venueId, venueName: venue?.shortName ?? null,
-      role: ds.role, startTime: ds.startTime.slice(0, 5), endTime: ds.endTime.slice(0, 5),
+      role: toPortalDisplayRole(empRoleMap[ds.role] || ds.role), startTime: ds.startTime.slice(0, 5), endTime: ds.endTime.slice(0, 5),
       shiftBand: shiftBand(ds.startTime), isDispatch: true,
     };
   }
@@ -130,7 +160,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
     const cwStart = s.startTime.slice(0, 5);
     const cwEnd = s.endTime.slice(0, 5);
     coworkers.push({
-      employeeId: co.id, name: co.name, phone: co.phone, role: s.role,
+      employeeId: co.id, name: co.name, phone: co.phone, role: toPortalDisplayRole(empRoleMap[s.role] || s.role),
       startTime: cwStart, endTime: cwEnd,
       shiftTime: isAllDay(s.startTime, s.endTime) ? "全天" : `${cwStart}-${cwEnd}`,
       venueName: myVenue?.shortName ?? null, isDispatch: false,
@@ -144,7 +174,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
     const cwStart = ds.startTime.slice(0, 5);
     const cwEnd = ds.endTime.slice(0, 5);
     coworkers.push({
-      employeeId: -ds.id, name: ds.dispatchName, phone: ds.dispatchPhone ?? null, role: ds.role,
+      employeeId: -ds.id, name: ds.dispatchName, phone: ds.dispatchPhone ?? null, role: toPortalDisplayRole(empRoleMap[ds.role] || ds.role),
       startTime: cwStart, endTime: cwEnd,
       shiftTime: isAllDay(ds.startTime, ds.endTime) ? "全天" : `${cwStart}-${cwEnd}`,
       venueName: myVenue?.shortName ?? null, isDispatch: true,
@@ -181,7 +211,7 @@ export const portalService = {
     }
     if (!found) throw err(404, "找不到員工");
     if (found.status !== "active") throw err(403, "此帳號已停用");
-    return { id: found.id, name: found.name, employeeCode: found.employeeCode, role: found.role, employmentType: found.employmentType };
+    return { id: found.id, name: found.name, employeeCode: found.employeeCode, role: found.role, employmentType: found.employmentType, regionId: found.regionId };
   },
 
   async lineCallback(code: string, redirectUri: string) {
@@ -232,7 +262,7 @@ export const portalService = {
     }
     return {
       id: employee.id, name: employee.name, employeeCode: employee.employeeCode, role: employee.role,
-      employmentType: employee.employmentType, lineDisplayName: profile.displayName, lineUserId,
+      employmentType: employee.employmentType, regionId: employee.regionId, lineDisplayName: profile.displayName, lineUserId,
     };
   },
 
@@ -243,7 +273,7 @@ export const portalService = {
     if (employee.status !== "active") throw err(403, "此帳號已停用");
     return {
       id: employee.id, name: employee.name, employeeCode: employee.employeeCode,
-      role: employee.role, employmentType: employee.employmentType, lineUserId: lineId,
+      role: employee.role, employmentType: employee.employmentType, regionId: employee.regionId, lineUserId: lineId,
     };
   },
 
@@ -280,8 +310,20 @@ export const portalService = {
       ) || slots.find((sl) =>
         sl.startTime.slice(0, 5) <= shiftStart && shiftStart < sl.endTime.slice(0, 5)
       );
-      const assignedRole = matchedSlot?.role || (emp ? empRoleMap[emp.role] : null) || null;
-      return { ...s, venue: venueMap[s.venueId] || null, assignedRole, _isDispatchRecord: false };
+      const rawRole = (s.role || "").trim();
+      const isLeave = LEAVE_ROLES.has(rawRole);
+      // Show the role the admin actually assigned (shifts.role) first — so the
+      // employee, the admin grid, and coworkers all agree on the same row, and a
+      // leave day shows the real leave type instead of a working role.
+      const assignedRole = resolveRegularRole(s.role, matchedSlot?.role, emp?.role);
+      return {
+        ...s,
+        venue: venueMap[s.venueId] || null,
+        assignedRole,
+        isLeave,
+        leaveType: isLeave ? rawRole : null,
+        _isDispatchRecord: false,
+      };
     }));
 
     const enrichedDispatch = myDispatchShifts.map((ds) => ({
@@ -289,7 +331,9 @@ export const portalService = {
       startTime: ds.startTime, endTime: ds.endTime, role: ds.role, notes: ds.notes || null,
       isDispatch: true, certificateImageUrl: null,
       venue: ds.venueId ? (venueMap[ds.venueId] || null) : null,
-      assignedRole: empRoleMap[ds.role] || ds.role || null,
+      assignedRole: toPortalDisplayRole(empRoleMap[ds.role] || ds.role || null),
+      isLeave: false,
+      leaveType: null,
       _isDispatchRecord: true,
     }));
 

@@ -68,12 +68,23 @@ export default function LiffClockInPage() {
     setStage("locating");
 
     try {
+      // 永久拒絕定位時，LINE 內建瀏覽器的 getCurrentPosition 有時完全不回呼，
+      // 使用者就卡在「定位中」轉圈、永遠到不了錯誤畫面（回報「就都開不了了」）。
+      // 加一道硬性逾時保險：保證 20 秒內一定結束、不會無限轉圈。正常允許定位
+      // 的使用者（1～3 秒就回來）完全不受影響；逾時則導向錯誤畫面 + 拍照備援。
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0,
-        });
+        let settled = false;
+        const finish = (cb: () => void) => { if (!settled) { settled = true; cb(); } };
+        const guard = setTimeout(() => finish(() => {
+          const t: any = new Error("定位逾時，請到戶外空曠處再試一次，或改用下方拍照打卡。");
+          t.code = 3;
+          reject(t);
+        }), 20000);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => finish(() => { clearTimeout(guard); resolve(pos); }),
+          (e) => finish(() => { clearTimeout(guard); reject(e); }),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+        );
       });
 
       const { latitude, longitude, accuracy: acc } = position.coords;

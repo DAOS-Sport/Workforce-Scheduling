@@ -426,7 +426,10 @@ export function calcShiftHours(startTime: string, endTime: string): number {
   const [eh, em] = endTime.split(":").map(Number);
   let startMin = sh * 60 + sm;
   let endMin = eh * 60 + em;
-  if (endMin <= startMin) endMin += 24 * 60;
+  // Only a STRICTLY earlier end is a genuine overnight shift (roll +24h). Equal
+  // start/end is a zero-length / unset entry → 0h, NOT a phantom 24-hour shift
+  // (which would otherwise trip the 12h/176h labour-law limits, see calcShiftHours bug).
+  if (endMin < startMin) endMin += 24 * 60;
   return (endMin - startMin) / 60;
 }
 

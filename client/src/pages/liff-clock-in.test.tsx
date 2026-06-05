@@ -115,10 +115,11 @@ describe("初始化", () => {
     expect(screen.getByTestId("text-employee-info")).toHaveTextContent("測試員工");
   });
 
-  it("LIFF 初始化完成後立即請求定位（跳出權限通知）", async () => {
+  it("LIFF 初始化完成後不自動請求定位（避免使用者誤按拒絕後被永久封鎖）", async () => {
     await renderAndWaitReady();
-    // 初始化後、按鈕出現前就應已呼叫一次
-    expect(mockGetCurrentPosition).toHaveBeenCalled();
+    // 為避免使用者在看懂畫面前誤按「拒絕」（瀏覽器會永久記住、之後無法再跳出請求），
+    // 初始化後不主動請求定位；只有在使用者點「GPS 打卡」按鈕時才請求。
+    expect(mockGetCurrentPosition).not.toHaveBeenCalled();
   });
 });
 

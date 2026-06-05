@@ -424,12 +424,12 @@ export default function AvailabilityPage() {
                             <div className="space-y-0.5">
                               {slots.map(s => (
                                 s.entryType === "off_request" ? (
-                                  <div key={s.id} className={`rounded px-1 py-0.5 text-[10px] leading-tight font-bold text-center border ${s.note === "特休" ? "bg-orange-100 border-orange-200 text-orange-700 dark:bg-orange-900/40 dark:border-orange-700 dark:text-orange-300" : s.note === "事假" ? "bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-300" : "bg-red-100 border-red-200 text-red-700 dark:bg-red-900/40 dark:border-red-700 dark:text-red-300"}`}>
+                                  <div key={s.id} className={`rounded px-1 py-0.5 text-[10px] leading-tight font-bold text-center border ${s.note === "特休" ? "bg-orange-100 border-orange-200 text-orange-700 dark:bg-orange-900/40 dark:border-orange-700 dark:text-orange-300" : s.note === "事假" ? "bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-300" : s.note === "休假" ? "bg-slate-100 border-slate-200 text-slate-700 dark:bg-slate-800/40 dark:border-slate-600 dark:text-slate-300" : "bg-red-100 border-red-200 text-red-700 dark:bg-red-900/40 dark:border-red-700 dark:text-red-300"}`}>
                                     {s.note || "休"}
                                   </div>
                                 ) : (
                                   <div key={s.id} className="rounded bg-purple-100 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700 px-1 py-0.5 text-[10px] text-purple-700 dark:text-purple-300 leading-tight">
-                                    {s.startTime ? s.startTime.slice(0, 5) : ""}–{s.endTime ? s.endTime.slice(0, 5) : ""}
+                                    {s.note === "都可以" && !s.startTime ? "都可以" : `${s.startTime ? s.startTime.slice(0, 5) : ""}–${s.endTime ? s.endTime.slice(0, 5) : ""}`}
                                   </div>
                                 )
                               ))}
@@ -451,8 +451,16 @@ export default function AvailabilityPage() {
             <span>紫色：可上班時段（兼職）</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
-            <span>紅色「休」：希望休假（正職）</span>
+            <div className="w-3 h-3 rounded bg-orange-100 border border-orange-200" />
+            <span>橘：特休</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-blue-100 border border-blue-200" />
+            <span>藍：事假</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-slate-100 border border-slate-200" />
+            <span>灰：休假（正職休假意願）</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-[9px] px-1 py-0 rounded font-bold bg-amber-100 text-amber-700">兼</span>
