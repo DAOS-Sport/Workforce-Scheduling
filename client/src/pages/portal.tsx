@@ -1606,7 +1606,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
           return (
             <div className="grid grid-cols-2 gap-3">
               {clockInLocked ? (
-                <button disabled className={`${btnHDone} rounded-xl bg-emerald-100 border-2 border-emerald-400 text-emerald-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-in">
+                <button className={`${btnHDone} rounded-xl bg-emerald-100 border-2 border-emerald-400 text-emerald-700 font-semibold flex flex-col items-center justify-center gap-0.5 hover:bg-emerald-200 active:scale-[0.98] transition-all`} onClick={() => handleClockIn("in")} data-testid="button-clock-in">
                   <div className="flex items-center gap-1">
                     <CheckCircle2 className="h-4 w-4" />
                     <span className={hideCard ? "text-base" : "text-sm"}>上班已打卡</span>
@@ -1623,7 +1623,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
                 </button>
               )}
               {clockOutLocked ? (
-                <button disabled className={`${btnHDone} rounded-xl bg-blue-100 border-2 border-blue-400 text-blue-700 font-semibold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed`} data-testid="button-clock-out">
+                <button className={`${btnHDone} rounded-xl bg-blue-100 border-2 border-blue-400 text-blue-700 font-semibold flex flex-col items-center justify-center gap-0.5 hover:bg-blue-200 active:scale-[0.98] transition-all`} onClick={() => handleClockIn("out")} data-testid="button-clock-out">
                   <div className="flex items-center gap-1">
                     <CheckCircle2 className="h-4 w-4" />
                     <span className={hideCard ? "text-base" : "text-sm"}>下班已打卡</span>
