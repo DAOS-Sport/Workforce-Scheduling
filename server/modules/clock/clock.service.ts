@@ -486,6 +486,8 @@ export const clockService = {
             clockType: updated.clockType, latitude: 0, longitude: 0, distance: 0,
             status: "success", failReason: "補打卡", matchedVenueName: null,
             clockTime: updated.requestedTime,
+            // 標記此筆為補打卡產生 → 出勤紀錄才能顯示「補打卡通過」。
+            amendmentId: updated.id,
           });
         }
       } catch (recordErr: any) {

@@ -290,3 +290,32 @@ describe("再次打卡", () => {
     );
   });
 });
+
+describe("防呆 — 按鈕在成功打卡前不鎖死、不消失", () => {
+  it("定位／送出進行中時，打卡按鈕仍保留在畫面上（不會按一次就消失）", async () => {
+    mockGetCurrentPosition.mockImplementation(() => {}); // 永不回呼 → 停在「定位中」
+    await renderAndWaitReady();
+
+    fireEvent.click(screen.getByTestId("button-clock-in"));
+
+    // 進入定位中後，按鈕本體仍在 DOM，而非被換成沒有按鈕的轉圈畫面
+    await waitFor(() =>
+      expect(screen.getByTestId("button-clock-in")).toBeInTheDocument()
+    );
+    expect(screen.getByTestId("button-clock-in")).toBeInTheDocument();
+  });
+
+  it("進行中重複點擊不會重複觸發定位／送出（防止重送）", async () => {
+    mockGetCurrentPosition.mockImplementation(() => {}); // 永不回呼 → 維持 in-flight
+    await renderAndWaitReady();
+
+    const btn = screen.getByTestId("button-clock-in");
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+
+    // inFlightRef 擋掉後續點擊 → 只請求一次定位
+    await waitFor(() => expect(mockGetCurrentPosition).toHaveBeenCalledTimes(1));
+    expect(mockGetCurrentPosition).toHaveBeenCalledTimes(1);
+  });
+});

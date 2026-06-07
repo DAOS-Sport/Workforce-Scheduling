@@ -145,12 +145,21 @@ export async function processClockIn(
 
   const recentRecords = await storage.getClockRecordsByEmployee(employee.id, todayStr, todayStr);
 
+  // 今日所有「成功」打卡，依時間新→舊排序；最新一筆用來判斷方向與防呆。
+  const successRecords = recentRecords
+    .filter((r) => r.status === "success")
+    .sort(
+      (a, b) =>
+        new Date(b.clockTime ?? 0).getTime() - new Date(a.clockTime ?? 0).getTime()
+    );
+  const lastSuccess = successRecords[0] ?? null;
+
   // Dedup window: 5 minutes (was 60). Only "success" records count — warnings
   // (e.g. "no shift / outside window") MUST NOT block a subsequent legitimate
   // attempt that has now entered the shift window. See Task #49.
   const DEDUP_WINDOW_MIN = 5;
   if (recentRecords.length > 0) {
-    const lastValidRecord = recentRecords.find(r => r.status === "success");
+    const lastValidRecord = lastSuccess;
     if (lastValidRecord?.clockTime) {
       const lastTime = new Date(lastValidRecord.clockTime).getTime();
       const nowTime = now.getTime();
@@ -201,6 +210,32 @@ export async function processClockIn(
           };
         }
       }
+    }
+  }
+
+  // 防呆翻轉守門：剛「上班打卡」成功後極短時間內又被點一次時，自動方向判斷會把它
+  // 翻成「下班」、偷偷記一筆早退。這裡擋下 → 視為同一次上班、不重複建檔、也不翻面。
+  // 注意：只擋「上班後的快速重點」；下班打卡不受限，確保下班後可以無限補打卡。
+  const FLIP_GUARD_MIN = 2;
+  if (!forcedClockType && lastSuccess?.clockType === "in" && lastSuccess.clockTime) {
+    const minsSinceIn = (now.getTime() - new Date(lastSuccess.clockTime).getTime()) / 60000;
+    if (minsSinceIn >= 0 && minsSinceIn < FLIP_GUARD_MIN) {
+      return {
+        status: "success",
+        clockType: "in",
+        venueName: lastSuccess.matchedVenueName ?? null,
+        distance: null,
+        time: formatTaiwanTime(new Date(lastSuccess.clockTime)),
+        date: todayStr,
+        shiftInfo: null,
+        failReason: "您剛才已完成上班打卡，無需重複",
+        employeeName: employee.name,
+        radius: null,
+        nearbyVenues: [],
+        userLat: lat,
+        userLng: lng,
+        recordId: lastSuccess.id,
+      };
     }
   }
 
@@ -315,8 +350,14 @@ export async function processClockIn(
     };
   }
 
-  const clockType = forcedClockType || determineClockType(recentRecords);
   const shiftInfo = matchingShift || venueShifts[0];
+  // 方向判斷（下班後可無限打卡的核心）：同一班別只要已有「上班」成功紀錄，
+  // 之後在該班別的每一次打卡都算「下班」，不會再翻回上班 → 下班可重複、無限打。
+  const clockType: "in" | "out" = forcedClockType
+    ? forcedClockType
+    : successRecords.some((r) => r.shiftId === shiftInfo.id && r.clockType === "in")
+      ? "out"
+      : "in";
 
   let lateReason: string | null = null;
   let earlyArrival = false;

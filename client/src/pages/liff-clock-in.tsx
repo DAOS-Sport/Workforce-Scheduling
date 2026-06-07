@@ -29,6 +29,9 @@ export default function LiffClockInPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [errorCode, setErrorCode] = useState<number | null>(null);
   const [accuracy, setAccuracy] = useState<number | null>(null);
+  // 防呆鎖：打卡請求進行中時擋掉重複觸發，但「不鎖死、不隱藏」按鈕本身。
+  // 一定會在 finally 解除，確保成功打到卡前按鈕都還能再按。
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     initLiff();
@@ -65,6 +68,9 @@ export default function LiffClockInPage() {
 
   const handleClockIn = useCallback(async () => {
     if (!profile) return;
+    // 防呆：請求進行中時，重複點擊一律忽略（不重送、不鎖死按鈕、不讓畫面卡住）。
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setStage("locating");
 
     try {
@@ -123,6 +129,9 @@ export default function LiffClockInPage() {
         setErrorMsg(err.message || "打卡過程發生錯誤");
       }
       setStage("error");
+    } finally {
+      // 無論成功、失敗或逾時，都解除防呆鎖 → 按鈕永遠可以再按，絕不會「按一次就鎖死」。
+      inFlightRef.current = false;
     }
   }, [profile]);
 
@@ -150,14 +159,24 @@ export default function LiffClockInPage() {
           </Card>
         )}
 
-        {stage === "ready" && (
+        {(stage === "ready" || stage === "locating" || stage === "submitting") && (() => {
+          // 防呆：上班打卡按鈕在「成功打到卡」前全程保留、永不消失也不 disabled。
+          // 定位中 / 送出中只是把按鈕變成進度狀態，重複點擊由 inFlightRef 安全擋掉。
+          const busy = stage === "locating" || stage === "submitting";
+          return (
           <Card className="p-8 bg-slate-800/50 border-slate-700">
             <div className="text-center">
-              <div className="w-20 h-20 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto mb-6">
-                <MapPin className="h-10 w-10 text-blue-400" />
+              <div className={`w-20 h-20 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto mb-6 ${busy ? "animate-pulse" : ""}`}>
+                {stage === "submitting"
+                  ? <Loader2 className="h-10 w-10 text-blue-400 animate-spin" />
+                  : <Navigation className="h-10 w-10 text-blue-400" />}
               </div>
               <p className="text-white/60 text-sm mb-6">
-                點擊下方按鈕，系統將自動取得您的 GPS 位置進行打卡
+                {stage === "locating"
+                  ? "正在定位中…請確認已開啟 GPS"
+                  : stage === "submitting"
+                    ? `正在送出打卡…請稍候${accuracy ? `（GPS 精度 ±${accuracy}m）` : ""}`
+                    : "點擊下方按鈕，系統將自動取得您的 GPS 位置進行打卡"}
               </p>
               <Button
                 size="lg"
@@ -165,32 +184,25 @@ export default function LiffClockInPage() {
                 onClick={handleClockIn}
                 data-testid="button-clock-in"
               >
-                <Navigation className="mr-2 h-5 w-5" />
-                GPS 打卡
+                {busy ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    {stage === "locating" ? "定位中…" : "打卡中…"}
+                  </>
+                ) : (
+                  <>
+                    <Navigation className="mr-2 h-5 w-5" />
+                    GPS 打卡
+                  </>
+                )}
               </Button>
+              {busy && (
+                <p className="text-white/40 text-xs mt-3">打卡成功前按鈕都會保留，請稍候…</p>
+              )}
             </div>
           </Card>
-        )}
-
-        {stage === "locating" && (
-          <Card className="p-8 text-center bg-slate-800/50 border-slate-700">
-            <div className="w-20 h-20 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto mb-4 animate-pulse">
-              <Navigation className="h-10 w-10 text-blue-400" />
-            </div>
-            <p className="text-white font-medium mb-1">正在定位中...</p>
-            <p className="text-white/50 text-sm">請確認已開啟 GPS</p>
-          </Card>
-        )}
-
-        {stage === "submitting" && (
-          <Card className="p-8 text-center bg-slate-800/50 border-slate-700">
-            <Loader2 className="h-10 w-10 animate-spin mx-auto text-blue-400 mb-4" />
-            <p className="text-white font-medium mb-1">正在處理打卡...</p>
-            {accuracy && (
-              <p className="text-white/50 text-sm">GPS 精度：±{accuracy}m</p>
-            )}
-          </Card>
-        )}
+          );
+        })()}
 
         {stage === "done" && result && (
           <ResultCard

@@ -196,6 +196,33 @@ describe("processClockIn — 重複打卡防呆", () => {
 
     expect(result.status).not.toBe("fail");
   });
+
+  it("下班後重複打卡 → 仍記為下班，可無限打卡（5 分鐘內也不擋、不翻回上班）", async () => {
+    // 已上班(08:00) + 已下班(08:08)，現在 08:10：再打一次仍應是「下班」。
+    const inRec = { ...mockClockRecord, id: 100, clockType: "in" as const, clockTime: new Date(2026, 4, 27, 8, 0, 0) };
+    const outRec = { ...mockClockRecord, id: 101, clockType: "out" as const, clockTime: new Date(2026, 4, 27, 8, 8, 0) };
+    vi.mocked(storage.getClockRecordsByEmployee).mockResolvedValue([inRec, outRec] as any);
+
+    const result = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
+
+    expect(result.status).toBe("success");
+    expect(result.clockType).toBe("out");
+    expect(storage.createClockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "success", clockType: "out" })
+    );
+  });
+
+  it("上班打卡後 2 分鐘內再次點 → 防呆，不翻成下班、不重複建檔", async () => {
+    // 1 分鐘前剛上班成功，再點一次不應變成下班早退。
+    const inRec = { ...mockClockRecord, id: 100, clockType: "in" as const, clockTime: new Date(2026, 4, 27, 8, 9, 0) };
+    vi.mocked(storage.getClockRecordsByEmployee).mockResolvedValue([inRec] as any);
+
+    const result = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
+
+    expect(result.clockType).toBe("in");
+    expect(result.status).toBe("success");
+    expect(storage.createClockRecord).not.toHaveBeenCalled();
+  });
 });
 
 describe("processClockIn — 場館距離判斷", () => {

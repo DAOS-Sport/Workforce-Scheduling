@@ -516,6 +516,19 @@ export const portalService = {
     const employee = await storage.getEmployee(employeeId);
     if (!employee) throw err(404, "找不到員工");
 
+    // 補打卡審核通過後，clockRecords 會寫入 amendedTime（補正後的真實時間）。出勤一律
+    // 以「補正後時間」為準（時間壓上去算出勤）；未補正則沿用原打卡時間。amendmentId 或
+    // amendedTime 任一存在即代表此筆經補打卡 → 用來在出勤紀錄標示「補打卡通過」。
+    const effTime = (cr: { amendedTime?: Date | null; clockTime?: Date | null } | null | undefined): Date | null => {
+      if (!cr) return null;
+      const t = cr.amendedTime ?? cr.clockTime ?? null;
+      return t ? new Date(t) : null;
+    };
+    const isAmended = (cr: { amendedTime?: Date | null; amendmentId?: number | null } | null | undefined): boolean =>
+      !!(cr && (cr.amendedTime || cr.amendmentId));
+    const fmtHM = (d: Date | null): string | null =>
+      d ? d.toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }) : null;
+
     const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
     const monthStart = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-01`;
     const lastDay = new Date(taiwanNow.getFullYear(), taiwanNow.getMonth() + 1, 0).getDate();
@@ -560,16 +573,17 @@ export const portalService = {
         .sort((a, b) => new Date(a.clockTime ?? 0).getTime() - new Date(b.clockTime ?? 0).getTime());
       const clockInRecord = dateClockRecords.find((cr) => cr.clockType === "in");
       const clockOutRecord = [...dateClockRecords].reverse().find((cr) => cr.clockType === "out");
+      // 補正後時間優先；GPS 紀錄缺時才退回匯入檔（XLSX）的打卡時間。
+      const inHM = fmtHM(effTime(clockInRecord));
+      const outHM = fmtHM(effTime(clockOutRecord));
       return {
         date: r.date,
-        clockIn: clockInRecord && clockInRecord.clockTime
-          ? new Date(clockInRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
-          : r.clockIn || null,
-        clockOut: clockOutRecord && clockOutRecord.clockTime
-          ? new Date(clockOutRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
-          : r.clockOut || null,
+        clockIn: inHM ?? r.clockIn ?? null,
+        clockOut: outHM ?? r.clockOut ?? null,
         isLate: r.isLate, isEarlyLeave: r.isEarlyLeave, hasAnomaly: r.hasAnomaly,
         leaveType: r.leaveType, shiftInfo, shiftType: r.shiftType || null,
+        clockInAmended: isAmended(clockInRecord),
+        clockOutAmended: isAmended(clockOutRecord),
       };
     });
 
@@ -578,7 +592,7 @@ export const portalService = {
       if (xlsxDates.has(dateStr)) continue;
       const validClocks = dayClocks
         .filter((cr) => cr.status === "success" || cr.status === "warning")
-        .sort((a, b) => new Date(a.clockTime ?? 0).getTime() - new Date(b.clockTime ?? 0).getTime());
+        .sort((a, b) => (effTime(a)?.getTime() ?? 0) - (effTime(b)?.getTime() ?? 0));
       const clockInRecord = validClocks.find((cr) => cr.clockType === "in");
       const clockOutRecord = [...validClocks].reverse().find((cr) => cr.clockType === "out");
       if (!clockInRecord) continue;
@@ -587,10 +601,9 @@ export const portalService = {
         ? dateShifts.map((s) => `${s.startTime.substring(0, 5)}-${s.endTime.substring(0, 5)}`).join(", ")
         : null;
       const gpsMissingOut = !clockOutRecord;
-      const clockInStr = new Date(clockInRecord.clockTime!).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" });
-      const clockOutStr = clockOutRecord?.clockTime
-        ? new Date(clockOutRecord.clockTime).toLocaleTimeString("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" })
-        : null;
+      // 以「補正後時間」算遲到/早退與顯示 → 補打卡通過後出勤即時反映正確時間。
+      const clockInStr = fmtHM(effTime(clockInRecord))!;
+      const clockOutStr = fmtHM(effTime(clockOutRecord));
       let gpsIsLate = false;
       let gpsIsEarlyLeave = false;
       let gpsHasAnomaly = gpsMissingOut && dateStr < todayStr;
@@ -614,6 +627,8 @@ export const portalService = {
         date: dateStr, clockIn: clockInStr, clockOut: clockOutStr,
         isLate: gpsIsLate, isEarlyLeave: gpsIsEarlyLeave, hasAnomaly: gpsHasAnomaly,
         leaveType: null, shiftInfo, shiftType: null,
+        clockInAmended: isAmended(clockInRecord),
+        clockOutAmended: isAmended(clockOutRecord),
       });
     }
 
@@ -625,10 +640,10 @@ export const portalService = {
       anomaly: allRows.filter((r) => r.hasAnomaly).length,
       leave: records.filter((r) => r.leaveHours && r.leaveHours.trim() !== "").length,
       todayLatestClock: latestClockToday
-        ? { clockType: latestClockToday.clockType, clockTime: latestClockToday.clockTime!.toISOString() }
+        ? { clockType: latestClockToday.clockType, clockTime: effTime(latestClockToday)!.toISOString() }
         : null,
-      todayClockIn: todayClockInRecord ? { clockTime: todayClockInRecord.clockTime!.toISOString() } : null,
-      todayClockOut: todayClockOutRecord ? { clockTime: todayClockOutRecord.clockTime!.toISOString() } : null,
+      todayClockIn: todayClockInRecord ? { clockTime: effTime(todayClockInRecord)!.toISOString() } : null,
+      todayClockOut: todayClockOutRecord ? { clockTime: effTime(todayClockOutRecord)!.toISOString() } : null,
       records: allRows,
     };
   },

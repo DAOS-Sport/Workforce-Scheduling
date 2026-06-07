@@ -95,6 +95,8 @@ interface AttendanceSummary {
     leaveType: string | null;
     shiftInfo: string | null;
     shiftType: string | null;
+    clockInAmended?: boolean;
+    clockOutAmended?: boolean;
   }[];
 }
 
@@ -3757,6 +3759,9 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                               ) : (
                                 <span className="text-xs text-slate-300 italic">未打卡</span>
                               )}
+                              {r.clockInAmended && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600" data-testid={`badge-amended-in-${idx}`}>補打卡通過</span>
+                              )}
                               {r.isLate && (
                                 <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">遲到</span>
                               )}
@@ -3768,6 +3773,9 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                                 <span className="text-sm font-mono font-semibold text-blue-700">{r.clockOut}</span>
                               ) : (
                                 <span className="text-xs text-slate-300 italic">未打卡</span>
+                              )}
+                              {r.clockOutAmended && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600" data-testid={`badge-amended-out-${idx}`}>補打卡通過</span>
                               )}
                               {r.isEarlyLeave && (
                                 <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-500">早退</span>
