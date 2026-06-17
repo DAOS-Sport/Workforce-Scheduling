@@ -57,11 +57,20 @@ export const summerScheduleService = {
       headers: { "x-api-key": apiKey },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) {
+    const contentType = res.headers.get("content-type") || "";
+    if (!res.ok || !contentType.includes("application/json")) {
       const body = await res.text().catch(() => "");
-      throw err(502, `報名系統 API 回傳 ${res.status}：${body.slice(0, 200)}`);
+      const hint = contentType.includes("text/html")
+        ? "（回傳 HTML，報名系統 API 端點可能尚未部署或網址有誤）"
+        : `（HTTP ${res.status}）`;
+      console.warn(`[summer] 報名系統 API 無法使用 ${hint}：${body.slice(0, 120)}`);
+      return { items: [], lastUpdated: new Date().toISOString(), source: "unavailable", hint };
     }
-    const raw = await res.json();
+    let raw: any;
+    try { raw = await res.json(); } catch (e: any) {
+      console.warn("[summer] 報名系統 API 回傳非 JSON：", e.message);
+      return { items: [], lastUpdated: new Date().toISOString(), source: "parse_error" };
+    }
     const items = Array.isArray(raw) ? raw : (Array.isArray(raw.items) ? raw.items : []);
     return {
       items,
