@@ -54,9 +54,19 @@ function normalizeSlotCode(value: any): string {
     .replace(/\s+/g, "");
 }
 
+// 外部報名系統的 venueId（1,3,4）與排班系統內部 venueId（1,2,3）不同，需要對應。
+// 新北高中=1→1, 三重商工=3→2, 三民高中=4→3
+const EXTERNAL_VENUE_ID_MAP: Record<number, number> = {
+  1: 1,
+  3: 2,
+  4: 3,
+};
+
 function normalizeVenueId(row: any): number | null {
-  const id = Number(row.venueId ?? row.venue_id ?? row.locationId ?? row.location_id);
-  if (Number.isFinite(id) && id > 0) return id;
+  const rawId = Number(row.venueId ?? row.venue_id ?? row.locationId ?? row.location_id);
+  if (Number.isFinite(rawId) && rawId > 0) {
+    return EXTERNAL_VENUE_ID_MAP[rawId] ?? rawId;
+  }
 
   const name = normalizeText(row.venueName ?? row.venue ?? row.locationName ?? row.location);
   if (name.includes("\u65b0\u5317")) return 1;
