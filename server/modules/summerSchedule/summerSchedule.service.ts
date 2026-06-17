@@ -46,11 +46,29 @@ export const summerScheduleService = {
   },
 
   async getEnrollmentCounts(weekNo: number) {
-    // 固定場館
-    const venueIds = [1, 2, 3];
-    const items: any[] = [];
-    // 回傳空數據，由管理員手動填報名人數
-    return { items, lastUpdated: new Date().toISOString() };
+    const apiUrl = process.env.ENROLLMENT_API_URL;
+    const apiKey = process.env.ENROLLMENT_API_KEY;
+    if (!apiUrl || !apiKey) {
+      console.warn("[summer] ENROLLMENT_API_URL 或 ENROLLMENT_API_KEY 未設定，回傳空資料");
+      return { items: [], lastUpdated: new Date().toISOString(), source: "unconfigured" };
+    }
+    const url = `${apiUrl}?weekNo=${weekNo}&includeZero=true`;
+    const res = await fetch(url, {
+      headers: { "x-api-key": apiKey },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw err(502, `報名系統 API 回傳 ${res.status}：${body.slice(0, 200)}`);
+    }
+    const raw = await res.json();
+    const items = Array.isArray(raw) ? raw : (Array.isArray(raw.items) ? raw.items : []);
+    return {
+      items,
+      lastUpdated: raw.lastUpdated || new Date().toISOString(),
+      filters: raw.filters || {},
+      source: "api",
+    };
   },
 
   async getScheduleAssignments(weekNo: number) {
