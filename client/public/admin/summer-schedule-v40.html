@@ -1855,49 +1855,111 @@ function setEnrollmentStatus(source,lastUpdated){
     : '報名人數：正式 API 模式';
   note.appendChild(badge);
 }
+function enrollmentKeyFromParts(weekNo, venueId, courseName, slotCode){
+  return [
+    String(weekNo || '').trim(),
+    String(venueId || '').trim(),
+    normalizeCourseNameForEnrollment(courseName),
+    String(slotCode || '').trim().toUpperCase()
+  ].join('|');
+}
+
+function normalizeCourseNameForEnrollment(name){
+  const s = String(name || '')
+    .replace(/\s+/g,'')
+    .replace(/[\uff08\uff09()]/g,'')
+    .trim();
+
+  if(!s) return '';
+  if(s.includes('\u4e00\u822c\u6cf3\u6cf3')) return '\u4e00\u822c\u6cf3\u6cf3';
+  if(s.includes('\u5e7c\u5e7c')) return '\u5e7c\u5e7c\u73ed\u6cf3\u6cf3';
+  if(s.includes('\u73a9\u6c34')) return '\u73a9\u6c34\u73ed';
+  if(s.includes('\u7fbd\u7403')) return '\u5ba4\u5167\u7fbd\u7403\u8ab2';
+  if(s.includes('\u7c43\u7403')) return '\u5ba4\u5916\u7c43\u7403\u8ab2';
+  if(s.includes('\u684c\u7403')) return '\u5ba4\u5167\u684c\u7403\u8ab2';
+  if(s.includes('\u68d2\u7403')) return '\u68d2\u7403\u8ab2';
+  if(s.includes('\u9ad8\u968e')) return '\u9ad8\u968e\u6cf3\u6cf3\u73ed';
+  if(s.includes('\u5047\u65e5')) return '\u6cf3\u6cf3\u5047\u65e5\u73ed';
+  return s;
+}
+
+function normalizeEnrollmentItemFromApi(row){
+  return {
+    weekNo: Number(row.weekNo) || 0,
+    venueId: String(row.venueId || '').trim(),
+    courseName: row.courseName || '',
+    slotCode: String(row.slotCode || '').trim().toUpperCase(),
+    registeredCount: Number(row.registeredCount) || 0
+  };
+}
+
 function applyEnrollmentCounts(payload){
-  const source=payload.source;
-  const data=payload.data||[];
-  document.querySelectorAll('tr[data-course-row]').forEach(tr=>{
-    const venue=tr.dataset.venueName||'';
-    const course=tr.dataset.courseName||'';
-    const slot=tr.dataset.slotCode||'';
-    let count=0;
-    if(source==='api'){
-      count=data
-        .filter(r=>{
-          const venueId=tr.dataset.venueId, courseId=tr.dataset.courseId, slotId=tr.dataset.slotId, weekNo=tr.dataset.weekNo;
-          const weekMatch = !r.weekNo || !weekNo || String(r.weekNo)===String(weekNo);
-          const hasStrongId = !!(venueId && (courseId || slotId));
-          const idMatch = (!venueId || String(r.venueId||'')===String(venueId))
-            && (!courseId || String(r.courseId||'')===String(courseId))
-            && (!slotId || String(r.slotId||'')===String(slotId))
-            && weekMatch;
-          if(hasStrongId) return idMatch;
-          return weekMatch && venueMatches(r.venueName||'',venue) && courseMatches(r.courseName||'',course) && String(r.slotCode||r.slotLabel||'')===String(slot);
-        })
-        .reduce((sum,r)=>sum+(Number(r.registeredCount)||0),0);
-    }else{
-      count=fallbackCountForRow(tr);
-    }
-    const enrollEl=tr.querySelector('.enroll-count');
-    const neededEl=tr.querySelector('.need-count');
+  const source = payload.source;
+  const data = payload.data || [];
+
+  const map = new Map();
+
+  if(source === 'api'){
+    data.map(normalizeEnrollmentItemFromApi).forEach(item => {
+      if(!item.weekNo || !item.venueId || !item.courseName || !item.slotCode) return;
+
+      const key = enrollmentKeyFromParts(
+        item.weekNo,
+        item.venueId,
+        item.courseName,
+        item.slotCode
+      );
+
+      // \u5f8c\u7aef\u5df2\u7d93\u6574\u7406\u6210\u4e00\u683c\u4e00\u7b46\u3002
+      // \u524d\u7aef\u5982\u679c\u9047\u5230\u91cd\u8907 key\uff0c\u53ea\u53d6\u6700\u5927\u503c\uff0c\u907f\u514d\u518d\u6b21\u932f\u8aa4\u52a0\u7e3d\u3002
+      const old = map.get(key);
+      if(old === undefined){
+        map.set(key, item.registeredCount);
+      }else{
+        map.set(key, Math.max(Number(old)||0, item.registeredCount));
+      }
+    });
+  }
+
+  document.querySelectorAll('tr[data-course-row]').forEach(tr => {
+    const weekNo = Number(tr.dataset.weekNo || 0);
+    const venueId = String(tr.dataset.venueId || '').trim();
+    const courseName = tr.dataset.courseName || '';
+    const slotCode = String(tr.dataset.slotCode || '').trim().toUpperCase();
+
+    const key = enrollmentKeyFromParts(weekNo, venueId, courseName, slotCode);
+
+    const count = source === 'api'
+      ? (map.has(key) ? Number(map.get(key)) || 0 : 0)
+      : fallbackCountForRow(tr);
+
+    const enrollEl = tr.querySelector('.enroll-count');
+    const neededEl = tr.querySelector('.need-count');
+
     if(enrollEl){
-      enrollEl.innerText=String(count);
-      enrollEl.classList.remove('loading','api','mock');
-      enrollEl.classList.add(source==='api'?'api':'empty');
-      enrollEl.setAttribute('title',source==='api'?'由 /api/admin/schedule-enrollment-counts 帶入':'API 未連線，暫無報名人數資料');
+      enrollEl.innerText = String(count);
+      enrollEl.classList.remove('loading','api','mock','empty');
+      enrollEl.classList.add(source === 'api' ? 'api' : 'empty');
+      enrollEl.setAttribute(
+        'title',
+        source === 'api'
+          ? '\u7531 /api/schedule/enrollment-counts \u7cbe\u6e96\u5e36\u5165'
+          : 'API \u672a\u9023\u7dda\uff0c\u66ab\u7121\u5831\u540d\u4eba\u6578\u8cc7\u6599'
+      );
     }
+
     if(neededEl){
-      const current=(neededEl.innerText||'').trim();
-      if(count===0){
-        neededEl.innerText='0';
-      }else if(current==='0'){
-        neededEl.innerText='';
+      const current = (neededEl.innerText || '').trim();
+
+      if(count === 0){
+        neededEl.innerText = '0';
+      }else if(current === '0'){
+        neededEl.innerText = '';
       }
     }
   });
-  setEnrollmentStatus(source,payload.lastUpdated);
+
+  setEnrollmentStatus(source, payload.lastUpdated);
   validateAll();
 }
 async function loadEnrollmentCounts(){

@@ -22,6 +22,110 @@ function err(status: number, message: string): Error {
   return e;
 }
 
+const WEEK_TO_TERM_ID: Record<number, number> = {
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 4,
+  5: 5,
+  6: 6,
+  7: 7,
+  8: 8,
+  9: 9,
+};
+
+function normalizeText(value: any): string {
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .replace(/[\uFF08\uFF09()]/g, "")
+    .trim();
+}
+
+function normalizeCourseName(value: any): string {
+  const s = normalizeText(value);
+  if (!s) return "";
+  if (s.includes("\u4e00\u822c\u6cf3\u6cf3")) return "\u4e00\u822c\u6cf3\u6cf3";
+  if (s.includes("\u5e7c\u5e7c")) return "\u5e7c\u5e7c\u73ed\u6cf3\u6cf3";
+  if (s.includes("\u73a9\u6c34")) return "\u73a9\u6c34\u73ed";
+  if (s.includes("\u7fbd\u7403")) return "\u5ba4\u5167\u7fbd\u7403\u8ab2";
+  if (s.includes("\u7c43\u7403")) return "\u5ba4\u5916\u7c43\u7403\u8ab2";
+  if (s.includes("\u684c\u7403")) return "\u5ba4\u5167\u684c\u7403\u8ab2";
+  if (s.includes("\u68d2\u7403")) return "\u68d2\u7403\u8ab2";
+  if (s.includes("\u9ad8\u968e")) return "\u9ad8\u968e\u6cf3\u6cf3\u73ed";
+  if (s.includes("\u5047\u65e5")) return "\u6cf3\u6cf3\u5047\u65e5\u73ed";
+  return s;
+}
+
+function normalizeSlotCode(value: any): string {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+}
+
+function normalizeVenueId(row: any): number | null {
+  const id = Number(row.venueId ?? row.venue_id ?? row.locationId ?? row.location_id);
+  if (Number.isFinite(id) && id > 0) return id;
+
+  const name = normalizeText(row.venueName ?? row.venue ?? row.locationName ?? row.location);
+  if (name.includes("\u65b0\u5317")) return 1;
+  if (name.includes("\u4e09\u91cd")) return 2;
+  if (name.includes("\u4e09\u6c11")) return 3;
+
+  return null;
+}
+
+function normalizeRegisteredCount(row: any): number {
+  const raw =
+    row.registeredCount ??
+    row.count ??
+    row.total ??
+    row.enrollmentCount ??
+    row.enrolled ??
+    row.students ??
+    row.numberOfStudents ??
+    0;
+
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function normalizeEnrollmentRow(row: any, weekNo: number, termId: number) {
+  const venueId = normalizeVenueId(row);
+  const courseName = normalizeCourseName(
+    row.courseName ??
+    row.course ??
+    row.className ??
+    row.programName ??
+    row.productName
+  );
+
+  const slotCode = normalizeSlotCode(
+    row.slotCode ??
+    row.timeCode ??
+    row.periodCode ??
+    row.sessionCode ??
+    row.code
+  );
+
+  const registeredCount = normalizeRegisteredCount(row);
+
+  if (!venueId || !courseName || !slotCode) {
+    return null;
+  }
+
+  return {
+    weekNo,
+    termId,
+    venueId,
+    courseId: row.courseId ?? row.course_id ?? null,
+    slotId: row.slotId ?? row.slot_id ?? null,
+    courseName,
+    slotCode,
+    registeredCount,
+  };
+}
+
 export const summerScheduleService = {
   async getEmployeesForSchedule() {
     const all = await storage.getAllEmployees();
@@ -48,35 +152,117 @@ export const summerScheduleService = {
   async getEnrollmentCounts(weekNo: number) {
     const apiUrl = process.env.ENROLLMENT_API_URL;
     const apiKey = process.env.ENROLLMENT_API_KEY;
-    if (!apiUrl || !apiKey) {
-      console.warn("[summer] ENROLLMENT_API_URL 或 ENROLLMENT_API_KEY 未設定，回傳空資料");
-      return { items: [], lastUpdated: new Date().toISOString(), source: "unconfigured" };
+
+    const safeWeekNo = Number(weekNo);
+    const termId = WEEK_TO_TERM_ID[safeWeekNo];
+
+    if (!termId) {
+      return {
+        items: [],
+        lastUpdated: new Date().toISOString(),
+        source: "invalid_week",
+        message: "\u9031\u5225\u932f\u8aa4",
+      };
     }
-    const url = `${apiUrl}?weekNo=${weekNo}&includeZero=true`;
-    const res = await fetch(url, {
+
+    if (!apiUrl || !apiKey) {
+      console.warn("[summer] ENROLLMENT_API_URL \u6216 ENROLLMENT_API_KEY \u672a\u8a2d\u5b9a\uff0c\u56de\u50b3\u7a7a\u8cc7\u6599");
+      return {
+        items: [],
+        lastUpdated: new Date().toISOString(),
+        source: "unconfigured",
+      };
+    }
+
+    // \u6ce8\u610f\uff1a\u6b63\u5f0f\u5831\u540d\u7cfb\u7d71\u4e3b\u8981\u7528 termId\uff0c\u4e0d\u8981\u53ea\u50b3 weekNo\u3002
+    // weekNo \u53ea\u7559\u5728\u6392\u73ed\u7cfb\u7d71\u5167\u90e8\u4f7f\u7528\u3002
+    const url = new URL(apiUrl);
+    url.searchParams.set("termId", String(termId));
+    url.searchParams.set("includeZero", "true");
+
+    const res = await fetch(url.toString(), {
       headers: { "x-api-key": apiKey },
       signal: AbortSignal.timeout(8000),
     });
+
     const contentType = res.headers.get("content-type") || "";
+
     if (!res.ok || !contentType.includes("application/json")) {
       const body = await res.text().catch(() => "");
       const hint = contentType.includes("text/html")
-        ? "（回傳 HTML，報名系統 API 端點可能尚未部署或網址有誤）"
-        : `（HTTP ${res.status}）`;
-      console.warn(`[summer] 報名系統 API 無法使用 ${hint}：${body.slice(0, 120)}`);
-      return { items: [], lastUpdated: new Date().toISOString(), source: "unavailable", hint };
+        ? "\u5831\u540d\u7cfb\u7d71\u56de\u50b3 HTML\uff0cAPI \u7db2\u5740\u53ef\u80fd\u4e0d\u662f JSON \u7aef\u9ede"
+        : `HTTP ${res.status}`;
+
+      console.warn(`[summer] \u5831\u540d\u7cfb\u7d71 API \u7121\u6cd5\u4f7f\u7528\uff1a${hint} ${body.slice(0, 120)}`);
+
+      return {
+        items: [],
+        lastUpdated: new Date().toISOString(),
+        source: "unavailable",
+        hint,
+      };
     }
+
     let raw: any;
-    try { raw = await res.json(); } catch (e: any) {
-      console.warn("[summer] 報名系統 API 回傳非 JSON：", e.message);
-      return { items: [], lastUpdated: new Date().toISOString(), source: "parse_error" };
+
+    try {
+      raw = await res.json();
+    } catch (e: any) {
+      console.warn("[summer] \u5831\u540d\u7cfb\u7d71 API \u56de\u50b3\u975e JSON\uff1a", e.message);
+      return {
+        items: [],
+        lastUpdated: new Date().toISOString(),
+        source: "parse_error",
+      };
     }
-    const items = Array.isArray(raw) ? raw : (Array.isArray(raw.items) ? raw.items : []);
+
+    const sourceItems = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw.items)
+        ? raw.items
+        : Array.isArray(raw.data)
+          ? raw.data
+          : [];
+
+    // \u5148\u6a19\u6e96\u5316\uff0c\u518d\u4f9d\u300c\u9031\u5225 + \u5834\u9928 + \u8ab2\u7a0b + \u6642\u6bb5\u300d\u5f59\u6574\u6210\u4e00\u683c\u4e00\u7b46
+    const map = new Map<string, any>();
+
+    for (const row of sourceItems) {
+      const item = normalizeEnrollmentRow(row, safeWeekNo, termId);
+      if (!item) continue;
+
+      const key = [
+        item.weekNo,
+        item.venueId,
+        item.courseName,
+        item.slotCode,
+      ].join("|");
+
+      const existing = map.get(key);
+
+      if (!existing) {
+        map.set(key, item);
+      } else {
+        // \u540c\u4e00\u683c\u5982\u679c\u5916\u90e8 API \u56de\u591a\u7b46\uff0c\u624d\u52a0\u7e3d\u3002
+        // \u4f46\u53ea\u6703\u5728\u540c\u4e00 termId \u5167\u52a0\u7e3d\uff0c\u4e0d\u6703\u8de8\u9031\u3001\u8de8\u68df\u6b21\u52a0\u7e3d\u3002
+        existing.registeredCount += item.registeredCount;
+      }
+    }
+
+    const items = Array.from(map.values());
+
     return {
       items,
       lastUpdated: raw.lastUpdated || new Date().toISOString(),
-      filters: raw.filters || {},
+      filters: {
+        weekNo: safeWeekNo,
+        termId,
+      },
       source: "api",
+      debug: {
+        rawCount: sourceItems.length,
+        normalizedCount: items.length,
+      },
     };
   },
 
