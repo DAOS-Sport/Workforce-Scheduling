@@ -22,17 +22,8 @@ function err(status: number, message: string): Error {
   return e;
 }
 
-const WEEK_TO_TERM_ID: Record<number, number> = {
-  1: 1,
-  2: 2,
-  3: 3,
-  4: 4,
-  5: 5,
-  6: 6,
-  7: 7,
-  8: 8,
-  9: 9,
-};
+// 外部報名系統回傳全部梯次資料，每筆有 termStartDate。
+// 用日期範圍比對 SUMMER_WEEKS 來篩出正確週次，不傳 termId 給外部 API。
 
 function normalizeText(value: any): string {
   return String(value || "")
@@ -154,19 +145,19 @@ export const summerScheduleService = {
     const apiKey = process.env.ENROLLMENT_API_KEY;
 
     const safeWeekNo = Number(weekNo);
-    const termId = WEEK_TO_TERM_ID[safeWeekNo];
+    const week = SUMMER_WEEKS.find((w) => w.no === safeWeekNo);
 
-    if (!termId) {
+    if (!week) {
       return {
         items: [],
         lastUpdated: new Date().toISOString(),
         source: "invalid_week",
-        message: "\u9031\u5225\u932f\u8aa4",
+        message: "週別錯誤",
       };
     }
 
     if (!apiUrl || !apiKey) {
-      console.warn("[summer] ENROLLMENT_API_URL \u6216 ENROLLMENT_API_KEY \u672a\u8a2d\u5b9a\uff0c\u56de\u50b3\u7a7a\u8cc7\u6599");
+      console.warn("[summer] ENROLLMENT_API_URL 或 ENROLLMENT_API_KEY 未設定，回傳空資料");
       return {
         items: [],
         lastUpdated: new Date().toISOString(),
@@ -174,15 +165,14 @@ export const summerScheduleService = {
       };
     }
 
-    // \u6ce8\u610f\uff1a\u6b63\u5f0f\u5831\u540d\u7cfb\u7d71\u4e3b\u8981\u7528 termId\uff0c\u4e0d\u8981\u53ea\u50b3 weekNo\u3002
-    // weekNo \u53ea\u7559\u5728\u6392\u73ed\u7cfb\u7d71\u5167\u90e8\u4f7f\u7528\u3002
+    // 外部 API 回傳全部梯次，不接受 termId 過濾。
+    // 撈全部後，依 termStartDate 落在本週日期範圍內篩選。
     const url = new URL(apiUrl);
-    url.searchParams.set("termId", String(termId));
     url.searchParams.set("includeZero", "true");
 
     const res = await fetch(url.toString(), {
       headers: { "x-api-key": apiKey },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(10000),
     });
 
     const contentType = res.headers.get("content-type") || "";
@@ -190,11 +180,9 @@ export const summerScheduleService = {
     if (!res.ok || !contentType.includes("application/json")) {
       const body = await res.text().catch(() => "");
       const hint = contentType.includes("text/html")
-        ? "\u5831\u540d\u7cfb\u7d71\u56de\u50b3 HTML\uff0cAPI \u7db2\u5740\u53ef\u80fd\u4e0d\u662f JSON \u7aef\u9ede"
+        ? "報名系統回傳 HTML，API 網址可能不是 JSON 端點"
         : `HTTP ${res.status}`;
-
-      console.warn(`[summer] \u5831\u540d\u7cfb\u7d71 API \u7121\u6cd5\u4f7f\u7528\uff1a${hint} ${body.slice(0, 120)}`);
-
+      console.warn(`[summer] 報名系統 API 無法使用：${hint} ${body.slice(0, 120)}`);
       return {
         items: [],
         lastUpdated: new Date().toISOString(),
@@ -204,11 +192,10 @@ export const summerScheduleService = {
     }
 
     let raw: any;
-
     try {
       raw = await res.json();
     } catch (e: any) {
-      console.warn("[summer] \u5831\u540d\u7cfb\u7d71 API \u56de\u50b3\u975e JSON\uff1a", e.message);
+      console.warn("[summer] 報名系統 API 回傳非 JSON：", e.message);
       return {
         items: [],
         lastUpdated: new Date().toISOString(),
@@ -216,7 +203,7 @@ export const summerScheduleService = {
       };
     }
 
-    const sourceItems = Array.isArray(raw)
+    const allItems: any[] = Array.isArray(raw)
       ? raw
       : Array.isArray(raw.items)
         ? raw.items
@@ -224,27 +211,28 @@ export const summerScheduleService = {
           ? raw.data
           : [];
 
-    // \u5148\u6a19\u6e96\u5316\uff0c\u518d\u4f9d\u300c\u9031\u5225 + \u5834\u9928 + \u8ab2\u7a0b + \u6642\u6bb5\u300d\u5f59\u6574\u6210\u4e00\u683c\u4e00\u7b46
+    // 用 termStartDate 比對本週範圍（startDate ≤ termStartDate ≤ endDate）
+    const weekStart = week.startDate; // "2026-07-01"
+    const weekEnd   = week.endDate;   // "2026-07-05"
+
+    const weekItems = allItems.filter((row) => {
+      const d = String(row.termStartDate || "").slice(0, 10);
+      return d >= weekStart && d <= weekEnd;
+    });
+
+    // 依「場館 + 課程 + 時段」彙整（同一格可能有多筆梯次累加）
     const map = new Map<string, any>();
 
-    for (const row of sourceItems) {
-      const item = normalizeEnrollmentRow(row, safeWeekNo, termId);
+    for (const row of weekItems) {
+      const item = normalizeEnrollmentRow(row, safeWeekNo, row.termId ?? 0);
       if (!item) continue;
 
-      const key = [
-        item.weekNo,
-        item.venueId,
-        item.courseName,
-        item.slotCode,
-      ].join("|");
-
+      const key = [item.weekNo, item.venueId, item.courseName, item.slotCode].join("|");
       const existing = map.get(key);
 
       if (!existing) {
         map.set(key, item);
       } else {
-        // \u540c\u4e00\u683c\u5982\u679c\u5916\u90e8 API \u56de\u591a\u7b46\uff0c\u624d\u52a0\u7e3d\u3002
-        // \u4f46\u53ea\u6703\u5728\u540c\u4e00 termId \u5167\u52a0\u7e3d\uff0c\u4e0d\u6703\u8de8\u9031\u3001\u8de8\u68df\u6b21\u52a0\u7e3d\u3002
         existing.registeredCount += item.registeredCount;
       }
     }
@@ -254,13 +242,11 @@ export const summerScheduleService = {
     return {
       items,
       lastUpdated: raw.lastUpdated || new Date().toISOString(),
-      filters: {
-        weekNo: safeWeekNo,
-        termId,
-      },
+      filters: { weekNo: safeWeekNo, weekStart, weekEnd },
       source: "api",
       debug: {
-        rawCount: sourceItems.length,
+        rawCount: allItems.length,
+        weekFilteredCount: weekItems.length,
         normalizedCount: items.length,
       },
     };
