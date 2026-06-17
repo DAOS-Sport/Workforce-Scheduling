@@ -57,7 +57,7 @@ export async function registerRoutes(
 
   // ── 3. Auth bootstrap (strict order matters!) ──────────────────────────
   //   a) Admin auth routes — mount BEFORE the gate so /api/admin/login
-  //      itself isn't blocked. /api/admin/* is also in OPEN_API_PREFIXES.
+  //      itself isn't blocked. Admin auth routes are mounted before gateAdminApi, so login/me/logout remain reachable.
   mountAdminAuthRoutes(httpServer, app);
   //   b) Internal server-to-server API (X-Internal-Token auth). Registered
   //      BEFORE the admin-cookie middleware so it never falls through to

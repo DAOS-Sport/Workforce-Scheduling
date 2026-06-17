@@ -3502,9 +3502,37 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   });
   const holidaySet = useMemo(() => new Set(monthlyHolidays), [monthlyHolidays]);
 
-  const { data: summerShifts = [], isLoading: summerLoading } = useQuery<
-    Array<{ date: string; venueName: string; startTime: string; endTime: string; role: string; notes: string | null }>
-  >({
+  type SummerShiftItem = {
+    id?: number;
+    date: string;
+    venueId?: number;
+    venueName: string;
+    startTime: string;
+    endTime: string;
+    role: string;
+    notes: string | null;
+  };
+
+  type SummerShiftResponse = {
+    employee?: {
+      id: number;
+      name: string;
+      employeeCode?: string | null;
+    };
+    week?: {
+      no: number;
+      label: string;
+      startDate: string;
+      endDate: string;
+    };
+    shifts: SummerShiftItem[];
+  };
+
+  const {
+    data: summerScheduleData,
+    isLoading: summerLoading,
+    error: summerError,
+  } = useQuery<SummerShiftResponse>({
     queryKey: ["/api/portal/my-summer-shifts", summerWeekNo],
     enabled: activeView === "summer" && !!employee?.id && !!portalLineUserId,
     staleTime: 60 * 1000,
@@ -3513,10 +3541,21 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
         headers: { "x-line-user-id": portalLineUserId },
         credentials: "include",
       });
-      if (!res.ok) throw new Error(`${res.status}`);
-      return res.json();
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `\u8b80\u53d6\u6691\u5047\u73ed\u8868\u5931\u6557 (${res.status})`);
+      }
+
+      const json = await res.json();
+
+      // 同時支援直接回傳 {employee, week, shifts}
+      // 以及未來如果包成 {data:{employee, week, shifts}} 的格式
+      return json.data || json;
     },
   });
+
+  const summerShifts = summerScheduleData?.shifts ?? [];
 
   const addAvailMutation = useMutation({
     mutationFn: async ({ date, startTime, endTime, entryType = "available", note }: { date: string; startTime?: string; endTime?: string; entryType?: string; note?: string }) => {
@@ -4125,13 +4164,17 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
               </div>
               {summerLoading ? (
                 <div className="h-24 bg-slate-100 rounded-lg animate-pulse" />
+              ) : summerError ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">
+                  {(summerError as Error).message || "暑假班表讀取失敗"}
+                </div>
               ) : summerShifts.length === 0 ? (
-                <p className="text-sm text-center text-slate-400 py-3">本週無暑假班表</p>
+                <p className="text-sm text-center text-slate-400 py-3">這一週尚未排班</p>
               ) : (
                 <div className="space-y-2">
                   {summerShifts.map((s, idx) => (
                     <SummerShiftCard
-                      key={idx}
+                      key={s.id ?? `${s.date}-${s.startTime}-${idx}`}
                       date={s.date}
                       startTime={s.startTime}
                       endTime={s.endTime}

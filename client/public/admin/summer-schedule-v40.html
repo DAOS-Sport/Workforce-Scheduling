@@ -627,57 +627,6 @@ body.section-manual section[data-section="duty"]{display:none!important}
 </head>
 <body class="simplified-mode section-all">
 
-<!-- 登入遮罩 -->
-<div id="authOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.72);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:20px;padding:36px 40px;box-shadow:0 24px 60px rgba(15,23,42,.18);width:100%;max-width:360px;text-align:center">
-    <div style="font-size:36px;margin-bottom:8px">🔐</div>
-    <h2 style="margin:0 0 6px;font-size:20px;color:#0b1f44;font-family:'Microsoft JhengHei',sans-serif">暑假排班表</h2>
-    <p style="margin:0 0 24px;color:#64748b;font-size:13px;font-family:'Microsoft JhengHei',sans-serif">請輸入管理後台密碼</p>
-    <input id="authPwInput" type="password" placeholder="密碼" autocomplete="current-password"
-      style="width:100%;padding:11px 14px;border:1.5px solid #d8e0ea;border-radius:10px;font-size:15px;outline:none;margin-bottom:12px;box-sizing:border-box;font-family:'Microsoft JhengHei',sans-serif"
-    />
-    <div id="authError" style="color:#b91c1c;font-size:13px;margin-bottom:10px;display:none;font-family:'Microsoft JhengHei',sans-serif">密碼錯誤，請重試</div>
-    <button id="authLoginBtn"
-      style="width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:900;cursor:pointer;font-family:'Microsoft JhengHei',sans-serif">
-      登入
-    </button>
-  </div>
-</div>
-<script>
-(function(){
-  var overlay = document.getElementById('authOverlay');
-  var input   = document.getElementById('authPwInput');
-  var btn     = document.getElementById('authLoginBtn');
-  var errMsg  = document.getElementById('authError');
-  overlay.style.display = 'none';
-
-  function showOverlay(){ overlay.style.display='flex'; setTimeout(function(){ input.focus(); },100); }
-  function hideOverlay(){ overlay.style.display='none'; }
-
-  function doLogin(){
-    var pw = input.value;
-    if(!pw) return;
-    btn.disabled = true; btn.textContent = '驗證中…';
-    errMsg.style.display='none';
-    fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw}),credentials:'include'})
-      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,data:d}; }); })
-      .then(function(res){
-        if(res.ok){ hideOverlay(); }
-        else{ errMsg.style.display='block'; input.value=''; input.focus(); }
-        btn.disabled=false; btn.textContent='登入';
-      })
-      .catch(function(){ errMsg.style.display='block'; btn.disabled=false; btn.textContent='登入'; });
-  }
-
-  btn.addEventListener('click', doLogin);
-  input.addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
-
-  fetch('/api/admin/me',{credentials:'include'})
-    .then(function(r){ if(!r.ok) showOverlay(); })
-    .catch(function(){ showOverlay(); });
-})();
-</script>
-
 <div class="app">
   <div class="topbar compact-top">
     <div class="compact-row">
@@ -1085,6 +1034,26 @@ const weeks = [{"no": 1, "start": "2026-07-01", "end": "2026-07-05", "activeWeek
 
 const fallbackEmployees = [];
 let employees = [];
+let employeeApiMessage = '尚未取得員工資料';
+
+function showEmployeeApiMessage(message){
+  employeeApiMessage = message || '尚未取得員工資料';
+
+  const select = document.getElementById('qEmployeeSelect');
+  if(select){
+    select.innerHTML = `<option value="">${escapeHtml(employeeApiMessage)}</option>`;
+  }
+
+  const info = document.getElementById('qEmployeeInfo');
+  if(info){
+    info.textContent = employeeApiMessage;
+  }
+
+  const box = document.getElementById('employeePickerList');
+  if(box){
+    box.innerHTML = `<div class="result-empty">${escapeHtml(employeeApiMessage)}</div>`;
+  }
+}
 
 function normalizeEmployeeFromApi(e){
   return {
@@ -1100,20 +1069,90 @@ function normalizeEmployeeFromApi(e){
 }
 async function loadEmployeesForSchedule(){
   try{
-    const res = await fetch(API_ENDPOINTS.employees, {credentials:'include'});
-    if(!res.ok) throw new Error('employee API status '+res.status);
+    const res = await fetch(API_ENDPOINTS.employees, { credentials:'include' });
+
+    if(res.status === 401){
+      employees = [];
+      showEmployeeApiMessage('請先登入管理後台，再重新開啟暑假排班表');
+      return;
+    }
+
+    if(!res.ok){
+      throw new Error('employee API status '+res.status);
+    }
+
     const raw = await res.json();
-    const list = Array.isArray(raw) ? raw : (Array.isArray(raw.items) ? raw.items : (Array.isArray(raw.employees) ? raw.employees : []));
+    const list = Array.isArray(raw)
+      ? raw
+      : (Array.isArray(raw.items)
+          ? raw.items
+          : (Array.isArray(raw.employees) ? raw.employees : []));
+
     employees = list.map(normalizeEmployeeFromApi);
+
+    if(!employees.length){
+      showEmployeeApiMessage('目前沒有可排班的啟用員工');
+    }
   }catch(err){
     console.warn('employees API unavailable, no employee data loaded:', err);
     employees = [];
+    showEmployeeApiMessage('員工資料讀取失敗，請確認 /api/employees/for-schedule 是否正常');
   }
+
   populateQuestionnaireEmployees();
   refreshEmployeeChips();
   renderLinePushCheck();
   renderAvailabilityReport();
-  if(!document.getElementById('payrollView')?.classList.contains('hidden-view')) renderPayrollReport();
+
+  if(!document.getElementById('payrollView')?.classList.contains('hidden-view')){
+    renderPayrollReport();
+  }
+}
+
+async function ensureAdminLoggedIn(){
+  try{
+    const res = await fetch('/api/admin/me', { credentials:'include' });
+    if(res.ok) return true;
+  }catch(e){}
+
+  document.body.innerHTML = `
+    <div style="
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#f8fafc;
+      font-family:'Microsoft JhengHei','Noto Sans TC',Arial,sans-serif;
+      padding:24px;
+    ">
+      <div style="
+        max-width:520px;
+        width:100%;
+        background:#fff;
+        border:1px solid #dbe3ef;
+        border-radius:18px;
+        box-shadow:0 16px 40px rgba(15,23,42,.08);
+        padding:24px;
+        text-align:center;
+      ">
+        <h2 style="margin:0 0 10px;color:#0f172a;">請先登入管理後台</h2>
+        <p style="margin:0 0 18px;color:#64748b;font-weight:800;line-height:1.7;">
+          暑假排班表需要管理員登入後才能讀取員工資料。
+          請先回到後台登入，再從左側選單進入「暑假排班表」。
+        </p>
+        <a href="/" style="
+          display:inline-block;
+          background:#1d4ed8;
+          color:#fff;
+          text-decoration:none;
+          font-weight:900;
+          padding:10px 16px;
+          border-radius:10px;
+        ">前往管理後台登入</a>
+      </div>
+    </div>
+  `;
+  return false;
 }
 
 const venues = [{"venueId": 1, "name": "新北高中", "lifeguardMin": 2, "lifeguardMax": 3, "tags": ["救生 2－3 人", "櫃台 1－2 人", "平日課程 8 門＋假日班"], "duty": [["1", "05:30-08:00"], ["2", "08:00-10:00"], ["3", "10:00-12:00"], ["4", "12:00-14:00"], ["5", "14:00-17:00"], ["6", "17:00-20:00"], ["7", "20:00-22:30"]], "courses": [{"name": "一般游泳(6足歲以上)", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "D", "time": "12:00-13:30"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "G", "time": "16:30-18:00"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}]}, {"name": "幼幼班游泳", "slots": [{"code": "A1", "time": "09:00-10:00"}, {"code": "A2", "time": "14:00-15:00"}, {"code": "A3", "time": "18:00-19:00"}, {"code": "A4", "time": "19:00-20:00"}, {"code": "A5", "time": "20:00-21:00"}]}, {"name": "室內羽球課", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "D", "time": "12:00-13:30"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}]}, {"name": "室外籃球課", "slots": [{"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "F", "time": "15:00-16:30"}]}, {"name": "室內桌球課", "slots": [{"code": "C", "time": "10:30-12:00"}, {"code": "E", "time": "13:30-15:00"}]}, {"name": "棒球課(室內+室外)", "slots": [{"code": "D", "time": "12:00-13:30"}, {"code": "F", "time": "15:00-16:30"}, {"code": "G", "time": "16:30-18:00"}, {"code": "H", "time": "18:00-19:30"}]}, {"name": "玩水班", "slots": [{"code": "C", "time": "10:30-12:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}]}, {"name": "高階游泳班", "slots": [{"code": "L", "time": "08:00-10:00"}, {"code": "M", "time": "14:00-16:00"}]}], "holidayCourses": [{"name": "游泳假日班", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}], "defaultNote": "六日假日班"}]}, {"venueId": 2, "name": "三重商工", "lifeguardMin": 1, "lifeguardMax": 2, "tags": ["救生 1－2 人", "櫃台 1－2 人", "平日課程 5 門＋假日班"], "duty": [["1", "07:30-10:00"], ["2", "10:00-12:00"], ["3", "12:00-14:00"], ["4", "14:00-16:00"], ["5", "16:00-18:00"], ["6", "18:00-20:00"], ["7", "20:00-22:30"]], "courses": [{"name": "一般游泳(6足歲以上)", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "D", "time": "12:00-13:30"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "G", "time": "16:30-18:00"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}]}, {"name": "幼幼班游泳", "slots": [{"code": "A1", "time": "09:00-10:00"}, {"code": "A2", "time": "14:00-15:00"}, {"code": "A3", "time": "18:00-19:00"}, {"code": "A4", "time": "19:00-20:00"}, {"code": "A5", "time": "20:00-21:00"}]}, {"name": "室內羽球課", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "D", "time": "12:00-13:30"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "G", "time": "16:30-18:00"}]}, {"name": "室外籃球課", "slots": [{"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "F", "time": "15:00-16:30"}]}, {"name": "玩水班", "slots": [{"code": "C", "time": "10:30-12:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}]}], "holidayCourses": [{"name": "游泳假日班", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}], "defaultNote": "六日假日班"}]}, {"venueId": 3, "name": "三民高中", "lifeguardMin": 1, "lifeguardMax": 2, "tags": ["救生 1－2 人", "櫃台 1－2 人", "平日課程 3 門＋假日班"], "duty": [["1", "07:30-10:00"], ["2", "10:00-12:00"], ["3", "12:00-14:00"], ["4", "14:00-16:00"], ["5", "16:00-18:00"], ["6", "18:00-20:00"], ["7", "20:00-22:00"]], "courses": [{"name": "一般游泳(6足歲以上)", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "D", "time": "12:00-13:30"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "G", "time": "16:30-18:00"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}]}, {"name": "幼幼班游泳", "slots": [{"code": "A1", "time": "09:00-10:00"}, {"code": "A2", "time": "14:00-15:00"}, {"code": "A3", "time": "18:00-19:00"}, {"code": "A4", "time": "19:00-20:00"}, {"code": "A5", "time": "20:00-21:00"}]}, {"name": "玩水班", "slots": [{"code": "C", "time": "10:30-12:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}]}], "holidayCourses": [{"name": "游泳假日班", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}], "defaultNote": "六日假日班"}]}];
@@ -1184,7 +1223,10 @@ function renderEmployeePickerList(){
   const q=(document.getElementById('employeeSearch')?.value||'').trim().toLowerCase();
   const list=[...employees].sort((a,b)=>Number(isLineBound(b))-Number(isLineBound(a)) || a.name.localeCompare(b.name,'zh-Hant'))
     .filter(e=>!q || [e.name,e.role,e.venueName,e.venue,e.lineDisplayName].join(' ').toLowerCase().includes(q));
-  if(!employees.length){box.innerHTML='<div class="result-empty">尚未取得員工資料，請先串接 /api/employees/for-schedule</div>';return;}
+  if(!employees.length){
+    box.innerHTML = `<div class="result-empty">${escapeHtml(employeeApiMessage || '尚未取得員工資料')}</div>`;
+    return;
+  }
   box.innerHTML=list.map(e=>`
     <button type="button" class="employee-option" onclick="selectEmployeeForTarget(${e.id})">
       <div>
@@ -2553,10 +2595,6 @@ function availabilityBusyEntries(week){
   }));
   return [...courses,...lifeguards,...frontdesks];
 }
-function sameEmployeeForAvailability(a,b){
-  if(a.employeeId && b.employeeId) return String(a.employeeId)===String(b.employeeId);
-  return a.name && b.name && a.name===b.name;
-}
 function renderAvailabilityReport(){
   const result=document.getElementById('availabilityResult');
   if(!result) return;
@@ -2933,7 +2971,33 @@ document.addEventListener('click', (e)=>{
   if(cell) focusLifeguardEditorFromDisplay(cell);
 });
 
-document.getElementById('weekSelect').addEventListener('change',()=>{render();buildAvailabilityPage(true);renderAvailabilityReport();renderPayrollReport();});document.getElementById('venueFilter').addEventListener('change',()=>{render();renderAvailabilityReport();renderPayrollReport();});purgeLegacyStorageOnce();initWeeks();loadEmployeesForSchedule();render();buildAvailabilityPage();renderAvailabilityReport();renderPayrollReport();
+async function bootSummerScheduleV40(){
+  const loggedIn = await ensureAdminLoggedIn();
+  if(!loggedIn) return;
+
+  document.getElementById('weekSelect')?.addEventListener('change',()=>{
+    render();
+    buildAvailabilityPage(true);
+    renderAvailabilityReport();
+    renderPayrollReport();
+  });
+
+  document.getElementById('venueFilter')?.addEventListener('change',()=>{
+    render();
+    renderAvailabilityReport();
+    renderPayrollReport();
+  });
+
+  purgeLegacyStorageOnce();
+  initWeeks();
+  await loadEmployeesForSchedule();
+  render();
+  buildAvailabilityPage();
+  renderAvailabilityReport();
+  renderPayrollReport();
+}
+
+document.addEventListener('DOMContentLoaded', bootSummerScheduleV40);
 /*
 Replit 後端必接 API 規格：
 1. GET  /api/employees/for-schedule -> {items:[{id,name,role,venueId,venueName,lineBound,lineDisplayName,lineBoundAt}]}
