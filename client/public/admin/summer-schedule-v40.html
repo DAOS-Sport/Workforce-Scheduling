@@ -626,6 +626,58 @@ body.section-manual section[data-section="duty"]{display:none!important}
 </style>
 </head>
 <body class="simplified-mode section-all">
+
+<!-- 登入遮罩 -->
+<div id="authOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.72);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:20px;padding:36px 40px;box-shadow:0 24px 60px rgba(15,23,42,.18);width:100%;max-width:360px;text-align:center">
+    <div style="font-size:36px;margin-bottom:8px">🔐</div>
+    <h2 style="margin:0 0 6px;font-size:20px;color:#0b1f44;font-family:'Microsoft JhengHei',sans-serif">暑假排班表</h2>
+    <p style="margin:0 0 24px;color:#64748b;font-size:13px;font-family:'Microsoft JhengHei',sans-serif">請輸入管理後台密碼</p>
+    <input id="authPwInput" type="password" placeholder="密碼" autocomplete="current-password"
+      style="width:100%;padding:11px 14px;border:1.5px solid #d8e0ea;border-radius:10px;font-size:15px;outline:none;margin-bottom:12px;box-sizing:border-box;font-family:'Microsoft JhengHei',sans-serif"
+    />
+    <div id="authError" style="color:#b91c1c;font-size:13px;margin-bottom:10px;display:none;font-family:'Microsoft JhengHei',sans-serif">密碼錯誤，請重試</div>
+    <button id="authLoginBtn"
+      style="width:100%;padding:12px;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:900;cursor:pointer;font-family:'Microsoft JhengHei',sans-serif">
+      登入
+    </button>
+  </div>
+</div>
+<script>
+(function(){
+  var overlay = document.getElementById('authOverlay');
+  var input   = document.getElementById('authPwInput');
+  var btn     = document.getElementById('authLoginBtn');
+  var errMsg  = document.getElementById('authError');
+  overlay.style.display = 'none';
+
+  function showOverlay(){ overlay.style.display='flex'; setTimeout(function(){ input.focus(); },100); }
+  function hideOverlay(){ overlay.style.display='none'; }
+
+  function doLogin(){
+    var pw = input.value;
+    if(!pw) return;
+    btn.disabled = true; btn.textContent = '驗證中…';
+    errMsg.style.display='none';
+    fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw}),credentials:'include'})
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,data:d}; }); })
+      .then(function(res){
+        if(res.ok){ hideOverlay(); }
+        else{ errMsg.style.display='block'; input.value=''; input.focus(); }
+        btn.disabled=false; btn.textContent='登入';
+      })
+      .catch(function(){ errMsg.style.display='block'; btn.disabled=false; btn.textContent='登入'; });
+  }
+
+  btn.addEventListener('click', doLogin);
+  input.addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+
+  fetch('/api/admin/me',{credentials:'include'})
+    .then(function(r){ if(!r.ok) showOverlay(); })
+    .catch(function(){ showOverlay(); });
+})();
+</script>
+
 <div class="app">
   <div class="topbar compact-top">
     <div class="compact-row">

@@ -21,7 +21,7 @@ const mainItems = [
   { title: "排班意願", url: "/availability", icon: ClipboardList },
   { title: "員工管理", url: "/employees", icon: Users },
   { title: "場館管理", url: "/venues", icon: Building2 },
-  { title: "暑假排班表 v40", url: "/admin/summer-schedule-v40.html", icon: Sun, external: true },
+  { title: "暑假排班表", url: "/admin/summer-schedule-v40.html", icon: Sun, external: true },
 ];
 
 const reportItems = [
