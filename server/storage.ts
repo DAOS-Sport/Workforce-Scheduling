@@ -16,6 +16,8 @@ import {
   missingClockNotifications,
   weeklyPushNotifications,
   leaveRequests,
+  employeeLeaveBalances,
+  leaveBalanceLogs,
   type Region, type InsertRegion,
   type Venue, type InsertVenue,
   type Employee, type InsertEmployee,
@@ -38,6 +40,8 @@ import {
   type MissingClockNotification,
   type WeeklyPushNotification,
   type LeaveRequest, type InsertLeaveRequest,
+  type EmployeeLeaveBalance,
+  type LeaveBalanceLog,
   type ShiftAuditLog,
 } from "@shared/schema";
 
@@ -196,6 +200,17 @@ export interface IStorage {
   getLeaveRequestsByEmployee(employeeId: number): Promise<LeaveRequest[]>;
   getLeaveRequest(id: number): Promise<LeaveRequest | undefined>;
   updateLeaveRequestStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<LeaveRequest | undefined>;
+  getLeaveRequestsByDateRange(employeeId: number, startDate: string, endDate: string): Promise<LeaveRequest[]>;
+
+  // Leave balances
+  getLeaveBalance(employeeId: number, year: number): Promise<EmployeeLeaveBalance | undefined>;
+  upsertLeaveBalance(employeeId: number, year: number, totalHours: number): Promise<EmployeeLeaveBalance>;
+  adjustLeaveBalancePending(employeeId: number, year: number, delta: number): Promise<void>;
+  adjustLeaveBalanceOnApprove(employeeId: number, year: number, hours: number): Promise<void>;
+  adjustLeaveBalanceOnReject(employeeId: number, year: number, hours: number): Promise<void>;
+  getAllLeaveBalances(year: number): Promise<(EmployeeLeaveBalance & { employeeName: string; employeeCode: string })[]>;
+  appendLeaveBalanceLog(employeeId: number, year: number, delta: number, reason: string, leaveRequestId?: number, operatedBy?: number, operatedByName?: string): Promise<void>;
+  getLeaveBalanceLogs(employeeId: number, year: number): Promise<LeaveBalanceLog[]>;
 }
 
 /**
@@ -664,6 +679,42 @@ export class DatabaseStorage implements IStorage {
     return leaveRepository.updateLeaveRequestStatus(id, status, reviewedBy, reviewedByName, reviewNote);
   }
 
+  async getLeaveRequestsByDateRange(employeeId: number, startDate: string, endDate: string): Promise<LeaveRequest[]> {
+    return leaveRepository.getLeaveRequestsByDateRange(employeeId, startDate, endDate);
+  }
+
+  async getLeaveBalance(employeeId: number, year: number): Promise<EmployeeLeaveBalance | undefined> {
+    return leaveRepository.getLeaveBalance(employeeId, year);
+  }
+
+  async upsertLeaveBalance(employeeId: number, year: number, totalHours: number): Promise<EmployeeLeaveBalance> {
+    return leaveRepository.upsertLeaveBalance(employeeId, year, totalHours);
+  }
+
+  async adjustLeaveBalancePending(employeeId: number, year: number, delta: number): Promise<void> {
+    return leaveRepository.adjustLeaveBalancePending(employeeId, year, delta);
+  }
+
+  async adjustLeaveBalanceOnApprove(employeeId: number, year: number, hours: number): Promise<void> {
+    return leaveRepository.adjustLeaveBalanceOnApprove(employeeId, year, hours);
+  }
+
+  async adjustLeaveBalanceOnReject(employeeId: number, year: number, hours: number): Promise<void> {
+    return leaveRepository.adjustLeaveBalanceOnReject(employeeId, year, hours);
+  }
+
+  async getAllLeaveBalances(year: number): Promise<(EmployeeLeaveBalance & { employeeName: string; employeeCode: string })[]> {
+    return leaveRepository.getAllLeaveBalances(year);
+  }
+
+  async appendLeaveBalanceLog(employeeId: number, year: number, delta: number, reason: string, leaveRequestId?: number, operatedBy?: number, operatedByName?: string): Promise<void> {
+    return leaveRepository.appendLeaveBalanceLog(employeeId, year, delta, reason, leaveRequestId, operatedBy, operatedByName);
+  }
+
+  async getLeaveBalanceLogs(employeeId: number, year: number): Promise<LeaveBalanceLog[]> {
+    return leaveRepository.getLeaveBalanceLogs(employeeId, year);
+  }
+
 }
 
 export const storage = new DatabaseStorage();
@@ -747,6 +798,42 @@ export async function ensureLeaveRequestsTable(): Promise<void> {
     )
   `);
   console.log("[db] leave_requests 表格確認完成");
+}
+
+export async function ensureLeaveManagementTables(): Promise<void> {
+  await pool.query(`
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS start_time TEXT;
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS end_time TEXT;
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS hours REAL;
+
+    CREATE TABLE IF NOT EXISTS employee_leave_balances (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      total_hours REAL NOT NULL DEFAULT 0,
+      used_hours REAL NOT NULL DEFAULT 0,
+      pending_hours REAL NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      CONSTRAINT elb_uniq_emp_year UNIQUE (employee_id, year)
+    );
+
+    CREATE TABLE IF NOT EXISTS leave_balance_logs (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      delta REAL NOT NULL,
+      reason TEXT NOT NULL,
+      leave_request_id INTEGER,
+      operated_by INTEGER,
+      operated_by_name TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_elb_emp_year ON employee_leave_balances (employee_id, year);
+    CREATE INDEX IF NOT EXISTS idx_lbl_emp_year ON leave_balance_logs (employee_id, year);
+  `);
+  console.log("[db] leave_management 表格確認完成");
 }
 
 export async function ensureOutingRecordsTable(): Promise<void> {

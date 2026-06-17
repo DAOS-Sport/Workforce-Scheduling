@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { zhTW } from "date-fns/locale";
-import { CalendarOff, CheckCircle2, XCircle, Clock, Search, Eye } from "lucide-react";
+import { CalendarOff, CheckCircle2, XCircle, Clock, Eye, BarChart2, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -27,6 +28,7 @@ interface LeaveRequest {
   leaveType: string;
   startDate: string;
   endDate: string;
+  hours: number | null;
   reason: string | null;
   certificateImageUrl: string | null;
   status: string;
@@ -34,6 +36,18 @@ interface LeaveRequest {
   reviewedAt: string | null;
   reviewNote: string | null;
   createdAt: string;
+}
+
+interface LeaveBalanceRow {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  employeeCode: string;
+  year: number;
+  totalHours: number;
+  usedHours: number;
+  pendingHours: number;
+  updatedAt: string;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -52,6 +66,176 @@ function daysBetween(startDate: string, endDate: string): number {
   const s = new Date(startDate);
   const e = new Date(endDate);
   return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
+}
+
+function BalanceOverviewSection() {
+  const { toast } = useToast();
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
+  const [collapsed, setCollapsed] = useState(false);
+  const [editingRow, setEditingRow] = useState<LeaveBalanceRow | null>(null);
+  const [editHours, setEditHours] = useState("");
+
+  const { data: balances = [], isLoading: balancesLoading } = useQuery<LeaveBalanceRow[]>({
+    queryKey: ["/api/leave-balances", year],
+    queryFn: async () => {
+      const res = await fetch(`/api/leave-balances?year=${year}`, { credentials: "include" });
+      if (!res.ok) throw new Error("載入失敗");
+      return res.json();
+    },
+  });
+
+  const adjustMutation = useMutation({
+    mutationFn: async ({ employeeId, totalHours }: { employeeId: number; totalHours: number }) => {
+      return apiRequest("POST", "/api/leave-balances/adjust", { employeeId, year, totalHours });
+    },
+    onSuccess: () => {
+      toast({ title: "特休時數已更新" });
+      queryClient.invalidateQueries({ queryKey: ["/api/leave-balances"] });
+      setEditingRow(null);
+    },
+    onError: (err: any) => {
+      toast({ title: err.message || "更新失敗", variant: "destructive" });
+    },
+  });
+
+  const handleSaveEdit = () => {
+    if (!editingRow) return;
+    const h = parseFloat(editHours);
+    if (isNaN(h) || h < 0) {
+      toast({ title: "請輸入有效的時數（≥0）", variant: "destructive" });
+      return;
+    }
+    adjustMutation.mutate({ employeeId: editingRow.employeeId, totalHours: h });
+  };
+
+  const yearOptions = [currentYear - 1, currentYear, currentYear + 1];
+
+  return (
+    <Card data-testid="card-balance-overview">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="h-4 w-4 text-teal-600" />
+            <CardTitle className="text-sm font-semibold">特休餘額總覽</CardTitle>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+              <SelectTrigger className="h-7 text-xs w-24" data-testid="select-balance-year">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y} 年</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <button
+              onClick={() => setCollapsed((v) => !v)}
+              className="text-slate-400 hover:text-slate-600 p-1 rounded"
+              data-testid="button-toggle-balance"
+            >
+              {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+      </CardHeader>
+      {!collapsed && (
+        <CardContent className="p-0">
+          {balancesLoading ? (
+            <div className="p-4 space-y-2">
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          ) : balances.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <BarChart2 className="h-6 w-6 mx-auto mb-2 opacity-30" />
+              <p className="text-xs">{year} 年尚無特休餘額資料</p>
+              <p className="text-xs text-slate-400 mt-1">員工申請特休後會自動建立，或由管理員設定核發時數</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="text-left px-4 py-2 text-xs font-semibold text-muted-foreground">員工</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">核發</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">已用</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">待審</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">剩餘</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {balances.map((b) => {
+                    const remaining = Math.max(0, b.totalHours - b.usedHours - b.pendingHours);
+                    return (
+                      <tr key={b.id} className="hover:bg-muted/20" data-testid={`row-balance-${b.employeeId}`}>
+                        <td className="px-4 py-2">
+                          <p className="font-medium text-sm">{b.employeeName}</p>
+                          <p className="text-xs text-muted-foreground">{b.employeeCode}</p>
+                        </td>
+                        <td className="text-right px-3 py-2 text-sm">{b.totalHours}h</td>
+                        <td className="text-right px-3 py-2 text-sm text-red-600">{b.usedHours}h</td>
+                        <td className="text-right px-3 py-2 text-sm text-amber-600">{b.pendingHours}h</td>
+                        <td className={`text-right px-3 py-2 text-sm font-semibold ${remaining <= 0 ? "text-red-600" : remaining <= 8 ? "text-amber-600" : "text-teal-700"}`}>
+                          {remaining}h
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+                            onClick={() => { setEditingRow(b); setEditHours(String(b.totalHours)); }}
+                            data-testid={`button-edit-balance-${b.employeeId}`}
+                            title="設定核發時數"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      )}
+
+      {/* Edit dialog */}
+      {editingRow && (
+        <Dialog open={!!editingRow} onOpenChange={(open) => { if (!open) setEditingRow(null); }}>
+          <DialogContent className="max-w-xs">
+            <DialogHeader>
+              <DialogTitle>設定特休核發時數</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">
+                {editingRow.employeeName}（{editingRow.employeeCode}）— {year} 年
+              </p>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">核發總時數（小時）</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={editHours}
+                  onChange={(e) => setEditHours(e.target.value)}
+                  className="h-9"
+                  data-testid="input-edit-balance-hours"
+                />
+                <p className="text-xs text-slate-400 mt-1">例：7天 = 56小時；14天 = 112小時</p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingRow(null)}>取消</Button>
+              <Button onClick={handleSaveEdit} disabled={adjustMutation.isPending} data-testid="button-save-balance">
+                儲存
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </Card>
+  );
 }
 
 export default function LeaveRequestsPage() {
@@ -78,6 +262,7 @@ export default function LeaveRequestsPage() {
     onSuccess: () => {
       toast({ title: "審核完成" });
       queryClient.invalidateQueries({ queryKey: ["/api/leave-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leave-balances"] });
       setSelected(null);
       setReviewNote("");
     },
@@ -104,7 +289,7 @@ export default function LeaveRequestsPage() {
             </div>
             <div>
               <h1 className="text-lg font-bold" data-testid="heading-leave-requests">請假管理</h1>
-              <p className="text-xs text-muted-foreground">審核員工請假申請</p>
+              <p className="text-xs text-muted-foreground">審核員工請假申請 · 管理特休餘額</p>
             </div>
           </div>
 
@@ -120,6 +305,9 @@ export default function LeaveRequestsPage() {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Balance overview */}
+        <BalanceOverviewSection />
 
         {/* Stats */}
         {statusFilter === "pending" && pendingCount > 0 && (
@@ -163,6 +351,9 @@ export default function LeaveRequestsPage() {
                         </span>
                         <span className="text-xs text-muted-foreground">{r.employeeCode}</span>
                         <Badge variant="outline" className="text-[11px] px-1.5 py-0">{r.leaveType}</Badge>
+                        {r.hours != null && (
+                          <Badge variant="outline" className="text-[11px] px-1.5 py-0 text-slate-500">{r.hours}h</Badge>
+                        )}
                         <Badge variant={STATUS_VARIANT[r.status] || "outline"} className="text-[11px] px-1.5 py-0">
                           {STATUS_LABEL[r.status] || r.status}
                         </Badge>
@@ -216,10 +407,15 @@ export default function LeaveRequestsPage() {
                   <p className="font-medium">{selected.startDate} ～ {selected.endDate}（{daysBetween(selected.startDate, selected.endDate)} 天）</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">申請狀態</p>
-                  <Badge variant={STATUS_VARIANT[selected.status] || "outline"}>
-                    {STATUS_LABEL[selected.status] || selected.status}
-                  </Badge>
+                  <p className="text-xs text-muted-foreground">時數 / 狀態</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {selected.hours != null && (
+                      <span className="text-sm font-medium">{selected.hours}h</span>
+                    )}
+                    <Badge variant={STATUS_VARIANT[selected.status] || "outline"}>
+                      {STATUS_LABEL[selected.status] || selected.status}
+                    </Badge>
+                  </div>
                 </div>
               </div>
 

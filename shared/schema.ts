@@ -530,6 +530,9 @@ export const leaveRequests = pgTable("leave_requests", {
   leaveType: text("leave_type").notNull(),
   startDate: text("start_date").notNull(),
   endDate: text("end_date").notNull(),
+  startTime: text("start_time"),
+  endTime: text("end_time"),
+  hours: real("hours"),
   reason: text("reason"),
   certificateImageUrl: text("certificate_image_url"),
   status: text("status").notNull().default("pending"),
@@ -543,6 +546,39 @@ export const leaveRequests = pgTable("leave_requests", {
 export const insertLeaveRequestSchema = createInsertSchema(leaveRequests).omit({ id: true, createdAt: true, reviewedAt: true });
 export type InsertLeaveRequest = z.infer<typeof insertLeaveRequestSchema>;
 export type LeaveRequest = typeof leaveRequests.$inferSelect;
+
+export const employeeLeaveBalances = pgTable("employee_leave_balances", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  year: integer("year").notNull(),
+  totalHours: real("total_hours").notNull().default(0),
+  usedHours: real("used_hours").notNull().default(0),
+  pendingHours: real("pending_hours").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  uniq: unique("elb_uniq_emp_year").on(t.employeeId, t.year),
+}));
+
+export const insertEmployeeLeaveBalanceSchema = createInsertSchema(employeeLeaveBalances).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertEmployeeLeaveBalance = z.infer<typeof insertEmployeeLeaveBalanceSchema>;
+export type EmployeeLeaveBalance = typeof employeeLeaveBalances.$inferSelect;
+
+export const leaveBalanceLogs = pgTable("leave_balance_logs", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  year: integer("year").notNull(),
+  delta: real("delta").notNull(),
+  reason: text("reason").notNull(),
+  leaveRequestId: integer("leave_request_id"),
+  operatedBy: integer("operated_by"),
+  operatedByName: text("operated_by_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLeaveBalanceLogSchema = createInsertSchema(leaveBalanceLogs).omit({ id: true, createdAt: true });
+export type InsertLeaveBalanceLog = z.infer<typeof insertLeaveBalanceLogSchema>;
+export type LeaveBalanceLog = typeof leaveBalanceLogs.$inferSelect;
 
 export const outingRecords = pgTable("outing_records", {
   id: serial("id").primaryKey(),

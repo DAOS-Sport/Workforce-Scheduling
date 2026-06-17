@@ -2575,6 +2575,9 @@ interface LeaveRequestRecord {
   leaveType: string;
   startDate: string;
   endDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  hours: number | null;
   reason: string | null;
   certificateImageUrl: string | null;
   status: string;
@@ -2583,6 +2586,16 @@ interface LeaveRequestRecord {
   reviewNote: string | null;
   createdAt: string;
 }
+
+interface LeaveSummary {
+  year: number;
+  totalHours: number;
+  usedHours: number;
+  pendingHours: number;
+  remainingHours: number;
+}
+
+const ANNUAL_LEAVE_SET = new Set(["特休", "特別休假"]);
 
 function LeaveRequestSection({ employee }: { employee: PortalEmployee }) {
   const [expanded, setExpanded] = useState(false);
@@ -2593,10 +2606,25 @@ function LeaveRequestSection({ employee }: { employee: PortalEmployee }) {
   const [leaveType, setLeaveType] = useState<string>("特休");
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [reason, setReason] = useState("");
   const [certPreview, setCertPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
+
+  const isAnnualLeave = ANNUAL_LEAVE_SET.has(leaveType);
+  const isSingleDay = startDate === endDate;
+
+  const { data: leaveSummary } = useQuery<LeaveSummary>({
+    queryKey: ["/api/portal/leave-summary", employee.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/leave-summary/${employee.id}`);
+      if (!res.ok) throw new Error("載入失敗");
+      return res.json();
+    },
+    enabled: isAnnualLeave,
+  });
 
   const { data: requests = [], refetch } = useQuery<LeaveRequestRecord[]>({
     queryKey: ["/api/portal/leave-requests", employee.id],
@@ -2654,6 +2682,8 @@ function LeaveRequestSection({ employee }: { employee: PortalEmployee }) {
         leaveType,
         startDate,
         endDate,
+        startTime: (isAnnualLeave && isSingleDay && startTime) ? startTime : null,
+        endTime: (isAnnualLeave && isSingleDay && endTime) ? endTime : null,
         reason: reason.trim() || null,
         certificateImageUrl: certPreview || null,
       });
@@ -2663,7 +2693,10 @@ function LeaveRequestSection({ employee }: { employee: PortalEmployee }) {
       setLeaveType("特休");
       setStartDate(todayStr);
       setEndDate(todayStr);
+      setStartTime("");
+      setEndTime("");
       refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/leave-summary", employee.id] });
     } catch (err: any) {
       toast({ title: err.message || "送出失敗", variant: "destructive" });
     } finally {
@@ -2675,6 +2708,42 @@ function LeaveRequestSection({ employee }: { employee: PortalEmployee }) {
 
   return (
     <div className="space-y-4">
+      {/* Annual leave balance card */}
+      {isAnnualLeave && leaveSummary && (
+        <div className="border border-teal-200 rounded-xl bg-teal-50 px-4 py-3 space-y-2" data-testid="card-leave-balance">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-teal-600" />
+            <span className="text-sm font-semibold text-teal-800">{leaveSummary.year} 年特休餘額</span>
+          </div>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            <div>
+              <p className="text-[10px] text-slate-500">核發</p>
+              <p className="text-sm font-bold text-juns-navy" data-testid="text-total-hours">{leaveSummary.totalHours}h</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500">已用</p>
+              <p className="text-sm font-bold text-red-600" data-testid="text-used-hours">{leaveSummary.usedHours}h</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500">待審</p>
+              <p className="text-sm font-bold text-amber-600" data-testid="text-pending-hours">{leaveSummary.pendingHours}h</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500">剩餘</p>
+              <p className={`text-sm font-bold ${leaveSummary.remainingHours <= 8 ? "text-red-600" : "text-teal-700"}`} data-testid="text-remaining-hours">
+                {leaveSummary.remainingHours}h
+              </p>
+            </div>
+          </div>
+          {leaveSummary.remainingHours <= 0 && (
+            <p className="text-xs text-red-600 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              特休餘額已用完，無法再申請特休
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Submit form */}
       <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
         <button
@@ -2729,6 +2798,35 @@ function LeaveRequestSection({ employee }: { employee: PortalEmployee }) {
                 />
               </div>
             </div>
+
+            {/* Time inputs (special: 特休 single-day only) */}
+            {isAnnualLeave && isSingleDay && (
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">時段（選填，留空代表全天 8 小時）</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-400 mb-0.5 block">開始時間</label>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="w-full h-9 border border-slate-200 rounded-md px-2 text-sm text-juns-navy"
+                      data-testid="input-leave-start-time"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 mb-0.5 block">結束時間</label>
+                    <input
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="w-full h-9 border border-slate-200 rounded-md px-2 text-sm text-juns-navy"
+                      data-testid="input-leave-end-time"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Reason */}
             <div>
@@ -2794,12 +2892,20 @@ function LeaveRequestSection({ employee }: { employee: PortalEmployee }) {
             {requests.map((r) => (
               <div key={r.id} className="px-4 py-3 space-y-1" data-testid={`card-leave-${r.id}`}>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-juns-navy">{r.leaveType}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium text-juns-navy">{r.leaveType}</span>
+                    {r.hours != null && (
+                      <span className="text-[11px] text-slate-400 bg-slate-100 rounded px-1.5 py-0.5">{r.hours}h</span>
+                    )}
+                  </div>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[r.status] || "bg-slate-100 text-slate-600"}`}>
                     {STATUS_LABEL[r.status] || r.status}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500">{r.startDate} ～ {r.endDate}</p>
+                <p className="text-xs text-slate-500">
+                  {r.startDate} ～ {r.endDate}
+                  {r.startTime && r.endTime && ` ${r.startTime.slice(0, 5)}～${r.endTime.slice(0, 5)}`}
+                </p>
                 {r.reason && <p className="text-xs text-slate-400">{r.reason}</p>}
                 {r.reviewNote && (
                   <p className="text-xs text-slate-500 bg-slate-50 rounded px-2 py-1">審核備註：{r.reviewNote}</p>

@@ -1,6 +1,7 @@
 import {
   ensureWeeklyPushTable,
   ensureLeaveRequestsTable,
+  ensureLeaveManagementTables,
   ensureAnnouncementsTable,
   ensureShiftsSoftDelete,
   ensureDispatchShiftsSoftDelete,
@@ -30,6 +31,14 @@ export async function runStartupMigrations(): Promise<void> {
     await ensureLeaveRequestsTable();
   } catch (err: any) {
     log(`leave_requests 表格建立失敗: ${err.message}`, "db");
+  }
+
+  // Leave management tables (balances + logs + new columns)
+  try {
+    await ensureLeaveManagementTables();
+    log("leave_management 表格確認完成", "db");
+  } catch (err: any) {
+    log(`leave_management 表格建立失敗: ${err.message}`, "db");
   }
 
   // Shift soft-delete columns + shift_audit_log table (Task #50 protection)
