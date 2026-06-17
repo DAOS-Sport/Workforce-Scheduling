@@ -6,10 +6,15 @@ import { requireAdmin } from "../../shared/middleware/requireAdmin";
 
 export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): void {
   // 員工選擇：後台暑假排班頁使用，必須登入管理後台
-  app.get("/api/employees/for-schedule", requireAdmin, async (_req, res) => {
+  // 注意：使用 /api/admin/ 前綴避免 Express 5 路由問題
+  app.get("/api/admin/summer-employees", requireAdmin, async (_req, res) => {
+    console.log("[summer-employees] handler entered");
     try {
-      ok(res, await summerScheduleService.getEmployeesForSchedule());
+      const data = await summerScheduleService.getEmployeesForSchedule();
+      console.log("[summer-employees] data fetched, items:", data?.items?.length);
+      res.status(200).json(data);
     } catch (err: any) {
+      console.error("[summer-employees] ERROR:", err);
       fail(res, 500, err.message);
     }
   });

@@ -1020,7 +1020,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
 <script>
 const REPLIT_READY_VERSION = "v40";
 const API_ENDPOINTS = {
-  employees: "/api/employees/for-schedule",
+  employees: "/api/summer/employees",
   enrollmentCounts: "/api/schedule/enrollment-counts",
   scheduleAssignments: "/api/admin/schedule-assignments",
   manualCourses: "/api/admin/manual-schedule-courses",
@@ -1938,9 +1938,9 @@ function normalizeCourseNameForEnrollment(name){
   return s;
 }
 
-function normalizeEnrollmentItemFromApi(row){
+function normalizeEnrollmentItemFromApi(row, fallbackWeekNo){
   return {
-    weekNo: Number(row.weekNo) || 0,
+    weekNo: Number(row.weekNo) || Number(fallbackWeekNo) || 0,
     venueId: String(row.venueId || '').trim(),
     courseName: row.courseName || '',
     slotCode: String(row.slotCode || '').trim().toUpperCase(),
@@ -1955,7 +1955,8 @@ function applyEnrollmentCounts(payload){
   const map = new Map();
 
   if(source === 'api'){
-    data.map(normalizeEnrollmentItemFromApi).forEach(item => {
+    const fallbackWeekNo = Number(payload.filters?.weekNo) || 0;
+    data.map(row => normalizeEnrollmentItemFromApi(row, fallbackWeekNo)).forEach(item => {
       if(!item.weekNo || !item.venueId || !item.courseName || !item.slotCode) return;
 
       const key = enrollmentKeyFromParts(
