@@ -1027,6 +1027,53 @@ const API_ENDPOINTS = {
   publishShifts: "/api/admin/summer-schedule/publish-shifts",
   mySummerShifts: "/api/portal/my-summer-shifts"
 };
+
+function unwrapApiPayload(json){
+  if(json && typeof json === 'object' && json.data !== undefined){
+    return json.data;
+  }
+  return json;
+}
+
+function extractApiItems(json){
+  const payload = unwrapApiPayload(json);
+
+  if(Array.isArray(payload)) return payload;
+
+  if(payload && Array.isArray(payload.items)) return payload.items;
+  if(payload && Array.isArray(payload.employees)) return payload.employees;
+  if(payload && Array.isArray(payload.data)) return payload.data;
+  if(payload && Array.isArray(payload.rows)) return payload.rows;
+
+  return [];
+}
+
+function extractApiMeta(json){
+  const payload = unwrapApiPayload(json);
+
+  return {
+    lastUpdated:
+      payload?.lastUpdated ||
+      json?.lastUpdated ||
+      json?.data?.lastUpdated ||
+      null,
+    source:
+      payload?.source ||
+      json?.source ||
+      json?.data?.source ||
+      'api',
+    debug:
+      payload?.debug ||
+      json?.debug ||
+      json?.data?.debug ||
+      null,
+    filters:
+      payload?.filters ||
+      json?.filters ||
+      json?.data?.filters ||
+      null,
+  };
+}
 const LOCAL_STORAGE_PREFIX = "schedule-v40-";
 const LEGACY_STORAGE_PREFIX = "schedule-v39-";
 
@@ -1081,17 +1128,14 @@ async function loadEmployeesForSchedule(){
       throw new Error('employee API status '+res.status);
     }
 
-    const raw = await res.json();
-    const list = Array.isArray(raw)
-      ? raw
-      : (Array.isArray(raw.items)
-          ? raw.items
-          : (Array.isArray(raw.employees) ? raw.employees : []));
+    const json = await res.json();
+    const list = extractApiItems(json);
 
-    employees = list.map(normalizeEmployeeFromApi);
+    employees = list.map(normalizeEmployeeFromApi).filter(e => e && e.id);
 
     if(!employees.length){
-      showEmployeeApiMessage('目前沒有可排班的啟用員工');
+      console.warn('employees API response has no usable items:', json);
+      showEmployeeApiMessage('目前沒有可排班的啟用員工，或 API 回傳格式沒有 items');
     }
   }catch(err){
     console.warn('employees API unavailable, no employee data loaded:', err);
@@ -1829,30 +1873,41 @@ function formatUpdatedTime(iso){
 }
 async function fetchEnrollmentCountsForCurrentWeek(){
   const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
-  // 注意：正式上線時，前端呼叫排班系統自己的後端 proxy。
-  // 排班系統後端再用 x-api-key 去呼叫 https://dream-dream.replit.app/api/admin/schedule-enrollment-counts
-  // 不可以把 x-api-key 寫在前端。
-  const url=`${API_ENDPOINTS.enrollmentCounts}?weekNo=${weekNo}&includeZero=true`;
+  const url=`${API_ENDPOINTS.enrollmentCounts}?weekNo=${encodeURIComponent(weekNo)}&includeZero=true`;
   try{
     const res=await fetch(url,{credentials:'include'});
+
+    if(res.status === 401){
+      return {source:'empty',data:[],lastUpdated:null,filters:{},message:'請先登入管理後台'};
+    }
+
     if(!res.ok) throw new Error('API status '+res.status);
-    const raw=await res.json();
-    const items=Array.isArray(raw) ? raw : (Array.isArray(raw.items) ? raw.items : []);
-    return {source:'api',data:items,lastUpdated:raw.lastUpdated||new Date().toISOString(),filters:raw.filters||{}};
+
+    const json=await res.json();
+    const items=extractApiItems(json);
+    const meta=extractApiMeta(json);
+
+    return {source:'api',data:items,lastUpdated:meta.lastUpdated,filters:meta.filters||{},debug:meta.debug};
   }catch(err){
     console.warn('schedule enrollment proxy unavailable, no enrollment counts loaded:',err);
-    return {source:'none',data:[],lastUpdated:null,filters:{}};
+    return {source:'empty',data:[],lastUpdated:null,filters:{},message:'報名人數 API 讀取失敗'};
   }
 }
-function setEnrollmentStatus(source,lastUpdated){
+function setEnrollmentStatus(source, lastUpdated, message){
   const note=document.getElementById('weekNote');
   if(!note) return;
   note.querySelectorAll('.enrollment-status').forEach(el=>el.remove());
   const badge=document.createElement('span');
   badge.className='enrollment-status '+(source==='api'?'api':'mock');
-  badge.textContent=source==='api'
-    ? `報名人數：API即時帶入${lastUpdated ? '｜更新 '+formatUpdatedTime(lastUpdated) : ''}`
-    : '報名人數：正式 API 模式';
+
+  if(message){
+    badge.textContent = message;
+  }else if(source==='api'){
+    badge.textContent = `報名人數：API即時帶入${lastUpdated ? '｜更新 '+formatUpdatedTime(lastUpdated) : ''}`;
+  }else{
+    badge.textContent = '報名人數：正式 API 模式';
+  }
+
   note.appendChild(badge);
 }
 function enrollmentKeyFromParts(weekNo, venueId, courseName, slotCode){
@@ -1895,7 +1950,7 @@ function normalizeEnrollmentItemFromApi(row){
 
 function applyEnrollmentCounts(payload){
   const source = payload.source;
-  const data = payload.data || [];
+  const data = Array.isArray(payload.data) ? payload.data : extractApiItems(payload.data || payload);
 
   const map = new Map();
 
@@ -1931,7 +1986,7 @@ function applyEnrollmentCounts(payload){
 
     const count = source === 'api'
       ? (map.has(key) ? Number(map.get(key)) || 0 : 0)
-      : fallbackCountForRow(tr);
+      : 0;
 
     const enrollEl = tr.querySelector('.enroll-count');
     const neededEl = tr.querySelector('.need-count');
@@ -1959,17 +2014,62 @@ function applyEnrollmentCounts(payload){
     }
   });
 
-  setEnrollmentStatus(source, payload.lastUpdated);
+  setEnrollmentStatus(source, payload.lastUpdated, payload.message);
   validateAll();
 }
 async function loadEnrollmentCounts(){
-  document.querySelectorAll('.enroll-count').forEach(el=>{
-    el.innerText='載入中';
-    el.classList.remove('api','mock');
+  const weekNo = Number(document.getElementById('weekSelect')?.value||0)+1;
+
+  document.querySelectorAll('.enroll-count').forEach(el => {
+    el.innerText = '...';
     el.classList.add('loading');
   });
-  const payload=await fetchEnrollmentCountsForCurrentWeek();
-  applyEnrollmentCounts(payload);
+
+  try{
+    const url = `${API_ENDPOINTS.enrollmentCounts}?weekNo=${encodeURIComponent(weekNo)}&includeZero=true`;
+
+    const res = await fetch(url, { credentials:'include' });
+
+    if(res.status === 401){
+      applyEnrollmentCounts({
+        source: 'empty',
+        data: [],
+        lastUpdated: null,
+        message: '請先登入管理後台'
+      });
+      setEnrollmentStatus('empty', null, '請先登入管理後台');
+      return;
+    }
+
+    if(!res.ok){
+      throw new Error('enrollment API status '+res.status);
+    }
+
+    const json = await res.json();
+    const items = extractApiItems(json);
+    const meta = extractApiMeta(json);
+
+    console.log('[summer enrollment] items:', items.length, 'meta:', meta);
+
+    applyEnrollmentCounts({
+      source: 'api',
+      data: items,
+      lastUpdated: meta.lastUpdated,
+      debug: meta.debug,
+      filters: meta.filters,
+    });
+  }catch(err){
+    console.warn('enrollment API unavailable:', err);
+
+    applyEnrollmentCounts({
+      source: 'empty',
+      data: [],
+      lastUpdated: null,
+      message: '報名人數 API 讀取失敗'
+    });
+
+    setEnrollmentStatus('empty', null, '報名人數 API 讀取失敗');
+  }
 }
 
 function rowForceOpen(tr){
