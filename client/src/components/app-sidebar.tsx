@@ -1,4 +1,4 @@
-import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff, PenLine, ListChecks, ClipboardList } from "lucide-react";
+import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff, PenLine, ListChecks, ClipboardList, Sun } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ const mainItems = [
   { title: "排班意願", url: "/availability", icon: ClipboardList },
   { title: "員工管理", url: "/employees", icon: Users },
   { title: "場館管理", url: "/venues", icon: Building2 },
+  { title: "暑假排班表 v40", url: "/admin/summer-schedule-v40.html", icon: Sun, external: true },
 ];
 
 const reportItems = [
@@ -99,13 +100,20 @@ export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    isActive={location === item.url}
+                    isActive={!item.external && location === item.url}
                     data-testid={`link-nav-${item.url.replace("/", "") || "home"}`}
                   >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
+                    {item.external ? (
+                      <a href={item.url} target="_blank" rel="noopener noreferrer">
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </a>
+                    ) : (
+                      <Link href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

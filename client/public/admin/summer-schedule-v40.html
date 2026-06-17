@@ -1,0 +1,2898 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>三館排班表｜Replit 上線準備版 v40</title>
+  <style>
+    :root{--bg:#f3f5f8;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#d8e0ea;--blue:#1d4ed8;--blue-soft:#eaf2ff;--green:#047857;--green-soft:#ecfdf5;--orange:#b45309;--orange-soft:#fff7ed;--red:#b91c1c;--red-soft:#fef2f2;--purple:#6d28d9;--purple-soft:#f5f3ff;--radius:16px;--shadow:0 14px 34px rgba(15,23,42,.08)}
+    *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#eef4ff 0,#f6f8fb 180px,#f3f5f8 100%);color:var(--text);font-family:"Microsoft JhengHei","Noto Sans TC",Arial,sans-serif;font-size:14px}.app{max-width:2280px;margin:0 auto;padding:16px 18px 28px}.topbar{position:sticky;top:0;z-index:30;background:rgba(243,245,248,.96);backdrop-filter:blur(8px);border:1px solid rgba(216,224,234,.9);border-radius:18px;padding:16px;box-shadow:0 12px 30px rgba(15,23,42,.08)}.header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:12px}h1{margin:0 0 6px;font-size:28px;letter-spacing:.5px;color:#0b1f44}.subtitle{color:var(--muted);font-weight:800;line-height:1.6;max-width:1100px}.actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}button,select,input{font-family:inherit;font-size:14px}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 12px;border-radius:10px;cursor:pointer;font-weight:900;transition:.15s ease;box-shadow:0 1px 0 rgba(15,23,42,.04)}.btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(15,23,42,.08)}.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}.btn.green{background:var(--green);border-color:var(--green);color:#fff}.filters{display:grid;grid-template-columns:320px 190px 1fr;gap:10px;align-items:end}.field label{display:block;color:var(--muted);font-size:12px;font-weight:900;margin-bottom:5px}.field select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;outline:none}.week-note{display:flex;align-items:center;padding:10px 12px;border-radius:10px;background:var(--blue-soft);color:#1e3a8a;font-weight:900;line-height:1.5;min-height:42px}.guide{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0 0}.guide-card{background:linear-gradient(180deg,#fff,#f8fbff);border:1px solid #dce7f4;border-radius:14px;padding:10px 12px;box-shadow:0 4px 12px rgba(15,23,42,.04);line-height:1.65;font-weight:850;color:#475569;min-height:92px}.guide-card b{color:#0f172a}.guide-card code{background:#f1f5f9;border:1px solid #dbe3ed;border-radius:6px;padding:1px 5px;color:#0f172a;font-weight:900}.top-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}.summary-card{background:#fff;border:1px solid #d8e4f1;border-radius:14px;padding:12px 14px;box-shadow:0 8px 20px rgba(15,23,42,.05)}.summary-card b{display:block;font-size:18px;color:#0f172a;margin-top:2px}.summary-card span{font-size:12px;font-weight:900;color:#64748b}.main{display:grid;gap:18px;margin-top:18px}.venue-card{background:var(--card);border:1px solid #d6e2f0;border-radius:18px;box-shadow:var(--shadow);overflow:hidden}.venue-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#0f2d5c,#1d4ed8 42%,#eef6ff);color:#fff}.venue-title{font-size:24px;font-weight:1000;letter-spacing:.5px}.venue-head .subtitle{color:#dbeafe}.venue-meta{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}.tag{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;border:1px solid transparent;font-size:12px;font-weight:900;white-space:nowrap;background:rgba(255,255,255,.92)!important}.tag.blue{color:var(--blue);border-color:#bfdbfe}.tag.green{color:var(--green);border-color:#bbf7d0}.tag.orange{color:var(--orange);border-color:#fed7aa}.venue-body{display:grid;grid-template-columns:minmax(980px,1.05fr) minmax(980px,1.08fr);gap:14px;padding:14px;background:#f8fbff;align-items:start}.course-stack{display:grid;gap:12px;min-width:0}.section{border:1px solid #d8e4f1;border-radius:16px;overflow:hidden;background:#fff;min-width:0;box-shadow:0 8px 20px rgba(15,23,42,.05)}.section-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#ffffff,#f1f7ff);font-weight:1000;border-left:6px solid #2563eb}.course-stack .section:nth-child(2) .section-head{border-left-color:#f97316;background:linear-gradient(90deg,#ffffff,#fff7ed)}.section-head small{color:var(--muted);font-weight:800}.lifeguard-inputs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:10px;background:#f8fafc;border-bottom:1px solid var(--line)}.source-card{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}.source-title{padding:8px 10px;background:#ecfdf5;color:#047857;font-weight:1000;border-bottom:1px solid var(--line)}.source-cell.warn .cell-status{color:#b91c1c;background:#fef2f2;border-top-color:#fecaca}.source-cell.ok .cell-status{color:#047857;background:#ecfdf5;border-top-color:#bbf7d0}.table-wrap{overflow:auto;width:100%;max-height:720px;background:#fff}table{border-collapse:collapse;width:100%}.duty-table{min-width:1100px}.course-table{min-width:980px}th,td{border:1px solid #d9e3ef;vertical-align:top}th{background:#edf4fc;text-align:center;color:#1e293b;font-weight:1000;padding:9px 8px;position:sticky;top:0;z-index:2}tbody tr:nth-child(even) td:not(.course-name):not(.time-cell):not(.needed-col):not(.enroll-col):not(.no-col){background:#fbfdff}.no-col{width:42px;text-align:center;background:#f8fafc;font-weight:1000;color:#0f172a;padding:8px}.time-cell{min-width:110px;background:#f8fafc;color:#0f172a;font-weight:1000;padding:8px;text-align:center;white-space:nowrap}.course-name{min-width:170px;background:#fff8ec;color:#7c2d12;font-weight:1000;padding:8px;line-height:1.45;border-left:4px solid #fed7aa}.course-code{width:64px;text-align:center;background:#f7f3ff;color:#5b21b6;font-weight:1000;padding:8px;white-space:nowrap;font-size:15px}.enroll-col{width:86px;min-width:86px;text-align:center;background:#ecfeff;color:#0e7490;font-weight:1000;padding:8px}.needed-col{width:86px;min-width:86px;text-align:center;background:#fff7ed;color:#c2410c;font-weight:1000;padding:8px}.time-edit{outline:0;border-radius:6px;min-height:22px;padding:4px}.time-edit:focus,.editbox:focus{background:#fffbea;box-shadow:inset 0 0 0 2px #facc15}.edit-cell{min-width:130px;height:68px;padding:0;background:#fff}.editbox{min-height:54px;outline:0;padding:8px 9px 3px;line-height:1.45;white-space:pre-wrap;border-radius:10px 10px 0 0;font-weight:850}.source-card .editbox{min-height:96px}.editbox:empty:before{content:attr(data-placeholder);color:#94a3b8;font-weight:700}.cell-status{min-height:20px;padding:3px 8px 4px;border-top:1px dashed #e2e8f0;font-size:10.5px;line-height:1.25;color:#64748b;background:#fbfdff;font-weight:900}.edit-cell.ok .cell-status{color:#166534;background:#dcfce7;border-top-color:#bbf7d0}.edit-cell.warn .cell-status{color:#991b1b;background:#fee2e2;border-top-color:#fecaca}.weekday-col{min-width:148px;background:#fffef7}.sat-col{min-width:140px}.sun-col{min-width:140px}.note-col{min-width:170px;background:#fbfbff}.frontdesk-head{background:#dbeafe;color:#1d4ed8}.lifeguard-head{background:#dcfce7;color:#047857}.course-head{background:#ede9fe;color:#6d28d9}.head-sub{display:block;color:var(--muted);font-size:12px;font-weight:800;margin-top:2px}.lifeguard-display{min-width:170px;background:#f7fffb}.lifeguard-lines{min-height:54px;padding:7px 8px;line-height:1.45;font-weight:900;white-space:pre-wrap}.lifeguard-lines .shift{display:block;margin:0 0 4px;padding:5px 7px;border-radius:9px;background:#ecfdf5;border:1px solid #bbf7d0;color:#065f46}.lifeguard-lines small{display:block;color:#047857;font-weight:800;margin-top:1px}.lifeguard-lines .empty{color:#94a3b8;font-weight:800}.mini-actions{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line);background:#f8fafc}.mini-btn{font-size:12px;padding:6px 9px;border-radius:8px;border:1px solid var(--line);background:#fff;font-weight:900;cursor:pointer}.mini-btn:hover{background:#eef6ff}.right-panels{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:14px}.panel{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 12px rgba(15,23,42,.04);overflow:hidden}.panel h3{font-size:15px;margin:0;padding:10px 12px;border-bottom:1px solid var(--line);background:#f8fafc}.panel-content{padding:10px 12px;line-height:1.75;font-weight:800;color:#475569}.formula{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:8px;margin-top:6px;color:#0f172a}@media print{body{background:#fff}.topbar,.actions,.guide,.top-summary,.right-panels,.mini-actions{display:none!important}.app{max-width:none;padding:0}.venue-card{box-shadow:none;border-radius:0;break-inside:avoid;margin-bottom:10px}.venue-body{grid-template-columns:1fr;padding:6px}.table-wrap{max-height:none;overflow:visible}th,td{font-size:10px}.editbox{min-height:45px;padding:5px}.cell-status{display:none}}@media(max-width:1800px){.venue-body{grid-template-columns:1fr}.guide,.top-summary,.right-panels{grid-template-columns:1fr 1fr}.filters{grid-template-columns:1fr}.header{flex-direction:column}.actions{justify-content:flex-start}.venue-head{align-items:flex-start;flex-direction:column}.venue-meta{justify-content:flex-start}}@media(max-width:820px){.guide,.top-summary,.right-panels,.lifeguard-inputs{grid-template-columns:1fr}.app{padding:10px}h1{font-size:22px}}
+  
+.lifeguard-display{cursor:pointer;position:relative}
+.lifeguard-display:hover{outline:2px solid #22c55e;outline-offset:-2px;background:#f0fdf4!important}
+.lifeguard-display:after{content:'點此編輯';position:absolute;right:6px;top:5px;font-size:10px;font-weight:900;color:#047857;background:#dcfce7;border:1px solid #bbf7d0;border-radius:999px;padding:2px 6px;opacity:.92}
+.source-card.active-edit{outline:3px solid #22c55e;box-shadow:0 0 0 5px rgba(34,197,94,.15)}
+.source-card.active-edit .source-title:after{content:'  ← 請在這裡修改';color:#b45309}
+
+.view-tabs{display:flex;gap:8px;margin:14px 0 0;flex-wrap:wrap}
+.tab-btn{border:1px solid #cbd5e1;background:#fff;color:#0f172a;border-radius:999px;padding:9px 14px;font-weight:1000;cursor:pointer}
+.tab-btn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+.hidden-view{display:none!important}
+.availability-page{background:#fff;border:1px solid #d8e4f1;border-radius:18px;box-shadow:0 14px 34px rgba(15,23,42,.08);overflow:hidden;margin-top:18px}
+.avail-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 16px;background:linear-gradient(90deg,#0f766e,#0891b2 48%,#ecfeff);color:#fff}
+.avail-head h2{font-size:23px;margin:0}
+.avail-head p{margin:5px 0 0;color:#cffafe;font-weight:800}
+.avail-body{padding:14px;background:#f8fbff}
+.avail-layout{display:grid;grid-template-columns:minmax(920px,1fr) minmax(720px,.82fr);gap:14px;align-items:start}
+.avail-section{border:1px solid #d8e4f1;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 8px 20px rgba(15,23,42,.05)}
+.avail-section-title{padding:12px 14px;background:linear-gradient(90deg,#ffffff,#ecfeff);border-bottom:1px solid #d8e4f1;font-weight:1000;border-left:6px solid #0891b2}
+.avail-table{min-width:980px}
+.avail-table th{background:#e0f2fe}
+.staff-name-col{min-width:110px;background:#f8fafc;font-weight:1000}
+.staff-venue-col{min-width:120px;background:#fff7ed;font-weight:1000;color:#9a3412}
+.avail-input{min-width:170px}
+.avail-result{min-width:760px}
+.avail-result td{padding:8px;line-height:1.55}
+.result-open{background:#ecfdf5;color:#065f46;font-weight:1000;border-radius:8px;padding:4px 7px;display:inline-block;margin:2px 3px 2px 0;border:1px solid #bbf7d0}
+.result-busy{background:#eef2ff;color:#3730a3;font-weight:900;border-radius:8px;padding:4px 7px;display:inline-block;margin:2px 3px 2px 0;border:1px solid #c7d2fe}
+.result-empty{color:#94a3b8;font-weight:900}
+.avail-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:1800px){.avail-layout{grid-template-columns:1fr}.avail-result{min-width:980px}}
+
+.questionnaire{background:#fff;border:1px solid #d8e4f1;border-radius:16px;box-shadow:0 8px 20px rgba(15,23,42,.05);overflow:hidden;margin-bottom:14px}
+.questionnaire-title{padding:12px 14px;background:linear-gradient(90deg,#ffffff,#f0f9ff);border-bottom:1px solid #d8e4f1;border-left:6px solid #0284c7;font-weight:1000}
+.q-body{padding:14px;background:#fbfdff}
+.q-grid{display:grid;grid-template-columns:1.1fr 1.2fr 1.2fr;gap:12px}
+.q-card{border:1px solid #d8e4f1;border-radius:14px;background:#fff;padding:12px}
+.q-card h4{margin:0 0 10px;font-size:15px;color:#0f172a}
+.q-field{margin-bottom:10px}
+.q-field label{display:block;font-size:12px;font-weight:1000;color:#64748b;margin-bottom:5px}
+.q-field input,.q-field select,.q-field textarea{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:9px 10px;font-family:inherit;font-size:14px;font-weight:850;background:#fff}
+.q-field textarea{min-height:76px;resize:vertical}
+.check-row{display:flex;gap:8px;flex-wrap:wrap}
+.check-pill{display:inline-flex;gap:5px;align-items:center;border:1px solid #cbd5e1;border-radius:999px;padding:6px 9px;background:#fff;font-weight:900}
+.time-row{display:grid;grid-template-columns:1fr 1fr auto;gap:7px;align-items:end;margin-bottom:7px}
+.q-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.q-hint{font-size:12px;color:#64748b;font-weight:800;line-height:1.6;margin-top:6px}
+@media(max-width:1300px){.q-grid{grid-template-columns:1fr}}
+
+/* v20 上方精簡版 */
+.compact-top{
+  padding:8px 12px!important;
+  border-radius:14px!important;
+  margin-bottom:8px!important;
+}
+.compact-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:6px;
+}
+.compact-title h1{
+  margin:0;
+  font-size:22px!important;
+  line-height:1.15;
+}
+.compact-subtitle{
+  font-size:12.5px!important;
+  line-height:1.35!important;
+  max-width:none!important;
+  margin-top:2px;
+}
+.compact-actions{
+  gap:6px!important;
+  flex-wrap:nowrap!important;
+}
+.compact-actions .btn{
+  padding:7px 10px!important;
+  border-radius:9px!important;
+  font-size:13px!important;
+}
+.compact-controls{
+  display:grid;
+  grid-template-columns:260px 180px 1fr;
+  gap:8px;
+  align-items:end;
+}
+.compact-controls .field label{
+  font-size:11px!important;
+  margin-bottom:3px!important;
+}
+.compact-controls .field select{
+  padding:7px 9px!important;
+  min-height:36px;
+}
+.compact-controls .week-note{
+  min-height:36px!important;
+  padding:7px 10px!important;
+  font-size:13px!important;
+  border-radius:9px!important;
+}
+.compact-help{
+  margin-top:6px;
+  font-size:12px;
+  color:#475569;
+  font-weight:850;
+}
+.compact-help summary{
+  cursor:pointer;
+  display:inline-block;
+  padding:4px 8px;
+  border:1px solid #cbd5e1;
+  border-radius:999px;
+  background:#fff;
+  color:#334155;
+}
+.help-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:8px;
+  margin-top:6px;
+}
+.help-grid>div{
+  background:#fff;
+  border:1px solid #d8e4f1;
+  border-radius:10px;
+  padding:7px 9px;
+  line-height:1.5;
+}
+.help-grid code{
+  background:#eef6ff;
+  border:1px solid #bfdbfe;
+  border-radius:6px;
+  padding:1px 5px;
+  font-weight:1000;
+}
+.view-tabs{
+  margin:8px 0 10px!important;
+}
+.tab-btn{
+  padding:7px 12px!important;
+  font-size:13px!important;
+}
+.main{
+  margin-top:10px!important;
+}
+@media(max-width:1100px){
+  .compact-row{align-items:flex-start;flex-direction:column}
+  .compact-actions{flex-wrap:wrap!important}
+  .compact-controls{grid-template-columns:1fr}
+  .help-grid{grid-template-columns:1fr}
+}
+
+
+/* v21 報名0人自動縮小 */
+tr.zero-enroll td{
+  background:#fafafa!important;
+}
+tr.zero-enroll .course-name,
+tr.zero-enroll .course-code,
+tr.zero-enroll .time-cell,
+tr.zero-enroll .enroll-col,
+tr.zero-enroll .needed-col{
+  padding-top:6px!important;
+  padding-bottom:6px!important;
+  opacity:.88;
+}
+tr.zero-enroll .edit-cell{
+  height:40px!important;
+}
+tr.zero-enroll .editbox{
+  min-height:22px!important;
+  padding:4px 6px 2px!important;
+  font-size:12px!important;
+  line-height:1.3!important;
+  color:#94a3b8;
+}
+tr.zero-enroll .cell-status{
+  display:none!important;
+}
+tr.zero-enroll .editbox:empty:before{
+  content:"0人，無需排教練";
+  color:#94a3b8;
+}
+tr.zero-enroll .note-col .editbox:empty:before{
+  content:"";
+}
+
+
+/* v22 報名人數 API 串接 */
+.auto-count{
+  background:#e0f2fe;
+  border:1px solid #7dd3fc;
+  border-radius:8px;
+  font-weight:1000;
+  text-align:center;
+  cursor:default;
+}
+.auto-count.loading{
+  color:#64748b;
+  background:#f1f5f9;
+  border-color:#cbd5e1;
+}
+.auto-count.api{
+  color:#075985;
+  background:#ecfeff;
+}
+.auto-count.mock{
+  color:#92400e;
+  background:#fff7ed;
+  border-color:#fed7aa;
+}
+.auto-count:after{
+  content:"系統";
+  display:block;
+  font-size:10px;
+  color:#64748b;
+  font-weight:900;
+  line-height:1.1;
+}
+.enrollment-status{
+  display:inline-block;
+  margin-left:8px;
+  padding:2px 7px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:1000;
+  background:#ecfeff;
+  color:#075985;
+  border:1px solid #bae6fd;
+}
+.enrollment-status.mock{
+  background:#fff7ed;
+  color:#92400e;
+  border-color:#fed7aa;
+}
+tr.zero-enroll .auto-count{
+  background:#f1f5f9;
+  color:#64748b;
+  border-color:#cbd5e1;
+}
+
+
+/* v23 完整優化：問題總表、0人隱藏、sticky 欄位、正式資料欄位 */
+.schedule-tools{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:10px;
+  align-items:start;
+  margin:8px 0 10px;
+}
+.issue-panel{
+  border:1px solid #fecaca;
+  background:#fff;
+  border-radius:14px;
+  overflow:hidden;
+  box-shadow:0 8px 20px rgba(15,23,42,.05);
+}
+.issue-head{
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  align-items:center;
+  padding:9px 12px;
+  background:#fff7ed;
+  border-bottom:1px solid #fed7aa;
+  color:#9a3412;
+  font-weight:1000;
+}
+.issue-count{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:24px;
+  height:24px;
+  padding:0 8px;
+  border-radius:999px;
+  background:#b91c1c;
+  color:#fff;
+  font-size:12px;
+}
+.issue-list{
+  padding:8px 12px;
+  max-height:145px;
+  overflow:auto;
+  font-size:12px;
+  font-weight:850;
+  color:#475569;
+  line-height:1.55;
+}
+.issue-list .issue-item{
+  padding:5px 0;
+  border-bottom:1px dashed #e2e8f0;
+}
+.issue-list .issue-item:last-child{border-bottom:0}
+.issue-list .ok-message{color:#047857;font-weight:1000}
+.filter-tools{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+  justify-content:flex-end;
+}
+.toggle-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  border:1px solid #cbd5e1;
+  background:#fff;
+  border-radius:999px;
+  padding:8px 11px;
+  font-size:12px;
+  font-weight:1000;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.toggle-pill input{margin:0}
+body.hide-zero tr.zero-enroll:not(.force-open){display:none}
+body.show-issues-only tr:not(.has-issue):not(:has(th)){display:none}
+body.show-issues-only tr.zero-enroll:not(.has-issue){display:none}
+tr.has-issue td:first-child{box-shadow:inset 4px 0 0 #b91c1c}
+tr.force-open td:first-child{box-shadow:inset 4px 0 0 #f97316}
+.force-badge{
+  display:inline-block;
+  margin-top:3px;
+  padding:1px 6px;
+  border-radius:999px;
+  background:#fff7ed;
+  border:1px solid #fed7aa;
+  color:#9a3412;
+  font-size:10px;
+  font-weight:1000;
+}
+.id-hint{
+  display:block;
+  margin-top:3px;
+  color:#94a3b8;
+  font-size:10px;
+  font-weight:800;
+}
+.course-table th:nth-child(1),
+.course-table td:nth-child(1){
+  position:sticky;
+  left:0;
+  z-index:3;
+}
+.course-table th:nth-child(2),
+.course-table td:nth-child(2){
+  position:sticky;
+  left:174px;
+  z-index:3;
+}
+.course-table th:nth-child(3),
+.course-table td:nth-child(3){
+  position:sticky;
+  left:238px;
+  z-index:3;
+}
+.course-table th:nth-child(1),
+.course-table th:nth-child(2),
+.course-table th:nth-child(3){z-index:5}
+tr.zero-enroll .force-badge{display:none}
+tr.zero-enroll.force-open .force-badge{display:inline-block}
+.unsaved-dot{
+  display:none;
+  margin-left:6px;
+  padding:2px 7px;
+  border-radius:999px;
+  background:#fff7ed;
+  color:#9a3412;
+  border:1px solid #fed7aa;
+  font-size:11px;
+  font-weight:1000;
+}
+body.unsaved .unsaved-dot{display:inline-block}
+@media(max-width:1200px){
+  .schedule-tools{grid-template-columns:1fr}
+  .filter-tools{justify-content:flex-start}
+}
+
+
+/* v25 簡潔排班版 */
+.mode-pills,.section-pills{display:flex;gap:8px;flex-wrap:wrap}
+.mode-pill,.section-pill{
+  display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid #cbd5e1;background:#fff;color:#0f172a;
+  border-radius:999px;padding:8px 12px;font-size:12px;font-weight:1000;cursor:pointer
+}
+.mode-pill.active,.section-pill.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+.mode-pill.orange.active,.section-pill.orange.active{background:#f97316;border-color:#f97316}
+.filter-group-label{font-size:11px;color:#64748b;font-weight:900;margin:0 0 6px}
+.filter-block{display:flex;flex-direction:column;gap:6px}
+.filter-tools{align-items:flex-start!important}
+.filter-tools .btn{padding:8px 10px!important;font-size:12px!important}
+.simplified-mode .issue-panel{display:none}
+.simplified-mode .right-panels{display:none}
+.simplified-mode .cell-status{display:none!important}
+.simplified-mode .edit-cell{height:52px}
+.simplified-mode .editbox{min-height:40px;padding:6px 8px 2px;line-height:1.35;font-size:12.5px}
+.simplified-mode .source-card .editbox{min-height:70px}
+.simplified-mode .lifeguard-inputs{padding:8px;gap:8px}
+.simplified-mode .source-title{padding:6px 9px;font-size:12px}
+.simplified-mode .lifeguard-lines{min-height:42px;padding:6px;line-height:1.25}
+.simplified-mode .lifeguard-lines .shift{
+  display:inline-flex;flex-direction:column;vertical-align:top;
+  margin:0 4px 4px 0;padding:4px 6px;border-radius:8px;font-size:12px
+}
+.simplified-mode .lifeguard-lines small{margin-top:0;font-size:10px}
+.simplified-mode .table-wrap{max-height:560px}
+.simplified-mode .section-head{padding:10px 12px}
+.simplified-mode .section-head small{font-size:11px}
+.simplified-mode .course-name{min-width:156px}
+.simplified-mode .id-hint{display:none}
+.simplified-mode .force-badge{display:none}
+.simplified-mode .has-issue td{background-image:linear-gradient(to right, rgba(254,242,242,.8), rgba(255,255,255,0));}
+body.section-duty section[data-section], body.section-course section[data-section], body.section-holiday section[data-section], body.section-manual section[data-section]{display:none}
+body.section-duty section[data-section="duty"]{display:block}
+body.section-course section[data-section="course"]{display:block}
+body.section-holiday section[data-section="holiday"]{display:block}
+body.section-manual section[data-section="manual"]{display:block}
+body.section-duty .course-stack, body.section-course .course-stack, body.section-holiday .course-stack, body.section-manual .course-stack{display:grid}
+body.section-course .venue-body, body.section-holiday .venue-body, body.section-manual .venue-body{grid-template-columns:1fr}
+body.section-course section[data-section="duty"], body.section-holiday section[data-section="duty"], body.section-manual section[data-section="duty"]{display:none!important}
+.check-mode .issue-panel{display:block}
+.check-mode .right-panels{display:grid}
+.check-mode .cell-status{display:block!important}
+.check-mode .edit-cell{height:68px}
+.check-mode .editbox{min-height:54px}
+.check-mode .table-wrap{max-height:720px}
+.check-mode .lifeguard-lines .shift{display:block}
+.check-mode .has-issue td:first-child{box-shadow:inset 4px 0 0 #dc2626}
+.check-mode .warn .cell-status{font-size:10.5px}
+@media(max-width:1400px){
+  .filter-tools{display:grid!important;grid-template-columns:1fr 1fr;gap:10px}
+}
+@media(max-width:900px){
+  .filter-tools{grid-template-columns:1fr!important}
+}
+
+
+/* v26 員工選擇與 LINE 綁定狀態 */
+.employee-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 7px 5px}
+.employee-select-btn{font-size:11px;padding:4px 7px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;font-weight:1000;cursor:pointer;color:#0f172a}
+.employee-select-btn:hover{background:#eff6ff;border-color:#93c5fd}
+.employee-chips{display:flex;gap:4px;flex-wrap:wrap}
+.employee-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:999px;padding:2px 6px;font-size:10.5px;font-weight:1000;color:#334155}
+.line-badge{display:inline-flex;align-items:center;border-radius:999px;padding:2px 6px;font-size:10.5px;font-weight:1000;border:1px solid transparent;white-space:nowrap}
+.line-badge.bound{background:#ecfdf5;color:#047857;border-color:#bbf7d0}
+.line-badge.unbound{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.employee-modal-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.46);z-index:1000;align-items:center;justify-content:center;padding:20px}
+.employee-modal-backdrop.show{display:flex}
+.employee-modal{width:min(760px,96vw);max-height:82vh;background:#fff;border-radius:18px;border:1px solid #d8e4f1;box-shadow:0 24px 70px rgba(15,23,42,.28);overflow:hidden}
+.employee-modal-head{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:13px 15px;background:linear-gradient(90deg,#0f2d5c,#1d4ed8);color:#fff;font-weight:1000}
+.employee-modal-head button{border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.16);color:#fff;border-radius:999px;padding:5px 9px;font-weight:1000;cursor:pointer}
+.employee-modal-body{padding:12px;background:#f8fbff}
+.employee-search{width:100%;border:1px solid #cbd5e1;border-radius:12px;padding:10px 12px;font-weight:900;margin-bottom:10px}
+.employee-list{display:grid;gap:8px;max-height:54vh;overflow:auto}
+.employee-option{display:flex;justify-content:space-between;gap:10px;align-items:center;text-align:left;border:1px solid #d8e4f1;background:#fff;border-radius:13px;padding:10px 12px;cursor:pointer;font-family:inherit}
+.employee-option:hover{background:#eff6ff;border-color:#93c5fd}
+.employee-option-main{font-weight:1000;color:#0f172a;line-height:1.45}
+.employee-option-sub{font-size:12px;color:#64748b;font-weight:850;margin-top:2px}
+.employee-info-box{border:1px solid #d8e4f1;border-radius:12px;background:#f8fafc;padding:9px 10px;font-size:13px;font-weight:900;line-height:1.6;color:#334155}
+.line-push-panel{border:1px solid #d8e4f1;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 8px 20px rgba(15,23,42,.05)}
+.line-push-head{padding:9px 12px;background:linear-gradient(90deg,#ecfdf5,#ffffff);border-bottom:1px solid #d8e4f1;color:#047857;font-weight:1000}
+.line-push-body{padding:9px 12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;line-height:1.6}
+.line-push-list-title{font-weight:1000;color:#0f172a;margin-bottom:4px}
+.line-push-item{padding:3px 0;border-bottom:1px dashed #e2e8f0;font-weight:900;color:#475569}
+.line-push-empty{color:#94a3b8;font-weight:900}
+.simplified-mode .employee-tools{padding:0 6px 4px}
+.simplified-mode .employee-chip{font-size:10px;padding:1px 5px}
+.simplified-mode .line-badge{font-size:10px;padding:1px 5px}
+@media(max-width:1100px){.line-push-body{grid-template-columns:1fr}}
+
+
+/* v29 本週手動課程 / 外部課程 */
+.manual-form{display:grid;grid-template-columns:1.25fr 1fr 1fr .65fr .65fr 1.2fr auto;gap:8px;padding:10px;background:#fff7ed;border-bottom:1px solid #fed7aa;align-items:end}
+.manual-field label{display:block;font-size:11px;font-weight:1000;color:#9a3412;margin-bottom:4px}
+.manual-field input,.manual-field select{width:100%;border:1px solid #fdba74;border-radius:9px;padding:8px 9px;font-weight:850;background:#fff;font-family:inherit;font-size:13px}
+.manual-add-btn{border:1px solid #ea580c;background:#f97316;color:#fff;border-radius:10px;padding:8px 10px;font-weight:1000;cursor:pointer;white-space:nowrap}
+.manual-help{padding:7px 10px;background:#fffaf3;border-bottom:1px solid #fed7aa;color:#9a3412;font-size:12px;font-weight:900;line-height:1.55}
+.manual-table{min-width:1080px}
+.manual-table th{background:#ffedd5;color:#9a3412}
+.manual-date-col{min-width:110px;background:#fff7ed;color:#9a3412;font-weight:1000;text-align:center;padding:8px;white-space:nowrap}
+.manual-empty{padding:14px;color:#94a3b8;font-weight:1000;text-align:center;background:#fff}
+.manual-delete{border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:5px 8px;font-size:12px;font-weight:1000;cursor:pointer}
+.manual-delete:hover{background:#fef2f2}
+body.section-manual section[data-section], body.section-duty section[data-section], body.section-course section[data-section], body.section-holiday section[data-section], body.section-manual section[data-section]{display:none}
+body.section-manual section[data-section="manual"]{display:block}
+body.section-manual .course-stack{display:grid}
+body.section-manual .venue-body{grid-template-columns:1fr}
+body.section-manual section[data-section="duty"]{display:none!important}
+@media(max-width:1300px){.manual-form{grid-template-columns:1fr 1fr}.manual-add-btn{width:100%}}
+@media(max-width:760px){.manual-form{grid-template-columns:1fr}}
+
+
+/* v31 撞課檢查與人員去重 */
+.duplicate-note{background:#fff7ed;color:#c2410c;border-top-color:#fed7aa!important}
+
+
+.result-busy.lifeguard-busy{background:#ecfdf5;color:#047857;border-color:#bbf7d0}
+.result-busy.course-busy{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
+
+
+/* v33 本週薪資統計 */
+.payroll-page{background:#fff;border:1px solid #d8e4f1;border-radius:18px;box-shadow:0 14px 34px rgba(15,23,42,.08);overflow:hidden;margin-top:18px}
+.payroll-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 16px;background:linear-gradient(90deg,#7c2d12,#ea580c 48%,#fff7ed);color:#fff}
+.payroll-head h2{font-size:23px;margin:0}
+.payroll-head p{margin:5px 0 0;color:#ffedd5;font-weight:800}
+.payroll-body{padding:14px;background:#fffaf7}
+.payroll-rates{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.rate-card{background:#fff;border:1px solid #fed7aa;border-radius:14px;padding:10px 12px}
+.rate-card label{display:block;font-size:12px;font-weight:1000;color:#9a3412;margin-bottom:5px}
+.rate-card input{width:100%;border:1px solid #fdba74;border-radius:10px;padding:9px 10px;font-weight:900;font-family:inherit}
+.payroll-summary-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.payroll-stat{background:#fff;border:1px solid #fed7aa;border-radius:14px;padding:11px 13px}
+.payroll-stat span{font-size:12px;font-weight:1000;color:#9a3412}
+.payroll-stat b{display:block;font-size:20px;color:#0f172a;margin-top:2px}
+.payroll-table,.payroll-detail-table{min-width:1100px}
+.payroll-table th,.payroll-detail-table th{background:#ffedd5;color:#9a3412}
+.payroll-table td,.payroll-detail-table td{padding:8px;line-height:1.5}
+.payroll-name{font-weight:1000;color:#0f172a}
+.payroll-money{font-weight:1000;color:#047857}
+.payroll-type{display:inline-block;border-radius:999px;padding:3px 7px;font-size:11px;font-weight:1000;border:1px solid #fed7aa;background:#fff7ed;color:#c2410c}
+.payroll-type.course{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
+.payroll-type.manual{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.payroll-type.lifeguard{background:#ecfdf5;color:#047857;border-color:#bbf7d0}
+.payroll-type.frontdesk{background:#f0f9ff;color:#0369a1;border-color:#bae6fd}
+.payroll-empty{padding:14px;color:#94a3b8;font-weight:1000;text-align:center;background:#fff}
+@media(max-width:1500px){.payroll-rates,.payroll-summary-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:800px){.payroll-rates,.payroll-summary-grid{grid-template-columns:1fr}.payroll-head{flex-direction:column;align-items:flex-start}}
+
+
+.course-count-list{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.course-count-chip{display:inline-flex;align-items:center;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:999px;padding:3px 7px;font-size:11px;font-weight:1000;margin:1px 2px 1px 0}
+.course-count-chip.manual{border-color:#fed7aa;background:#fff7ed;color:#c2410c}
+.course-total-table{min-width:980px}
+.course-total-table th{background:#ffedd5;color:#9a3412}
+.course-total-table td{padding:8px;line-height:1.55}
+
+
+/* v36 正式資料模式 / 課程薪資規則 / 強化檢查 */
+.production-badge{background:#ecfdf5!important;border-color:#bbf7d0!important;color:#047857!important}
+.rate-rule-table{min-width:900px}
+.rate-rule-table th{background:#ffedd5;color:#9a3412}
+.rate-rule-table td{padding:7px;line-height:1.45}
+.rule-input{width:100%;border:1px solid #fdba74;border-radius:9px;padding:7px 8px;font-weight:900;font-family:inherit;background:#fff}
+.rule-delete{border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:5px 8px;font-weight:1000;cursor:pointer}
+.rule-delete:hover{background:#fef2f2}
+.rate-rule-actions{display:flex;gap:8px;flex-wrap:wrap;padding:8px;background:#fff7ed;border-top:1px solid #fed7aa}
+.rule-note{font-size:12px;color:#9a3412;font-weight:900;line-height:1.6;padding:8px 10px;background:#fffaf3;border-bottom:1px solid #fed7aa}
+.conflict-strong{background:#fef2f2!important;color:#991b1b!important;border-top-color:#fecaca!important}
+
+
+/* v37 問題分級與手機查閱 */
+.issue-group{border:1px solid #e2e8f0;border-radius:12px;background:#fff;margin:8px 0;overflow:hidden}
+.issue-group-head{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;font-weight:1000;border-bottom:1px solid #e2e8f0}
+.issue-group-head.critical{background:#fef2f2;color:#991b1b}
+.issue-group-head.shortage{background:#fff7ed;color:#9a3412}
+.issue-group-head.notice{background:#f8fafc;color:#475569}
+.issue-item.critical{border-left-color:#dc2626;background:#fff7f7}
+.issue-item.shortage{border-left-color:#f97316;background:#fffaf3}
+.issue-item.notice{border-left-color:#64748b;background:#f8fafc}
+.issue-severity-badge{display:inline-flex;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:1000;background:rgba(255,255,255,.75);border:1px solid rgba(15,23,42,.08)}
+.mobile-page{background:#fff;border:1px solid #d8e4f1;border-radius:18px;box-shadow:0 14px 34px rgba(15,23,42,.08);overflow:hidden;margin-top:18px}
+.mobile-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 16px;background:linear-gradient(90deg,#1e3a8a,#0284c7 52%,#ecfeff);color:#fff}
+.mobile-head h2{font-size:23px;margin:0}
+.mobile-head p{margin:5px 0 0;color:#dbeafe;font-weight:800}
+.mobile-body{padding:14px;background:#f8fbff}
+.mobile-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.mobile-stat{background:#fff;border:1px solid #d8e4f1;border-radius:14px;padding:11px 13px}
+.mobile-stat span{font-size:12px;font-weight:1000;color:#0369a1}
+.mobile-stat b{display:block;font-size:20px;color:#0f172a;margin-top:2px}
+.mobile-card-grid{display:grid;grid-template-columns:repeat(3,minmax(260px,1fr));gap:12px}
+.mobile-card{background:#fff;border:1px solid #d8e4f1;border-radius:16px;padding:12px;box-shadow:0 8px 18px rgba(15,23,42,.05)}
+.mobile-card h4{margin:0 0 8px;color:#0f172a;font-size:15px}
+.mobile-work{border-top:1px dashed #e2e8f0;padding:8px 0;font-size:13px;line-height:1.55}
+.mobile-work:first-of-type{border-top:0}
+.mobile-work b{color:#0f172a}
+.mobile-work small{display:block;color:#64748b;font-weight:850;margin-top:2px}
+.mobile-pill{display:inline-flex;border-radius:999px;padding:3px 7px;font-size:11px;font-weight:1000;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;margin:2px 4px 2px 0}
+.mobile-pill.lifeguard{background:#ecfdf5;color:#047857;border-color:#bbf7d0}
+.mobile-pill.frontdesk{background:#f0f9ff;color:#0369a1;border-color:#bae6fd}
+.mobile-pill.manual{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.mobile-empty{padding:14px;color:#94a3b8;font-weight:1000;text-align:center;background:#fff;border:1px dashed #cbd5e1;border-radius:14px}
+.visual-clean .tag,.visual-clean .mode-pill,.visual-clean .section-pill{box-shadow:none}
+@media(max-width:1200px){
+  .mobile-summary{grid-template-columns:1fr 1fr}
+  .mobile-card-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:760px){
+  body{background:#f8fbff}
+  .app{padding:8px}
+  .compact-row,.compact-controls,.payroll-head,.avail-head,.mobile-head{flex-direction:column;align-items:flex-start}
+  .actions.compact-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .actions.compact-actions .btn{width:100%}
+  .view-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;position:sticky;top:0;z-index:30;background:#f8fbff;padding:8px 0}
+  .tab-btn{width:100%;font-size:12px;padding:9px 8px}
+  .filter-tools{grid-template-columns:1fr!important}
+  .schedule-tools{grid-template-columns:1fr!important}
+  .mobile-summary{grid-template-columns:1fr}
+  .mobile-card-grid{grid-template-columns:1fr}
+  .table-wrap{max-height:none!important}
+  .course-table,.duty-table,.payroll-table,.payroll-detail-table,.course-total-table,.avail-table,.avail-result{min-width:820px}
+  .right-panels{display:none!important}
+}
+
+/* v40 Replit 上線準備 */
+.replit-status-panel{border:1px solid #cbd5e1;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 8px 20px rgba(15,23,42,.05)}
+.replit-status-head{padding:9px 12px;background:linear-gradient(90deg,#eef2ff,#ffffff);border-bottom:1px solid #d8e4f1;color:#3730a3;font-weight:1000}
+.replit-status-body{padding:9px 12px;font-size:12px;line-height:1.6;color:#475569;font-weight:900}
+.api-chip{display:inline-flex;border-radius:999px;padding:2px 7px;margin:2px 4px 2px 0;font-size:11px;font-weight:1000;border:1px solid #cbd5e1;background:#f8fafc;color:#475569}
+.api-chip.ok{background:#ecfdf5;color:#047857;border-color:#bbf7d0}
+.api-chip.warn{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.api-chip.fail{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+@media(max-width:1100px){.replit-status-body{font-size:11.5px}}
+
+</style>
+</head>
+<body class="simplified-mode section-all">
+<div class="app">
+  <div class="topbar compact-top">
+    <div class="compact-row">
+      <div class="compact-title">
+        <h1>三館排班表</h1>
+        <div class="subtitle compact-subtitle">救生完整班段自動展開｜串接報名系統 API｜0人自動縮排｜撞班提醒｜教練選擇｜員工 API 準備｜正式資料模式｜問題分級｜手機查閱｜課程薪資規則｜員工前台發布準備｜Replit 上線準備版 v40 <span class="unsaved-dot">尚未儲存</span></div>
+      </div>
+      <div class="actions compact-actions">
+        <button class="btn" onclick="clearStorage()">清空</button>
+        <button class="btn" onclick="copyPreviousWeek()">複製上週</button>
+        <button class="btn" onclick="checkReplitApis()">檢查 API</button>
+        <button class="btn green" onclick="saveLocal()">儲存排班</button>
+        <button class="btn primary" onclick="publishToEmployeePortal()">發布員工前台</button>
+        <button class="btn" onclick="window.print()">列印</button>
+      </div>
+    </div>
+
+    <div class="compact-controls">
+      <div class="field"><label for="weekSelect">週別</label><select id="weekSelect"></select></div>
+      <div class="field"><label for="venueFilter">館別</label><select id="venueFilter"><option value="all">全部館別</option><option>新北高中</option><option>三重商工</option><option>三民高中</option></select></div>
+      <div class="week-note" id="weekNote"></div>
+    </div>
+
+    <details class="compact-help">
+      <summary>排班格式說明</summary>
+      <div class="help-grid">
+        <div><b>救生輸入</b><br><code>員工姓名 05:30-14:00</code>、<code>員工姓名 10:00-12:00 35</code></div>
+        <div><b>人數判斷</b><br>新北高中救生 2－3 人；三重、三民 1－2 人。</div>
+        <div><b>撞班提醒</b><br>救生與課程同時段同人，會顯示提醒。</div>
+      </div>
+    </details>
+  </div>
+
+  <div class="view-tabs">
+  <button class="tab-btn active" id="tabSchedule" onclick="showView('schedule')">三館排班總表</button>
+  <button class="tab-btn" id="tabAvailability" onclick="showView('availability')">員工可上課時段 / 未排到課</button>
+
+  <button class="tab-btn" id="tabPayroll" onclick="showView('payroll')">本週薪資統計</button>
+  <button class="tab-btn" id="tabMobile" onclick="showView('mobile')">手機查閱</button></div>
+
+
+<div class="schedule-tools" id="scheduleTools">
+  <div class="issue-panel">
+    <div class="issue-head">
+      <span>本週待處理問題</span>
+      <span class="issue-count" id="issueCount">0</span>
+    </div>
+    <div class="issue-list" id="issueList"><span class="ok-message">目前尚無問題。</span></div>
+  </div>
+  <div class="line-push-panel">
+    <div class="line-push-head">LINE 推播準備檢查</div>
+    <div class="line-push-body" id="linePushCheck">
+      <div><div class="line-push-list-title">可推播：</div><div class="line-push-empty">尚未排班</div></div>
+      <div><div class="line-push-list-title">未綁定，無法推播：</div><div class="line-push-empty">尚未排班</div></div>
+    </div>
+  </div>
+  <div class="replit-status-panel">
+    <div class="replit-status-head">Replit 上線檢查</div>
+    <div class="replit-status-body" id="replitStatusBox">
+      <span class="api-chip warn">尚未檢查 API</span><br>
+      必接 API：員工資料、報名人數、排班儲存、發布到 shifts、員工前台班表。
+    </div>
+  </div>
+  <div class="filter-tools">
+    <div class="filter-block">
+      <div class="filter-group-label">畫面模式</div>
+      <div class="mode-pills">
+        <button class="mode-pill active" id="modeSimpleBtn" onclick="setVisualMode('simple')">排班模式</button>
+        <button class="mode-pill orange" id="modeCheckBtn" onclick="setVisualMode('check')">檢查模式</button>
+      </div>
+    </div>
+    <div class="filter-block">
+      <div class="filter-group-label">顯示區塊</div>
+      <div class="section-pills">
+        <button class="section-pill active" id="sectionAllBtn" onclick="setSectionView('all')">全部</button>
+        <button class="section-pill" id="sectionDutyBtn" onclick="setSectionView('duty')">救生 / 櫃台</button>
+        <button class="section-pill" id="sectionCourseBtn" onclick="setSectionView('course')">平日課程</button>
+        <button class="section-pill" id="sectionHolidayBtn" onclick="setSectionView('holiday')">假日課程</button>
+        <button class="section-pill" id="sectionManualBtn" onclick="setSectionView('manual')">手動課程</button>
+      </div>
+    </div>
+    <div class="filter-block">
+      <div class="filter-group-label">快速篩選</div>
+      <label class="toggle-pill"><input type="checkbox" id="hideZeroToggle" onchange="applyScheduleFilters()"> 隱藏 0 人課程</label>
+      <label class="toggle-pill"><input type="checkbox" id="issuesOnlyToggle" onchange="applyScheduleFilters()"> 只看問題</label>
+    </div>
+    <div class="filter-block">
+      <div class="filter-group-label">操作</div>
+      <button class="btn" onclick="expandAllZero()">顯示全部 0 人</button>
+      <button class="btn green" onclick="saveLocal()">儲存排班</button>
+    </div>
+  </div>
+</div>
+
+<section id="scheduleView">
+  <main class="main" id="venueList"></main>
+  <div class="right-panels"><div class="panel"><h3>救生輸入範例</h3><div class="panel-content"><div class="formula">員工姓名 05:30-14:00<br>員工姓名 10:00-12:00<br>員工姓名 14:00-22:30</div></div></div><div class="panel"><h3>平日例外寫法</h3><div class="panel-content"><div class="formula">員工姓名 05:30-14:00 123<br>員工姓名 05:30-14:00 45</div>數字代表星期，1=一、2=二、3=三、4=四、5=五。</div></div><div class="panel"><h3>正式網站可再強化</h3><div class="panel-content">下一版可加：救生班段拖拉、個人總時數、日薪/時薪統計、匯出 Excel。</div></div></div>
+</section>
+
+<section id="availabilityView" class="hidden-view">
+  <div class="availability-page">
+    <div class="avail-head">
+      <div>
+        <h2>員工可上課時段 / 未排到工作</h2>
+        <p>可用問卷方式讓員工填寫本週可上課時間，送出後會進入下方表格，系統再比對課程表列出還沒被排到課的空檔。</p>
+      </div>
+      <div class="avail-actions">
+        <button class="btn" onclick="addAvailabilityRow()">＋新增員工</button>
+        <button class="btn green" onclick="renderAvailabilityReport()">重新分析</button>
+      </div>
+    </div>
+    <div class="avail-body">
+      <div class="guide" style="margin-top:0;margin-bottom:12px">
+        <div class="guide-card"><b>輸入方式</b><br><code>07:30-12:00 123</code><br><code>14:00-18:00 45</code></div>
+        <div class="guide-card"><b>數字代表星期</b><br>1=一、2=二、3=三、4=四、5=五；沒寫數字代表整個平日都可以。</div>
+        <div class="guide-card"><b>比對邏輯</b><br>系統會優先使用 employeeId 比對員工，判斷同一人哪些可上課時段還沒排到工作；比對不到時才使用姓名備援。</div>
+        <div class="guide-card"><b>提醒</b><br>系統優先使用 employeeId，比對不到時才用姓名備援。</div>
+      </div>
+
+      <section class="questionnaire">
+        <div class="questionnaire-title">員工填寫問卷</div>
+        <div class="q-body">
+          <div class="q-grid">
+            <div class="q-card">
+              <h4>1. 基本資料</h4>
+              <div class="q-field">
+                <label>選擇員工</label>
+                <select id="qEmployeeSelect" onchange="updateQuestionnaireEmployeeInfo()"></select>
+                <div id="qEmployeeInfo" class="employee-info-box" style="margin-top:8px">請先選擇員工</div>
+              </div>
+              <div class="q-field">
+                <label>手動輸入備註姓名（備援）</label>
+                <input id="qManualName" placeholder="例：臨時教練，主要請用上方選擇員工">
+              </div>
+              <div class="q-field">
+                <label>可支援館別</label>
+                <div class="check-row" id="qVenues">
+                  <label class="check-pill"><input type="checkbox" value="新北高中">新北高中</label>
+                  <label class="check-pill"><input type="checkbox" value="三重商工">三重商工</label>
+                  <label class="check-pill"><input type="checkbox" value="三民高中">三民高中</label>
+                  <label class="check-pill"><input type="checkbox" value="全部">全部</label>
+                </div>
+              </div>
+              <div class="q-field">
+                <label>可上課程 / 備註</label>
+                <textarea id="qNote" placeholder="例：可教游泳、幼幼班、球類；晚上較方便"></textarea>
+              </div>
+            </div>
+            <div class="q-card">
+              <h4>2. 平日可上課時間</h4>
+              <div class="q-hint">先勾星期，再填開始與結束時間。可新增多段。</div>
+              <div class="check-row" id="qWeekdays" style="margin:8px 0 10px">
+                <label class="check-pill"><input type="checkbox" value="1">週一</label>
+                <label class="check-pill"><input type="checkbox" value="2">週二</label>
+                <label class="check-pill"><input type="checkbox" value="3">週三</label>
+                <label class="check-pill"><input type="checkbox" value="4">週四</label>
+                <label class="check-pill"><input type="checkbox" value="5">週五</label>
+              </div>
+              <div id="qWeekdayTimes">
+                <div class="time-row">
+                  <input type="time" class="qStart" value="07:30">
+                  <input type="time" class="qEnd" value="12:00">
+                  <button class="mini-btn" type="button" onclick="removeTimeRow(this)">刪除</button>
+                </div>
+              </div>
+              <button class="mini-btn" type="button" onclick="addTimeRow('qWeekdayTimes')">＋新增平日時間</button>
+            </div>
+            <div class="q-card">
+              <h4>3. 假日可上課時間</h4>
+              <div class="q-field">
+                <label>週六</label>
+                <div id="qSatTimes">
+                  <div class="time-row">
+                    <input type="time" class="qStart" value="09:00">
+                    <input type="time" class="qEnd" value="12:00">
+                    <button class="mini-btn" type="button" onclick="removeTimeRow(this)">刪除</button>
+                  </div>
+                </div>
+                <button class="mini-btn" type="button" onclick="addTimeRow('qSatTimes')">＋新增週六時間</button>
+              </div>
+              <div class="q-field">
+                <label>週日</label>
+                <div id="qSunTimes">
+                  <div class="time-row">
+                    <input type="time" class="qStart">
+                    <input type="time" class="qEnd">
+                    <button class="mini-btn" type="button" onclick="removeTimeRow(this)">刪除</button>
+                  </div>
+                </div>
+                <button class="mini-btn" type="button" onclick="addTimeRow('qSunTimes')">＋新增週日時間</button>
+              </div>
+              <div class="q-actions">
+                <button class="btn green" type="button" onclick="submitAvailabilityForm()">送出到下方表格</button>
+                <button class="btn" type="button" onclick="clearAvailabilityForm()">清空問卷</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div class="avail-layout">
+        <section class="avail-section">
+          <div class="avail-section-title">員工本週可上課時段</div>
+          <div class="table-wrap">
+            <table class="avail-table">
+              <thead>
+                <tr>
+                  <th>員工</th>
+                  <th>可支援館別</th>
+                  <th>平日可上課時段</th>
+                  <th>週六</th>
+                  <th>週日</th>
+                  <th>備註</th>
+                </tr>
+              </thead>
+              <tbody id="availabilityBody"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="avail-section">
+          <div class="avail-section-title">尚未排到課的時段</div>
+          <div class="table-wrap">
+            <table class="avail-result">
+              <thead>
+                <tr>
+                  <th>員工</th>
+                  <th>星期</th>
+                  <th>可上課時段</th>
+                  <th>已排工作（課程 / 救生）</th>
+                  <th>尚未排到工作</th>
+                </tr>
+              </thead>
+              <tbody id="availabilityResult"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+<section id="payrollView" class="hidden-view">
+  <div class="payroll-page">
+    <div class="payroll-head">
+      <div>
+        <h2>本週薪資統計 / 教練工作明細</h2>
+        <p>依照目前週別排班資料，統計每位員工本週上了哪些課、上了幾堂、救生與櫃台時數，方便後續計算薪水。</p>
+      </div>
+      <div class="avail-actions">
+        <button class="btn" onclick="renderPayrollReport()">重新統計</button>
+        <button class="btn green" onclick="copyPayrollCsv()">複製明細 CSV</button>
+      </div>
+    </div>
+    <div class="payroll-body">
+      <div class="payroll-rates">
+        <div class="rate-card"><label>一般課程單價 / 堂</label><input id="rateCourse" type="number" value="0" oninput="savePayrollRates();renderPayrollReport()"></div>
+        <div class="rate-card"><label>手動課程單價 / 堂</label><input id="rateManual" type="number" value="0" oninput="savePayrollRates();renderPayrollReport()"></div>
+        <div class="rate-card"><label>救生時薪</label><input id="rateLifeguard" type="number" value="0" oninput="savePayrollRates();renderPayrollReport()"></div>
+        <div class="rate-card"><label>櫃台時薪</label><input id="rateFrontdesk" type="number" value="0" oninput="savePayrollRates();renderPayrollReport()"></div>
+        <div class="rate-card"><label>備註</label><input id="payrollNote" placeholder="例：本頁金額僅試算" oninput="savePayrollRates()"></div>
+      </div>
+      <section class="avail-section" style="margin-bottom:12px">
+        <div class="avail-section-title">課程薪資規則</div>
+        <div class="rule-note">依課程名稱設定堂費；正式資料進來後，薪資統計會優先使用這裡的規則，沒有符合才用上方一般 / 手動課程單價。</div>
+        <div class="table-wrap">
+          <table class="rate-rule-table">
+            <thead>
+              <tr>
+                <th>課程名稱關鍵字</th>
+                <th>來源</th>
+                <th>堂費</th>
+                <th>備註</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="courseRateRulesBody"></tbody>
+          </table>
+        </div>
+        <div class="rate-rule-actions">
+          <button class="mini-btn" onclick="addCourseRateRule()">＋新增薪資規則</button>
+          <button class="mini-btn" onclick="resetCourseRateRules()">清空薪資規則</button>
+        </div>
+      </section>
+      <div class="payroll-summary-grid" id="payrollSummaryCards"></div>
+      <section class="avail-section" style="margin-bottom:12px">
+        <div class="avail-section-title">本週課程名稱統計</div>
+        <div class="table-wrap">
+          <table class="course-total-table">
+            <thead>
+              <tr>
+                <th>課程名稱</th>
+                <th>本週總堂數</th>
+                <th>一般 / 手動</th>
+                <th>教練分配</th>
+              </tr>
+            </thead>
+            <tbody id="payrollCourseBreakdownBody"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="avail-section" style="margin-bottom:12px">
+        <div class="avail-section-title">員工本週統計</div>
+        <div class="table-wrap">
+          <table class="payroll-table">
+            <thead>
+              <tr>
+                <th>員工</th>
+                <th>課程名稱堂數明細</th>
+                <th>手動課程</th>
+                <th>救生班數</th>
+                <th>櫃台班數</th>
+                <th>總時數</th>
+                <th>參考薪資</th>
+                <th>LINE</th>
+              </tr>
+            </thead>
+            <tbody id="payrollSummaryBody"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="avail-section">
+        <div class="avail-section-title">本週工作明細</div>
+        <div class="table-wrap">
+          <table class="payroll-detail-table">
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>員工</th>
+                <th>館別</th>
+                <th>類型</th>
+                <th>課程 / 工作內容</th>
+                <th>時段</th>
+                <th>人數</th>
+                <th>計算</th>
+                <th>備註</th>
+              </tr>
+            </thead>
+            <tbody id="payrollDetailBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+
+
+<section id="mobileView" class="hidden-view">
+  <div class="mobile-page">
+    <div class="mobile-head">
+      <div>
+        <h2>手機查閱 / 本週班表摘要</h2>
+        <p>手機版以查看為主：依日期列出本週工作、問題摘要與個人班表，避免手機操作大表格。</p>
+      </div>
+      <div class="avail-actions">
+        <button class="btn" onclick="renderMobileView()">重新整理</button>
+        <button class="btn green" onclick="showView('schedule')">回排班表</button>
+      </div>
+    </div>
+    <div class="mobile-body">
+      <div class="mobile-summary" id="mobileSummaryCards"></div>
+      <section class="avail-section" style="margin-bottom:12px">
+        <div class="avail-section-title">手機版問題摘要</div>
+        <div id="mobileIssueList" style="padding:10px"></div>
+      </section>
+      <section class="avail-section">
+        <div class="avail-section-title">本週各日班表</div>
+        <div class="mobile-card-grid" id="mobileWorkCards" style="padding:12px"></div>
+      </section>
+      <section class="avail-section" style="margin-top:12px">
+        <div class="avail-section-title">本週個人班表</div>
+        <div class="mobile-card-grid" id="mobileEmployeeCards" style="padding:12px"></div>
+      </section>
+    </div>
+  </div>
+</section>
+
+<div class="employee-modal-backdrop" id="employeePickerModal">
+  <div class="employee-modal">
+    <div class="employee-modal-head">
+      <div>選擇員工</div>
+      <button type="button" onclick="closeEmployeePicker()">關閉</button>
+    </div>
+    <div class="employee-modal-body">
+      <input class="employee-search" id="employeeSearch" placeholder="搜尋姓名、職務、館別" oninput="renderEmployeePickerList()">
+      <div class="employee-list" id="employeePickerList"></div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+const REPLIT_READY_VERSION = "v40";
+const API_ENDPOINTS = {
+  employees: "/api/employees/for-schedule",
+  enrollmentCounts: "/api/schedule/enrollment-counts",
+  scheduleAssignments: "/api/admin/schedule-assignments",
+  manualCourses: "/api/admin/manual-schedule-courses",
+  publishShifts: "/api/admin/summer-schedule/publish-shifts",
+  mySummerShifts: "/api/portal/my-summer-shifts"
+};
+const LOCAL_STORAGE_PREFIX = "schedule-v40-";
+const LEGACY_STORAGE_PREFIX = "schedule-v39-";
+
+const weeks = [{"no": 1, "start": "2026-07-01", "end": "2026-07-05", "activeWeekdays": [3, 4, 5], "weekday": "07/01（三）－07/03（五）", "sat": "07/04（六）", "sun": "07/05（日）", "label": "第一週｜07/01（三）－07/05（日）"}, {"no": 2, "start": "2026-07-06", "end": "2026-07-12", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "07/06（一）－07/10（五）", "sat": "07/11（六）", "sun": "07/12（日）", "label": "第二週｜07/06（一）－07/12（日）"}, {"no": 3, "start": "2026-07-13", "end": "2026-07-19", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "07/13（一）－07/17（五）", "sat": "07/18（六）", "sun": "07/19（日）", "label": "第三週｜07/13（一）－07/19（日）"}, {"no": 4, "start": "2026-07-20", "end": "2026-07-26", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "07/20（一）－07/24（五）", "sat": "07/25（六）", "sun": "07/26（日）", "label": "第四週｜07/20（一）－07/26（日）"}, {"no": 5, "start": "2026-07-27", "end": "2026-08-02", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "07/27（一）－07/31（五）", "sat": "08/01（六）", "sun": "08/02（日）", "label": "第五週｜07/27（一）－08/02（日）"}, {"no": 6, "start": "2026-08-03", "end": "2026-08-09", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "08/03（一）－08/07（五）", "sat": "08/08（六）", "sun": "08/09（日）", "label": "第六週｜08/03（一）－08/09（日）"}, {"no": 7, "start": "2026-08-10", "end": "2026-08-16", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "08/10（一）－08/14（五）", "sat": "08/15（六）", "sun": "08/16（日）", "label": "第七週｜08/10（一）－08/16（日）"}, {"no": 8, "start": "2026-08-17", "end": "2026-08-23", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "08/17（一）－08/21（五）", "sat": "08/22（六）", "sun": "08/23（日）", "label": "第八週｜08/17（一）－08/23（日）"}, {"no": 9, "start": "2026-08-24", "end": "2026-08-30", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "08/24（一）－08/28（五）", "sat": "08/29（六）", "sun": "08/30（日）", "label": "第九週｜08/24（一）－08/30（日）"}];
+
+const fallbackEmployees = [];
+let employees = [];
+
+function normalizeEmployeeFromApi(e){
+  return {
+    id: e.id,
+    name: e.name || '',
+    role: e.role || '',
+    venueId: e.venueId ?? '',
+    venueName: e.venueName || e.venue || '',
+    lineBound: !!e.lineBound,
+    lineDisplayName: e.lineDisplayName || '',
+    lineBoundAt: e.lineBoundAt || ''
+  };
+}
+async function loadEmployeesForSchedule(){
+  try{
+    const res = await fetch(API_ENDPOINTS.employees, {credentials:'include'});
+    if(!res.ok) throw new Error('employee API status '+res.status);
+    const raw = await res.json();
+    const list = Array.isArray(raw) ? raw : (Array.isArray(raw.items) ? raw.items : (Array.isArray(raw.employees) ? raw.employees : []));
+    employees = list.map(normalizeEmployeeFromApi);
+  }catch(err){
+    console.warn('employees API unavailable, no employee data loaded:', err);
+    employees = [];
+  }
+  populateQuestionnaireEmployees();
+  refreshEmployeeChips();
+  renderLinePushCheck();
+  renderAvailabilityReport();
+  if(!document.getElementById('payrollView')?.classList.contains('hidden-view')) renderPayrollReport();
+}
+
+const venues = [{"venueId": 1, "name": "新北高中", "lifeguardMin": 2, "lifeguardMax": 3, "tags": ["救生 2－3 人", "櫃台 1－2 人", "平日課程 8 門＋假日班"], "duty": [["1", "05:30-08:00"], ["2", "08:00-10:00"], ["3", "10:00-12:00"], ["4", "12:00-14:00"], ["5", "14:00-17:00"], ["6", "17:00-20:00"], ["7", "20:00-22:30"]], "courses": [{"name": "一般游泳(6足歲以上)", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "D", "time": "12:00-13:30"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "G", "time": "16:30-18:00"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}]}, {"name": "幼幼班游泳", "slots": [{"code": "A1", "time": "09:00-10:00"}, {"code": "A2", "time": "14:00-15:00"}, {"code": "A3", "time": "18:00-19:00"}, {"code": "A4", "time": "19:00-20:00"}, {"code": "A5", "time": "20:00-21:00"}]}, {"name": "室內羽球課", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "D", "time": "12:00-13:30"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}]}, {"name": "室外籃球課", "slots": [{"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "F", "time": "15:00-16:30"}]}, {"name": "室內桌球課", "slots": [{"code": "C", "time": "10:30-12:00"}, {"code": "E", "time": "13:30-15:00"}]}, {"name": "棒球課(室內+室外)", "slots": [{"code": "D", "time": "12:00-13:30"}, {"code": "F", "time": "15:00-16:30"}, {"code": "G", "time": "16:30-18:00"}, {"code": "H", "time": "18:00-19:30"}]}, {"name": "玩水班", "slots": [{"code": "C", "time": "10:30-12:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}]}, {"name": "高階游泳班", "slots": [{"code": "L", "time": "08:00-10:00"}, {"code": "M", "time": "14:00-16:00"}]}], "holidayCourses": [{"name": "游泳假日班", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}], "defaultNote": "六日假日班"}]}, {"venueId": 2, "name": "三重商工", "lifeguardMin": 1, "lifeguardMax": 2, "tags": ["救生 1－2 人", "櫃台 1－2 人", "平日課程 5 門＋假日班"], "duty": [["1", "07:30-10:00"], ["2", "10:00-12:00"], ["3", "12:00-14:00"], ["4", "14:00-16:00"], ["5", "16:00-18:00"], ["6", "18:00-20:00"], ["7", "20:00-22:30"]], "courses": [{"name": "一般游泳(6足歲以上)", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "D", "time": "12:00-13:30"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "G", "time": "16:30-18:00"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}]}, {"name": "幼幼班游泳", "slots": [{"code": "A1", "time": "09:00-10:00"}, {"code": "A2", "time": "14:00-15:00"}, {"code": "A3", "time": "18:00-19:00"}, {"code": "A4", "time": "19:00-20:00"}, {"code": "A5", "time": "20:00-21:00"}]}, {"name": "室內羽球課", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "D", "time": "12:00-13:30"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "G", "time": "16:30-18:00"}]}, {"name": "室外籃球課", "slots": [{"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "F", "time": "15:00-16:30"}]}, {"name": "玩水班", "slots": [{"code": "C", "time": "10:30-12:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}]}], "holidayCourses": [{"name": "游泳假日班", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}], "defaultNote": "六日假日班"}]}, {"venueId": 3, "name": "三民高中", "lifeguardMin": 1, "lifeguardMax": 2, "tags": ["救生 1－2 人", "櫃台 1－2 人", "平日課程 3 門＋假日班"], "duty": [["1", "07:30-10:00"], ["2", "10:00-12:00"], ["3", "12:00-14:00"], ["4", "14:00-16:00"], ["5", "16:00-18:00"], ["6", "18:00-20:00"], ["7", "20:00-22:00"]], "courses": [{"name": "一般游泳(6足歲以上)", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "D", "time": "12:00-13:30"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "G", "time": "16:30-18:00"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}]}, {"name": "幼幼班游泳", "slots": [{"code": "A1", "time": "09:00-10:00"}, {"code": "A2", "time": "14:00-15:00"}, {"code": "A3", "time": "18:00-19:00"}, {"code": "A4", "time": "19:00-20:00"}, {"code": "A5", "time": "20:00-21:00"}]}, {"name": "玩水班", "slots": [{"code": "C", "time": "10:30-12:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}]}], "holidayCourses": [{"name": "游泳假日班", "slots": [{"code": "A", "time": "07:30-09:00"}, {"code": "B", "time": "09:00-10:30"}, {"code": "C", "time": "10:30-12:00"}, {"code": "E", "time": "13:30-15:00"}, {"code": "F", "time": "15:00-16:30"}, {"code": "H", "time": "18:00-19:30"}, {"code": "I", "time": "19:30-21:00"}, {"code": "J", "time": "21:00-22:30"}], "defaultNote": "六日假日班"}]}];
+const samples = {};
+
+function purgeLegacyStorageOnce(){
+  const flag='schedule-v39-legacy-purged';
+  if(localStorage.getItem(flag)==='1') return;
+  Object.keys(localStorage)
+    .filter(k=>/^schedule-v(26|27|28|29|30|31|32|33|34|35|36|37)-/.test(k) || /^schedule-v(26|27|28|29|30|31|32|33|34|35|36|37)-employee-meta-/.test(k))
+    .forEach(k=>localStorage.removeItem(k));
+  Object.keys(sessionStorage).filter(k=>/^schedule-v(27|28|29|30|31|32|33|34|35|36|37)-loaded-week-/.test(k)).forEach(k=>sessionStorage.removeItem(k));
+  localStorage.setItem(flag,'1');
+}
+function initWeeks(){document.getElementById('weekSelect').innerHTML=weeks.map((w,i)=>`<option value="${i}">${w.label}</option>`).join('')}
+function currentWeekKey(){return 'w'+(Number(document.getElementById('weekSelect')?.value||0)+1)}
+function slug(str){return String(str).replace(/[()（）+＋\s\/]/g,'_').replace(/[^\u4e00-\u9fa5A-Za-z0-9_\-]/g,'').replace(/_+/g,'_').replace(/^_|_$/g,'')}
+function cellKey(venue,type,row,field){return `${currentWeekKey()}-${venue}-${type}-${row}-${field}`}
+function sourceKey(venue,period){return `${currentWeekKey()}-${venue}-lifeguard-source-${period}`}
+function getSaved(key){const prefixes=[LOCAL_STORAGE_PREFIX,LEGACY_STORAGE_PREFIX];for(const p of prefixes){const v=localStorage.getItem(p+key);if(v!==null)return v}return null}
+function escapeHtml(str){return String(str??'').replace(/[&<>"]/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]))}
+function sampleValue(key){return ''}
+function savedOrSample(key){return getSaved(key)??''}
+
+function isLineBound(emp){return !!(emp && emp.lineBound);}
+function employeeById(id){return employees.find(e=>String(e.id)===String(id));}
+function employeeByName(name){return employees.find(e=>e.name===String(name||'').trim());}
+function lineBadge(emp){
+  return `<span class="line-badge ${isLineBound(emp)?'bound':'unbound'}">${isLineBound(emp)?'已綁定 LINE':'未綁定 LINE'}</span>`;
+}
+function employeeLabel(emp){
+  return `${emp.name}｜${emp.role}｜${emp.venueName||emp.venue||''}｜${isLineBound(emp)?'已綁定 LINE':'未綁定 LINE'}`;
+}
+function employeeMetaStorageKey(key){return LOCAL_STORAGE_PREFIX+'employee-meta-'+key;}
+function getEmployeeMeta(key){
+  try{return JSON.parse(localStorage.getItem(employeeMetaStorageKey(key))||'[]');}
+  catch(e){return [];}
+}
+function saveEmployeeMeta(key, arr){
+  localStorage.setItem(employeeMetaStorageKey(key), JSON.stringify(arr.map(x=>({
+    employeeId:x.employeeId||x.id,
+    employeeName:x.employeeName||x.name,
+    lineBound:!!x.lineBound,
+    role:x.role||'',
+    venueId:x.venueId||'',
+    venueName:x.venueName||x.venue||''
+  }))));
+}
+function employeeToolsHTML(key){
+  return `<div class="employee-tools" data-employee-tools="${escapeHtml(key)}">
+    <button class="employee-select-btn" type="button" onclick="openEmployeePicker('${escapeAttr(key)}')">＋選擇員工</button>
+    <div class="employee-chips" data-employee-chips="${escapeHtml(key)}"></div>
+  </div>`;
+}
+let employeePickerTargetKey='';
+function openEmployeePicker(key){
+  employeePickerTargetKey=key;
+  const modal=document.getElementById('employeePickerModal');
+  const search=document.getElementById('employeeSearch');
+  if(search) search.value='';
+  renderEmployeePickerList();
+  modal?.classList.add('show');
+}
+function closeEmployeePicker(){document.getElementById('employeePickerModal')?.classList.remove('show');}
+function renderEmployeePickerList(){
+  const box=document.getElementById('employeePickerList');
+  if(!box) return;
+  const q=(document.getElementById('employeeSearch')?.value||'').trim().toLowerCase();
+  const list=[...employees].sort((a,b)=>Number(isLineBound(b))-Number(isLineBound(a)) || a.name.localeCompare(b.name,'zh-Hant'))
+    .filter(e=>!q || [e.name,e.role,e.venueName,e.venue,e.lineDisplayName].join(' ').toLowerCase().includes(q));
+  if(!employees.length){box.innerHTML='<div class="result-empty">尚未取得員工資料，請先串接 /api/employees/for-schedule</div>';return;}
+  box.innerHTML=list.map(e=>`
+    <button type="button" class="employee-option" onclick="selectEmployeeForTarget(${e.id})">
+      <div>
+        <div class="employee-option-main">${escapeHtml(e.name)}｜${escapeHtml(e.role)}｜${escapeHtml(e.venueName||e.venue||'')}</div>
+        <div class="employee-option-sub">LINE：${isLineBound(e)?escapeHtml(e.lineDisplayName||'已綁定'):'尚未綁定'}</div>
+      </div>
+      ${lineBadge(e)}
+    </button>
+  `).join('') || '<div class="result-empty">查無員工</div>';
+}
+function selectEmployeeForTarget(employeeId){
+  const emp=employeeById(employeeId);
+  if(!emp || !employeePickerTargetKey) return;
+  const box=document.querySelector(`[data-key="${CSS.escape(employeePickerTargetKey)}"]`);
+  if(box){
+    const lines=usefulLines(box.innerText);
+    if(!lines.some(line=>normalizeName(line).includes(emp.name) || line.includes(emp.name))){
+      const text=box.innerText.trim();
+      box.innerText=text ? `${text}\n${emp.name}` : emp.name;
+    }
+    localStorage.setItem(LOCAL_STORAGE_PREFIX+employeePickerTargetKey, box.innerText.replace(/\n+$/,''));
+  }
+  const meta=getEmployeeMeta(employeePickerTargetKey);
+  if(!meta.some(x=>String(x.employeeId)===String(emp.id))){
+    meta.push({employeeId:emp.id, employeeName:emp.name, lineBound:isLineBound(emp), role:emp.role, venueId:emp.venueId||'', venueName:emp.venueName||emp.venue||''});
+    saveEmployeeMeta(employeePickerTargetKey, meta);
+  }
+  refreshEmployeeChips();
+  closeEmployeePicker();
+  validateAll();
+  renderAvailabilityReport();
+}
+function refreshEmployeeChips(){
+  document.querySelectorAll('[data-employee-chips]').forEach(chips=>{
+    const key=chips.dataset.employeeChips;
+    const meta=getEmployeeMeta(key);
+    chips.innerHTML=meta.map(m=>{
+      const emp=employeeById(m.employeeId) || {
+        id:m.employeeId||'',
+        name:m.employeeName||'未指定員工',
+        role:m.role||'',
+        venueId:m.venueId||'',
+        venueName:m.venueName||m.venue||'',
+        lineBound:!!m.lineBound
+      };
+      return `<span class="employee-chip">${escapeHtml(emp.name)} ${lineBadge(emp)}</span>`;
+    }).join('');
+  });
+}
+function findEmployeeForLine(name,key=''){
+  const meta=getEmployeeMeta(key);
+  const byMeta=meta.find(m=>m.employeeName===name || String(m.employeeId)===String(name));
+  if(byMeta){
+    const emp=employeeById(byMeta.employeeId);
+    return emp || {id:byMeta.employeeId,name:byMeta.employeeName,role:byMeta.role,venueId:byMeta.venueId||'',venueName:byMeta.venueName||'',lineBound:!!byMeta.lineBound};
+  }
+  return employeeByName(name);
+}
+function escapeAttr(str){return String(str||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+
+function content(key,ph,attrs=''){
+  const val=savedOrSample(key);
+  const useEmployeePicker = /data-role=/.test(attrs);
+  return `<div class="editbox" contenteditable="true" data-key="${key}" ${attrs} data-placeholder="${ph}">${escapeHtml(val).replace(/\n/g,'<br>')}</div>${useEmployeePicker?employeeToolsHTML(key):''}<div class="cell-status"></div>`;
+}
+function parseTimeRange(text){const raw=String(text||'').trim();const m=raw.match(/(\d{1,2}):(\d{2})\s*[-－~～]\s*(\d{1,2}):(\d{2})/);if(!m)return null;const start=Number(m[1])*60+Number(m[2]),end=Number(m[3])*60+Number(m[4]);if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return null;return{start,end,label:`${m[1].padStart(2,'0')}:${m[2]}-${m[3].padStart(2,'0')}:${m[4]}`}}
+function timesOverlap(a,b){return!!(a&&b&&Math.max(a.start,b.start)<Math.min(a.end,b.end))}
+function normalizeName(str){return String(str||'').replace(/[0-9]/g,'').replace(/[()（）\[\]【】,:：;；、\/\\\-－]/g,' ').replace(/\s+/g,' ').trim()}
+function activeDaysForPeriod(period,week){if(period==='weekday')return week.activeWeekdays;if(period==='sat')return[6];if(period==='sun')return[7];const mm=String(period||'').match(/^manual-day-(\d)$/);if(mm)return[Number(mm[1])];return[7]}
+function dayName(d){return({1:'一',2:'二',3:'三',4:'四',5:'五',6:'六',7:'日'})[d]||d}
+function usefulLines(text){return String(text||'').split(/\n+/).map(s=>s.trim()).filter(s=>s&&!/^(待排|待確認|確認中|缺|無|x|X|-|－)$/.test(s))}
+function parseShiftLines(text,period,week,sourceCell=null,sourceVenue='',metaKey=''){
+  const rows=[],def=activeDaysForPeriod(period,week);
+  usefulLines(text).forEach(line=>{
+    const tm=line.match(/\d{1,2}:\d{2}\s*[-－~～]\s*\d{1,2}:\d{2}/);
+    if(!tm)return;
+    const time=parseTimeRange(tm[0]);
+    const rest=line.replace(tm[0],' ');
+    const dm=rest.match(/[1-5]+/g);
+    const days=period==='weekday'?(dm?Array.from(new Set(dm.join('').split('').map(Number))).filter(d=>def.includes(d)):[...def]):[...def];
+    const name=normalizeName(rest.replace(/[1-5]+/g,' '));
+    const emp=findEmployeeForLine(name,metaKey);
+    if(name&&time&&days.length)rows.push({name,employeeId:emp?.id||'',lineBound:!!emp?.lineBound,role:emp?.role||'',employeeVenue:emp?.venue||'',time,days,raw:line,sourceCell,venue:sourceVenue,period});
+  });
+  return rows;
+}
+function parseAssignments(text,period,week,metaKey=''){
+  const def=activeDaysForPeriod(period,week),rows=[];
+  usefulLines(text).forEach(line=>{
+    const m=line.match(/[1-5]+/g);
+    const days=period==='weekday'?(m?Array.from(new Set(m.join('').split('').map(Number))).filter(d=>def.includes(d)):[...def]):[...def];
+    const name=normalizeName(line.replace(/[1-5]+/g,' '));
+    const emp=findEmployeeForLine(name,metaKey);
+    if(name&&days.length)rows.push({name,employeeId:emp?.id||'',lineBound:!!emp?.lineBound,role:emp?.role||'',employeeVenue:emp?.venue||'',days,raw:line});
+  });
+  return rows;
+}
+
+function assignmentIdentity(a){
+  return a.employeeId ? `id:${a.employeeId}` : `name:${a.name}`;
+}
+function dedupeAssignments(assignments){
+  const seen=new Set(), out=[];
+  assignments.forEach(a=>{
+    const key=assignmentIdentity(a)+'|'+(a.days||[]).join('');
+    if(!seen.has(key)){seen.add(key);out.push(a);}
+  });
+  return out;
+}
+function duplicateNamesInAssignments(assignments){
+  const seen=new Set(), dup=new Set();
+  assignments.forEach(a=>{
+    const key=assignmentIdentity(a);
+    if(seen.has(key)) dup.add(a.name || '未指定員工');
+    seen.add(key);
+  });
+  return Array.from(dup);
+}
+function countAssignmentsByDay(text,period,week,metaKey=''){
+  const days=activeDaysForPeriod(period,week);
+  const counts={}; days.forEach(d=>counts[d]=new Set());
+  parseAssignments(text,period,week,metaKey).forEach(a=>{
+    const id=assignmentIdentity(a);
+    a.days.forEach(d=>{if(counts[d]) counts[d].add(id);});
+  });
+  const result={}; Object.entries(counts).forEach(([d,set])=>result[d]=set.size);
+  return result;
+}
+function countAssignmentsSingle(text,period,week,metaKey=''){
+  const set=new Set();
+  parseAssignments(text,period,week,metaKey).forEach(a=>set.add(assignmentIdentity(a)));
+  return set.size;
+}
+function countWeekday(text,days){const counts={};days.forEach(d=>counts[d]=0);usefulLines(text).forEach(line=>{const m=line.match(/[1-5]+/g);const ds=m?Array.from(new Set(m.join('').split('').map(Number))).filter(d=>days.includes(d)):days;ds.forEach(d=>counts[d]++)});return counts}
+function countSingle(text){return usefulLines(text).length}
+function buildLifeguardInputs(venue,week){const periods=[['weekday','平日救生完整班段','例：員工姓名 05:30-14:00 123\n員工姓名 10:00-12:00 45'],['sat','週六救生完整班段','例：員工姓名 05:30-14:00\n員工姓名 14:00-22:30'],['sun','週日救生完整班段','例：員工姓名 05:30-14:00\n員工姓名 14:00-22:30']];return `<div class="lifeguard-inputs">${periods.map(([period,title,ph])=>{const key=sourceKey(venue.name,period),val=savedOrSample(key),venueId=venue.venueId||venueIdByName(venue.name)||'';return `<div class="source-card source-cell" data-source-cell="${period}" data-venue="${venue.name}" data-venue-id="${venueId}"><div class="source-title">${title}</div><div class="editbox lifeguard-source" contenteditable="true" data-key="${key}" data-role="lifeguard-source" data-period="${period}" data-venue="${venue.name}" data-venue-id="${venueId}" data-placeholder="${ph}">${escapeHtml(val).replace(/\n/g,'<br>')}</div>${employeeToolsHTML(key)}<div class="cell-status"></div></div>`}).join('')}</div>`}
+function buildDutyRows(venue,rows,week){return rows.map(([no,time])=>{const timeKey=cellKey(venue.name,'duty',no,'time'),rowTime=getSaved(timeKey)||time,fdWeek=cellKey(venue.name,'duty',no,'weekday-frontdesk'),fdSat=cellKey(venue.name,'duty',no,'sat-frontdesk'),fdSun=cellKey(venue.name,'duty',no,'sun-frontdesk'),note=cellKey(venue.name,'duty',no,'note');return `<tr data-duty-row="${no}"><td class="no-col">${no}</td><td class="time-cell"><div class="time-edit segment-time" contenteditable="true" data-key="${timeKey}">${escapeHtml(rowTime)}</div></td><td class="edit-cell weekday-col need-validate">${content(fdWeek,'櫃台人員',`data-role="frontdesk" data-period="weekday" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"`)}</td><td class="edit-cell lifeguard-display weekday-col" data-role="lifeguard-display" data-period="weekday" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"><div class="lifeguard-lines"><span class="empty">自動展開</span></div><div class="cell-status"></div></td><td class="edit-cell sat-col need-validate">${content(fdSat,'週六櫃台',`data-role="frontdesk" data-period="sat" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"`)}</td><td class="edit-cell lifeguard-display sat-col" data-role="lifeguard-display" data-period="sat" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"><div class="lifeguard-lines"><span class="empty">自動展開</span></div><div class="cell-status"></div></td><td class="edit-cell sun-col need-validate">${content(fdSun,'週日櫃台',`data-role="frontdesk" data-period="sun" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"`)}</td><td class="edit-cell lifeguard-display sun-col" data-role="lifeguard-display" data-period="sun" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"><div class="lifeguard-lines"><span class="empty">自動展開</span></div><div class="cell-status"></div></td><td class="edit-cell note-col">${content(note,'備註 / 例外')}</td></tr>`}).join('')}
+function buildDutySection(venue,week){return `<section class="section" data-section="duty" data-venue="${venue.name}"><div class="section-head"><span>櫃台 / 救生排班</span><small>救生上方輸入完整班段，下方自動依時段展開</small></div>${buildLifeguardInputs(venue,week)}<div class="table-wrap"><table class="duty-table"><thead><tr><th class="no-col" rowspan="2">段</th><th rowspan="2">時段</th><th colspan="2">平日<span class="head-sub">${week.weekday}</span></th><th colspan="2">週六<span class="head-sub">${week.sat}</span></th><th colspan="2">週日<span class="head-sub">${week.sun}</span></th><th rowspan="2" class="note-col">備註 / 例外</th></tr><tr><th class="frontdesk-head">櫃台<br><span class="head-sub">1－2人</span></th><th class="lifeguard-head">救生<br><span class="head-sub">${venue.lifeguardMin}－${venue.lifeguardMax}人</span></th><th class="frontdesk-head">櫃台<br><span class="head-sub">1－2人</span></th><th class="lifeguard-head">救生<br><span class="head-sub">${venue.lifeguardMin}－${venue.lifeguardMax}人</span></th><th class="frontdesk-head">櫃台<br><span class="head-sub">1－2人</span></th><th class="lifeguard-head">救生<br><span class="head-sub">${venue.lifeguardMin}－${venue.lifeguardMax}人</span></th></tr></thead><tbody>${buildDutyRows(venue,venue.duty,week)}</tbody></table></div><div class="mini-actions"><button class="mini-btn" onclick="addDutyRow(this,'${venue.name}')">＋新增時段列</button></div></section>`}
+function flattenCourses(venue){const rows=[];venue.courses.forEach(c=>c.slots.forEach(s=>rows.push({courseName:c.name,code:s.code,time:s.time,id:`${slug(c.name)}-${s.code}`})));return rows}
+function flattenHolidayCourses(venue){const rows=[];(venue.holidayCourses||[]).forEach(c=>c.slots.forEach(s=>rows.push({courseName:c.name,code:s.code,time:s.time,id:`holiday-${slug(c.name)}-${s.code}`})));return rows}
+function buildCourseRow(venue,row,kind){
+  const rowId=row.id,
+    enrollKey=cellKey(venue.name,'course',rowId,'enroll'),
+    neededKey=cellKey(venue.name,'course',rowId,'needed'),
+    noteKey=cellKey(venue.name,'course',rowId,'note'),
+    neededVal=savedOrSample(neededKey);
+  const rowAttrs=`data-course-row="${escapeHtml(rowId)}" data-venue-name="${escapeHtml(venue.name)}" data-venue-id="${escapeHtml(venue.venueId || venueIdByName(venue.name) || '')}" data-course-name="${escapeHtml(row.courseName)}" data-course-id="${escapeHtml(row.courseId || '')}" data-term-id="" data-week-no="${currentWeekKey().replace('w','')}" data-slot-id="${escapeHtml(row.slotId || '')}" data-slot-code="${escapeHtml(row.code)}" data-course-kind="${escapeHtml(kind)}"`;
+  const enrollCell=`<td class="enroll-col"><div class="time-edit enroll-count auto-count loading" data-key="${enrollKey}" data-auto-enrollment="true" data-placeholder="系統帶入">載入中</div></td>`;
+  if(kind==='weekday'){
+    const weekdayKey=cellKey(venue.name,'course',rowId,'weekday');
+    return `<tr ${rowAttrs}><td class="course-name">${escapeHtml(row.courseName)}<span class="id-hint">API: venue_id / course_id / term_id / slot_id</span></td><td class="course-code">${escapeHtml(row.code)}</td><td class="time-cell">${escapeHtml(row.time)}</td>${enrollCell}<td class="needed-col"><div class="time-edit need-count" contenteditable="true" data-key="${neededKey}" data-placeholder="幾位">${escapeHtml(neededVal)}</div></td><td class="edit-cell weekday-col course-validate">${content(weekdayKey,'平日教練，請選擇員工 123',`data-role="course" data-period="weekday" data-venue="${venue.name}" data-needed-key="${neededKey}"`)}</td><td class="edit-cell note-col">${content(noteKey,'人數 / 體驗 / 備註')}</td></tr>`;
+  }
+  const satKey=cellKey(venue.name,'course',rowId,'sat'),sunKey=cellKey(venue.name,'course',rowId,'sun');
+  return `<tr ${rowAttrs}><td class="course-name">${escapeHtml(row.courseName)}<span class="id-hint">API: venue_id / course_id / term_id / slot_id</span></td><td class="course-code">${escapeHtml(row.code)}</td><td class="time-cell">${escapeHtml(row.time)}</td>${enrollCell}<td class="needed-col"><div class="time-edit need-count" contenteditable="true" data-key="${neededKey}" data-placeholder="幾位">${escapeHtml(neededVal)}</div></td><td class="edit-cell sat-col course-validate">${content(satKey,'週六教練',`data-role="course" data-period="sat" data-venue="${venue.name}" data-needed-key="${neededKey}"`)}</td><td class="edit-cell sun-col course-validate">${content(sunKey,'週日教練',`data-role="course" data-period="sun" data-venue="${venue.name}" data-needed-key="${neededKey}"`)}</td><td class="edit-cell note-col">${content(noteKey,'假日班備註')}</td></tr>`;
+}
+
+function venueIdByName(name){
+  const map={'新北高中':1,'三重商工':2,'三民高中':3};
+  return map[name] || '';
+}
+let manualCourseApiCache=[];
+const loadedManualCourseWeeks=new Set();
+function manualCoursesKey(){return LOCAL_STORAGE_PREFIX+'manual-courses';}
+function getLocalManualCourses(){
+  try{return JSON.parse(localStorage.getItem(manualCoursesKey())||'[]');}
+  catch(e){return [];}
+}
+function getManualCourses(){
+  const local=getLocalManualCourses();
+  const merged=[...manualCourseApiCache, ...local];
+  const seen=new Set();
+  return merged.filter(r=>{
+    const key=String(r.id||'')+'|'+String(r.date||'')+'|'+String(r.courseName||'');
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+function saveManualCourses(rows){
+  localStorage.setItem(manualCoursesKey(), JSON.stringify(rows));
+}
+async function loadManualCoursesForWeek(weekNo){
+  if(!weekNo || loadedManualCourseWeeks.has(String(weekNo))) return;
+  loadedManualCourseWeeks.add(String(weekNo));
+  try{
+    const res=await fetch(`${API_ENDPOINTS.manualCourses}?weekNo=${weekNo}`,{credentials:'include'});
+    if(!res.ok) throw new Error('manual course API status '+res.status);
+    const raw=await res.json();
+    const items=Array.isArray(raw)?raw:(Array.isArray(raw.items)?raw.items:(Array.isArray(raw.courses)?raw.courses:[]));
+    const normalized=items.map(r=>({
+      id:r.id,
+      source:'manual',
+      date:r.date,
+      weekNo:Number(r.weekNo)||weekNo,
+      venueId:r.venueId||'',
+      venueName:r.venueName||r.venue||'',
+      courseName:r.courseName||'',
+      startTime:r.startTime||'',
+      endTime:r.endTime||'',
+      registeredCount:Number(r.registeredCount)||0,
+      requiredCoaches:Number(r.requiredCoaches)||0,
+      note:r.note||''
+    }));
+    manualCourseApiCache=manualCourseApiCache.filter(r=>Number(r.weekNo)!==Number(weekNo)).concat(normalized);
+    render();
+  }catch(err){
+    console.warn('manual schedule course API unavailable, using local manual courses only:',err);
+  }
+}
+function weekNoForDate(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  if(isNaN(d)) return null;
+  const w=weeks.find(x=>new Date(x.start+'T00:00:00')<=d && d<=new Date(x.end+'T23:59:59'));
+  return w?Number(w.no):null;
+}
+function dayOfWeekForDate(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  if(isNaN(d)) return null;
+  const n=d.getDay();
+  return n===0?7:n;
+}
+function formatManualDate(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  if(isNaN(d)) return dateStr;
+  const mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+  return `${mm}/${dd}（${dayName(dayOfWeekForDate(dateStr))}）`;
+}
+function parseManualDates(raw,baseYear){
+  const out=[], seen=new Set();
+  String(raw||'').split(/[\s,，、;；]+/).map(s=>s.trim()).filter(Boolean).forEach(token=>{
+    let y=baseYear, m='', d='';
+    let mm=token.match(/^(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);
+    if(mm){y=Number(mm[1]);m=mm[2];d=mm[3];}
+    else{
+      mm=token.match(/^(\d{1,2})[\/.-](\d{1,2})$/);
+      if(mm){m=mm[1];d=mm[2];}
+    }
+    if(!m||!d) return;
+    const iso=`${y}-${String(Number(m)).padStart(2,'0')}-${String(Number(d)).padStart(2,'0')}`;
+    if(!seen.has(iso) && weekNoForDate(iso)){seen.add(iso);out.push(iso);}
+  });
+  return out;
+}
+function buildManualCourseSection(venue,week){
+  const weekNo=Number(week.no);
+  const rows=getManualCourses().filter(r=>Number(r.weekNo)===weekNo && r.venueName===venue.name).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
+  const body=rows.length?rows.map(r=>buildManualCourseRow(venue,r,week)).join(''):`<tr><td colspan="9" class="manual-empty">本週尚未新增手動課程。</td></tr>`;
+  const vSlug=slug(venue.name);
+  return `<section class="section" data-section="manual"><div class="section-head"><span>本週手動課程 / 外部課程</span><small>只顯示 ${week.label} 的手動課程，會一起檢查教練撞班</small></div>
+    <div class="manual-help">用途：補習班游泳、包班、臨時加課、外部合作課。可一次輸入多個日期，例如：07/06、07/13、07/20，系統會自動放到各週。</div>
+    <div class="manual-form" data-manual-form="${escapeHtml(venue.name)}">
+      <div class="manual-field"><label>日期，可多筆</label><input class="manual-dates" placeholder="07/06、07/13、07/20"></div>
+      <div class="manual-field"><label>課程名稱</label><input class="manual-name" placeholder="補習班游泳"></div>
+      <div class="manual-field"><label>時間</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><input class="manual-start" type="time" value="16:00"><input class="manual-end" type="time" value="17:00"></div></div>
+      <div class="manual-field"><label>人數</label><input class="manual-count" type="number" min="0" value="4"></div>
+      <div class="manual-field"><label>需教練</label><input class="manual-needed" type="number" min="0" value="1"></div>
+      <div class="manual-field"><label>備註</label><input class="manual-note" placeholder="補習班包班"></div>
+      <button type="button" class="manual-add-btn" onclick="addManualCourseFromForm(this,'${escapeAttr(venue.name)}')">＋新增</button>
+    </div>
+    <div class="table-wrap"><table class="manual-table course-table"><thead><tr><th>日期</th><th>課程名稱</th><th>時段</th><th class="enroll-col">人數</th><th class="needed-col">需教練</th><th class="course-head">教練</th><th class="note-col">備註</th><th>來源</th><th>操作</th></tr></thead><tbody>${body}</tbody></table></div>
+  </section>`;
+}
+function buildManualCourseRow(venue,row,week){
+  const id=row.id;
+  const day=dayOfWeekForDate(row.date) || 1;
+  const rowId=`manual-${id}`;
+  const enrollKey=cellKey(venue.name,'manual',id,'enroll');
+  const neededKey=cellKey(venue.name,'manual',id,'needed');
+  const coachKey=cellKey(venue.name,'manual',id,'coach');
+  const noteKey=cellKey(venue.name,'manual',id,'note');
+  const enrollVal=getSaved(enrollKey) ?? row.registeredCount ?? '';
+  const neededVal=getSaved(neededKey) ?? row.requiredCoaches ?? '';
+  const noteVal=getSaved(noteKey) ?? row.note ?? '';
+  const timeLabel=`${row.startTime}-${row.endTime}`;
+  const rowAttrs=`data-course-row="${escapeHtml(rowId)}" data-manual-course-row="${escapeHtml(id)}" data-venue-name="${escapeHtml(venue.name)}" data-venue-id="${escapeHtml(row.venueId || venueIdByName(venue.name))}" data-course-name="${escapeHtml(row.courseName)}" data-course-id="" data-term-id="" data-week-no="${escapeHtml(row.weekNo)}" data-slot-id="" data-slot-code="MANUAL" data-course-kind="manual" data-manual-date="${escapeHtml(row.date)}"`;
+  return `<tr ${rowAttrs}>
+    <td class="manual-date-col">${escapeHtml(formatManualDate(row.date))}</td>
+    <td class="course-name"><div class="time-edit" contenteditable="true" data-key="${cellKey(venue.name,'manual',id,'name')}" oninput="updateManualCourseField('${escapeAttr(id)}','courseName',this.innerText)">${escapeHtml(getSaved(cellKey(venue.name,'manual',id,'name')) ?? row.courseName)}</div></td>
+    <td class="time-cell">${escapeHtml(timeLabel)}</td>
+    <td class="enroll-col"><div class="time-edit enroll-count" contenteditable="true" data-key="${enrollKey}" oninput="updateManualCourseField('${escapeAttr(id)}','registeredCount',this.innerText)">${escapeHtml(enrollVal)}</div></td>
+    <td class="needed-col"><div class="time-edit need-count" contenteditable="true" data-key="${neededKey}" data-placeholder="幾位" oninput="updateManualCourseField('${escapeAttr(id)}','requiredCoaches',this.innerText)">${escapeHtml(neededVal)}</div></td>
+    <td class="edit-cell course-validate">${content(coachKey,'選擇教練',`data-role="course" data-period="manual-day-${day}" data-venue="${venue.name}" data-needed-key="${neededKey}"`)}</td>
+    <td class="edit-cell note-col">${content(noteKey,'手動課程備註')}</td>
+    <td class="enroll-col">手動</td>
+    <td class="no-col"><button class="manual-delete" type="button" onclick="deleteManualCourse('${escapeAttr(id)}')">刪除</button></td>
+  </tr>`;
+}
+async function addManualCourseFromForm(btn,venueName){
+  const form=btn.closest('[data-manual-form]');
+  if(!form) return;
+  const week=weeks[Number(document.getElementById('weekSelect')?.value||0)];
+  const dates=parseManualDates(form.querySelector('.manual-dates')?.value, new Date(week.start+'T00:00:00').getFullYear());
+  const courseName=(form.querySelector('.manual-name')?.value||'').trim();
+  const startTime=form.querySelector('.manual-start')?.value || '';
+  const endTime=form.querySelector('.manual-end')?.value || '';
+  const registeredCount=Number(form.querySelector('.manual-count')?.value||0);
+  const requiredCoaches=Number(form.querySelector('.manual-needed')?.value||0);
+  const note=(form.querySelector('.manual-note')?.value||'').trim();
+  if(!dates.length){alert('請輸入日期，例如 07/06、07/13、07/20');return;}
+  if(!courseName){alert('請輸入課程名稱');return;}
+  if(!startTime||!endTime||startTime>=endTime){alert('請確認開始與結束時間');return;}
+  const newRows=dates.map(date=>({
+    id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+    source:'manual',
+    date,
+    weekNo:weekNoForDate(date),
+    venueId:venueIdByName(venueName),
+    venueName,
+    courseName,
+    startTime,
+    endTime,
+    registeredCount,
+    requiredCoaches,
+    note,
+    createdAt:new Date().toISOString()
+  }));
+  try{
+    const res=await fetch(API_ENDPOINTS.manualCourses,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify({items:newRows})
+    });
+    if(!res.ok) throw new Error('manual course create API status '+res.status);
+    loadedManualCourseWeeks.delete(String(week.no));
+    await loadManualCoursesForWeek(week.no);
+  }catch(err){
+    console.warn('manual course create API unavailable, saving to local fallback:',err);
+    const rows=getLocalManualCourses();
+    saveManualCourses(rows.concat(newRows));
+  }
+  form.querySelector('.manual-dates').value='';
+  form.querySelector('.manual-name').value='';
+  form.querySelector('.manual-note').value='';
+  render();
+}
+function updateManualCourseCache(id,row){
+  const localRows=getLocalManualCourses();
+  const localIndex=localRows.findIndex(r=>String(r.id)===String(id));
+  if(localIndex>=0){
+    localRows[localIndex]=row;
+    saveManualCourses(localRows);
+  }else{
+    manualCourseApiCache=manualCourseApiCache.map(r=>String(r.id)===String(id)?row:r);
+  }
+}
+async function updateManualCourseField(id,field,value){
+  const row=getManualCourses().find(r=>String(r.id)===String(id));
+  if(!row) return;
+  if(field==='registeredCount'||field==='requiredCoaches') row[field]=Number.parseInt(String(value||'').trim(),10)||0;
+  else row[field]=String(value||'').trim();
+  updateManualCourseCache(id,row);
+  try{
+    const res=await fetch(`${API_ENDPOINTS.manualCourses}/${encodeURIComponent(id)}`,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify(row)
+    });
+    if(!res.ok) throw new Error('manual course patch API status '+res.status);
+  }catch(err){
+    console.warn('manual course patch API unavailable, local fallback kept:',err);
+  }
+}
+async function deleteManualCourse(id){
+  if(!confirm('刪除這筆手動課程？')) return;
+  manualCourseApiCache=manualCourseApiCache.filter(r=>String(r.id)!==String(id));
+  saveManualCourses(getLocalManualCourses().filter(r=>String(r.id)!==String(id)));
+  Object.keys(localStorage).filter(k=>k.includes(`-manual-${id}-`) || k.includes(`employee-meta-`) && k.includes(`-manual-${id}-`)).forEach(k=>localStorage.removeItem(k));
+  try{
+    const res=await fetch(`${API_ENDPOINTS.manualCourses}/${encodeURIComponent(id)}`,{
+      method:'DELETE',
+      credentials:'include'
+    });
+    if(!res.ok) throw new Error('manual course delete API status '+res.status);
+  }catch(err){
+    console.warn('manual course delete API unavailable, local delete kept:',err);
+  }
+  render();
+}
+function buildCourseSection(venue,week){const rows=flattenCourses(venue);return `<section class="section" data-section="course"><div class="section-head"><span>平日課程 / 教練</span><small>${venue.courses.length} 門平日課程，${rows.length} 個時段；只排週一到週五</small></div><div class="table-wrap"><table class="course-table"><thead><tr><th>課程名稱</th><th>代碼</th><th>時段</th><th class="enroll-col">報名人數</th><th class="needed-col">需教練數</th><th class="course-head">平日<span class="head-sub">${week.weekday}</span></th><th class="note-col">備註</th></tr></thead><tbody>${rows.map(r=>buildCourseRow(venue,r,'weekday')).join('')}</tbody></table></div><div class="mini-actions"><button class="mini-btn" onclick="addCourseRow(this,'${venue.name}')">＋新增平日課程時段</button></div></section>`}
+function buildHolidayCourseSection(venue,week){const rows=flattenHolidayCourses(venue);return `<section class="section" data-section="holiday"><div class="section-head"><span>假日游泳班 / 教練</span><small>固定 A、B、C、E、F、H、I、J，共 ${rows.length} 個時段；只排週六、週日</small></div><div class="table-wrap"><table class="course-table"><thead><tr><th>課程名稱</th><th>代碼</th><th>時段</th><th class="enroll-col">報名人數</th><th class="needed-col">需教練數</th><th class="course-head">週六<span class="head-sub">${week.sat}</span></th><th class="course-head">週日<span class="head-sub">${week.sun}</span></th><th class="note-col">備註</th></tr></thead><tbody>${rows.map(r=>buildCourseRow(venue,r,'holiday')).join('')}</tbody></table></div><div class="mini-actions"><button class="mini-btn" onclick="addHolidayCourseRow(this,'${venue.name}')">＋新增假日班時段</button></div></section>`}
+function getVenueRule(venueName,role){if(role==='frontdesk')return{min:1,max:2,label:'櫃台'};const venue=venues.find(v=>v.name===venueName);return{min:venue.lifeguardMin,max:venue.lifeguardMax,label:'救生'}}
+function validateFrontdesk(cell,week){const box=cell.querySelector('.editbox'),status=cell.querySelector('.cell-status'),rule=getVenueRule(box.dataset.venue,box.dataset.role),text=box.innerText.trim(),period=box.dataset.period;cell.classList.remove('ok','warn');if(!text){cell.classList.add('warn');status.textContent=`${rule.label}不足：最少 ${rule.min} 人`;return}if(period==='weekday'){const counts=countWeekday(text,week.activeWeekdays),bad=[];Object.entries(counts).forEach(([d,c])=>{if(c<rule.min)bad.push(`${d}不足${c}/${rule.min}`);if(c>rule.max)bad.push(`${d}超過${c}/${rule.max}`)});if(bad.length){cell.classList.add('warn');status.textContent=bad.join('、')}else{cell.classList.add('ok');status.textContent=`OK｜${Object.entries(counts).map(([d,c])=>`${d}:${c}`).join(' ')}`}}else{const count=countSingle(text);if(count<rule.min){cell.classList.add('warn');status.textContent=`${rule.label}不足：${count}/${rule.min}`}else if(count>rule.max){cell.classList.add('warn');status.textContent=`${rule.label}超過：${count}/${rule.max}`}else{cell.classList.add('ok');status.textContent=`OK｜${count}人`}}}
+function allLifeguardShifts(week){const rows=[];document.querySelectorAll('.lifeguard-source').forEach(box=>{rows.push(...parseShiftLines(box.innerText,box.dataset.period,week,box.closest('.source-cell'),box.dataset.venue,box.dataset.key))});return rows}
+function renderLifeguards(week){const shifts=allLifeguardShifts(week);document.querySelectorAll('.source-cell').forEach(cell=>{const box=cell.querySelector('.lifeguard-source'),status=cell.querySelector('.cell-status'),parsed=parseShiftLines(box.innerText,box.dataset.period,week,cell,box.dataset.venue,box.dataset.key),total=usefulLines(box.innerText).length;cell.classList.remove('ok','warn');if(!box.innerText.trim()){status.textContent='未填救生班段';return}if(parsed.length<total){cell.classList.add('warn');status.textContent=`有 ${total-parsed.length} 筆缺少時間，格式：姓名 05:30-14:00`}else{cell.classList.add('ok');status.textContent=`已讀取 ${parsed.length} 筆班段`}});document.querySelectorAll('.lifeguard-display').forEach(cell=>{const venueName=cell.dataset.venue,period=cell.dataset.period,tr=cell.closest('tr'),timeText=tr?.querySelector('.segment-time')?.innerText||'',segment=parseTimeRange(timeText),rule=getVenueRule(venueName,'lifeguard'),linesBox=cell.querySelector('.lifeguard-lines'),status=cell.querySelector('.cell-status');cell.classList.remove('ok','warn');if(!segment){linesBox.innerHTML='<span class="empty">時段格式錯誤</span>';cell.classList.add('warn');status.textContent='請用 05:30-08:00 格式';return}const days=activeDaysForPeriod(period,week),matched=shifts.filter(s=>s.venue===venueName&&timesOverlap(s.time,segment)&&s.days.some(d=>days.includes(d)));if(!matched.length){linesBox.innerHTML='<span class="empty">無救生</span>';cell.classList.add('warn');status.textContent=`救生不足：0/${rule.min}`;return}const unique=[],seen=new Set();matched.forEach(s=>{const dLabel=period==='weekday'?s.days.filter(d=>days.includes(d)).join(''):'';const key=s.name+s.time.label+dLabel;if(!seen.has(key)){seen.add(key);unique.push({...s,dLabel})}});linesBox.innerHTML=unique.map(s=>`<span class="shift">${escapeHtml(s.name)}<small>${escapeHtml(s.time.label)}${s.dLabel?'｜'+s.dLabel:''}</small></span>`).join('');const counts={};days.forEach(d=>counts[d]=new Set());matched.forEach(s=>s.days.forEach(d=>{if(counts[d])counts[d].add(s.name)}));const bad=[];Object.entries(counts).forEach(([d,set])=>{const c=set.size;if(c<rule.min)bad.push(`${dayName(d)}不足${c}/${rule.min}`);if(c>rule.max)bad.push(`${dayName(d)}超過${c}/${rule.max}`)});if(bad.length){cell.classList.add('warn');status.textContent=bad.join('、')}else{cell.classList.add('ok');status.textContent=`OK｜${Object.entries(counts).map(([d,set])=>`${dayName(d)}:${set.size}`).join(' ')}`}})}
+function getNeededNumber(key){const el=document.querySelector(`[data-key="${CSS.escape(key)}"]`),raw=(el?.innerText||getSaved(key)||'').trim(),n=parseInt(raw,10);return Number.isFinite(n)&&n>0?n:null}
+function getEnrollNumberFromCell(cell){
+  const tr = cell.closest('tr');
+  const enrollEl = tr?.querySelector('.enroll-count');
+  const raw = (enrollEl?.innerText || '').trim();
+  const n = parseInt(raw,10);
+  return Number.isFinite(n) ? n : null;
+}
+function validateCourseCell(cell,week){
+  const box = cell.querySelector('.editbox');
+  const status = cell.querySelector('.cell-status');
+  const period = box.dataset.period;
+  const needed = getNeededNumber(box.dataset.neededKey);
+  const enroll = getEnrollNumberFromCell(cell);
+  const text = box.innerText.trim();
+  const assignments = parseAssignments(text,period,week,box.dataset.key);
+  const dups = duplicateNamesInAssignments(assignments);
+  cell.classList.remove('ok','warn');
+  if(dups.length){
+    cell.classList.add('warn');
+    status.textContent = `人員重複：${dups.join('、')}`;
+    return;
+  }
+  if(enroll === 0){
+    cell.classList.add('ok');
+    status.textContent = '報名 0 人｜教練 0';
+    return;
+  }
+  if(needed === 0){
+    cell.classList.add('ok');
+    status.textContent = '教練 0';
+    return;
+  }
+  if(!needed){ status.textContent = '請先填需教練數'; return; }
+  if(!text){
+    cell.classList.add('warn');
+    status.textContent = `教練不足：0/${needed}`;
+    return;
+  }
+  if(period === 'weekday' || String(period).startsWith('manual-day-')){
+    const counts = countAssignmentsByDay(text, period, week, box.dataset.key);
+    const bad = [];
+    Object.entries(counts).forEach(([day,count])=>{
+      if(count < needed) bad.push(`${dayName(day)}不足${count}/${needed}`);
+      if(count > needed) bad.push(`${dayName(day)}超過${count}/${needed}`);
+    });
+    if(bad.length){ cell.classList.add('warn'); status.textContent = bad.join('、'); }
+    else{ cell.classList.add('ok'); status.textContent = `OK｜${Object.entries(counts).map(([d,c])=>`${dayName(d)}:${c}`).join(' ')}`; }
+  }else{
+    const count = countAssignmentsSingle(text, period, week, box.dataset.key);
+    if(count < needed){ cell.classList.add('warn'); status.textContent = `教練不足：${count}/${needed}`; }
+    else if(count > needed){ cell.classList.add('warn'); status.textContent = `教練超過：${count}/${needed}`; }
+    else{ cell.classList.add('ok'); status.textContent = `OK｜${count}人`; }
+  }
+}
+function extractCourseEntries(week){
+  const entries=[];
+  document.querySelectorAll('.course-validate .editbox[data-role="course"]').forEach(box=>{
+    const cell=box.closest('.edit-cell'),tr=cell.closest('tr');
+    let time=parseTimeRange(tr?.children?.[2]?.innerText||'');
+    if(!time){
+      const manualTime=tr?.querySelector('.time-cell')?.innerText||'';
+      time=parseTimeRange(manualTime);
+    }
+    if(!time)return;
+    parseAssignments(box.innerText,box.dataset.period,week,box.dataset.key).forEach(a=>{
+      entries.push({
+        ...a,
+        roleType:'course',
+        time,
+        cell,
+        venue:box.dataset.venue,
+        courseName:tr?.dataset.courseName || tr?.querySelector('.course-name')?.innerText?.split('\n')?.[0] || '',
+        slotCode:tr?.dataset.slotCode || '',
+        date:tr?.dataset.manualDate || '',
+        rowKey:(tr?.dataset.courseRow||'')+'|'+(box.dataset.period||'')+'|'+(box.dataset.key||'')
+      });
+    });
+  });
+  return entries;
+}
+function extractFrontdeskEntries(week){
+  const entries=[];
+  document.querySelectorAll('.editbox[data-role="frontdesk"]').forEach(box=>{
+    const cell=box.closest('.edit-cell'),tr=cell.closest('tr');
+    const time=parseTimeRange(tr?.querySelector('.segment-time')?.innerText||'');
+    if(!time) return;
+    parseAssignments(box.innerText,box.dataset.period,week,box.dataset.key).forEach(a=>{
+      entries.push({...a,roleType:'frontdesk',time,cell,venue:box.dataset.venue,rowKey:(tr?.rowIndex||'')+'|frontdesk|'+(box.dataset.key||'')});
+    });
+  });
+  return entries;
+}
+function extractLifeguardEntries(week){
+  return allLifeguardShifts(week).map(l=>({...l,roleType:'lifeguard',cell:l.sourceCell,rowKey:'lifeguard|'+(l.period||'')+'|'+(l.venue||'')+'|'+(l.raw||'')}));
+}
+function addConflict(cell,msg){
+  if(!cell) return;
+  const status=cell.querySelector('.cell-status'),prev=status?.textContent.trim()||'';
+  cell.classList.remove('ok');
+  cell.classList.add('warn');
+  if(status){
+    if(prev.includes(msg)) return;
+    status.textContent=prev?`${prev}｜${msg}`:msg;
+    status.classList.add('conflict-strong');
+  }
+}
+function sameAssignedPerson(a,b){
+  if(a.employeeId && b.employeeId) return String(a.employeeId)===String(b.employeeId);
+  return a.name && b.name && a.name===b.name;
+}
+function workTypeLabel(x){
+  if(x.roleType==='course') return `課程 ${x.courseName||''} ${x.slotCode||''}`.trim();
+  if(x.roleType==='lifeguard') return '救生';
+  if(x.roleType==='frontdesk') return '櫃台';
+  return '工作';
+}
+function courseLabel(c){
+  const base=[c.venue,workTypeLabel(c),c.time?.label].filter(Boolean).join(' ');
+  return base || c.time?.label || '工作';
+}
+function applyAllWorkConflicts(entries){
+  for(let i=0;i<entries.length;i++){
+    for(let j=i+1;j<entries.length;j++){
+      const a=entries[i], b=entries[j];
+      if(a.rowKey===b.rowKey) continue;
+      if(!sameAssignedPerson(a,b)) continue;
+      if(!timesOverlap(a.time,b.time)) continue;
+      const sameDays=(a.days||[]).filter(d=>(b.days||[]).includes(d));
+      if(!sameDays.length) continue;
+      const dLabel=sameDays.map(dayName).join('、');
+      const msgA=`撞班：${a.name} 同時排到「${courseLabel(b)}」（週${dLabel}）`;
+      const msgB=`撞班：${b.name} 同時排到「${courseLabel(a)}」（週${dLabel}）`;
+      addConflict(a.cell,msgA);
+      addConflict(b.cell,msgB);
+    }
+  }
+}
+function availabilityIntervalsForWeek(week){
+  const staffRows=readAvailabilityRows();
+  const out=[];
+  staffRows.forEach(staff=>{
+    out.push(...parseAvailabilityLinesForStaff(staff,staff.weekday,'weekday',week));
+    out.push(...parseAvailabilityLinesForStaff(staff,staff.sat,'sat',week));
+    out.push(...parseAvailabilityLinesForStaff(staff,staff.sun,'sun',week));
+  });
+  return out;
+}
+function sameEmployeeForAvailability(a,b){
+  if(a.employeeId && b.employeeId) return String(a.employeeId)===String(b.employeeId);
+  return a.name && b.name && a.name===b.name;
+}
+function availabilityCoversWork(avail,work,day){
+  return sameEmployeeForAvailability(avail,work)
+    && Number(avail.day)===Number(day)
+    && avail.time.start<=work.time.start
+    && avail.time.end>=work.time.end
+    && venueTextMatches(avail.venues||'全部', work.venue||'');
+}
+function applyAvailabilityConflicts(entries,week){
+  const avails=availabilityIntervalsForWeek(week);
+  if(!avails.length) return;
+  entries.forEach(work=>{
+    if(!work.name && !work.employeeId) return;
+    const employeeHasAvailability=avails.some(a=>sameEmployeeForAvailability(a,work));
+    if(!employeeHasAvailability) return;
+    (work.days||[]).forEach(day=>{
+      const ok=avails.some(a=>availabilityCoversWork(a,work,day));
+      if(!ok){
+        addConflict(work.cell,`不在可上課時段：${work.name} 週${dayName(day)} ${work.time.label}`);
+      }
+    });
+  });
+}
+function applyConflictWarnings(week){
+  const courses=extractCourseEntries(week);
+  const lifeguards=extractLifeguardEntries(week);
+  const frontdesks=extractFrontdeskEntries(week);
+  const all=[...courses,...lifeguards,...frontdesks];
+  applyAllWorkConflicts(all);
+  applyAvailabilityConflicts(all,week);
+}
+
+
+
+function simpleName(str){
+  return String(str||'')
+    .replace(/^夢想[-－]/,'')
+    .replace(/分館/g,'')
+    .replace(/[()\s（）]/g,'')
+    .toLowerCase();
+}
+function venueMatches(apiVenue,rowVenue){
+  const a=simpleName(apiVenue), b=simpleName(rowVenue);
+  return !!a && !!b && (a.includes(b) || b.includes(a));
+}
+function courseMatches(apiCourse,rowCourse){
+  const a=simpleName(apiCourse), b=simpleName(rowCourse);
+  if(!a || !b) return false;
+  if(a.includes(b) || b.includes(a)) return true;
+  if(a.includes('游泳假日班') && b.includes('游泳假日班')) return true;
+  return false;
+}
+function fallbackCountForRow(tr){
+  // v36 正式資料模式：報名人數只接受 API；API 未連線時不產生假人數。
+  if(tr.dataset.courseKind==='manual') return parseInt(tr.querySelector('.enroll-count')?.innerText||'0',10)||0;
+  return 0;
+}
+function formatUpdatedTime(iso){
+  if(!iso) return '';
+  try{
+    return new Date(iso).toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }catch(e){ return iso; }
+}
+async function fetchEnrollmentCountsForCurrentWeek(){
+  const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
+  // 注意：正式上線時，前端呼叫排班系統自己的後端 proxy。
+  // 排班系統後端再用 x-api-key 去呼叫 https://dream-dream.replit.app/api/admin/schedule-enrollment-counts
+  // 不可以把 x-api-key 寫在前端。
+  const url=`${API_ENDPOINTS.enrollmentCounts}?weekNo=${weekNo}&includeZero=true`;
+  try{
+    const res=await fetch(url,{credentials:'include'});
+    if(!res.ok) throw new Error('API status '+res.status);
+    const raw=await res.json();
+    const items=Array.isArray(raw) ? raw : (Array.isArray(raw.items) ? raw.items : []);
+    return {source:'api',data:items,lastUpdated:raw.lastUpdated||new Date().toISOString(),filters:raw.filters||{}};
+  }catch(err){
+    console.warn('schedule enrollment proxy unavailable, no enrollment counts loaded:',err);
+    return {source:'none',data:[],lastUpdated:null,filters:{}};
+  }
+}
+function setEnrollmentStatus(source,lastUpdated){
+  const note=document.getElementById('weekNote');
+  if(!note) return;
+  note.querySelectorAll('.enrollment-status').forEach(el=>el.remove());
+  const badge=document.createElement('span');
+  badge.className='enrollment-status '+(source==='api'?'api':'mock');
+  badge.textContent=source==='api'
+    ? `報名人數：API即時帶入${lastUpdated ? '｜更新 '+formatUpdatedTime(lastUpdated) : ''}`
+    : '報名人數：正式 API 模式';
+  note.appendChild(badge);
+}
+function applyEnrollmentCounts(payload){
+  const source=payload.source;
+  const data=payload.data||[];
+  document.querySelectorAll('tr[data-course-row]').forEach(tr=>{
+    const venue=tr.dataset.venueName||'';
+    const course=tr.dataset.courseName||'';
+    const slot=tr.dataset.slotCode||'';
+    let count=0;
+    if(source==='api'){
+      count=data
+        .filter(r=>{
+          const venueId=tr.dataset.venueId, courseId=tr.dataset.courseId, slotId=tr.dataset.slotId, weekNo=tr.dataset.weekNo;
+          const weekMatch = !r.weekNo || !weekNo || String(r.weekNo)===String(weekNo);
+          const hasStrongId = !!(venueId && (courseId || slotId));
+          const idMatch = (!venueId || String(r.venueId||'')===String(venueId))
+            && (!courseId || String(r.courseId||'')===String(courseId))
+            && (!slotId || String(r.slotId||'')===String(slotId))
+            && weekMatch;
+          if(hasStrongId) return idMatch;
+          return weekMatch && venueMatches(r.venueName||'',venue) && courseMatches(r.courseName||'',course) && String(r.slotCode||r.slotLabel||'')===String(slot);
+        })
+        .reduce((sum,r)=>sum+(Number(r.registeredCount)||0),0);
+    }else{
+      count=fallbackCountForRow(tr);
+    }
+    const enrollEl=tr.querySelector('.enroll-count');
+    const neededEl=tr.querySelector('.need-count');
+    if(enrollEl){
+      enrollEl.innerText=String(count);
+      enrollEl.classList.remove('loading','api','mock');
+      enrollEl.classList.add(source==='api'?'api':'empty');
+      enrollEl.setAttribute('title',source==='api'?'由 /api/admin/schedule-enrollment-counts 帶入':'API 未連線，暫無報名人數資料');
+    }
+    if(neededEl){
+      const current=(neededEl.innerText||'').trim();
+      if(count===0){
+        neededEl.innerText='0';
+      }else if(current==='0'){
+        neededEl.innerText='';
+      }
+    }
+  });
+  setEnrollmentStatus(source,payload.lastUpdated);
+  validateAll();
+}
+async function loadEnrollmentCounts(){
+  document.querySelectorAll('.enroll-count').forEach(el=>{
+    el.innerText='載入中';
+    el.classList.remove('api','mock');
+    el.classList.add('loading');
+  });
+  const payload=await fetchEnrollmentCountsForCurrentWeek();
+  applyEnrollmentCounts(payload);
+}
+
+function rowForceOpen(tr){
+  const note = Array.from(tr.querySelectorAll('.note-col .editbox')).map(el=>el.innerText || '').join(' ');
+  return /仍排課|開課|照排|保留教練|手動排/.test(note);
+}
+function applyZeroEnrollmentRows(){
+  document.querySelectorAll('tr[data-course-row]').forEach(tr=>{
+    const enrollEl = tr.querySelector('.enroll-count');
+    const neededEl = tr.querySelector('.need-count');
+    if(!enrollEl || !neededEl) return;
+    const enroll = parseInt((enrollEl.innerText || '').trim(), 10);
+    const forceOpen = rowForceOpen(tr);
+    tr.classList.toggle('force-open', !!forceOpen);
+    const noteCell = tr.querySelector('.note-col .editbox');
+    if(forceOpen && noteCell && !noteCell.parentElement.querySelector('.force-badge')){
+      noteCell.insertAdjacentHTML('afterend','<span class="force-badge">0人仍排課</span>');
+    }
+    if(Number.isFinite(enroll) && enroll === 0 && !forceOpen){
+      if((neededEl.innerText || '').trim() !== '0'){
+        neededEl.innerText = '0';
+        if(neededEl.dataset.key){
+          localStorage.setItem(LOCAL_STORAGE_PREFIX + neededEl.dataset.key, '0');
+        }
+      }
+      tr.classList.add('zero-enroll');
+      tr.querySelectorAll('.course-validate .editbox').forEach(box=>{
+        if((box.innerText || '').trim()==='') box.setAttribute('data-placeholder','0人，無需排教練');
+      });
+    }else{
+      tr.classList.remove('zero-enroll');
+      tr.querySelectorAll('.course-validate .editbox').forEach(box=>{
+        const period = box.dataset.period;
+        box.setAttribute('data-placeholder', period==='weekday' ? '平日教練，請選擇員工 123' : (period==='sat' ? '週六教練' : '週日教練'));
+      });
+    }
+  });
+}
+function markIssueRows(){
+  document.querySelectorAll('tr').forEach(tr=>tr.classList.remove('has-issue'));
+  document.querySelectorAll('.warn').forEach(cell=>{
+    const tr=cell.closest('tr');
+    if(tr) tr.classList.add('has-issue');
+  });
+}
+function classifyIssue(text){
+  const t=String(text||'');
+  if(/撞班|撞課|不在可上課時段|同時|超過|重複/.test(t)) return 'critical';
+  if(/不足|未填|請先填|格式錯誤|無救生/.test(t)) return 'shortage';
+  return 'notice';
+}
+function issueGroupLabel(type){
+  return ({critical:'嚴重錯誤',shortage:'排班不足',notice:'提醒'})[type] || '提醒';
+}
+function issueGroupHint(type){
+  return ({critical:'必須優先處理',shortage:'需補人或確認',notice:'可檢查後處理'})[type] || '';
+}
+function collectCurrentIssues(){
+  const issues=[];
+  document.querySelectorAll('.warn .cell-status').forEach(status=>{
+    const text=(status.innerText||'').trim();
+    if(!text) return;
+    const tr=status.closest('tr');
+    const venue=status.closest('.venue-card')?.querySelector('.venue-title')?.innerText || '';
+    const cells=tr ? Array.from(tr.children).slice(0,3).map(td=>td.innerText.trim().split('\n')[0]).filter(Boolean).join('｜') : '';
+    issues.push({venue,cells,text,type:classifyIssue(text)});
+  });
+  const unique=[],seen=new Set();
+  issues.forEach(i=>{
+    const key=i.venue+i.cells+i.text;
+    if(!seen.has(key)){seen.add(key);unique.push(i);}
+  });
+  return unique;
+}
+function updateIssueSummary(){
+  markIssueRows();
+  const list=document.getElementById('issueList');
+  const countEl=document.getElementById('issueCount');
+  if(!list || !countEl) return;
+  const unique=collectCurrentIssues();
+  countEl.textContent=String(unique.length);
+  if(!unique.length){
+    list.innerHTML='<span class="ok-message">目前尚無問題。</span>';
+    return;
+  }
+  const groups={critical:[],shortage:[],notice:[]};
+  unique.forEach(i=>groups[i.type||'notice'].push(i));
+  list.innerHTML=['critical','shortage','notice'].filter(k=>groups[k].length).map(k=>`
+    <div class="issue-group">
+      <div class="issue-group-head ${k}">
+        <span>${issueGroupLabel(k)}</span>
+        <span class="issue-severity-badge">${groups[k].length} 項｜${issueGroupHint(k)}</span>
+      </div>
+      ${groups[k].slice(0,20).map(i=>`<div class="issue-item ${k}"><b>${escapeHtml(i.venue)}</b>${i.cells?'｜'+escapeHtml(i.cells):''}<br>${escapeHtml(i.text)}</div>`).join('')}
+    </div>
+  `).join('');
+}
+
+
+
+function assignedNameFromLine(line,role){
+  if(role==='lifeguard-source'){
+    const tm=line.match(/\d{1,2}:\d{2}\s*[-－~～]\s*\d{1,2}:\d{2}/);
+    const rest=tm?line.replace(tm[0],' '):line;
+    return normalizeName(rest.replace(/[1-5]+/g,' '));
+  }
+  return normalizeName(line.replace(/[1-5]+/g,' '));
+}
+function collectAssignedEmployeeStats(){
+  const stats=new Map();
+  document.querySelectorAll('[contenteditable][data-key]').forEach(box=>{
+    const role=box.dataset.role||'';
+    if(!role || role==='') return;
+    const key=box.dataset.key;
+    usefulLines(box.innerText).forEach(line=>{
+      const name=assignedNameFromLine(line,role);
+      if(!name) return;
+      const emp=findEmployeeForLine(name,key);
+      const id=emp?.id ? `id-${emp.id}` : `name-${name}`;
+      if(!stats.has(id)){
+        stats.set(id,{employeeId:emp?.id||'',name:emp?.name||name,role:emp?.role||'',venue:emp?.venue||'',lineBound:!!emp?.lineBound,count:0});
+      }
+      stats.get(id).count++;
+    });
+  });
+  return Array.from(stats.values()).sort((a,b)=>Number(b.lineBound)-Number(a.lineBound)||a.name.localeCompare(b.name,'zh-Hant'));
+}
+function renderLinePushCheck(){
+  const box=document.getElementById('linePushCheck');
+  if(!box) return;
+  const stats=collectAssignedEmployeeStats();
+  const bound=stats.filter(x=>x.lineBound);
+  const unbound=stats.filter(x=>!x.lineBound);
+  const render=(arr,emptyText)=>arr.length?arr.map(x=>`<div class="line-push-item">${escapeHtml(x.name)}｜${x.count} 個班｜${lineBadge({lineBound:!!x.lineBound})}</div>`).join(''):`<div class="line-push-empty">${emptyText}</div>`;
+  box.innerHTML=`<div><div class="line-push-list-title">可推播：</div>${render(bound,'目前沒有可推播名單')}</div>
+  <div><div class="line-push-list-title">未綁定，無法推播：</div>${render(unbound,'目前沒有未綁定名單')}</div>`;
+}
+
+let visualMode='simple';
+let sectionView='all';
+function setVisualMode(mode){
+  visualMode=mode;
+  document.body.classList.toggle('simplified-mode', mode==='simple');
+  document.body.classList.toggle('check-mode', mode==='check');
+  document.getElementById('modeSimpleBtn')?.classList.toggle('active', mode==='simple');
+  document.getElementById('modeCheckBtn')?.classList.toggle('active', mode==='check');
+  applyScheduleFilters();
+}
+function setSectionView(section){
+  sectionView=section;
+  ['all','duty','course','holiday','manual'].forEach(s=>{
+    document.body.classList.toggle('section-'+s, s===section);
+    document.getElementById('section'+s.charAt(0).toUpperCase()+s.slice(1)+'Btn')?.classList.toggle('active', s===section);
+  });
+}
+function applyScheduleFilters(){
+  document.body.classList.toggle('hide-zero', !!document.getElementById('hideZeroToggle')?.checked);
+  document.body.classList.toggle('show-issues-only', !!document.getElementById('issuesOnlyToggle')?.checked);
+  if(document.getElementById('issuesOnlyToggle')?.checked){ setVisualMode('check'); }
+}
+function expandAllZero(){
+  const toggle=document.getElementById('hideZeroToggle');
+  if(toggle) toggle.checked=false;
+  applyScheduleFilters();
+}
+function validateAll(){const week=weeks[Number(document.getElementById('weekSelect').value||0)];applyZeroEnrollmentRows();document.querySelectorAll('.need-validate').forEach(cell=>validateFrontdesk(cell,week));renderLifeguards(week);document.querySelectorAll('.course-validate').forEach(cell=>validateCourseCell(cell,week));applyConflictWarnings(week);updateIssueSummary();renderLinePushCheck();applyScheduleFilters();if(!document.getElementById('mobileView')?.classList.contains('hidden-view'))renderMobileView()}
+function render(){const week=weeks[Number(document.getElementById('weekSelect').value||0)],venueFilter=document.getElementById('venueFilter').value;document.getElementById('weekNote').textContent=`目前週別：${week.label}｜平日欄：${week.weekday}｜救生格式：姓名 時段 星期數字`;const visible=venues.filter(v=>venueFilter==='all'||v.name===venueFilter);document.getElementById('venueList').innerHTML=visible.map(v=>`<article class="venue-card" data-venue-card="${v.name}"><div class="venue-head"><div><div class="venue-title">${v.name}</div><div class="subtitle">${week.label}</div></div><div class="venue-meta">${v.tags.map((t,i)=>`<span class="tag ${['blue','green','orange'][i%3]}">${t}</span>`).join('')}</div></div><div class="venue-body">${buildDutySection(v,week)}<div class="course-stack">${buildCourseSection(v,week)}${buildHolidayCourseSection(v,week)}${buildManualCourseSection(v,week)}</div></div></article>`).join('');bindAutoSave();refreshEmployeeChips();validateAll();if(!document.getElementById('payrollView')?.classList.contains('hidden-view'))renderPayrollReport();loadEnrollmentCounts();loadManualCoursesForWeek(week.no);loadExistingScheduleAssignments();renderAvailabilityReport()}
+function bindAutoSave(){document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{el.addEventListener('input',()=>{const key=el.getAttribute('data-key'),text=el.innerText.replace(/\n+$/,'');localStorage.setItem(LOCAL_STORAGE_PREFIX+key,text);refreshEmployeeChips();validateAll()})})}
+function timePartsFromLabel(label){
+  const t=parseTimeRange(label);
+  if(!t) return {startTime:'',endTime:''};
+  return {startTime:minutesToTime(t.start),endTime:minutesToTime(t.end)};
+}
+function employeeForAssignment(a){
+  if(a.employeeId){
+    const emp=employeeById(a.employeeId);
+    if(emp) return emp;
+  }
+  return employeeByName(a.name) || {id:a.employeeId||'',name:a.name||'未指定員工',role:a.role||'',venueId:a.venueId||'',venueName:a.employeeVenue||'',lineBound:!!a.lineBound};
+}
+function normalizedBase(weekNo, venueName, venueId, roleType, dateType, days, time, a){
+  const emp=employeeForAssignment(a);
+  const finalVenueName = venueName || '';
+  const finalVenueId = venueId || venueIdByName(finalVenueName) || '';
+  return {
+    weekNo,
+    venueId: finalVenueId,
+    venueName: finalVenueName,
+    roleType,
+    courseId: '',
+    courseName: '',
+    slotId: '',
+    slotCode: '',
+    dateType,
+    days: days || a.days || [],
+    startTime: time ? minutesToTime(time.start) : '',
+    endTime: time ? minutesToTime(time.end) : '',
+    employeeId: emp.id || '',
+    employeeName: emp.name || a.name || '未指定員工',
+    role: emp.role || a.role || '',
+    lineBound: !!emp.lineBound,
+    source: roleType==='course' ? 'registration' : 'schedule'
+  };
+}
+function collectNormalizedAssignments(){
+  const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
+  const week=weeks[Number(document.getElementById('weekSelect')?.value||0)];
+  const assignments=[];
+  document.querySelectorAll('.course-validate .editbox[data-role="course"]').forEach(box=>{
+    const cell=box.closest('.edit-cell'), tr=cell?.closest('tr');
+    const time=parseTimeRange(tr?.children?.[2]?.innerText||'');
+    if(!tr || !time) return;
+    const venueName=tr.dataset.venueName||box.dataset.venue||'';
+    const venueId=tr.dataset.venueId||'';
+    parseAssignments(box.innerText,box.dataset.period,week,box.dataset.key).forEach(a=>{
+      const item=normalizedBase(weekNo,venueName,venueId,'course',box.dataset.period,a.days,time,a);
+      item.courseName=tr.dataset.courseName||tr.children?.[0]?.innerText?.split('\n')?.[0]||'';
+      item.courseId=tr.dataset.courseId||'';
+      item.slotId=tr.dataset.slotId||'';
+      item.slotCode=tr.dataset.slotCode||tr.children?.[1]?.innerText||'';
+      item.requiredCoaches=tr.querySelector('.need-count')?.innerText.trim()||'';
+      item.registeredCount=tr.querySelector('.enroll-count')?.innerText.trim()||'';
+      item.source=tr.dataset.courseKind==='manual'?'manual':'registration';
+      item.manualCourseId=tr.dataset.manualCourseRow||'';
+      item.date=tr.dataset.manualDate||'';
+      assignments.push(item);
+    });
+  });
+  document.querySelectorAll('.editbox[data-role="frontdesk"]').forEach(box=>{
+    const cell=box.closest('.edit-cell'), tr=cell?.closest('tr');
+    const time=parseTimeRange(tr?.querySelector('.segment-time')?.innerText||'');
+    if(!time) return;
+    parseAssignments(box.innerText,box.dataset.period,week,box.dataset.key).forEach(a=>{
+      assignments.push(normalizedBase(weekNo,box.dataset.venue||'',box.dataset.venueId||venueIdByName(box.dataset.venue||''),'frontdesk',box.dataset.period,a.days,time,a));
+    });
+  });
+  document.querySelectorAll('.lifeguard-source[data-role="lifeguard-source"]').forEach(box=>{
+    parseShiftLines(box.innerText,box.dataset.period,week,box.closest('.source-cell'),box.dataset.venue,box.dataset.key).forEach(a=>{
+      assignments.push(normalizedBase(weekNo,box.dataset.venue||'',box.dataset.venueId||venueIdByName(box.dataset.venue||''),'lifeguard',box.dataset.period,a.days,a.time,a));
+    });
+  });
+  return assignments;
+}
+
+function parseISODateAsLocal(iso){
+  const [y,m,d]=String(iso||'').split('-').map(Number);
+  if(!y||!m||!d) return null;
+  return new Date(y,m-1,d);
+}
+function dateToISO(date){
+  if(!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const y=date.getFullYear();
+  const m=String(date.getMonth()+1).padStart(2,'0');
+  const d=String(date.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+function isoDateForWeekDay(week, dayNo){
+  const start=parseISODateAsLocal(week?.start);
+  if(!start || !dayNo) return '';
+  const startDay = start.getDay() === 0 ? 7 : start.getDay();
+  const offset = Number(dayNo) - startDay;
+  const out = new Date(start);
+  out.setDate(start.getDate()+offset);
+  if(week?.start && week?.end){
+    const startIso=week.start, endIso=week.end, outIso=dateToISO(out);
+    if(outIso < startIso || outIso > endIso) return '';
+  }
+  return dateToISO(out);
+}
+function roleLabelForShift(roleType){
+  if(roleType==='lifeguard') return '救生';
+  if(roleType==='frontdesk') return '櫃台';
+  return '教練';
+}
+function notesForShift(a){
+  const parts=[];
+  if(a.roleType==='course') parts.push(a.source==='manual'?'手動課程':'暑假課程');
+  else if(a.roleType==='lifeguard') parts.push('暑假救生排班');
+  else if(a.roleType==='frontdesk') parts.push('暑假櫃台排班');
+  if(a.courseName) parts.push(a.courseName);
+  if(a.slotCode) parts.push(a.slotCode);
+  if(a.registeredCount!=='' && a.registeredCount!==undefined) parts.push(`報名 ${a.registeredCount} 人`);
+  if(a.requiredCoaches!=='' && a.requiredCoaches!==undefined) parts.push(`需求 ${a.requiredCoaches} 位`);
+  if(a.manualCourseId) parts.push(`manualCourseId:${a.manualCourseId}`);
+  return parts.filter(Boolean).join('｜') || '暑假排班';
+}
+function collectShiftRowsForPortal(){
+  const weekIndex=Number(document.getElementById('weekSelect')?.value||0);
+  const week=weeks[weekIndex];
+  const rows=[];
+  collectNormalizedAssignments().forEach(a=>{
+    if(!a.employeeId || !a.venueId || !a.startTime || !a.endTime) return;
+    const dates=[];
+    if(a.date) dates.push(a.date);
+    else (a.days||[]).forEach(day=>{
+      const iso=isoDateForWeekDay(week, day);
+      if(iso) dates.push(iso);
+    });
+    Array.from(new Set(dates)).forEach(date=>{
+      rows.push({
+        employeeId:Number(a.employeeId),
+        venueId:Number(a.venueId),
+        date,
+        startTime:a.startTime,
+        endTime:a.endTime,
+        role:roleLabelForShift(a.roleType),
+        notes:notesForShift(a),
+        status:'active',
+        source:'summer-schedule-v40',
+        weekNo:a.weekNo,
+        roleType:a.roleType,
+        courseName:a.courseName||'',
+        slotCode:a.slotCode||'',
+        manualCourseId:a.manualCourseId||'',
+        originalAssignment:a
+      });
+    });
+  });
+  rows.sort((a,b)=>String(a.date).localeCompare(String(b.date)) || String(a.startTime).localeCompare(String(b.startTime)) || String(a.employeeId).localeCompare(String(b.employeeId)));
+  return rows;
+}
+function renderReplitStatus(items){
+  const box=document.getElementById('replitStatusBox');
+  if(!box) return;
+  box.innerHTML = items.map(item=>`<span class="api-chip ${item.status}">${escapeHtml(item.label)}</span>`).join('') + '<br>' +
+    '<span>綠色代表 API 可連線；橘色代表尚未接後端；紅色代表錯誤。</span>';
+}
+async function probeApi(label, url){
+  try{
+    const res=await fetch(url,{credentials:'include'});
+    return {label: `${label} ${res.status}`, status: res.ok ? 'ok' : 'warn'};
+  }catch(err){
+    return {label: `${label} 未連線`, status:'fail'};
+  }
+}
+async function checkReplitApis(){
+  const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
+  renderReplitStatus([{label:'檢查中...',status:'warn'}]);
+  const items=await Promise.all([
+    probeApi('員工API', API_ENDPOINTS.employees),
+    probeApi('報名人數', `${API_ENDPOINTS.enrollmentCounts}?weekNo=${weekNo}&includeZero=true`),
+    probeApi('排班讀取', `${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`),
+    probeApi('手動課程', `${API_ENDPOINTS.manualCourses}?weekNo=${weekNo}`),
+    probeApi('員工前台API', `${API_ENDPOINTS.mySummerShifts}/${weekNo}`)
+  ]);
+  renderReplitStatus(items);
+}
+async function publishToEmployeePortal(){
+  const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
+  const shifts=collectShiftRowsForPortal();
+  if(!shifts.length){
+    alert('目前沒有可發布到員工前台的班表。請確認已選員工並有排班資料。');
+    return;
+  }
+  const missing=shifts.filter(s=>!s.employeeId || !s.venueId || !s.date || !s.startTime || !s.endTime);
+  if(missing.length){
+    alert(`有 ${missing.length} 筆資料缺少 employeeId / venueId / date / time，請先修正。`);
+    return;
+  }
+  if(!confirm(`準備發布第 ${weekNo} 週 ${shifts.length} 筆班表到員工前台，是否繼續？`)) return;
+  try{
+    const res=await fetch(API_ENDPOINTS.publishShifts,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({weekNo, shifts, generatedAt:new Date().toISOString()})});
+    if(!res.ok) throw new Error('publish API status '+res.status);
+    alert(`已發布第 ${weekNo} 週 ${shifts.length} 筆班表到員工前台。`);
+    checkReplitApis();
+  }catch(err){
+    console.warn('publish shifts API unavailable:',err);
+    localStorage.setItem(LOCAL_STORAGE_PREFIX+'last-shifts-payload', JSON.stringify({weekNo, shifts, generatedAt:new Date().toISOString()}));
+    alert('發布 API 尚未接上。已先把 shifts payload 暫存在本機，請 Replit 後端新增 /api/admin/summer-schedule/publish-shifts 後即可發布。');
+  }
+}
+
+const LINE_PUSH_BACKEND_API='/api/admin/schedule-assignments/push-line';
+function collectSchedulePayload(){
+  const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
+  const assignments=collectNormalizedAssignments();
+  const shifts=collectShiftRowsForPortal();
+  const payload={
+    version:REPLIT_READY_VERSION,
+    weekNo,
+    generatedAt:new Date().toISOString(),
+    rawEntries:[],
+    assignments,
+    shifts,
+    publishShiftsApi:API_ENDPOINTS.publishShifts,
+    linePushPreview:collectAssignedEmployeeStats(),
+    linePushBackendApi:LINE_PUSH_BACKEND_API,
+    apiEndpoints:API_ENDPOINTS
+  };
+  document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{
+    payload.rawEntries.push({key:el.dataset.key, value:el.innerText.replace(/\n+$/,''), employees:getEmployeeMeta(el.dataset.key)});
+  });
+  return payload;
+}
+async function loadExistingScheduleAssignments(){
+  const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
+  const marker=LOCAL_STORAGE_PREFIX+'loaded-week-'+weekNo;
+  if(sessionStorage.getItem(marker)) return;
+  sessionStorage.setItem(marker,'1');
+  try{
+    const res=await fetch(`${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`,{credentials:'include'});
+    if(!res.ok) throw new Error('schedule assignment API status '+res.status);
+    const raw=await res.json();
+    const entries=Array.isArray(raw.rawEntries)?raw.rawEntries:(Array.isArray(raw.entries)?raw.entries:[]);
+    entries.forEach(entry=>{
+      if(!entry.key) return;
+      localStorage.setItem(LOCAL_STORAGE_PREFIX+entry.key, entry.value||'');
+      if(Array.isArray(entry.employees)) saveEmployeeMeta(entry.key, entry.employees);
+      const el=document.querySelector(`[data-key="${CSS.escape(entry.key)}"]`);
+      if(el) el.innerText=entry.value||'';
+    });
+    refreshEmployeeChips();
+    validateAll();
+    renderAvailabilityReport();
+  }catch(err){
+    console.warn('existing schedule assignment API unavailable:',err);
+  }
+}
+async function saveLocal(){
+  document.querySelectorAll('[contenteditable][data-key]').forEach(el=>localStorage.setItem(LOCAL_STORAGE_PREFIX+el.dataset.key,el.innerText.replace(/\n+$/,'')));
+  const payload=collectSchedulePayload();
+  try{
+    const res=await fetch(API_ENDPOINTS.scheduleAssignments,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});
+    if(!res.ok) throw new Error('API status '+res.status);
+    document.body.classList.remove('unsaved');
+    alert(`已儲存第 ${payload.weekNo} 週排班。\nNormalized assignments：${payload.assignments.length} 筆\n員工前台 shifts：${payload.shifts.length} 筆`);
+    checkReplitApis();
+  }catch(err){
+    console.warn('schedule assignment API unavailable, local fallback saved:',err);
+    localStorage.setItem(LOCAL_STORAGE_PREFIX+'last-payload',JSON.stringify(payload));
+    document.body.classList.remove('unsaved');
+    alert(`後端 /api/admin/schedule-assignments 尚未接上，已先暫存在本機。\nNormalized assignments：${payload.assignments.length} 筆\n員工前台 shifts：${payload.shifts.length} 筆`);
+  }
+}
+function clearStorage(){
+  if(!confirm('清空目前瀏覽器暫存資料？'))return;
+  Object.keys(localStorage)
+    .filter(k=>/^schedule-v40-/.test(k) || /^schedule-v39-/.test(k) || /^schedule-v39-employee-meta-/.test(k) || k==='schedule-v39-course-rate-rules' || k==='schedule-v39-manual-courses')
+    .forEach(k=>localStorage.removeItem(k));
+  Object.keys(sessionStorage).filter(k=>/^schedule-v40-loaded-week-/.test(k) || /^schedule-v39-loaded-week-/.test(k)).forEach(k=>sessionStorage.removeItem(k));
+  render();
+}
+function copyPreviousWeek(){alert('正式網站：會把上一週同館別資料帶入，包含救生完整班段、櫃台、課程與假日班。')}
+function addDutyRow(){alert('這版示意新增時段功能保留到正式網站處理；目前可直接修改現有「時段」欄。')}function addCourseRow(){alert('正式網站可新增平日課程時段；目前示意版先使用預載時段。')}function addHolidayCourseRow(){alert('正式網站可新增假日班時段；目前示意版先使用預載時段。')}
+
+function focusLifeguardEditorFromDisplay(cell){
+  const venue = cell.dataset.venue;
+  const period = cell.dataset.period;
+  const source = document.querySelector(`.lifeguard-source[data-venue="${CSS.escape(venue)}"][data-period="${CSS.escape(period)}"]`);
+  if(!source) return;
+  document.querySelectorAll('.source-card.active-edit').forEach(el=>el.classList.remove('active-edit'));
+  const card = source.closest('.source-card');
+  if(card) card.classList.add('active-edit');
+  source.scrollIntoView({behavior:'smooth', block:'center'});
+  setTimeout(()=>{
+    source.focus();
+    const range = document.createRange();
+    range.selectNodeContents(source);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }, 250);
+}
+
+
+function addTimeRow(containerId){
+  const box=document.getElementById(containerId);
+  if(!box) return;
+  box.insertAdjacentHTML('beforeend',`<div class="time-row">
+    <input type="time" class="qStart">
+    <input type="time" class="qEnd">
+    <button class="mini-btn" type="button" onclick="removeTimeRow(this)">刪除</button>
+  </div>`);
+}
+function removeTimeRow(btn){
+  const row=btn.closest('.time-row');
+  const box=row?.parentElement;
+  if(row && box.children.length>1) row.remove();
+  else if(row){ row.querySelectorAll('input').forEach(i=>i.value=''); }
+}
+function checkedValues(containerId){
+  return Array.from(document.querySelectorAll(`#${containerId} input:checked`)).map(i=>i.value);
+}
+function readTimeRows(containerId, suffix=''){
+  return Array.from(document.querySelectorAll(`#${containerId} .time-row`)).map(row=>{
+    const start=row.querySelector('.qStart')?.value || '';
+    const end=row.querySelector('.qEnd')?.value || '';
+    if(!start || !end) return '';
+    return `${start}-${end}${suffix ? ' ' + suffix : ''}`;
+  }).filter(Boolean);
+}
+function setEditableText(el,text){
+  el.innerText=text || '';
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+}
+function submitAvailabilityForm(){
+  buildAvailabilityPage();
+  const selectedId=document.getElementById('qEmployeeSelect')?.value || '';
+  const emp=employeeById(selectedId);
+  const manual=document.getElementById('qManualName')?.value.trim() || '';
+  const name=emp?.name || manual;
+  if(!name){ alert('請先選擇員工，或填寫備援姓名'); return; }
+  let venues=checkedValues('qVenues');
+  if(emp && (!venues.length || venues.includes('全部'))) venues=[emp.venueName || emp.venue || '全部'];
+  if(venues.includes('全部')) venues=['全部'];
+  if(!venues.length) venues=['全部'];
+  const days=checkedValues('qWeekdays').join('');
+  const weekday=readTimeRows('qWeekdayTimes', days).join('\n');
+  const sat=readTimeRows('qSatTimes').join('\n');
+  const sun=readTimeRows('qSunTimes').join('\n');
+  const note=document.getElementById('qNote')?.value.trim() || '';
+  const body=document.getElementById('availabilityBody');
+  const no=body.children.length+1;
+  body.insertAdjacentHTML('beforeend',buildAvailabilityRow(no,{employeeId:emp?.id||'',name,venues:venues.join('、'),weekday,sat,sun,note}));
+  bindAutoSave();
+  body.lastElementChild.querySelectorAll('[contenteditable]').forEach(el=>{
+    localStorage.setItem(LOCAL_STORAGE_PREFIX+el.dataset.key,el.innerText.replace(/\n+$/,''));
+    el.addEventListener('input',renderAvailabilityReport);
+  });
+  renderAvailabilityReport();
+  body.lastElementChild.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function clearAvailabilityForm(){
+  const sel=document.getElementById('qEmployeeSelect');
+  if(sel) sel.value='';
+  const manual=document.getElementById('qManualName');
+  if(manual) manual.value='';
+  const info=document.getElementById('qEmployeeInfo');
+  if(info) info.innerHTML='請先選擇員工';
+  document.getElementById('qNote').value='';
+  document.querySelectorAll('#qVenues input,#qWeekdays input').forEach(i=>i.checked=false);
+  ['qWeekdayTimes','qSatTimes','qSunTimes'].forEach(id=>{
+    const box=document.getElementById(id);
+    if(!box) return;
+    while(box.children.length>1) box.lastElementChild.remove();
+    box.querySelectorAll('input').forEach(i=>i.value='');
+  });
+}
+function populateQuestionnaireEmployees(){
+  const sel=document.getElementById('qEmployeeSelect');
+  if(!sel) return;
+  if(!employees.length){
+    sel.innerHTML='<option value="">尚未取得員工資料，請先串接 /api/employees/for-schedule</option>';
+    return;
+  }
+  const options=['<option value="">請選擇員工</option>'].concat([...employees]
+    .sort((a,b)=>Number(isLineBound(b))-Number(isLineBound(a))||a.name.localeCompare(b.name,'zh-Hant'))
+    .map(e=>`<option value="${e.id}">${escapeHtml(employeeLabel(e))}</option>`));
+  sel.innerHTML=options.join('');
+}
+function updateQuestionnaireEmployeeInfo(){
+  const emp=employeeById(document.getElementById('qEmployeeSelect')?.value);
+  const info=document.getElementById('qEmployeeInfo');
+  if(!info) return;
+  if(!emp){info.innerHTML='請先選擇員工';return;}
+  info.innerHTML=`<b>${escapeHtml(emp.name)}</b><br>職務：${escapeHtml(emp.role)}｜所屬館別：${escapeHtml(emp.venueName||emp.venue||'')}｜${lineBadge(emp)}`;
+  document.querySelectorAll('#qVenues input').forEach(i=>{
+    i.checked=((emp.venueName||'')==='全部' && i.value==='全部') || i.value===emp.venueName;
+  });
+}
+
+
+const availabilitySeeds=[];
+function showView(view){
+  const isAvail=view==='availability';
+  const isPayroll=view==='payroll';
+  const isMobile=view==='mobile';
+  document.getElementById('scheduleView')?.classList.toggle('hidden-view', isAvail || isPayroll || isMobile);
+  document.getElementById('availabilityView')?.classList.toggle('hidden-view', !isAvail);
+  document.getElementById('payrollView')?.classList.toggle('hidden-view', !isPayroll);
+  document.getElementById('mobileView')?.classList.toggle('hidden-view', !isMobile);
+  document.getElementById('tabSchedule')?.classList.toggle('active', view==='schedule');
+  document.getElementById('tabAvailability')?.classList.toggle('active', isAvail);
+  document.getElementById('tabPayroll')?.classList.toggle('active', isPayroll);
+  document.getElementById('tabMobile')?.classList.toggle('active', isMobile);
+  if(isAvail){buildAvailabilityPage(false);renderAvailabilityReport();}
+  if(isPayroll){renderPayrollReport();}
+  if(isMobile){renderMobileView();}
+}
+function availabilityKey(row,field){return `${currentWeekKey()}-availability-${row}-${field}`;}
+function availCell(key, value, placeholder, extraClass=''){
+  const val=getSaved(key) ?? value ?? '';
+  return `<div class="editbox ${extraClass}" contenteditable="true" data-key="${key}" data-placeholder="${placeholder}">${escapeHtml(val).replace(/\n/g,'<br>')}</div>`;
+}
+function buildAvailabilityPage(force=false){
+  const body=document.getElementById('availabilityBody');
+  if(!body) return;
+  if(body.children.length && !force) return;
+  body.innerHTML=availabilitySeeds.map((row,i)=>buildAvailabilityRow(i+1,row)).join('');
+  bindAutoSave();
+  body.querySelectorAll('[contenteditable]').forEach(el=>el.addEventListener('input',renderAvailabilityReport));
+}
+function buildAvailabilityRow(no,row={}){
+  const emp=row.employeeId?employeeById(row.employeeId):employeeByName(row.name);
+  const employeeId=row.employeeId || emp?.id || '';
+  const lineStatus=emp?`<div style="margin-top:4px">${lineBadge(emp)}</div>`:'';
+  return `<tr data-avail-row="${no}" data-employee-id="${escapeHtml(employeeId)}">
+    <td class="staff-name-col">${availCell(availabilityKey(no,'name'),row.name||'','姓名','staff-name')}${lineStatus}</td>
+    <td class="staff-venue-col">${availCell(availabilityKey(no,'venues'),row.venues||emp?.venueName||emp?.venue||'全部','館別','staff-venues')}</td>
+    <td class="avail-input">${availCell(availabilityKey(no,'weekday'),row.weekday||'','07:30-12:00 123')}</td>
+    <td class="avail-input">${availCell(availabilityKey(no,'sat'),row.sat||'','週六可上課時段')}</td>
+    <td class="avail-input">${availCell(availabilityKey(no,'sun'),row.sun||'','週日可上課時段')}</td>
+    <td class="note-col">${availCell(availabilityKey(no,'note'),row.note||'','備註')}</td>
+  </tr>`;
+}
+function addAvailabilityRow(){
+  const body=document.getElementById('availabilityBody');
+  if(!body) return;
+  const no=body.children.length+1;
+  body.insertAdjacentHTML('beforeend',buildAvailabilityRow(no,{venues:'全部'}));
+  bindAutoSave();
+  const last=body.lastElementChild;
+  last.querySelectorAll('[contenteditable]').forEach(el=>el.addEventListener('input',renderAvailabilityReport));
+  last.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function readAvailabilityRows(){
+  const rows=[];
+  document.querySelectorAll('#availabilityBody tr').forEach(tr=>{
+    const no=tr.dataset.availRow;
+    const name=(tr.querySelector(`[data-key="${CSS.escape(availabilityKey(no,'name'))}"]`)?.innerText||'').trim();
+    const venues=(tr.querySelector(`[data-key="${CSS.escape(availabilityKey(no,'venues'))}"]`)?.innerText||'全部').trim();
+    const weekday=(tr.querySelector(`[data-key="${CSS.escape(availabilityKey(no,'weekday'))}"]`)?.innerText||'').trim();
+    const sat=(tr.querySelector(`[data-key="${CSS.escape(availabilityKey(no,'sat'))}"]`)?.innerText||'').trim();
+    const sun=(tr.querySelector(`[data-key="${CSS.escape(availabilityKey(no,'sun'))}"]`)?.innerText||'').trim();
+    if(name) rows.push({name,venues,weekday,sat,sun});
+  });
+  return rows;
+}
+function parseAvailabilityLinesForStaff(staff, text, period, week){
+  const days=activeDaysForPeriod(period,week);
+  const out=[];
+  usefulLines(text).forEach(line=>{
+    const timeMatch=line.match(/\d{1,2}:\d{2}\s*[-－~～]\s*\d{1,2}:\d{2}/);
+    if(!timeMatch) return;
+    const time=parseTimeRange(timeMatch[0]);
+    if(!time) return;
+    const rest=line.replace(timeMatch[0],' ');
+    const dayMatches=rest.match(/[1-5]+/g);
+    const lineDays=period==='weekday'
+      ? (dayMatches?Array.from(new Set(dayMatches.join('').split('').map(Number))).filter(d=>days.includes(d)):[...days])
+      : [...days];
+    lineDays.forEach(day=>out.push({employeeId:staff.employeeId||'',name:staff.name,venues:staff.venues,day,time,raw:line}));
+  });
+  return out;
+}
+function minutesToTime(min){
+  const h=Math.floor(min/60).toString().padStart(2,'0');
+  const m=(min%60).toString().padStart(2,'0');
+  return `${h}:${m}`;
+}
+function fmtInterval(x){return `${minutesToTime(x.start)}-${minutesToTime(x.end)}`;}
+function subtractIntervals(base, busy){
+  let open=[{start:base.start,end:base.end}];
+  busy.forEach(b=>{
+    const next=[];
+    open.forEach(seg=>{
+      if(b.end<=seg.start || b.start>=seg.end){next.push(seg);return;}
+      if(b.start>seg.start) next.push({start:seg.start,end:Math.min(b.start,seg.end)});
+      if(b.end<seg.end) next.push({start:Math.max(b.end,seg.start),end:seg.end});
+    });
+    open=next.filter(s=>s.end>s.start);
+  });
+  return open;
+}
+function venueTextMatches(availVenues, courseVenue){
+  const v=String(availVenues||'全部');
+  return v.includes('全部') || v.includes(courseVenue);
+}
+function availabilityBusyEntries(week){
+  const courses=extractCourseEntries(week).map(c=>({
+    ...c,
+    busyType:'course',
+    busyLabel:`課程｜${c.venue||''} ${c.courseName||''} ${c.slotCode||''}`.trim()
+  }));
+  const lifeguards=extractLifeguardEntries(week).map(l=>({
+    ...l,
+    busyType:'lifeguard',
+    busyLabel:`救生｜${l.venue||''} ${l.time?.label||''}`.trim()
+  }));
+  const frontdesks=extractFrontdeskEntries(week).map(f=>({
+    ...f,
+    busyType:'frontdesk',
+    busyLabel:`櫃台｜${f.venue||''} ${f.time?.label||''}`.trim()
+  }));
+  return [...courses,...lifeguards,...frontdesks];
+}
+function sameEmployeeForAvailability(a,b){
+  if(a.employeeId && b.employeeId) return String(a.employeeId)===String(b.employeeId);
+  return a.name && b.name && a.name===b.name;
+}
+function renderAvailabilityReport(){
+  const result=document.getElementById('availabilityResult');
+  if(!result) return;
+  const week=weeks[Number(document.getElementById('weekSelect').value||0)];
+  const staffRows=readAvailabilityRows();
+  const avail=[];
+  staffRows.forEach(staff=>{
+    avail.push(...parseAvailabilityLinesForStaff(staff,staff.weekday,'weekday',week));
+    avail.push(...parseAvailabilityLinesForStaff(staff,staff.sat,'sat',week));
+    avail.push(...parseAvailabilityLinesForStaff(staff,staff.sun,'sun',week));
+  });
+  const busyEntries=availabilityBusyEntries(week);
+  const rows=[];
+  avail.forEach(a=>{
+    const busy=busyEntries.filter(b=>sameEmployeeForAvailability(a,b) && b.days.includes(a.day) && timesOverlap(a.time,b.time));
+    const busyIntervals=busy.map(b=>({start:b.time.start,end:b.time.end,label:b.time.label,venue:b.venue,type:b.busyType}));
+    const open=subtractIntervals(a.time,busyIntervals);
+    if(open.length){
+      rows.push(`<tr>
+        <td><b>${escapeHtml(a.name||'未指定員工')}</b></td>
+        <td>週${dayName(a.day)}</td>
+        <td>${escapeHtml(a.time.label)}</td>
+        <td>${busy.length?busy.map(b=>`<span class="result-busy ${b.busyType==='lifeguard'?'lifeguard-busy':'course-busy'}">${escapeHtml(b.busyLabel)} ${escapeHtml(b.time.label)}</span>`).join(''):'<span class="result-empty">尚未排工作</span>'}</td>
+        <td>${open.map(o=>`<span class="result-open">${fmtInterval(o)}</span>`).join('')}</td>
+      </tr>`);
+    }
+  });
+  result.innerHTML=rows.length?rows.join(''):`<tr><td colspan="5" class="result-empty" style="padding:14px">目前沒有未排到工作的可用時段，或尚未輸入員工可上課時間。</td></tr>`;
+}
+
+
+
+const defaultCourseRateRules=[];
+function courseRateRulesKey(){return LOCAL_STORAGE_PREFIX+'course-rate-rules';}
+function getCourseRateRules(){
+  try{
+    const raw=localStorage.getItem(courseRateRulesKey());
+    if(raw!==null) return JSON.parse(raw||'[]');
+  }catch(e){}
+  return [];
+}
+function saveCourseRateRules(rules){
+  localStorage.setItem(courseRateRulesKey(), JSON.stringify(rules));
+}
+function renderCourseRateRules(){
+  const body=document.getElementById('courseRateRulesBody');
+  if(!body) return;
+  const rules=getCourseRateRules();
+  body.innerHTML=rules.length?rules.map((r,i)=>`<tr>
+    <td><input class="rule-input" value="${escapeHtml(r.keyword||'')}" oninput="updateCourseRateRule(${i},'keyword',this.value)"></td>
+    <td>
+      <select class="rule-input" onchange="updateCourseRateRule(${i},'source',this.value)">
+        <option value="all" ${r.source==='all'?'selected':''}>全部</option>
+        <option value="registration" ${r.source==='registration'?'selected':''}>報名系統課程</option>
+        <option value="manual" ${r.source==='manual'?'selected':''}>手動課程</option>
+      </select>
+    </td>
+    <td><input class="rule-input" type="number" value="${escapeHtml(r.rate||0)}" oninput="updateCourseRateRule(${i},'rate',this.value)"></td>
+    <td><input class="rule-input" value="${escapeHtml(r.note||'')}" oninput="updateCourseRateRule(${i},'note',this.value)"></td>
+    <td><button class="rule-delete" onclick="deleteCourseRateRule(${i})">刪除</button></td>
+  </tr>`).join(''):`<tr><td colspan="5" class="payroll-empty">尚未設定課程薪資規則。</td></tr>`;
+}
+function updateCourseRateRule(i,field,value){
+  const rules=getCourseRateRules();
+  if(!rules[i]) return;
+  rules[i][field]=field==='rate'?(Number(value)||0):value;
+  saveCourseRateRules(rules);
+  renderPayrollReport();
+}
+function addCourseRateRule(){
+  const rules=getCourseRateRules();
+  rules.push({keyword:'',source:'all',rate:0,note:''});
+  saveCourseRateRules(rules);
+  renderCourseRateRules();
+  renderPayrollReport();
+}
+function deleteCourseRateRule(i){
+  const rules=getCourseRateRules();
+  rules.splice(i,1);
+  saveCourseRateRules(rules);
+  renderCourseRateRules();
+  renderPayrollReport();
+}
+function resetCourseRateRules(){
+  if(!confirm('確定要清空所有課程薪資規則？')) return;
+  saveCourseRateRules([]);
+  renderCourseRateRules();
+  renderPayrollReport();
+}
+function getPayrollRateForCourse(courseName,source){
+  const name=String(courseName||'');
+  const rules=getCourseRateRules()
+    .filter(r=>r.keyword && (r.source==='all' || !r.source || r.source===source))
+    .sort((a,b)=>String(b.keyword).length-String(a.keyword).length);
+  const hit=rules.find(r=>name.includes(r.keyword) || r.keyword.includes(name));
+  if(hit) return Number(hit.rate)||0;
+  return source==='manual'?numberValue('rateManual'):numberValue('rateCourse');
+}
+function payrollRateKey(name){return LOCAL_STORAGE_PREFIX+'payroll-rate-'+name;}
+function loadPayrollRates(){
+  [['rateCourse','course'],['rateManual','manual'],['rateLifeguard','lifeguard'],['rateFrontdesk','frontdesk'],['payrollNote','note']].forEach(([id,k])=>{
+    const el=document.getElementById(id);
+    if(el){
+      const v=localStorage.getItem(payrollRateKey(k));
+      if(v!==null) el.value=v;
+    }
+  });
+}
+function savePayrollRates(){
+  [['rateCourse','course'],['rateManual','manual'],['rateLifeguard','lifeguard'],['rateFrontdesk','frontdesk'],['payrollNote','note']].forEach(([id,k])=>{
+    const el=document.getElementById(id);
+    if(el) localStorage.setItem(payrollRateKey(k), el.value||'');
+  });
+}
+function numberValue(id){return Number(document.getElementById(id)?.value||0)||0;}
+function dateForWeekDay(week,day){
+  const start=new Date(week.start+'T00:00:00');
+  const startDay=start.getDay()===0?7:start.getDay();
+  const diff=Number(day)-startDay;
+  const d=new Date(start);
+  d.setDate(start.getDate()+diff);
+  if(d<new Date(week.start+'T00:00:00') || d>new Date(week.end+'T23:59:59')) return '';
+  const yyyy=d.getFullYear(), mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+function durationHours(startTime,endTime){
+  const t=parseTimeRange(`${startTime}-${endTime}`);
+  if(!t) return 0;
+  return Math.max(0,(t.end-t.start)/60);
+}
+function roleTypeLabel(type,source){
+  if(type==='course' && source==='manual') return '手動課程';
+  if(type==='course') return '一般課程';
+  if(type==='lifeguard') return '救生';
+  if(type==='frontdesk') return '櫃台';
+  return type||'工作';
+}
+function roleTypeClass(type,source){
+  if(type==='course' && source==='manual') return 'manual';
+  if(type==='course') return 'course';
+  if(type==='lifeguard') return 'lifeguard';
+  if(type==='frontdesk') return 'frontdesk';
+  return '';
+}
+function expandedPayrollRows(){
+  const week=weeks[Number(document.getElementById('weekSelect')?.value||0)];
+  const assignments=collectNormalizedAssignments();
+  const rows=[];
+  assignments.forEach(a=>{
+    const days=(a.days&&a.days.length)?a.days:[''];
+    days.forEach(day=>{
+      const date=a.date || (day?dateForWeekDay(week,day):'');
+      const hours=durationHours(a.startTime,a.endTime);
+      rows.push({
+        ...a,
+        date,
+        day,
+        hours,
+        unit:(a.roleType==='course'?1:hours),
+        typeLabel:roleTypeLabel(a.roleType,a.source),
+        typeClass:roleTypeClass(a.roleType,a.source),
+        workName:a.roleType==='course' ? (a.courseName||'課程') : roleTypeLabel(a.roleType,a.source)
+      });
+    });
+  });
+  return rows.sort((a,b)=>`${a.date}${a.startTime}${a.employeeName}`.localeCompare(`${b.date}${b.startTime}${b.employeeName}`));
+}
+function employeeKeyForPayroll(row){
+  return row.employeeId ? 'id-'+row.employeeId : 'name-'+(row.employeeName||'未指定員工');
+}
+function courseNameForPayroll(row){
+  return row.roleType==='course' ? (row.workName || row.courseName || '未命名課程') : '';
+}
+function addCourseCount(obj,name,source,employeeName){
+  if(!name) return;
+  const key=name;
+  if(!obj[key]) obj[key]={total:0,general:0,manual:0,byEmployee:{}};
+  obj[key].total += 1;
+  if(source==='manual') obj[key].manual += 1;
+  else obj[key].general += 1;
+  const emp=employeeName||'未指定員工';
+  obj[key].byEmployee[emp]=(obj[key].byEmployee[emp]||0)+1;
+}
+function renderCourseBreakdown(map){
+  const entries=Object.entries(map||{}).sort((a,b)=>b[1].total-a[1].total || a[0].localeCompare(b[0],'zh-Hant'));
+  if(!entries.length) return '<span class="result-empty">無課程</span>';
+  return `<div class="course-count-list">${entries.map(([name,data])=>`<span class="course-count-chip ${data.manual&&data.manual===data.total?'manual':''}">${escapeHtml(name)}｜${data.total}堂</span>`).join('')}</div>`;
+}
+function renderEmployeeCourseBreakdown(map){
+  const entries=Object.entries(map||{}).sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0],'zh-Hant'));
+  if(!entries.length) return '<span class="result-empty">無課程</span>';
+  return `<div class="course-count-list">${entries.map(([name,count])=>`<span class="course-count-chip">${escapeHtml(name)}｜${count}堂</span>`).join('')}</div>`;
+}
+function renderPayrollReport(){
+  loadPayrollRates();
+  renderCourseRateRules();
+  const body=document.getElementById('payrollSummaryBody');
+  const detail=document.getElementById('payrollDetailBody');
+  const cards=document.getElementById('payrollSummaryCards');
+  const courseBody=document.getElementById('payrollCourseBreakdownBody');
+  if(!body || !detail || !cards) return;
+  const rows=expandedPayrollRows();
+  const rateLifeguard=numberValue('rateLifeguard'), rateFrontdesk=numberValue('rateFrontdesk');
+  const map=new Map();
+  const courseTotals={};
+  rows.forEach(r=>{
+    const key=employeeKeyForPayroll(r);
+    if(!map.has(key)){
+      map.set(key,{employeeId:r.employeeId,employeeName:r.employeeName||'未指定員工',role:r.role||'',lineBound:!!r.lineBound,courseSessions:0,manualSessions:0,lifeguardShifts:0,frontdeskShifts:0,courseHours:0,lifeguardHours:0,frontdeskHours:0,totalHours:0,pay:0,items:[],courseByName:{}});
+    }
+    const s=map.get(key);
+    s.lineBound=s.lineBound||!!r.lineBound;
+    s.items.push(r);
+    s.totalHours += r.hours;
+    if(r.roleType==='course'){
+      const cname=courseNameForPayroll(r);
+      s.courseByName[cname]=(s.courseByName[cname]||0)+1;
+      addCourseCount(courseTotals,cname,r.source,s.employeeName);
+      s.courseHours += r.hours;
+      const courseRate=getPayrollRateForCourse(cname,r.source);
+      if(r.source==='manual'){s.manualSessions += 1; s.pay += courseRate;}
+      else{s.courseSessions += 1; s.pay += courseRate;}
+    }else if(r.roleType==='lifeguard'){
+      s.lifeguardShifts += 1; s.lifeguardHours += r.hours; s.pay += r.hours*rateLifeguard;
+    }else if(r.roleType==='frontdesk'){
+      s.frontdeskShifts += 1; s.frontdeskHours += r.hours; s.pay += r.hours*rateFrontdesk;
+    }
+  });
+  const stats=Array.from(map.values()).sort((a,b)=>a.employeeName.localeCompare(b.employeeName,'zh-Hant'));
+  const totals=stats.reduce((acc,s)=>{
+    acc.staff+=1; acc.course+=s.courseSessions; acc.manual+=s.manualSessions; acc.lifeguard+=s.lifeguardShifts; acc.frontdesk+=s.frontdeskShifts; acc.hours+=s.totalHours; acc.pay+=s.pay; return acc;
+  },{staff:0,course:0,manual:0,lifeguard:0,frontdesk:0,hours:0,pay:0});
+  cards.innerHTML=[
+    ['員工數',`${totals.staff} 人`],
+    ['一般課程',`${totals.course} 堂`],
+    ['手動課程',`${totals.manual} 堂`],
+    ['救生 / 櫃台',`${totals.lifeguard} / ${totals.frontdesk} 班`],
+    ['總時數 / 試算薪資',`${totals.hours.toFixed(1)} 小時｜$${Math.round(totals.pay).toLocaleString()}`]
+  ].map(([label,value])=>`<div class="payroll-stat"><span>${label}</span><b>${value}</b></div>`).join('');
+  if(courseBody){
+    const courseEntries=Object.entries(courseTotals).sort((a,b)=>b[1].total-a[1].total || a[0].localeCompare(b[0],'zh-Hant'));
+    courseBody.innerHTML=courseEntries.length?courseEntries.map(([name,data])=>{
+      const byEmp=Object.entries(data.byEmployee).sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0],'zh-Hant'))
+        .map(([emp,count])=>`<span class="course-count-chip">${escapeHtml(emp)}｜${count}堂</span>`).join('');
+      return `<tr>
+        <td class="payroll-name">${escapeHtml(name)}</td>
+        <td>${data.total} 堂</td>
+        <td>一般 ${data.general} 堂｜手動 ${data.manual} 堂</td>
+        <td><div class="course-count-list">${byEmp}</div></td>
+      </tr>`;
+    }).join(''):`<tr><td colspan="4" class="payroll-empty">目前本週沒有課程資料。</td></tr>`;
+  }
+  body.innerHTML=stats.length?stats.map(s=>`<tr>
+    <td class="payroll-name">${escapeHtml(s.employeeName)}</td>
+    <td>${renderEmployeeCourseBreakdown(s.courseByName)}</td>
+    <td>${s.manualSessions} 堂</td>
+    <td>${s.lifeguardShifts} 班｜${s.lifeguardHours.toFixed(1)} 小時</td>
+    <td>${s.frontdeskShifts} 班｜${s.frontdeskHours.toFixed(1)} 小時</td>
+    <td>${s.totalHours.toFixed(1)} 小時</td>
+    <td class="payroll-money">$${Math.round(s.pay).toLocaleString()}</td>
+    <td>${lineBadge({lineBound:s.lineBound})}</td>
+  </tr>`).join(''):`<tr><td colspan="8" class="payroll-empty">目前本週沒有可統計的排班資料。</td></tr>`;
+  detail.innerHTML=rows.length?rows.map(r=>`<tr>
+    <td>${escapeHtml(r.date || '')}${r.day?`<br><small>週${dayName(r.day)}</small>`:''}</td>
+    <td class="payroll-name">${escapeHtml(r.employeeName||'未指定員工')}</td>
+    <td>${escapeHtml(r.venueName||'')}</td>
+    <td><span class="payroll-type ${r.typeClass}">${escapeHtml(r.typeLabel)}</span></td>
+    <td>${escapeHtml(r.workName||'')}${r.slotCode?`<br><small>${escapeHtml(r.slotCode)}</small>`:''}</td>
+    <td>${escapeHtml((r.startTime||'')+'-'+(r.endTime||''))}</td>
+    <td>${escapeHtml(r.registeredCount||'')}</td>
+    <td>${r.roleType==='course'?'1 堂':`${r.hours.toFixed(1)} 小時`}</td>
+    <td>${r.source==='manual'?'手動課程':''}</td>
+  </tr>`).join(''):`<tr><td colspan="9" class="payroll-empty">目前本週沒有可統計的排班明細。</td></tr>`;
+}
+function copyPayrollCsv(){
+  const rows=expandedPayrollRows();
+  const header=['日期','星期','員工','館別','類型','課程/工作','開始','結束','人數','計算'];
+  const csv=[header].concat(rows.map(r=>[
+    r.date||'', r.day?`週${dayName(r.day)}`:'', r.employeeName||'', r.venueName||'', r.typeLabel||'', r.workName||'', r.startTime||'', r.endTime||'', r.registeredCount||'', r.roleType==='course'?'1堂':`${r.hours.toFixed(1)}小時`
+  ])).map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  navigator.clipboard?.writeText(csv).then(()=>alert('已複製薪資明細 CSV')).catch(()=>alert(csv));
+}
+
+function mobileTypeClass(row){
+  if(row.roleType==='course' && row.source==='manual') return 'manual';
+  if(row.roleType==='lifeguard') return 'lifeguard';
+  if(row.roleType==='frontdesk') return 'frontdesk';
+  return '';
+}
+function mobileTypeLabel(row){
+  if(row.roleType==='course' && row.source==='manual') return '手動課程';
+  if(row.roleType==='course') return '課程';
+  if(row.roleType==='lifeguard') return '救生';
+  if(row.roleType==='frontdesk') return '櫃台';
+  return '工作';
+}
+function mobileWeekRows(){
+  return expandedPayrollRows ? expandedPayrollRows() : [];
+}
+let renderingMobile=false;
+function renderMobileView(){
+  if(renderingMobile) return;
+  renderingMobile=true;
+  const summary=document.getElementById('mobileSummaryCards');
+  const issueBox=document.getElementById('mobileIssueList');
+  const workBox=document.getElementById('mobileWorkCards');
+  const empBox=document.getElementById('mobileEmployeeCards');
+  if(!summary || !issueBox || !workBox || !empBox){renderingMobile=false;return;}
+  validateAll();
+  const rows=mobileWeekRows();
+  const issues=collectCurrentIssues();
+  const staffCount=new Set(rows.map(r=>employeeKeyForPayroll(r))).size;
+  const courseCount=rows.filter(r=>r.roleType==='course').length;
+  const lifeguardHours=rows.filter(r=>r.roleType==='lifeguard').reduce((s,r)=>s+(r.hours||0),0);
+  summary.innerHTML=[
+    ['本週員工',`${staffCount} 人`],
+    ['課程 / 手動課',`${courseCount} 堂`],
+    ['救生時數',`${lifeguardHours.toFixed(1)} 小時`],
+    ['待處理問題',`${issues.length} 項`]
+  ].map(([a,b])=>`<div class="mobile-stat"><span>${a}</span><b>${b}</b></div>`).join('');
+  if(!issues.length){
+    issueBox.innerHTML='<div class="mobile-empty">目前尚無問題。</div>';
+  }else{
+    const groups={critical:[],shortage:[],notice:[]};
+    issues.forEach(i=>groups[i.type||'notice'].push(i));
+    issueBox.innerHTML=['critical','shortage','notice'].filter(k=>groups[k].length).map(k=>`
+      <div class="issue-group">
+        <div class="issue-group-head ${k}"><span>${issueGroupLabel(k)}</span><span class="issue-severity-badge">${groups[k].length} 項</span></div>
+        ${groups[k].slice(0,8).map(i=>`<div class="issue-item ${k}"><b>${escapeHtml(i.venue)}</b>${i.cells?'｜'+escapeHtml(i.cells):''}<br>${escapeHtml(i.text)}</div>`).join('')}
+      </div>
+    `).join('');
+  }
+  const byDate={};
+  rows.forEach(r=>{
+    const key=r.date||'未指定日期';
+    (byDate[key] ||= []).push(r);
+  });
+  const dateKeys=Object.keys(byDate).sort();
+  workBox.innerHTML=dateKeys.length?dateKeys.map(date=>`
+    <div class="mobile-card">
+      <h4>${escapeHtml(date)}${byDate[date][0]?.day?`｜週${dayName(byDate[date][0].day)}`:''}</h4>
+      ${byDate[date].sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||'')).map(r=>`
+        <div class="mobile-work">
+          <span class="mobile-pill ${mobileTypeClass(r)}">${mobileTypeLabel(r)}</span>
+          <b>${escapeHtml(r.startTime||'')}-${escapeHtml(r.endTime||'')}｜${escapeHtml(r.venueName||'')}</b>
+          <small>${escapeHtml(r.workName||r.courseName||mobileTypeLabel(r))}${r.registeredCount?`｜${escapeHtml(r.registeredCount)}人`:''}</small>
+          <small>員工：${escapeHtml(r.employeeName||'未指定員工')}</small>
+        </div>
+      `).join('')}
+    </div>
+  `).join(''):'<div class="mobile-empty">本週尚無班表資料。</div>';
+  const byEmp={};
+  rows.forEach(r=>{
+    const key=employeeKeyForPayroll(r);
+    (byEmp[key] ||= {name:r.employeeName||'未指定員工',lineBound:!!r.lineBound,items:[]}).items.push(r);
+  });
+  const empList=Object.values(byEmp).sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
+  empBox.innerHTML=empList.length?empList.map(e=>`
+    <div class="mobile-card">
+      <h4>${escapeHtml(e.name)} ${lineBadge({lineBound:e.lineBound})}</h4>
+      ${e.items.sort((a,b)=>`${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`)).map(r=>`
+        <div class="mobile-work">
+          <span class="mobile-pill ${mobileTypeClass(r)}">${mobileTypeLabel(r)}</span>
+          <b>${escapeHtml(r.date||'')} ${escapeHtml(r.startTime||'')}-${escapeHtml(r.endTime||'')}</b>
+          <small>${escapeHtml(r.venueName||'')}｜${escapeHtml(r.workName||r.courseName||mobileTypeLabel(r))}</small>
+        </div>
+      `).join('')}
+    </div>
+  `).join(''):'<div class="mobile-empty">本週尚無個人班表資料。</div>';
+  renderingMobile=false;
+}
+document.addEventListener('click', (e)=>{
+  const cell = e.target.closest('.lifeguard-display');
+  if(cell) focusLifeguardEditorFromDisplay(cell);
+});
+
+document.getElementById('weekSelect').addEventListener('change',()=>{render();buildAvailabilityPage(true);renderAvailabilityReport();renderPayrollReport();});document.getElementById('venueFilter').addEventListener('change',()=>{render();renderAvailabilityReport();renderPayrollReport();});purgeLegacyStorageOnce();initWeeks();loadEmployeesForSchedule();render();buildAvailabilityPage();renderAvailabilityReport();renderPayrollReport();
+/*
+Replit 後端必接 API 規格：
+1. GET  /api/employees/for-schedule -> {items:[{id,name,role,venueId,venueName,lineBound,lineDisplayName,lineBoundAt}]}
+2. GET  /api/schedule/enrollment-counts?weekNo=1&includeZero=true -> {items:[{weekNo,venueId,courseId,slotId,slotCode,registeredCount}]}
+3. GET  /api/admin/schedule-assignments?weekNo=1 -> {rawEntries:[], assignments:[]}
+4. POST /api/admin/schedule-assignments -> 儲存本頁 rawEntries / assignments / shifts payload。
+5. GET/POST/PATCH/DELETE /api/admin/manual-schedule-courses -> 手動課程正式儲存。
+6. POST /api/admin/summer-schedule/publish-shifts -> 將 payload.shifts upsert 到既有 shifts 表，員工前台才查得到。
+7. GET  /api/portal/my-summer-shifts/:weekNo -> 員工前台用 lineId 查自己的第 1～第 9 週班表，不可讓前端傳 employeeId 查別人。
+*/
+
+</script>
+</body>
+</html>

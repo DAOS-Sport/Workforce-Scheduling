@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SummerShiftCard } from "@/components/SummerShiftCard";
 import {
   CalendarDays, Phone, MapPin, Clock, Users, ShieldCheck,
   ChevronLeft, ChevronRight, Calendar, List,
@@ -19,6 +20,7 @@ import {
   Menu, Home, LogOut, FileEdit, Briefcase, BarChart2,
   HelpCircle, Info, ChevronDown, ChevronUp, Fingerprint, FileWarning,
   type LucideIcon,
+  Sun,
 } from "lucide-react";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
 
@@ -421,7 +423,7 @@ function JunsHeader({
   );
 }
 
-type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "leave" | "guidelines" | "sop" | "availability";
+type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "leave" | "guidelines" | "sop" | "availability" | "summer";
 
 const VIEW_TITLES: Record<PortalView, string> = {
   home: "打卡首頁",
@@ -435,6 +437,7 @@ const VIEW_TITLES: Record<PortalView, string> = {
   guidelines: "員工守則",
   sop: "系統使用說明",
   availability: "排班意願",
+  summer: "我的暑假班表",
 };
 
 function SideMenuDrawer({
@@ -463,6 +466,7 @@ function SideMenuDrawer({
       label: "排班協作",
       items: [
         { view: "schedule", label: "我的班表", icon: CalendarDays },
+        { view: "summer", label: "我的暑假班表", icon: Sun },
         { view: "coworkers", label: "工作夥伴", icon: Users },
         { view: "availability", label: "排班意願", icon: CalendarDays },
       ],
@@ -3433,6 +3437,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [addAvailStart, setAddAvailStart] = useState("08:00");
   const [addAvailEnd, setAddAvailEnd] = useState("17:00");
   const [leaveTypeSheet, setLeaveTypeSheet] = useState<string | null>(null);
+  const [summerWeekNo, setSummerWeekNo] = useState<number>(1);
   const [copySourceDate, setCopySourceDate] = useState<string | null>(null);
   const [copyTargetDates, setCopyTargetDates] = useState<Set<string>>(new Set());
   const addAvailDurationMin = (() => {
@@ -3496,6 +3501,22 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
     staleTime: 10 * 60 * 1000,
   });
   const holidaySet = useMemo(() => new Set(monthlyHolidays), [monthlyHolidays]);
+
+  const { data: summerShifts = [], isLoading: summerLoading } = useQuery<
+    Array<{ date: string; venueName: string; startTime: string; endTime: string; role: string; notes: string | null }>
+  >({
+    queryKey: ["/api/portal/my-summer-shifts", summerWeekNo],
+    enabled: activeView === "summer" && !!employee?.id && !!portalLineUserId,
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/my-summer-shifts/${summerWeekNo}`, {
+        headers: { "x-line-user-id": portalLineUserId },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
 
   const addAvailMutation = useMutation({
     mutationFn: async ({ date, startTime, endTime, entryType = "available", note }: { date: string; startTime?: string; endTime?: string; entryType?: string; note?: string }) => {
@@ -4078,6 +4099,52 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
             )}
           </div>
         </div>
+        </div>
+      )}
+
+      {activeView === "summer" && (
+        <div className="max-w-lg mx-auto p-4 pb-8">
+          <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+            <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
+              <Sun className="h-4 w-4 text-juns-teal" />
+              <span className="text-sm font-semibold text-juns-navy">我的暑假班表</span>
+            </div>
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <label className="text-sm text-slate-500">選擇週次</label>
+                <select
+                  className="border border-juns-border rounded-md px-2 py-1 text-sm"
+                  value={summerWeekNo}
+                  onChange={(e) => setSummerWeekNo(Number(e.target.value))}
+                  data-testid="select-summer-week"
+                >
+                  {Array.from({ length: 9 }, (_, i) => i + 1).map((w) => (
+                    <option key={w} value={w}>第 {w} 週</option>
+                  ))}
+                </select>
+              </div>
+              {summerLoading ? (
+                <div className="h-24 bg-slate-100 rounded-lg animate-pulse" />
+              ) : summerShifts.length === 0 ? (
+                <p className="text-sm text-center text-slate-400 py-3">本週無暑假班表</p>
+              ) : (
+                <div className="space-y-2">
+                  {summerShifts.map((s, idx) => (
+                    <SummerShiftCard
+                      key={idx}
+                      date={s.date}
+                      startTime={s.startTime}
+                      endTime={s.endTime}
+                      venueName={s.venueName}
+                      role={s.role}
+                      notes={s.notes}
+                      idx={idx}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

@@ -18,6 +18,7 @@ import { mountPortalGuidelinesRoutes } from "./portal.guidelines.routes";
 import { mountPortalAttendanceRoutes } from "./portal.attendance.routes";
 import { mountPortalOutingRoutes } from "./portal.outing.routes";
 import { mountPortalAvailabilityRoutes } from "./portal.availability.routes";
+import { mountPortalSummerRoutes } from "./portal.summer.routes";
 
 export function mountPortalRoutes(httpServer: Server, app: Express): void {
   mountPortalAuthRoutes(httpServer, app);
@@ -27,4 +28,5 @@ export function mountPortalRoutes(httpServer: Server, app: Express): void {
   mountPortalAttendanceRoutes(httpServer, app);
   mountPortalOutingRoutes(httpServer, app);
   mountPortalAvailabilityRoutes(httpServer, app);
+  mountPortalSummerRoutes(httpServer, app);
 }

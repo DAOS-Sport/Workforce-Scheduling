@@ -577,6 +577,44 @@ export const insertShiftAvailabilitySchema = createInsertSchema(shiftAvailabilit
 export type InsertShiftAvailability = z.infer<typeof insertShiftAvailabilitySchema>;
 export type ShiftAvailability = typeof shiftAvailabilities.$inferSelect;
 
+export const summerScheduleAssignments = pgTable("summer_schedule_assignments", {
+  id: serial("id").primaryKey(),
+  version: text("version").notNull().default("v40"),
+  weekNo: integer("week_no").notNull(),
+  rawEntries: jsonb("raw_entries"),
+  assignments: jsonb("assignments"),
+  shiftEntries: jsonb("shift_entries"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  uniq: unique("ssa_uniq_version_week").on(t.version, t.weekNo),
+}));
+
+export const insertSummerScheduleAssignmentSchema = createInsertSchema(summerScheduleAssignments).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSummerScheduleAssignment = z.infer<typeof insertSummerScheduleAssignmentSchema>;
+export type SummerScheduleAssignment = typeof summerScheduleAssignments.$inferSelect;
+
+export const manualScheduleCourses = pgTable("manual_schedule_courses", {
+  id: serial("id").primaryKey(),
+  weekNo: integer("week_no").notNull(),
+  date: text("date").notNull(),
+  venueId: integer("venue_id").notNull(),
+  venueName: text("venue_name"),
+  courseName: text("course_name").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  employeeId: integer("employee_id"),
+  employeeName: text("employee_name"),
+  note: text("note"),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertManualScheduleCourseSchema = createInsertSchema(manualScheduleCourses).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertManualScheduleCourse = z.infer<typeof insertManualScheduleCourseSchema>;
+export type ManualScheduleCourse = typeof manualScheduleCourses.$inferSelect;
+
 export interface VacancyInfo {
   venueId: number;
   venueName: string;
