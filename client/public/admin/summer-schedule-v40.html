@@ -2635,6 +2635,9 @@ function updateQuestionnaireEmployeeInfo(){
 
 
 const availabilitySeeds=[];
+// true when availability data is API-backed; false when entered manually.
+// Determines whether cells are editable and whether manual controls are shown.
+let availabilityApiMode=false;
 function showView(view){
   const isAvail=view==='availability';
   const isPayroll=view==='payroll';
@@ -2651,6 +2654,14 @@ function showView(view){
   if(isPayroll){renderPayrollReport();}
   if(isMobile){renderMobileView();}
 }
+function setAvailabilityApiMode(isApi){
+  availabilityApiMode=isApi;
+  // Show/hide manual-entry controls depending on mode
+  const addBtn=document.querySelector('#availabilityView .avail-actions .btn:not(.green)');
+  const questionnaire=document.querySelector('#availabilityView .questionnaire');
+  if(addBtn) addBtn.style.display=isApi?'none':'';
+  if(questionnaire) questionnaire.style.display=isApi?'none':'';
+}
 function loadAvailabilityFromDB(){
   const weekIdx=Number(document.getElementById('weekSelect')?.value||0);
   const weekNo=(weeks[weekIdx]?.no)||(weekIdx+1);
@@ -2659,6 +2670,7 @@ function loadAvailabilityFromDB(){
     .then(data=>{
       if(data&&Array.isArray(data.items)&&data.items.length){
         availabilitySeeds.length=0;
+        setAvailabilityApiMode(true);
         data.items.forEach(item=>{
           const fmtSlots=(slots,days)=>{
             if(!slots||!slots.length)return '';
@@ -2666,6 +2678,7 @@ function loadAvailabilityFromDB(){
             return slots.map(s=>`${s.startTime}-${s.endTime}${dayStr?' '+dayStr:''}`).join('\n');
           };
           availabilitySeeds.push({
+            fromApi:true,
             employeeId:item.employeeId,
             name:item.employeeName||'',
             venues:item.submitted===false?'—':(Array.isArray(item.venueNames)?item.venueNames.join('、'):'全部'),
@@ -2678,11 +2691,12 @@ function loadAvailabilityFromDB(){
         });
         buildAvailabilityPage(true);
       } else {
+        setAvailabilityApiMode(false);
         buildAvailabilityPage(false);
       }
       renderAvailabilityReport();
     })
-    .catch(()=>{buildAvailabilityPage(false);renderAvailabilityReport();});
+    .catch(()=>{setAvailabilityApiMode(false);buildAvailabilityPage(false);renderAvailabilityReport();});
 }
 function availabilityKey(row,field){return `${currentWeekKey()}-availability-${row}-${field}`;}
 function availCell(key, value, placeholder, extraClass=''){
@@ -2697,14 +2711,30 @@ function buildAvailabilityPage(force=false){
   bindAutoSave();
   body.querySelectorAll('[contenteditable]').forEach(el=>el.addEventListener('input',renderAvailabilityReport));
 }
+// Read-only cell for API-backed rows — bypasses localStorage entirely
+function availCellReadonly(value, extraClass=''){
+  return `<div class="editbox ${extraClass}" style="background:rgba(15,23,42,.03);color:#334155">${escapeHtml(value||'').replace(/\n/g,'<br>')}</div>`;
+}
 function buildAvailabilityRow(no,row={}){
   const emp=row.employeeId?employeeById(row.employeeId):employeeByName(row.name);
   const employeeId=row.employeeId || emp?.id || '';
   const lineStatus=emp?`<div style="margin-top:4px">${lineBadge(emp)}</div>`:'';
   const notSubmittedStyle=row.notSubmitted?'background:rgba(239,68,68,.06);opacity:.8':'';
   const notSubmittedBadge=row.notSubmitted?'<span style="font-size:10px;color:#ef4444;background:rgba(239,68,68,.12);border-radius:4px;padding:1px 5px;margin-left:4px">未填報</span>':'';
-  return `<tr data-avail-row="${no}" data-employee-id="${escapeHtml(employeeId)}" style="${notSubmittedStyle}">
-    <td class="staff-name-col">${availCell(availabilityKey(no,'name'),row.name||'','姓名','staff-name')}${notSubmittedBadge}${lineStatus}</td>
+  if(row.fromApi){
+    // API-backed: render read-only cells, do NOT consult localStorage
+    return `<tr data-avail-row="${no}" data-employee-id="${escapeHtml(employeeId)}" style="${notSubmittedStyle}">
+      <td class="staff-name-col">${availCellReadonly(row.name,'staff-name')}${notSubmittedBadge}${lineStatus}</td>
+      <td class="staff-venue-col">${availCellReadonly(row.venues||emp?.venueName||emp?.venue||'全部','staff-venues')}</td>
+      <td class="avail-input">${availCellReadonly(row.weekday||'')}</td>
+      <td class="avail-input">${availCellReadonly(row.sat||'')}</td>
+      <td class="avail-input">${availCellReadonly(row.sun||'')}</td>
+      <td class="note-col">${availCellReadonly(row.note||'')}</td>
+    </tr>`;
+  }
+  // Manual-entry mode: use localStorage-aware editable cells
+  return `<tr data-avail-row="${no}" data-employee-id="${escapeHtml(employeeId)}">
+    <td class="staff-name-col">${availCell(availabilityKey(no,'name'),row.name||'','姓名','staff-name')}${lineStatus}</td>
     <td class="staff-venue-col">${availCell(availabilityKey(no,'venues'),row.venues||emp?.venueName||emp?.venue||'全部','館別','staff-venues')}</td>
     <td class="avail-input">${availCell(availabilityKey(no,'weekday'),row.weekday||'','07:30-12:00 123')}</td>
     <td class="avail-input">${availCell(availabilityKey(no,'sat'),row.sat||'','週六可排班時段')}</td>
