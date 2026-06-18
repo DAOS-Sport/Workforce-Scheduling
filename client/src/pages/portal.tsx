@@ -4447,69 +4447,110 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                         ))}
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      {saWdSlots.map((slot, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <input type="time" value={slot.s} onChange={(e) => setSaWdSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: e.target.value } : s))}
-                            className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-wd-start-${i}`} />
-                          <span className="text-xs text-slate-400">至</span>
-                          <input type="time" value={slot.e} onChange={(e) => setSaWdSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: e.target.value } : s))}
-                            className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-wd-end-${i}`} />
-                          {saWdSlots.length > 1 && (
-                            <button onClick={() => setSaWdSlots((prev) => prev.filter((_, j) => j !== i))}
-                              className="h-7 w-7 flex items-center justify-center rounded-md border border-red-200 text-red-500 hover:bg-red-50" data-testid={`button-remove-wd-${i}`}>
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          )}
+                    {/* TimeSelect: two <select> for hour+minute — reliable on LINE WebView */}
+                    {(() => {
+                      const SA_HOURS = Array.from({ length: 17 }, (_, i) => String(i + 6).padStart(2, "0"));
+                      const SA_MINS = ["00", "15", "30", "45"];
+                      const TimeSelect = ({ val, onChange, testId }: { val: string; onChange: (v: string) => void; testId: string }) => {
+                        const [h, m] = val ? val.split(":") : ["07", "30"];
+                        return (
+                          <div className="flex items-center gap-0.5 border border-juns-border rounded-md overflow-hidden">
+                            <select value={h} onChange={(e) => onChange(`${e.target.value}:${m}`)}
+                              className="py-1.5 pl-2 pr-0.5 text-sm bg-white border-0 outline-none appearance-none" data-testid={`${testId}-h`}>
+                              {SA_HOURS.map((hh) => <option key={hh} value={hh}>{hh}</option>)}
+                            </select>
+                            <span className="text-sm text-slate-500 select-none">:</span>
+                            <select value={m} onChange={(e) => onChange(`${h}:${e.target.value}`)}
+                              className="py-1.5 pr-2 pl-0.5 text-sm bg-white border-0 outline-none appearance-none" data-testid={`${testId}-m`}>
+                              {SA_MINS.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
+                            </select>
+                          </div>
+                        );
+                      };
+                      return (
+                        <div className="space-y-2">
+                          {saWdSlots.map((slot, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <TimeSelect val={slot.s} onChange={(v) => setSaWdSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: v } : s))} testId={`input-wd-start-${i}`} />
+                              <span className="text-xs text-slate-400">至</span>
+                              <TimeSelect val={slot.e} onChange={(v) => setSaWdSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: v } : s))} testId={`input-wd-end-${i}`} />
+                              {saWdSlots.length > 1 && (
+                                <button onClick={() => setSaWdSlots((prev) => prev.filter((_, j) => j !== i))}
+                                  className="h-7 w-7 flex items-center justify-center rounded-md border border-red-200 text-red-500 hover:bg-red-50" data-testid={`button-remove-wd-${i}`}>
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          <button onClick={() => setSaWdSlots((prev) => [...prev, { s: "07:30", e: "12:00" }])}
+                            className="text-xs text-juns-teal hover:underline" data-testid="button-add-wd-slot">＋ 新增平日時段</button>
                         </div>
-                      ))}
-                      <button onClick={() => setSaWdSlots((prev) => [...prev, { s: "07:30", e: "12:00" }])}
-                        className="text-xs text-juns-teal hover:underline" data-testid="button-add-wd-slot">＋ 新增平日時段</button>
-                    </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="border border-juns-border rounded-lg p-3 space-y-3">
                     <p className="text-xs font-semibold text-juns-navy">假日可排班時段</p>
-                    <div>
-                      <label className="text-xs text-slate-500 block mb-1.5">週六</label>
-                      <div className="space-y-2">
-                        {saSatSlots.map((slot, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <input type="time" value={slot.s} onChange={(e) => setSaSatSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: e.target.value } : s))}
-                              className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-sat-start-${i}`} />
-                            <span className="text-xs text-slate-400">至</span>
-                            <input type="time" value={slot.e} onChange={(e) => setSaSatSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: e.target.value } : s))}
-                              className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-sat-end-${i}`} />
-                            <button onClick={() => setSaSatSlots((prev) => prev.filter((_, j) => j !== i))}
-                              className="h-7 w-7 flex items-center justify-center rounded-md border border-red-200 text-red-500 hover:bg-red-50" data-testid={`button-remove-sat-${i}`}>
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                    {(() => {
+                      const SA_HOURS = Array.from({ length: 17 }, (_, i) => String(i + 6).padStart(2, "0"));
+                      const SA_MINS = ["00", "15", "30", "45"];
+                      const TimeSelect = ({ val, onChange, testId }: { val: string; onChange: (v: string) => void; testId: string }) => {
+                        const [h, m] = val ? val.split(":") : ["09", "00"];
+                        return (
+                          <div className="flex items-center gap-0.5 border border-juns-border rounded-md overflow-hidden">
+                            <select value={h} onChange={(e) => onChange(`${e.target.value}:${m}`)}
+                              className="py-1.5 pl-2 pr-0.5 text-sm bg-white border-0 outline-none appearance-none" data-testid={`${testId}-h`}>
+                              {SA_HOURS.map((hh) => <option key={hh} value={hh}>{hh}</option>)}
+                            </select>
+                            <span className="text-sm text-slate-500 select-none">:</span>
+                            <select value={m} onChange={(e) => onChange(`${h}:${e.target.value}`)}
+                              className="py-1.5 pr-2 pl-0.5 text-sm bg-white border-0 outline-none appearance-none" data-testid={`${testId}-m`}>
+                              {SA_MINS.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
+                            </select>
                           </div>
-                        ))}
-                        <button onClick={() => setSaSatSlots((prev) => [...prev, { s: "09:00", e: "12:00" }])}
-                          className="text-xs text-juns-teal hover:underline" data-testid="button-add-sat-slot">＋ 新增週六時段</button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-slate-500 block mb-1.5">週日</label>
-                      <div className="space-y-2">
-                        {saSunSlots.map((slot, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <input type="time" value={slot.s} onChange={(e) => setSaSunSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: e.target.value } : s))}
-                              className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-sun-start-${i}`} />
-                            <span className="text-xs text-slate-400">至</span>
-                            <input type="time" value={slot.e} onChange={(e) => setSaSunSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: e.target.value } : s))}
-                              className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-sun-end-${i}`} />
-                            <button onClick={() => setSaSunSlots((prev) => prev.filter((_, j) => j !== i))}
-                              className="h-7 w-7 flex items-center justify-center rounded-md border border-red-200 text-red-500 hover:bg-red-50" data-testid={`button-remove-sun-${i}`}>
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                        );
+                      };
+                      return (
+                        <>
+                          <div>
+                            <label className="text-xs text-slate-500 block mb-1.5">週六</label>
+                            <div className="space-y-2">
+                              {saSatSlots.map((slot, i) => (
+                                <div key={i} className="flex items-center gap-2">
+                                  <TimeSelect val={slot.s} onChange={(v) => setSaSatSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: v } : s))} testId={`input-sat-start-${i}`} />
+                                  <span className="text-xs text-slate-400">至</span>
+                                  <TimeSelect val={slot.e} onChange={(v) => setSaSatSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: v } : s))} testId={`input-sat-end-${i}`} />
+                                  <button onClick={() => setSaSatSlots((prev) => prev.filter((_, j) => j !== i))}
+                                    className="h-7 w-7 flex items-center justify-center rounded-md border border-red-200 text-red-500 hover:bg-red-50" data-testid={`button-remove-sat-${i}`}>
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                              <button onClick={() => setSaSatSlots((prev) => [...prev, { s: "09:00", e: "12:00" }])}
+                                className="text-xs text-juns-teal hover:underline" data-testid="button-add-sat-slot">＋ 新增週六時段</button>
+                            </div>
                           </div>
-                        ))}
-                        <button onClick={() => setSaSunSlots((prev) => [...prev, { s: "09:00", e: "12:00" }])}
-                          className="text-xs text-juns-teal hover:underline" data-testid="button-add-sun-slot">＋ 新增週日時段</button>
-                      </div>
-                    </div>
+                          <div>
+                            <label className="text-xs text-slate-500 block mb-1.5">週日</label>
+                            <div className="space-y-2">
+                              {saSunSlots.map((slot, i) => (
+                                <div key={i} className="flex items-center gap-2">
+                                  <TimeSelect val={slot.s} onChange={(v) => setSaSunSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: v } : s))} testId={`input-sun-start-${i}`} />
+                                  <span className="text-xs text-slate-400">至</span>
+                                  <TimeSelect val={slot.e} onChange={(v) => setSaSunSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: v } : s))} testId={`input-sun-end-${i}`} />
+                                  <button onClick={() => setSaSunSlots((prev) => prev.filter((_, j) => j !== i))}
+                                    className="h-7 w-7 flex items-center justify-center rounded-md border border-red-200 text-red-500 hover:bg-red-50" data-testid={`button-remove-sun-${i}`}>
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                              <button onClick={() => setSaSunSlots((prev) => [...prev, { s: "09:00", e: "12:00" }])}
+                                className="text-xs text-juns-teal hover:underline" data-testid="button-add-sun-slot">＋ 新增週日時段</button>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   <div>
