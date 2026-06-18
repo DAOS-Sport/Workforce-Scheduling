@@ -138,17 +138,44 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
     }
   });
 
-  // Admin: 取得某週所有員工填報
+  // Admin: 取得某週所有員工填報（含「未填報」員工）
   app.get("/api/admin/summer-availability", requireAdmin, async (req, res) => {
     try {
       const weekNo = parseInt(req.query.weekNo as string, 10) || 1;
+      // 1. 取得暑假排班員工清單（與前台同一份資料）；回傳值為 { items: [] }
+      const summerEmpsResult = await summerScheduleService.getEmployeesForSchedule();
+      const summerEmps: { id: number; name: string }[] = Array.isArray(summerEmpsResult)
+        ? summerEmpsResult
+        : (summerEmpsResult as any)?.items ?? [];
+      // 2. 取得本週已填報紀錄
       const rows = await summerAvailabilityRepository.getAllByWeek(weekNo);
-      const allEmployees = await storage.getAllEmployees();
-      const empMap = new Map(allEmployees.map((e) => [e.id, e]));
-      const items = rows.map((r) => ({
-        ...r,
-        employeeName: empMap.get(r.employeeId)?.name ?? `員工#${r.employeeId}`,
-      }));
+      const submittedMap = new Map(rows.map((r) => [r.employeeId, r]));
+      // 3. 組合：已填報員工展開欄位，未填報員工補 null + submitted:false
+      const items = summerEmps.map((emp: { id: number; name: string }) => {
+        const record = submittedMap.get(emp.id);
+        if (record) {
+          return {
+            ...record,
+            employeeName: emp.name,
+            submitted: true,
+          };
+        }
+        return {
+          id: null,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          weekNo,
+          venueNames: [],
+          weekdayDays: [],
+          weekdaySlots: [],
+          satSlots: [],
+          sunSlots: [],
+          notes: null,
+          submitted: false,
+          submittedAt: null,
+          updatedAt: null,
+        };
+      });
       ok(res, { items });
     } catch (err: any) {
       fail(res, 500, err.message);
