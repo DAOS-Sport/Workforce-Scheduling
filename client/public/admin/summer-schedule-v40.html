@@ -2711,9 +2711,11 @@ function buildAvailabilityPage(force=false){
   bindAutoSave();
   body.querySelectorAll('[contenteditable]').forEach(el=>el.addEventListener('input',renderAvailabilityReport));
 }
-// Read-only cell for API-backed rows — bypasses localStorage entirely
-function availCellReadonly(value, extraClass=''){
-  return `<div class="editbox ${extraClass}" style="background:rgba(15,23,42,.03);color:#334155">${escapeHtml(value||'').replace(/\n/g,'<br>')}</div>`;
+// Read-only cell for API-backed rows — stores API value in data-key so
+// readAvailabilityRows() can still read innerText for report/conflict logic,
+// but does NOT consult localStorage (getSaved is intentionally bypassed).
+function availCellReadonly(key, value, extraClass=''){
+  return `<div class="editbox ${extraClass}" data-key="${escapeHtml(key)}" style="background:rgba(15,23,42,.03);color:#334155;cursor:default" aria-readonly="true">${escapeHtml(value||'').replace(/\n/g,'<br>')}</div>`;
 }
 function buildAvailabilityRow(no,row={}){
   const emp=row.employeeId?employeeById(row.employeeId):employeeByName(row.name);
@@ -2722,14 +2724,16 @@ function buildAvailabilityRow(no,row={}){
   const notSubmittedStyle=row.notSubmitted?'background:rgba(239,68,68,.06);opacity:.8':'';
   const notSubmittedBadge=row.notSubmitted?'<span style="font-size:10px;color:#ef4444;background:rgba(239,68,68,.12);border-radius:4px;padding:1px 5px;margin-left:4px">未填報</span>':'';
   if(row.fromApi){
-    // API-backed: render read-only cells, do NOT consult localStorage
+    // API-backed: emit data-key so readAvailabilityRows() can read innerText,
+    // but render as read-only — no localStorage, no contenteditable
+    const venues=row.venues||emp?.venueName||emp?.venue||'全部';
     return `<tr data-avail-row="${no}" data-employee-id="${escapeHtml(employeeId)}" style="${notSubmittedStyle}">
-      <td class="staff-name-col">${availCellReadonly(row.name,'staff-name')}${notSubmittedBadge}${lineStatus}</td>
-      <td class="staff-venue-col">${availCellReadonly(row.venues||emp?.venueName||emp?.venue||'全部','staff-venues')}</td>
-      <td class="avail-input">${availCellReadonly(row.weekday||'')}</td>
-      <td class="avail-input">${availCellReadonly(row.sat||'')}</td>
-      <td class="avail-input">${availCellReadonly(row.sun||'')}</td>
-      <td class="note-col">${availCellReadonly(row.note||'')}</td>
+      <td class="staff-name-col">${availCellReadonly(availabilityKey(no,'name'),row.name||'','staff-name')}${notSubmittedBadge}${lineStatus}</td>
+      <td class="staff-venue-col">${availCellReadonly(availabilityKey(no,'venues'),venues,'staff-venues')}</td>
+      <td class="avail-input">${availCellReadonly(availabilityKey(no,'weekday'),row.weekday||'')}</td>
+      <td class="avail-input">${availCellReadonly(availabilityKey(no,'sat'),row.sat||'')}</td>
+      <td class="avail-input">${availCellReadonly(availabilityKey(no,'sun'),row.sun||'')}</td>
+      <td class="note-col">${availCellReadonly(availabilityKey(no,'note'),row.note||'')}</td>
     </tr>`;
   }
   // Manual-entry mode: use localStorage-aware editable cells
