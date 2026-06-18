@@ -423,7 +423,7 @@ function JunsHeader({
   );
 }
 
-type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "leave" | "guidelines" | "sop" | "availability" | "summer";
+type PortalView = "home" | "outing" | "attendance" | "schedule" | "coworkers" | "amendment" | "overtime" | "leave" | "guidelines" | "sop" | "availability" | "summer" | "summer-avail";
 
 const VIEW_TITLES: Record<PortalView, string> = {
   home: "打卡首頁",
@@ -438,6 +438,7 @@ const VIEW_TITLES: Record<PortalView, string> = {
   sop: "系統使用說明",
   availability: "排班意願",
   summer: "我的暑假班表",
+  "summer-avail": "暑假可排班時段填報",
 };
 
 function SideMenuDrawer({
@@ -467,6 +468,7 @@ function SideMenuDrawer({
       items: [
         { view: "schedule", label: "我的班表", icon: CalendarDays },
         { view: "summer", label: "我的暑假班表", icon: Sun },
+        { view: "summer-avail", label: "暑假可排班時段填報", icon: ClipboardCheck },
         { view: "coworkers", label: "工作夥伴", icon: Users },
         { view: "availability", label: "排班意願", icon: CalendarDays },
       ],
@@ -3544,6 +3546,13 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [addAvailEnd, setAddAvailEnd] = useState("17:00");
   const [leaveTypeSheet, setLeaveTypeSheet] = useState<string | null>(null);
   const [summerWeekNo, setSummerWeekNo] = useState<number>(1);
+  const [summerAvailWeekNo, setSummerAvailWeekNo] = useState<number>(1);
+  const [saVenues, setSaVenues] = useState<string[]>([]);
+  const [saWeekdays, setSaWeekdays] = useState<number[]>([]);
+  const [saWdSlots, setSaWdSlots] = useState<{ s: string; e: string }[]>([{ s: "07:30", e: "12:00" }]);
+  const [saSatSlots, setSaSatSlots] = useState<{ s: string; e: string }[]>([]);
+  const [saSunSlots, setSaSunSlots] = useState<{ s: string; e: string }[]>([]);
+  const [saNotes, setSaNotes] = useState<string>("");
   const [copySourceDate, setCopySourceDate] = useState<string | null>(null);
   const [copyTargetDates, setCopyTargetDates] = useState<Set<string>>(new Set());
   const addAvailDurationMin = (() => {
@@ -3662,6 +3671,79 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   });
 
   const summerShifts = summerScheduleData?.shifts ?? [];
+
+  const SUMMER_AVAIL_WEEKS = [
+    { no: 1, label: "第1週 07/01－07/05" }, { no: 2, label: "第2週 07/06－07/12" },
+    { no: 3, label: "第3週 07/13－07/19" }, { no: 4, label: "第4週 07/20－07/26" },
+    { no: 5, label: "第5週 07/27－08/02" }, { no: 6, label: "第6週 08/03－08/09" },
+    { no: 7, label: "第7週 08/10－08/16" }, { no: 8, label: "第8週 08/17－08/23" },
+    { no: 9, label: "第9週 08/24－08/30" },
+  ];
+
+  interface SummerAvailRecord {
+    id: number; employeeId: number; weekNo: number;
+    venueNames: string[]; weekdayDays: number[];
+    weekdaySlots: { startTime: string; endTime: string }[];
+    satSlots: { startTime: string; endTime: string }[];
+    sunSlots: { startTime: string; endTime: string }[];
+    notes: string | null;
+  }
+
+  const { data: summerAvailRecord, isLoading: saLoading } = useQuery<SummerAvailRecord | null>({
+    queryKey: ["/api/portal/summer-availability", summerAvailWeekNo, employee?.id],
+    enabled: activeView === "summer-avail" && !!portalLineUserId,
+    staleTime: 0,
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/summer-availability/${summerAvailWeekNo}`, {
+        headers: { "x-line-user-id": portalLineUserId },
+        credentials: "include",
+      });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    if (summerAvailRecord && summerAvailRecord.weekNo === summerAvailWeekNo) {
+      setSaVenues(summerAvailRecord.venueNames ?? []);
+      setSaWeekdays(summerAvailRecord.weekdayDays ?? []);
+      setSaWdSlots((summerAvailRecord.weekdaySlots ?? []).map((s) => ({ s: s.startTime, e: s.endTime })));
+      setSaSatSlots((summerAvailRecord.satSlots ?? []).map((s) => ({ s: s.startTime, e: s.endTime })));
+      setSaSunSlots((summerAvailRecord.sunSlots ?? []).map((s) => ({ s: s.startTime, e: s.endTime })));
+      setSaNotes(summerAvailRecord.notes ?? "");
+    } else if (summerAvailRecord === null) {
+      setSaVenues([]); setSaWeekdays([]);
+      setSaWdSlots([{ s: "07:30", e: "12:00" }]);
+      setSaSatSlots([]); setSaSunSlots([]); setSaNotes("");
+    }
+  }, [summerAvailRecord, summerAvailWeekNo]);
+
+  const saveSummerAvailMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/portal/summer-availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-line-user-id": portalLineUserId },
+        credentials: "include",
+        body: JSON.stringify({
+          weekNo: summerAvailWeekNo,
+          venueNames: saVenues,
+          weekdayDays: saWeekdays,
+          weekdaySlots: saWdSlots.filter((s) => s.s && s.e).map((s) => ({ startTime: s.s, endTime: s.e })),
+          satSlots: saSatSlots.filter((s) => s.s && s.e).map((s) => ({ startTime: s.s, endTime: s.e })),
+          sunSlots: saSunSlots.filter((s) => s.s && s.e).map((s) => ({ startTime: s.s, endTime: s.e })),
+          notes: saNotes.trim() || null,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/summer-availability", summerAvailWeekNo, employee?.id] });
+      toast({ title: "已儲存", description: "可排班時段填報完成，管理員可查閱您的填報" });
+    },
+    onError: (err: any) => toast({ title: "儲存失敗", description: err.message, variant: "destructive" }),
+  });
 
   const addAvailMutation = useMutation({
     mutationFn: async ({ date, startTime, endTime, entryType = "available", note }: { date: string; startTime?: string; endTime?: string; entryType?: string; note?: string }) => {
@@ -4291,6 +4373,177 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     />
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeView === "summer-avail" && (
+        <div className="max-w-lg mx-auto p-4 pb-8 space-y-3">
+          <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+            <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4 text-juns-teal" />
+              <span className="text-sm font-semibold text-juns-navy">暑假可排班時段填報</span>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-slate-500 block mb-1.5">填報週次</label>
+                <select
+                  className="w-full border border-juns-border rounded-lg px-3 py-2 text-sm bg-white"
+                  value={summerAvailWeekNo}
+                  onChange={(e) => setSummerAvailWeekNo(Number(e.target.value))}
+                  data-testid="select-summer-avail-week"
+                >
+                  {SUMMER_AVAIL_WEEKS.map((w) => (
+                    <option key={w.no} value={w.no}>{w.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {saLoading ? (
+                <div className="space-y-2">
+                  <div className="h-8 bg-slate-100 rounded animate-pulse" />
+                  <div className="h-8 bg-slate-100 rounded animate-pulse" />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 block mb-2">可支援館別</label>
+                    <div className="flex flex-wrap gap-2">
+                      {["新北高中", "三重商工", "三民高中", "全部"].map((v) => (
+                        <label key={v} className="flex items-center gap-1.5 cursor-pointer" data-testid={`check-venue-${v}`}>
+                          <input
+                            type="checkbox"
+                            className="rounded border-juns-border text-juns-teal"
+                            checked={saVenues.includes(v)}
+                            onChange={(e) => setSaVenues((prev) =>
+                              e.target.checked ? [...prev.filter((x) => x !== "全部"), v] : prev.filter((x) => x !== v)
+                            )}
+                          />
+                          <span className="text-sm text-slate-700">{v}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="border border-juns-border rounded-lg p-3 space-y-3">
+                    <p className="text-xs font-semibold text-juns-navy">平日可排班時段</p>
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1.5">可排班星期</label>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {[["一", 1], ["二", 2], ["三", 3], ["四", 4], ["五", 5]].map(([lbl, val]) => (
+                          <label key={val} className="flex items-center gap-1 cursor-pointer" data-testid={`check-weekday-${val}`}>
+                            <input
+                              type="checkbox"
+                              className="rounded border-juns-border text-juns-teal"
+                              checked={saWeekdays.includes(val as number)}
+                              onChange={(e) => setSaWeekdays((prev) =>
+                                e.target.checked ? [...prev, val as number].sort() : prev.filter((x) => x !== val)
+                              )}
+                            />
+                            <span className="text-sm text-slate-700">週{lbl}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {saWdSlots.map((slot, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <input type="time" value={slot.s} onChange={(e) => setSaWdSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: e.target.value } : s))}
+                            className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-wd-start-${i}`} />
+                          <span className="text-xs text-slate-400">至</span>
+                          <input type="time" value={slot.e} onChange={(e) => setSaWdSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: e.target.value } : s))}
+                            className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-wd-end-${i}`} />
+                          {saWdSlots.length > 1 && (
+                            <button onClick={() => setSaWdSlots((prev) => prev.filter((_, j) => j !== i))}
+                              className="h-7 w-7 flex items-center justify-center rounded-md border border-red-200 text-red-500 hover:bg-red-50" data-testid={`button-remove-wd-${i}`}>
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <button onClick={() => setSaWdSlots((prev) => [...prev, { s: "07:30", e: "12:00" }])}
+                        className="text-xs text-juns-teal hover:underline" data-testid="button-add-wd-slot">＋ 新增平日時段</button>
+                    </div>
+                  </div>
+
+                  <div className="border border-juns-border rounded-lg p-3 space-y-3">
+                    <p className="text-xs font-semibold text-juns-navy">假日可排班時段</p>
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1.5">週六</label>
+                      <div className="space-y-2">
+                        {saSatSlots.map((slot, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <input type="time" value={slot.s} onChange={(e) => setSaSatSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: e.target.value } : s))}
+                              className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-sat-start-${i}`} />
+                            <span className="text-xs text-slate-400">至</span>
+                            <input type="time" value={slot.e} onChange={(e) => setSaSatSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: e.target.value } : s))}
+                              className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-sat-end-${i}`} />
+                            <button onClick={() => setSaSatSlots((prev) => prev.filter((_, j) => j !== i))}
+                              className="h-7 w-7 flex items-center justify-center rounded-md border border-red-200 text-red-500 hover:bg-red-50" data-testid={`button-remove-sat-${i}`}>
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                        <button onClick={() => setSaSatSlots((prev) => [...prev, { s: "09:00", e: "12:00" }])}
+                          className="text-xs text-juns-teal hover:underline" data-testid="button-add-sat-slot">＋ 新增週六時段</button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1.5">週日</label>
+                      <div className="space-y-2">
+                        {saSunSlots.map((slot, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <input type="time" value={slot.s} onChange={(e) => setSaSunSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: e.target.value } : s))}
+                              className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-sun-start-${i}`} />
+                            <span className="text-xs text-slate-400">至</span>
+                            <input type="time" value={slot.e} onChange={(e) => setSaSunSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: e.target.value } : s))}
+                              className="flex-1 border border-juns-border rounded-md px-2 py-1.5 text-sm" data-testid={`input-sun-end-${i}`} />
+                            <button onClick={() => setSaSunSlots((prev) => prev.filter((_, j) => j !== i))}
+                              className="h-7 w-7 flex items-center justify-center rounded-md border border-red-200 text-red-500 hover:bg-red-50" data-testid={`button-remove-sun-${i}`}>
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                        <button onClick={() => setSaSunSlots((prev) => [...prev, { s: "09:00", e: "12:00" }])}
+                          className="text-xs text-juns-teal hover:underline" data-testid="button-add-sun-slot">＋ 新增週日時段</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 block mb-1.5">備註（可教課程、限制等）</label>
+                    <textarea
+                      className="w-full border border-juns-border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-juns-teal/30"
+                      rows={3}
+                      placeholder="例：可教游泳、幼幼班；晚上較方便..."
+                      value={saNotes}
+                      onChange={(e) => setSaNotes(e.target.value)}
+                      data-testid="input-sa-notes"
+                    />
+                  </div>
+
+                  {summerAvailRecord && (
+                    <div className="flex items-center gap-1.5 text-xs text-juns-green bg-juns-green/10 rounded-lg px-3 py-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                      已有填報記錄，送出後將覆蓋更新
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => saveSummerAvailMutation.mutate()}
+                    disabled={saveSummerAvailMutation.isPending}
+                    className="w-full h-11 rounded-xl bg-juns-teal text-white text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50"
+                    data-testid="button-save-summer-avail"
+                  >
+                    {saveSummerAvailMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" />儲存中...</>
+                    ) : (
+                      <><Send className="h-4 w-4" />送出填報</>
+                    )}
+                  </button>
+                </>
               )}
             </div>
           </div>

@@ -651,6 +651,26 @@ export const insertManualScheduleCourseSchema = createInsertSchema(manualSchedul
 export type InsertManualScheduleCourse = z.infer<typeof insertManualScheduleCourseSchema>;
 export type ManualScheduleCourse = typeof manualScheduleCourses.$inferSelect;
 
+export const summerAvailabilities = pgTable("summer_availabilities", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull(),
+  weekNo: integer("week_no").notNull(),
+  venueNames: jsonb("venue_names").$type<string[]>().notNull().default([]),
+  weekdayDays: jsonb("weekday_days").$type<number[]>().notNull().default([]),
+  weekdaySlots: jsonb("weekday_slots").$type<{ startTime: string; endTime: string }[]>().notNull().default([]),
+  satSlots: jsonb("sat_slots").$type<{ startTime: string; endTime: string }[]>().notNull().default([]),
+  sunSlots: jsonb("sun_slots").$type<{ startTime: string; endTime: string }[]>().notNull().default([]),
+  notes: text("notes"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  uniq: unique("sa_uniq_emp_week").on(t.employeeId, t.weekNo),
+}));
+
+export const insertSummerAvailabilitySchema = createInsertSchema(summerAvailabilities).omit({ id: true, submittedAt: true, updatedAt: true });
+export type InsertSummerAvailability = z.infer<typeof insertSummerAvailabilitySchema>;
+export type SummerAvailability = typeof summerAvailabilities.$inferSelect;
+
 export interface VacancyInfo {
   venueId: number;
   venueName: string;

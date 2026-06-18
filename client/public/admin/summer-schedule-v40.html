@@ -662,7 +662,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
 
   <div class="view-tabs">
   <button class="tab-btn active" id="tabSchedule" onclick="showView('schedule')">三館排班總表</button>
-  <button class="tab-btn" id="tabAvailability" onclick="showView('availability')">員工可上課時段 / 未排到課</button>
+  <button class="tab-btn" id="tabAvailability" onclick="showView('availability')">員工可排班時段 / 未排到課</button>
 
   <button class="tab-btn" id="tabPayroll" onclick="showView('payroll')">本週薪資統計</button>
   <button class="tab-btn" id="tabMobile" onclick="showView('mobile')">手機查閱</button></div>
@@ -730,8 +730,8 @@ body.section-manual section[data-section="duty"]{display:none!important}
   <div class="availability-page">
     <div class="avail-head">
       <div>
-        <h2>員工可上課時段 / 未排到工作</h2>
-        <p>可用問卷方式讓員工填寫本週可上課時間，送出後會進入下方表格，系統再比對課程表列出還沒被排到課的空檔。</p>
+        <h2>員工可排班時段 / 未排到工作</h2>
+        <p>員工透過 LINE 員工入口填報各週可排班時段後，系統會自動同步至下方表格，管理員可再比對課程表列出尚未排到工作的空檔。</p>
       </div>
       <div class="avail-actions">
         <button class="btn" onclick="addAvailabilityRow()">＋新增員工</button>
@@ -776,7 +776,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
               </div>
             </div>
             <div class="q-card">
-              <h4>2. 平日可上課時間</h4>
+              <h4>2. 平日可排班時段</h4>
               <div class="q-hint">先勾星期，再填開始與結束時間。可新增多段。</div>
               <div class="check-row" id="qWeekdays" style="margin:8px 0 10px">
                 <label class="check-pill"><input type="checkbox" value="1">週一</label>
@@ -795,7 +795,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
               <button class="mini-btn" type="button" onclick="addTimeRow('qWeekdayTimes')">＋新增平日時間</button>
             </div>
             <div class="q-card">
-              <h4>3. 假日可上課時間</h4>
+              <h4>3. 假日可排班時段</h4>
               <div class="q-field">
                 <label>週六</label>
                 <div id="qSatTimes">
@@ -828,14 +828,14 @@ body.section-manual section[data-section="duty"]{display:none!important}
       </section>
       <div class="avail-layout">
         <section class="avail-section">
-          <div class="avail-section-title">員工本週可上課時段</div>
+          <div class="avail-section-title">員工本週可排班時段</div>
           <div class="table-wrap">
             <table class="avail-table">
               <thead>
                 <tr>
                   <th>員工</th>
                   <th>可支援館別</th>
-                  <th>平日可上課時段</th>
+                  <th>平日可排班時段</th>
                   <th>週六</th>
                   <th>週日</th>
                   <th>備註</th>
@@ -853,7 +853,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
                 <tr>
                   <th>員工</th>
                   <th>星期</th>
-                  <th>可上課時段</th>
+                  <th>可排班時段</th>
                   <th>已排工作（課程 / 救生）</th>
                   <th>尚未排到工作</th>
                 </tr>
@@ -2647,9 +2647,41 @@ function showView(view){
   document.getElementById('tabAvailability')?.classList.toggle('active', isAvail);
   document.getElementById('tabPayroll')?.classList.toggle('active', isPayroll);
   document.getElementById('tabMobile')?.classList.toggle('active', isMobile);
-  if(isAvail){buildAvailabilityPage(false);renderAvailabilityReport();}
+  if(isAvail){loadAvailabilityFromDB();}
   if(isPayroll){renderPayrollReport();}
   if(isMobile){renderMobileView();}
+}
+function loadAvailabilityFromDB(){
+  const weekIdx=Number(document.getElementById('weekSelect')?.value||0);
+  const weekNo=(weeks[weekIdx]?.no)||(weekIdx+1);
+  fetch(`/api/admin/summer-availability?weekNo=${weekNo}`,{credentials:'include'})
+    .then(r=>r.ok?r.json():null)
+    .then(data=>{
+      if(data&&Array.isArray(data.items)&&data.items.length){
+        availabilitySeeds.length=0;
+        data.items.forEach(item=>{
+          function fmtSlots(slots,days){
+            if(!slots||!slots.length)return '';
+            const dayStr=days&&days.length?days.join(''):'';
+            return slots.map(s=>`${s.startTime}-${s.endTime}${dayStr?' '+dayStr:''}`).join('\n');
+          }
+          availabilitySeeds.push({
+            employeeId:item.employeeId,
+            name:item.employeeName||'',
+            venues:Array.isArray(item.venueNames)?item.venueNames.join('、'):'全部',
+            weekday:fmtSlots(item.weekdaySlots,item.weekdayDays),
+            sat:fmtSlots(item.satSlots),
+            sun:fmtSlots(item.sunSlots),
+            note:item.notes||'',
+          });
+        });
+        buildAvailabilityPage(true);
+      } else {
+        buildAvailabilityPage(false);
+      }
+      renderAvailabilityReport();
+    })
+    .catch(()=>{buildAvailabilityPage(false);renderAvailabilityReport();});
 }
 function availabilityKey(row,field){return `${currentWeekKey()}-availability-${row}-${field}`;}
 function availCell(key, value, placeholder, extraClass=''){

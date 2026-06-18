@@ -9,6 +9,7 @@ import {
   ensureShiftAvailabilitiesTable,
   ensureAvailabilityEntryTypeColumn,
   ensureVenueOperatingHoursColumns,
+  ensureSummerAvailabilitiesTable,
 } from "../storage";
 import { log } from "../shared/log";
 
@@ -88,5 +89,13 @@ export async function runStartupMigrations(): Promise<void> {
     await ensureVenueOperatingHoursColumns();
   } catch (err: any) {
     log(`venues open_time/close_time 欄位建立失敗: ${err.message}`, "db");
+  }
+
+  // Summer availabilities table (Task #108)
+  try {
+    await ensureSummerAvailabilitiesTable();
+    log("summer_availabilities 表格確認完成", "db");
+  } catch (err: any) {
+    log(`summer_availabilities 表格建立失敗: ${err.message}`, "db");
   }
 }

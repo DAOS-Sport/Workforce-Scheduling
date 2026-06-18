@@ -1,8 +1,10 @@
 import { type Express } from "express";
 import { type Server } from "http";
 import { summerScheduleService } from "./summerSchedule.service";
+import { summerAvailabilityRepository } from "./summerAvailability.repository";
 import { ok, fail } from "../../shared/http/response";
 import { requireAdmin } from "../../shared/middleware/requireAdmin";
+import { storage } from "../../storage";
 
 export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): void {
   // 員工選擇：後台暑假排班頁使用，必須登入管理後台
@@ -68,7 +70,7 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
   // 手動課程修改
   app.patch("/api/admin/manual-schedule-courses/:id", requireAdmin, async (req, res) => {
     try {
-      ok(res, await summerScheduleService.updateManualCourse(parseInt(req.params.id, 10), req.body));
+      ok(res, await summerScheduleService.updateManualCourse(parseInt(req.params.id as string, 10), req.body));
     } catch (err: any) {
       fail(res, err.status || 500, err.message);
     }
@@ -77,7 +79,7 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
   // 手動課程刪除
   app.delete("/api/admin/manual-schedule-courses/:id", requireAdmin, async (req, res) => {
     try {
-      ok(res, await summerScheduleService.deleteManualCourse(parseInt(req.params.id, 10)));
+      ok(res, await summerScheduleService.deleteManualCourse(parseInt(req.params.id as string, 10)));
     } catch (err: any) {
       fail(res, 500, err.message);
     }
@@ -89,6 +91,67 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
       ok(res, await summerScheduleService.publishShifts(req.body));
     } catch (err: any) {
       fail(res, err.status || 500, err.message);
+    }
+  });
+
+  // ── 暑假可排班時段 ─────────────────────────────────────────
+
+  // Portal: 取得本人本週填報
+  app.get("/api/portal/summer-availability/:weekNo", async (req, res) => {
+    try {
+      const lineId = req.header("x-line-user-id") ?? (req.query.lineUserId as string) ?? "";
+      if (!lineId) return fail(res, 401, "需要 LINE 身份");
+      const employee = await storage.getEmployeeByLineId(lineId);
+      if (!employee) return fail(res, 404, "找不到員工資料");
+      const weekNo = parseInt(req.params.weekNo, 10);
+      if (!weekNo || weekNo < 1 || weekNo > 9) return fail(res, 400, "weekNo 只允許 1-9");
+      const record = await summerAvailabilityRepository.getByEmployeeAndWeek(employee.id, weekNo);
+      if (!record) return res.status(404).json({ message: "尚無填報資料" });
+      ok(res, record);
+    } catch (err: any) {
+      fail(res, 500, err.message);
+    }
+  });
+
+  // Portal: 新增或更新本人填報
+  app.post("/api/portal/summer-availability", async (req, res) => {
+    try {
+      const lineId = req.header("x-line-user-id") ?? (req.query.lineUserId as string) ?? "";
+      if (!lineId) return fail(res, 401, "需要 LINE 身份");
+      const employee = await storage.getEmployeeByLineId(lineId);
+      if (!employee) return fail(res, 404, "找不到員工資料");
+      const { weekNo, venueNames = [], weekdayDays = [], weekdaySlots = [], satSlots = [], sunSlots = [], notes } = req.body;
+      if (!weekNo || weekNo < 1 || weekNo > 9) return fail(res, 400, "weekNo 只允許 1-9");
+      const record = await summerAvailabilityRepository.upsert({
+        employeeId: employee.id,
+        weekNo,
+        venueNames,
+        weekdayDays,
+        weekdaySlots,
+        satSlots,
+        sunSlots,
+        notes: notes || null,
+      });
+      ok(res, record);
+    } catch (err: any) {
+      fail(res, 500, err.message);
+    }
+  });
+
+  // Admin: 取得某週所有員工填報
+  app.get("/api/admin/summer-availability", requireAdmin, async (req, res) => {
+    try {
+      const weekNo = parseInt(req.query.weekNo as string, 10) || 1;
+      const rows = await summerAvailabilityRepository.getAllByWeek(weekNo);
+      const allEmployees = await storage.getAllEmployees();
+      const empMap = new Map(allEmployees.map((e) => [e.id, e]));
+      const items = rows.map((r) => ({
+        ...r,
+        employeeName: empMap.get(r.employeeId)?.name ?? `員工#${r.employeeId}`,
+      }));
+      ok(res, { items });
+    } catch (err: any) {
+      fail(res, 500, err.message);
     }
   });
 }

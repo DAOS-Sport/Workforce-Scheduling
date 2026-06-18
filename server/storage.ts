@@ -894,6 +894,29 @@ export async function ensureVenueOperatingHoursColumns(): Promise<void> {
  * Ensures the weekly_push_notifications table exists with the required unique constraint.
  * Called at server startup so the table is guaranteed to exist before any cron/API access.
  */
+export async function ensureSummerAvailabilitiesTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS summer_availabilities (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL,
+      week_no INTEGER NOT NULL,
+      venue_names JSONB NOT NULL DEFAULT '[]',
+      weekday_days JSONB NOT NULL DEFAULT '[]',
+      weekday_slots JSONB NOT NULL DEFAULT '[]',
+      sat_slots JSONB NOT NULL DEFAULT '[]',
+      sun_slots JSONB NOT NULL DEFAULT '[]',
+      notes TEXT,
+      submitted_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      CONSTRAINT sa_uniq_emp_week UNIQUE (employee_id, week_no)
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_summer_avail_week ON summer_availabilities (week_no);
+  `);
+  console.log("[db] summer_availabilities 表格確認完成");
+}
+
 export async function ensureWeeklyPushTable(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS weekly_push_notifications (
