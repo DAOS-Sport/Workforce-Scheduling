@@ -114,39 +114,84 @@ function mapStatus(status: string): string | null {
   return null;
 }
 
+// RAGIC v3 API 每個欄位都可能回傳「單一值」或「多值陣列」。以下兩個工具統一處理，
+// 確保「完整讀取整個陣列、再正確取值」，避免陣列被亂轉成 "a,b" 這類髒字串。
+
+// 單值欄位：取陣列中第一個非空值（容忍 ["", "X"] 這種前面夾空值的情況）。
+function firstValue(raw: any): string {
+  if (Array.isArray(raw)) {
+    for (const v of raw) {
+      const s = String(v ?? "").trim();
+      if (s) return s;
+    }
+    return "";
+  }
+  return String(raw ?? "").trim();
+}
+
+// 多值欄位（部門 / 應徵職務）：完整讀取陣列中所有非空值。
+function allValues(raw: any): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((v) => String(v ?? "").trim()).filter(Boolean);
+  }
+  const s = String(raw ?? "").trim();
+  return s ? [s] : [];
+}
+
+// 以下三個是「手填資料清洗」工具，處理 RAGIC 人工輸入常見的髒值。
+
+// 全形英數標點（U+FF01–U+FF5E）轉半形；全形空白（U+3000）轉半形空白。
+function toHalfWidth(s: string): string {
+  return s
+    .replace(/[！-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/　/g, " ");
+}
+
+// 收斂空白：內部連續空白（含全形/定位/換行/零寬字元）收成單一半形空白，再去頭尾。
+// 用於姓名 / 部門 / 應徵職務等「可含詞間空白」的欄位。
+function cleanText(s: string): string {
+  return s.replace(/[\s\u200b-\u200d\ufeff]+/g, " ").trim();
+}
+
+// 整理為「無空白 token」：全形轉半形 + 去除所有空白與零寬字元。
+// 用於不該含空白的欄位：手機 / E-mail / LINE ID / 聘雇類別 / 在職狀態。
+function tidyToken(s: string): string {
+  return toHalfWidth(s).replace(/[\s\u200b-\u200d\ufeff]+/g, "");
+}
+
 function parseRagicRecord(record: Record<string, any>): RagicEmployee | null {
-  const rawName = record["姓名"];
-  const rawCode = record["員工編號"];
-  const name = Array.isArray(rawName) ? rawName[0] : rawName;
-  const employeeCode = Array.isArray(rawCode) ? rawCode[0] : rawCode;
+  // 單值欄位：取陣列第一個非空值。
+  // 員工編號是比對鍵 → 只去頭尾空白（不做內部清洗），避免清洗後對不到既有資料而重複新增。
+  const name = cleanText(firstValue(record["姓名"]));
+  const employeeCode = firstValue(record["員工編號"]);
   if (!name || !employeeCode) return null;
 
-  const rawDept = record["部門"];
-  const department = Array.isArray(rawDept) ? rawDept.join(", ") : String(rawDept || "");
-  const rawRole = record["應徵職務"];
-  const roleStr = Array.isArray(rawRole) ? rawRole.join(", ") : String(rawRole || "");
-  const rawType = record["聘雇類別"];
-  const typeStr = Array.isArray(rawType) ? rawType[0] || "" : String(rawType || "");
-  const rawStatusField = record["在職狀態"];
-  const statusStr = Array.isArray(rawStatusField) ? rawStatusField[0] || "" : String(rawStatusField || "");
+  // 多值欄位：完整讀取所有值、逐一清洗後 join，供 mapRole / mapDepartmentToRegionCode 比對
+  //（兩者皆以 includes 比對，因此能對應到陣列中的任一個值）。
+  const department = allValues(record["部門"]).map(cleanText).filter(Boolean).join(", ");
+  const roleStr = allValues(record["應徵職務"]).map(cleanText).filter(Boolean).join(", ");
+
+  // 聘雇類別 / 在職狀態為精確比對欄位，去除所有空白以確保 mapStatus / mapEmploymentType 命中。
+  const typeStr = tidyToken(firstValue(record["聘雇類別"]));
+  const statusStr = tidyToken(firstValue(record["在職狀態"]));
 
   return {
-    name: name.trim(),
-    employeeCode: String(employeeCode).trim(),
-    phone: String(record["手機"] || "").trim(),
-    email: String(record["E-mail"] || "").trim(),
-    lineId: String(record["個人LINE ID"] || "").trim(),
-    department: department.trim(),
-    role: mapRole(roleStr.trim()),
-    rawRole: roleStr.trim(),
-    rawStatus: statusStr.trim(),
-    rawEmploymentType: typeStr.trim(),
-    status: mapStatus(statusStr.trim()),
-    employmentType: mapEmploymentType(typeStr.trim()),
+    name,
+    employeeCode,
+    phone: tidyToken(firstValue(record["手機"])),
+    email: tidyToken(firstValue(record["電子郵件信箱"])), // RAGIC 實際 key 為「電子郵件信箱」（非 E-mail，舊 key 不存在導致 email 全空）
+    lineId: tidyToken(firstValue(record["個人LINE ID"])),
+    department,
+    role: mapRole(roleStr),
+    rawRole: roleStr,
+    rawStatus: statusStr,
+    rawEmploymentType: typeStr,
+    status: mapStatus(statusStr),
+    employmentType: mapEmploymentType(typeStr),
   };
 }
 
-export async function syncFromRagic(): Promise<{
+export async function syncFromRagic(dryRun = false): Promise<{
   created: number;
   updated: number;
   skipped: number;
@@ -199,11 +244,14 @@ export async function syncFromRagic(): Promise<{
       const existing = await storage.getEmployeeByCode(parsed.employeeCode);
 
       if (existing) {
+        // 更新策略：RAGIC 有值才覆寫，空白不清（避免把本地資料/已綁定 LINE ID 清掉）。
         const updateData: Record<string, any> = {};
         if (parsed.name) updateData.name = parsed.name;
         if (parsed.phone) updateData.phone = parsed.phone;
         if (parsed.email) updateData.email = parsed.email;
         if (parsed.department) updateData.department = parsed.department;
+        // LINE ID：保護已綁定的有效 ID — 僅在「RAGIC 新值為有效 U 格式」或「本地現值無效」
+        // 時才覆寫；RAGIC 為空則完全不動 lineId，不會把員工登入用的 ID 清掉。
         if (parsed.lineId) {
           const incomingValid = isValidLineUserId(parsed.lineId);
           const existingValid = existing.lineId && isValidLineUserId(existing.lineId);
@@ -222,7 +270,7 @@ export async function syncFromRagic(): Promise<{
           result.deactivated++;
         }
 
-        await storage.updateEmployee(existing.id, updateData);
+        if (!dryRun) await storage.updateEmployee(existing.id, updateData);
         result.updated++;
       } else {
         if (!ACTIVE_STATUSES.includes(parsed.rawStatus)) {
@@ -239,7 +287,7 @@ export async function syncFromRagic(): Promise<{
           addSkip(`聘雇類別未知(${parsed.rawEmploymentType || "空白"})`);
           continue;
         }
-        await storage.createEmployee({
+        if (!dryRun) await storage.createEmployee({
           name: parsed.name,
           employeeCode: parsed.employeeCode,
           phone: parsed.phone || null,
@@ -258,7 +306,7 @@ export async function syncFromRagic(): Promise<{
     }
   }
 
-  console.log(`[ragic] 同步完成 — 新增:${result.created} 更新:${result.updated} 略過:${result.skipped} 停用:${result.deactivated} 錯誤:${result.errors.length}`);
+  console.log(`[ragic] ${dryRun ? "[預覽] " : ""}同步完成 — 新增:${result.created} 更新:${result.updated} 略過:${result.skipped} 停用:${result.deactivated} 錯誤:${result.errors.length}`);
   if (Object.keys(result.skipReasons).length > 0) {
     console.log(`[ragic] 略過原因:`, result.skipReasons);
   }
