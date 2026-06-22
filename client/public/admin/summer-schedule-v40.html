@@ -478,6 +478,8 @@ body.section-course section[data-section="duty"], body.section-holiday section[d
 .simplified-mode .employee-tools{padding:0 6px 4px}
 .simplified-mode .employee-chip{font-size:10px;padding:1px 5px}
 .simplified-mode .line-badge{font-size:10px;padding:1px 5px}
+.needed-zero .editbox{min-height:0!important;padding:2px 6px!important;color:#94a3b8;font-size:10px}
+.needed-zero .editbox:empty::before{content:'（不需教練）';color:#cbd5e1;font-size:10px}
 @media(max-width:1100px){.line-push-body{grid-template-columns:1fr}}
 
 
@@ -1316,7 +1318,7 @@ function refreshEmployeeChips(){
         venueName:m.venueName||m.venue||'',
         lineBound:!!m.lineBound
       };
-      return `<span class="employee-chip">${escapeHtml(emp.name)} ${lineBadge(emp)}</span>`;
+      return `<span class="employee-chip">${escapeHtml(emp.name)}${isLineBound(emp)?'':' <span style="color:#c2410c;font-weight:900">(未綁定)</span>'}</span>`;
     }).join('');
   });
 }
@@ -1686,10 +1688,15 @@ function validateCourseCell(cell,week){
     return;
   }
   if(needed === 0){
-    cell.classList.add('ok');
-    status.textContent = '教練 0';
+    cell.classList.add('ok','needed-zero');
+    status.textContent = '';
+    const tools=cell.querySelector('.employee-tools');
+    if(tools) tools.style.display='none';
     return;
   }
+  cell.classList.remove('needed-zero');
+  const tools0=cell.querySelector('.employee-tools');
+  if(tools0) tools0.style.display='';
   if(!needed){ status.textContent = '請先填需教練數'; return; }
   if(!text){
     cell.classList.add('warn');
