@@ -451,7 +451,9 @@ body.section-course section[data-section="duty"], body.section-holiday section[d
 .employee-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 7px 5px}
 .employee-select-btn{font-size:11px;padding:4px 7px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;font-weight:1000;cursor:pointer;color:#0f172a}
 .employee-select-btn:hover{background:#eff6ff;border-color:#93c5fd}
-.employee-chips{display:flex;gap:4px;flex-wrap:wrap}
+.employee-chips{display:flex;gap:4px;flex-wrap:wrap;padding:2px 7px 0}
+.employee-chips:empty{display:none}
+.needed-zero .employee-chips{display:none!important}
 .employee-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:999px;padding:2px 6px;font-size:10.5px;font-weight:1000;color:#334155}
 .line-badge{display:inline-flex;align-items:center;border-radius:999px;padding:2px 6px;font-size:10.5px;font-weight:1000;border:1px solid transparent;white-space:nowrap}
 .line-badge.bound{background:#ecfdf5;color:#047857;border-color:#bbf7d0}
@@ -1247,10 +1249,11 @@ function saveEmployeeMeta(key, arr){
     venueName:x.venueName||x.venue||''
   }))));
 }
-function employeeToolsHTML(key){
+function employeeToolsHTML(key, includeChips=true){
+  const chipsHtml=includeChips?`<div class="employee-chips" data-employee-chips="${escapeHtml(key)}"></div>`:'';
   return `<div class="employee-tools" data-employee-tools="${escapeHtml(key)}">
     <button class="employee-select-btn" type="button" onclick="openEmployeePicker('${escapeAttr(key)}')">＋選擇員工</button>
-    <div class="employee-chips" data-employee-chips="${escapeHtml(key)}"></div>
+    ${chipsHtml}
   </div>`;
 }
 let employeePickerTargetKey='';
@@ -1336,7 +1339,10 @@ function escapeAttr(str){return String(str||'').replace(/\\/g,'\\\\').replace(/'
 function content(key,ph,attrs=''){
   const val=savedOrSample(key);
   const useEmployeePicker = /data-role=/.test(attrs);
-  return `<div class="editbox" contenteditable="true" data-key="${key}" ${attrs} data-placeholder="${ph}">${escapeHtml(val).replace(/\n/g,'<br>')}</div>${useEmployeePicker?employeeToolsHTML(key):''}<div class="cell-status"></div>`;
+  if(useEmployeePicker){
+    return `<div class="editbox" contenteditable="true" data-key="${key}" ${attrs} data-placeholder="${ph}">${escapeHtml(val).replace(/\n/g,'<br>')}</div><div class="employee-chips" data-employee-chips="${escapeHtml(key)}"></div>${employeeToolsHTML(key,false)}<div class="cell-status"></div>`;
+  }
+  return `<div class="editbox" contenteditable="true" data-key="${key}" ${attrs} data-placeholder="${ph}">${escapeHtml(val).replace(/\n/g,'<br>')}</div><div class="cell-status"></div>`;
 }
 function parseTimeRange(text){const raw=String(text||'').trim();const m=raw.match(/(\d{1,2}):(\d{2})\s*[-－~～]\s*(\d{1,2}):(\d{2})/);if(!m)return null;const start=Number(m[1])*60+Number(m[2]),end=Number(m[3])*60+Number(m[4]);if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return null;return{start,end,label:`${m[1].padStart(2,'0')}:${m[2]}-${m[3].padStart(2,'0')}:${m[4]}`}}
 function timesOverlap(a,b){return!!(a&&b&&Math.max(a.start,b.start)<Math.min(a.end,b.end))}
