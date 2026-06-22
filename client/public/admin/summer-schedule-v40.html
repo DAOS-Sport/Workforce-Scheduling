@@ -451,9 +451,7 @@ body.section-course section[data-section="duty"], body.section-holiday section[d
 .employee-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 7px 5px}
 .employee-select-btn{font-size:11px;padding:4px 7px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;font-weight:1000;cursor:pointer;color:#0f172a}
 .employee-select-btn:hover{background:#eff6ff;border-color:#93c5fd}
-.employee-chips{display:flex;gap:4px;flex-wrap:wrap;padding:2px 7px 0}
-.employee-chips:empty{display:none}
-.needed-zero .employee-chips{display:none!important}
+.employee-chips{display:none!important}
 .employee-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:999px;padding:2px 6px;font-size:10.5px;font-weight:1000;color:#334155}
 .line-badge{display:inline-flex;align-items:center;border-radius:999px;padding:2px 6px;font-size:10.5px;font-weight:1000;border:1px solid transparent;white-space:nowrap}
 .line-badge.bound{background:#ecfdf5;color:#047857;border-color:#bbf7d0}
@@ -1118,6 +1116,35 @@ function normalizeEmployeeFromApi(e){
     lineBoundAt: e.lineBoundAt || ''
   };
 }
+function isEmployeeLineBound(emp){
+  return !!(emp&&(emp.lineBound===true||emp.lineBound==='true'||emp.lineUserId||emp.lineId||emp.lineDisplayName));
+}
+function employeeDisplayNameWithLineStatus(emp){
+  if(!emp) return '';
+  const name=String(emp.name||emp.employeeName||'').trim();
+  if(!name) return '';
+  return isEmployeeLineBound(emp)?name:`${name}（未綁定）`;
+}
+function cleanEmployeeDisplayName(name){
+  return String(name||'').replace(/（未綁定）/g,'').replace(/\(未綁定\)/g,'').replace(/（LINE未綁定）/g,'').replace(/\(LINE未綁定\)/g,'').trim();
+}
+function refreshInlineEmployeeStatusText(){
+  document.querySelectorAll('.editbox[data-role="course"]').forEach(box=>{
+    const text=box.innerText||'';
+    if(!text.trim()) return;
+    const lines=text.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+    const fixed=lines.map(line=>{
+      const cleanName=cleanEmployeeDisplayName(line);
+      const emp=employees.find(e=>String(e.name||'').trim()===cleanName);
+      return emp?employeeDisplayNameWithLineStatus(emp):line;
+    });
+    const newText=fixed.join('\n');
+    if(newText!==text){
+      box.innerText=newText;
+      localStorage.setItem(LOCAL_STORAGE_PREFIX+(box.dataset.key||''),newText);
+    }
+  });
+}
 async function loadEmployeesForSchedule(){
   try{
     const res = await fetch(API_ENDPOINTS.employees, { credentials:'include' });
@@ -1151,6 +1178,7 @@ async function loadEmployeesForSchedule(){
   refreshEmployeeChips();
   renderLinePushCheck();
   renderAvailabilityReport();
+  refreshInlineEmployeeStatusText();
 
   if(!document.getElementById('payrollView')?.classList.contains('hidden-view')){
     renderPayrollReport();
@@ -1292,9 +1320,10 @@ function selectEmployeeForTarget(employeeId){
   const box=document.querySelector(`[data-key="${CSS.escape(employeePickerTargetKey)}"]`);
   if(box){
     const lines=usefulLines(box.innerText);
-    if(!lines.some(line=>normalizeName(line).includes(emp.name) || line.includes(emp.name))){
+    if(!lines.some(line=>cleanEmployeeDisplayName(line)===emp.name||normalizeName(line).includes(emp.name))){
       const text=box.innerText.trim();
-      box.innerText=text ? `${text}\n${emp.name}` : emp.name;
+      const displayName=employeeDisplayNameWithLineStatus(emp);
+      box.innerText=text ? `${text}\n${displayName}` : displayName;
     }
     localStorage.setItem(LOCAL_STORAGE_PREFIX+employeePickerTargetKey, box.innerText.replace(/\n+$/,''));
   }
@@ -1309,21 +1338,7 @@ function selectEmployeeForTarget(employeeId){
   renderAvailabilityReport();
 }
 function refreshEmployeeChips(){
-  document.querySelectorAll('[data-employee-chips]').forEach(chips=>{
-    const key=chips.dataset.employeeChips;
-    const meta=getEmployeeMeta(key);
-    chips.innerHTML=meta.map(m=>{
-      const emp=employeeById(m.employeeId) || {
-        id:m.employeeId||'',
-        name:m.employeeName||'未指定員工',
-        role:m.role||'',
-        venueId:m.venueId||'',
-        venueName:m.venueName||m.venue||'',
-        lineBound:!!m.lineBound
-      };
-      return `<span class="employee-chip">${escapeHtml(emp.name)}${isLineBound(emp)?'':' <span style="color:#c2410c;font-weight:900">(未綁定)</span>'}</span>`;
-    }).join('');
-  });
+  document.querySelectorAll('[data-employee-chips]').forEach(el=>{el.innerHTML='';});
 }
 function findEmployeeForLine(name,key=''){
   const meta=getEmployeeMeta(key);
@@ -1349,7 +1364,7 @@ function timesOverlap(a,b){return!!(a&&b&&Math.max(a.start,b.start)<Math.min(a.e
 function normalizeName(str){return String(str||'').replace(/[0-9]/g,'').replace(/[()（）\[\]【】,:：;；、\/\\\-－]/g,' ').replace(/\s+/g,' ').trim()}
 function activeDaysForPeriod(period,week){if(period==='weekday')return week.activeWeekdays;if(period==='sat')return[6];if(period==='sun')return[7];const mm=String(period||'').match(/^manual-day-(\d)$/);if(mm)return[Number(mm[1])];return[7]}
 function dayName(d){return({1:'一',2:'二',3:'三',4:'四',5:'五',6:'六',7:'日'})[d]||d}
-function usefulLines(text){return String(text||'').split(/\n+/).map(s=>s.trim()).filter(s=>s&&!/^(待排|待確認|確認中|缺|無|x|X|-|－)$/.test(s))}
+function usefulLines(text){return String(text||'').split(/\n+/).map(s=>cleanEmployeeDisplayName(s.trim())).filter(s=>s&&!/^(待排|待確認|確認中|缺|無|x|X|-|－)$/.test(s))}
 function parseShiftLines(text,period,week,sourceCell=null,sourceVenue='',metaKey=''){
   const rows=[],def=activeDaysForPeriod(period,week);
   usefulLines(text).forEach(line=>{
@@ -2250,7 +2265,7 @@ function expandAllZero(){
   applyScheduleFilters();
 }
 function validateAll(){const week=weeks[Number(document.getElementById('weekSelect').value||0)];applyZeroEnrollmentRows();document.querySelectorAll('.need-validate').forEach(cell=>validateFrontdesk(cell,week));renderLifeguards(week);document.querySelectorAll('.course-validate').forEach(cell=>validateCourseCell(cell,week));applyConflictWarnings(week);updateIssueSummary();renderLinePushCheck();applyScheduleFilters();if(!document.getElementById('mobileView')?.classList.contains('hidden-view'))renderMobileView()}
-function render(){const week=weeks[Number(document.getElementById('weekSelect').value||0)],venueFilter=document.getElementById('venueFilter').value;document.getElementById('weekNote').textContent=`目前週別：${week.label}｜平日欄：${week.weekday}｜救生格式：姓名 時段 星期數字`;const visible=venues.filter(v=>venueFilter==='all'||v.name===venueFilter);document.getElementById('venueList').innerHTML=visible.map(v=>`<article class="venue-card" data-venue-card="${v.name}"><div class="venue-head"><div><div class="venue-title">${v.name}</div><div class="subtitle">${week.label}</div></div><div class="venue-meta">${v.tags.map((t,i)=>`<span class="tag ${['blue','green','orange'][i%3]}">${t}</span>`).join('')}</div></div><div class="venue-body">${buildDutySection(v,week)}<div class="course-stack">${buildCourseSection(v,week)}${buildHolidayCourseSection(v,week)}${buildManualCourseSection(v,week)}</div></div></article>`).join('');bindAutoSave();refreshEmployeeChips();validateAll();if(!document.getElementById('payrollView')?.classList.contains('hidden-view'))renderPayrollReport();loadEnrollmentCounts();loadManualCoursesForWeek(week.no);loadExistingScheduleAssignments();renderAvailabilityReport()}
+function render(){const week=weeks[Number(document.getElementById('weekSelect').value||0)],venueFilter=document.getElementById('venueFilter').value;document.getElementById('weekNote').textContent=`目前週別：${week.label}｜平日欄：${week.weekday}｜救生格式：姓名 時段 星期數字`;const visible=venues.filter(v=>venueFilter==='all'||v.name===venueFilter);document.getElementById('venueList').innerHTML=visible.map(v=>`<article class="venue-card" data-venue-card="${v.name}"><div class="venue-head"><div><div class="venue-title">${v.name}</div><div class="subtitle">${week.label}</div></div><div class="venue-meta">${v.tags.map((t,i)=>`<span class="tag ${['blue','green','orange'][i%3]}">${t}</span>`).join('')}</div></div><div class="venue-body">${buildDutySection(v,week)}<div class="course-stack">${buildCourseSection(v,week)}${buildHolidayCourseSection(v,week)}${buildManualCourseSection(v,week)}</div></div></article>`).join('');bindAutoSave();refreshEmployeeChips();validateAll();if(!document.getElementById('payrollView')?.classList.contains('hidden-view'))renderPayrollReport();loadEnrollmentCounts();loadManualCoursesForWeek(week.no);loadExistingScheduleAssignments();renderAvailabilityReport();refreshInlineEmployeeStatusText();}
 function bindAutoSave(){document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{el.addEventListener('input',()=>{const key=el.getAttribute('data-key'),text=el.innerText.replace(/\n+$/,'');localStorage.setItem(LOCAL_STORAGE_PREFIX+key,text);refreshEmployeeChips();validateAll()})})}
 function timePartsFromLabel(label){
   const t=parseTimeRange(label);
