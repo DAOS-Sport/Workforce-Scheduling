@@ -4457,24 +4457,24 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                           <div key={i} className="flex items-center gap-2 flex-wrap">
                             <div className="flex items-center border border-juns-border rounded-md bg-white">
                               <select value={sh} onChange={(e) => setSaWdSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: `${e.target.value}:${sm}` } : s))}
-                                className="py-2 px-2 text-sm bg-transparent" data-testid={`input-wd-start-${i}-h`}>
+                                className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-wd-start-${i}-h`}>
                                 {SA_HOURS.map((hh) => <option key={hh} value={hh}>{hh}</option>)}
                               </select>
                               <span className="text-sm text-slate-400">:</span>
                               <select value={sm} onChange={(e) => setSaWdSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: `${sh}:${e.target.value}` } : s))}
-                                className="py-2 px-2 text-sm bg-transparent" data-testid={`input-wd-start-${i}-m`}>
+                                className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-wd-start-${i}-m`}>
                                 {SA_MINS.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
                               </select>
                             </div>
                             <span className="text-xs text-slate-400">至</span>
                             <div className="flex items-center border border-juns-border rounded-md bg-white">
                               <select value={eh} onChange={(e) => setSaWdSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: `${e.target.value}:${em}` } : s))}
-                                className="py-2 px-2 text-sm bg-transparent" data-testid={`input-wd-end-${i}-h`}>
+                                className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-wd-end-${i}-h`}>
                                 {SA_HOURS.map((hh) => <option key={hh} value={hh}>{hh}</option>)}
                               </select>
                               <span className="text-sm text-slate-400">:</span>
                               <select value={em} onChange={(e) => setSaWdSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: `${eh}:${e.target.value}` } : s))}
-                                className="py-2 px-2 text-sm bg-transparent" data-testid={`input-wd-end-${i}-m`}>
+                                className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-wd-end-${i}-m`}>
                                 {SA_MINS.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
                               </select>
                             </div>
@@ -4506,24 +4506,24 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                             <div key={i} className="flex items-center gap-2 flex-wrap">
                               <div className="flex items-center border border-juns-border rounded-md bg-white">
                                 <select value={sh} onChange={(e) => setSaSatSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: `${e.target.value}:${sm}` } : s))}
-                                  className="py-2 px-2 text-sm bg-transparent" data-testid={`input-sat-start-${i}-h`}>
+                                  className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-sat-start-${i}-h`}>
                                   {SA_HOURS.map((hh) => <option key={hh} value={hh}>{hh}</option>)}
                                 </select>
                                 <span className="text-sm text-slate-400">:</span>
                                 <select value={sm} onChange={(e) => setSaSatSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: `${sh}:${e.target.value}` } : s))}
-                                  className="py-2 px-2 text-sm bg-transparent" data-testid={`input-sat-start-${i}-m`}>
+                                  className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-sat-start-${i}-m`}>
                                   {SA_MINS.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
                                 </select>
                               </div>
                               <span className="text-xs text-slate-400">至</span>
                               <div className="flex items-center border border-juns-border rounded-md bg-white">
                                 <select value={eh} onChange={(e) => setSaSatSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: `${e.target.value}:${em}` } : s))}
-                                  className="py-2 px-2 text-sm bg-transparent" data-testid={`input-sat-end-${i}-h`}>
+                                  className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-sat-end-${i}-h`}>
                                   {SA_HOURS.map((hh) => <option key={hh} value={hh}>{hh}</option>)}
                                 </select>
                                 <span className="text-sm text-slate-400">:</span>
                                 <select value={em} onChange={(e) => setSaSatSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: `${eh}:${e.target.value}` } : s))}
-                                  className="py-2 px-2 text-sm bg-transparent" data-testid={`input-sat-end-${i}-m`}>
+                                  className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-sat-end-${i}-m`}>
                                   {SA_MINS.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
                                 </select>
                               </div>
@@ -4550,24 +4550,24 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                             <div key={i} className="flex items-center gap-2 flex-wrap">
                               <div className="flex items-center border border-juns-border rounded-md bg-white">
                                 <select value={sh} onChange={(e) => setSaSunSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: `${e.target.value}:${sm}` } : s))}
-                                  className="py-2 px-2 text-sm bg-transparent" data-testid={`input-sun-start-${i}-h`}>
+                                  className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-sun-start-${i}-h`}>
                                   {SA_HOURS.map((hh) => <option key={hh} value={hh}>{hh}</option>)}
                                 </select>
                                 <span className="text-sm text-slate-400">:</span>
                                 <select value={sm} onChange={(e) => setSaSunSlots((prev) => prev.map((s, j) => j === i ? { ...s, s: `${sh}:${e.target.value}` } : s))}
-                                  className="py-2 px-2 text-sm bg-transparent" data-testid={`input-sun-start-${i}-m`}>
+                                  className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-sun-start-${i}-m`}>
                                   {SA_MINS.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
                                 </select>
                               </div>
                               <span className="text-xs text-slate-400">至</span>
                               <div className="flex items-center border border-juns-border rounded-md bg-white">
                                 <select value={eh} onChange={(e) => setSaSunSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: `${e.target.value}:${em}` } : s))}
-                                  className="py-2 px-2 text-sm bg-transparent" data-testid={`input-sun-end-${i}-h`}>
+                                  className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-sun-end-${i}-h`}>
                                   {SA_HOURS.map((hh) => <option key={hh} value={hh}>{hh}</option>)}
                                 </select>
                                 <span className="text-sm text-slate-400">:</span>
                                 <select value={em} onChange={(e) => setSaSunSlots((prev) => prev.map((s, j) => j === i ? { ...s, e: `${eh}:${e.target.value}` } : s))}
-                                  className="py-2 px-2 text-sm bg-transparent" data-testid={`input-sun-end-${i}-m`}>
+                                  className="py-2 px-2 text-sm bg-white text-slate-800" data-testid={`input-sun-end-${i}-m`}>
                                   {SA_MINS.map((mm) => <option key={mm} value={mm}>{mm}</option>)}
                                 </select>
                               </div>
