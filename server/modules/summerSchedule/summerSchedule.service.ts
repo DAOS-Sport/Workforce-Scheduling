@@ -307,6 +307,24 @@ export const summerScheduleService = {
     return row;
   },
 
+  async createManualCourses(items: any[]) {
+    if (!items.length) return [];
+    const sanitized = items.map((item: any) => ({
+      weekNo: Number(item.weekNo) || 0,
+      date: String(item.date || ""),
+      venueId: Number(item.venueId) || 0,
+      venueName: item.venueName ? String(item.venueName) : null,
+      courseName: String(item.courseName || ""),
+      startTime: String(item.startTime || ""),
+      endTime: String(item.endTime || ""),
+      registeredCount: Number(item.registeredCount) || 0,
+      requiredCoaches: Number(item.requiredCoaches) || 0,
+      note: item.note ? String(item.note) : null,
+      status: "active" as const,
+    }));
+    return db.insert(manualScheduleCourses).values(sanitized).returning();
+  },
+
   async updateManualCourse(id: number, data: Partial<InsertManualScheduleCourse>) {
     const [row] = await db.update(manualScheduleCourses).set({ ...data, updatedAt: new Date() }).where(eq(manualScheduleCourses.id, id)).returning();
     return row;

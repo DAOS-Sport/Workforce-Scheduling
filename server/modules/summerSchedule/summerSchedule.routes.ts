@@ -58,10 +58,12 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
     }
   });
 
-  // 手動課程新增
+  // 手動課程新增（接受 {items:[...]} 或單筆物件）
   app.post("/api/admin/manual-schedule-courses", requireAdmin, async (req, res) => {
     try {
-      ok(res, await summerScheduleService.createManualCourse(req.body));
+      const items: any[] = Array.isArray(req.body.items) ? req.body.items : [req.body];
+      const rows = await summerScheduleService.createManualCourses(items);
+      ok(res, { items: rows });
     } catch (err: any) {
       fail(res, err.status || 500, err.message);
     }

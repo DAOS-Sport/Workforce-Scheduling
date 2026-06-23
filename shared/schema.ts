@@ -639,6 +639,8 @@ export const manualScheduleCourses = pgTable("manual_schedule_courses", {
   courseName: text("course_name").notNull(),
   startTime: text("start_time").notNull(),
   endTime: text("end_time").notNull(),
+  registeredCount: integer("registered_count").default(0),
+  requiredCoaches: integer("required_coaches").default(1),
   employeeId: integer("employee_id"),
   employeeName: text("employee_name"),
   note: text("note"),
