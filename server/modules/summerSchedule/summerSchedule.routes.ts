@@ -88,6 +88,8 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
   });
 
   // 發布到員工前台 shifts
+  // 新版前端只送 {weekNo} → 服務端讀取母資料表已儲存的 shiftEntries 發布（DB 驅動，republish 永遠一致）。
+  // 舊版若帶 {weekNo, shifts:[...]} 仍相容。
   app.post("/api/admin/summer-schedule/publish-shifts", requireAdmin, async (req, res) => {
     try {
       ok(res, await summerScheduleService.publishShifts(req.body));
@@ -179,6 +181,20 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
         };
       });
       ok(res, { items });
+    } catch (err: any) {
+      fail(res, 500, err.message);
+    }
+  });
+
+  // Admin: 刪除某位員工某週的暑假可排班填報；員工仍會在列表中以「未填報」呈現
+  app.delete("/api/admin/summer-availability/:employeeId/:weekNo", requireAdmin, async (req, res) => {
+    try {
+      const employeeId = parseInt(String(req.params.employeeId), 10);
+      const weekNo = parseInt(String(req.params.weekNo), 10);
+      if (!Number.isInteger(employeeId) || employeeId <= 0) return fail(res, 400, "employeeId 格式錯誤");
+      if (!Number.isInteger(weekNo) || weekNo < 1 || weekNo > 9) return fail(res, 400, "weekNo 只允許 1-9");
+      const deleted = await summerAvailabilityRepository.deleteByEmployeeAndWeek(employeeId, weekNo);
+      ok(res, { success: true, deleted });
     } catch (err: any) {
       fail(res, 500, err.message);
     }

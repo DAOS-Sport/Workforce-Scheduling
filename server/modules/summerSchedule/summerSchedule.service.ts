@@ -30,6 +30,51 @@ function normalizeWeekNo(value: any): number {
   return weekNo;
 }
 
+function rawEntryHasScheduleValue(entry: any): boolean {
+  const key = String(entry?.key ?? "");
+  const value = String(entry?.value ?? "").trim();
+  const hasEmployees = Array.isArray(entry?.employees) && entry.employees.length > 0;
+  if (!value && !hasEmployees) return false;
+  if (key.includes("-availability-")) return false;
+  if (key.includes("-dutygrid-rows")) return false;
+  if (/-course-.*-enroll$/.test(key)) return false;
+  return true;
+}
+
+function hasMeaningfulScheduleData(data: {
+  rawEntries?: any[] | null;
+  assignments?: any[] | null;
+  shiftEntries?: any[] | null;
+  shifts?: any[] | null;
+}): boolean {
+  if (Array.isArray(data.assignments) && data.assignments.length > 0) return true;
+  if (Array.isArray(data.shiftEntries) && data.shiftEntries.length > 0) return true;
+  if (Array.isArray(data.shifts) && data.shifts.length > 0) return true;
+  return Array.isArray(data.rawEntries) && data.rawEntries.some(rawEntryHasScheduleValue);
+}
+
+function hasWorkRows(data: {
+  assignments?: any[] | null;
+  shiftEntries?: any[] | null;
+  shifts?: any[] | null;
+}): boolean {
+  return (
+    (Array.isArray(data.assignments) && data.assignments.length > 0) ||
+    (Array.isArray(data.shiftEntries) && data.shiftEntries.length > 0) ||
+    (Array.isArray(data.shifts) && data.shifts.length > 0)
+  );
+}
+
+function hasShiftRows(data: {
+  shiftEntries?: any[] | null;
+  shifts?: any[] | null;
+}): boolean {
+  return (
+    (Array.isArray(data.shiftEntries) && data.shiftEntries.length > 0) ||
+    (Array.isArray(data.shifts) && data.shifts.length > 0)
+  );
+}
+
 function normalizeOptionalText(value: any): string | null {
   const text = String(value ?? "").trim();
   return text ? text : null;
@@ -231,6 +276,54 @@ function normalizeEnrollmentRow(row: any, weekNo: number, termId: number) {
   };
 }
 
+// 共用發布邏輯：刪掉該週已發布的 v40 班次（軟取消、寫 audit），再插入新班次。
+// publishShifts（payload 版，相容舊版）與「DB 驅動」路徑共用。
+async function applyPublish(week: { startDate: string; endDate: string }, weekNo: number, incoming: any[]) {
+  // 0. 空陣列保護：絕不在「無可發布班次」時執行刪除，否則會把員工該週已發布班表整週清空。
+  if (!Array.isArray(incoming) || incoming.length === 0) {
+    return { success: false, inserted: 0, skipped: 0, message: "此週無可發布班次，已取消發布以保留員工現有班表" };
+  }
+  // 1. 找出這週已有的 summer-schedule-v40 班次（透過 notes 標記）
+  const existing = await db.select().from(shifts).where(
+    and(
+      gte(shifts.date, week.startDate),
+      lte(shifts.date, week.endDate),
+      like(shifts.notes, "%暑假排班v40%"),
+      eq(shifts.status, "active")
+    )
+  );
+
+  // 2. 取消舊資料（軟刪除 + audit）
+  for (const s of existing) {
+    await storage.deleteShift(s.id, "summer-schedule-publish", "重新發布暑假排班", true);
+  }
+
+  // 3. 寫入新 shifts（補上 weekNo 標記；缺必要欄位者略過）
+  let inserted = 0;
+  let skipped = 0;
+  for (const item of incoming) {
+    if (!item || !item.employeeId || !item.venueId || !item.date || !item.startTime || !item.endTime) {
+      skipped++;
+      continue;
+    }
+    const noteTag = `暑假排班v40｜weekNo=${weekNo}`;
+    const notes = item.notes ? `${item.notes}｜${noteTag}` : noteTag;
+    const shiftData: InsertShift = {
+      employeeId: item.employeeId,
+      venueId: item.venueId,
+      date: item.date,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      role: item.role || "教練",
+      notes,
+    };
+    await storage.createShift(shiftData, "summer-schedule-publish");
+    inserted++;
+  }
+
+  return { success: true, message: "已發布到員工前台", inserted, skipped };
+}
+
 export const summerScheduleService = {
   async getEmployeesForSchedule() {
     const all = await storage.getAllEmployees();
@@ -385,9 +478,6 @@ export const summerScheduleService = {
     const { version = "v40", rawEntries, assignments, shifts: shiftEntries } = payload;
     const weekNo = normalizeWeekNo(payload.weekNo);
     const updatedAt = new Date();
-    const [existing] = await db.select().from(summerScheduleAssignments).where(
-      and(eq(summerScheduleAssignments.version, version), eq(summerScheduleAssignments.weekNo, weekNo))
-    );
     const data: InsertSummerScheduleAssignment = {
       version,
       weekNo,
@@ -395,11 +485,40 @@ export const summerScheduleService = {
       assignments: Array.isArray(assignments) ? assignments : [],
       shiftEntries: Array.isArray(shiftEntries) ? shiftEntries : [],
     };
-    if (existing) {
-      await db.update(summerScheduleAssignments).set({ ...data, updatedAt }).where(eq(summerScheduleAssignments.id, existing.id));
-    } else {
-      await db.insert(summerScheduleAssignments).values(data);
+    const guardData = {
+      rawEntries: data.rawEntries as any[],
+      assignments: data.assignments as any[],
+      shiftEntries: data.shiftEntries as any[],
+    };
+    const incomingHasShiftRows = hasShiftRows(guardData);
+    const incomingHasWorkRows = hasWorkRows(guardData);
+    const incomingHasScheduleData = hasMeaningfulScheduleData(guardData);
+    if (!incomingHasShiftRows || !incomingHasWorkRows || !incomingHasScheduleData) {
+      const [existing] = await db.select().from(summerScheduleAssignments).where(
+        and(eq(summerScheduleAssignments.version, version), eq(summerScheduleAssignments.weekNo, weekNo))
+      );
+      const existingData = existing ? {
+        rawEntries: existing.rawEntries as any[],
+        assignments: existing.assignments as any[],
+        shiftEntries: existing.shiftEntries as any[],
+      } : null;
+      if (existingData && hasShiftRows(existingData) && !incomingHasShiftRows) {
+        throw err(409, "保護：空白班表不覆蓋既有排班資料");
+      }
+      if (existingData && hasWorkRows(existingData) && !incomingHasWorkRows) {
+        throw err(409, "保護：空白班表不覆蓋既有排班資料");
+      }
+      if (existingData && hasMeaningfulScheduleData(existingData) && !incomingHasScheduleData) {
+        throw err(409, "保護：空白班表不覆蓋既有排班資料");
+      }
     }
+    // 原子 upsert（避免並發兩個請求同時 select 到「無列」各自 insert 而撞 unique key）
+    await db.insert(summerScheduleAssignments)
+      .values({ ...data, updatedAt })
+      .onConflictDoUpdate({
+        target: [summerScheduleAssignments.version, summerScheduleAssignments.weekNo],
+        set: { ...data, updatedAt },
+      });
     return { success: true, updatedAt: updatedAt.toISOString() };
   },
 
@@ -435,46 +554,34 @@ export const summerScheduleService = {
   },
 
   async publishShifts(payload: any) {
-    const { weekNo, shifts: incoming } = payload;
-    if (!weekNo || !Array.isArray(incoming)) throw err(400, "weekNo 和 shifts 為必填");
-
+    const weekNo = normalizeWeekNo(payload?.weekNo);
     const week = SUMMER_WEEKS.find((w) => w.no === weekNo);
     if (!week) throw err(400, "weekNo 只允許 1-9");
 
-    // 1. 找出這週已有的 summer-schedule-v40 班次（透過 notes 標記）
-    const existing = await db.select().from(shifts).where(
-      and(
-        gte(shifts.date, week.startDate),
-        lte(shifts.date, week.endDate),
-        like(shifts.notes, "%暑假排班v40%"),
-        eq(shifts.status, "active")
-      )
+    // 決定發布來源：
+    //  1) payload 帶 shifts 陣列（舊版相容）→ 用 payload
+    //  2) 否則（新版只送 weekNo）→ 讀母資料表已儲存的 shiftEntries（DB 驅動，republish 與已存內容一致）
+    let incoming: any[] = Array.isArray(payload?.shifts) ? payload.shifts : [];
+    if (!incoming.length) {
+      const [row] = await db.select().from(summerScheduleAssignments).where(
+        and(eq(summerScheduleAssignments.version, "v40"), eq(summerScheduleAssignments.weekNo, weekNo))
+      );
+      incoming = Array.isArray(row?.shiftEntries) ? (row!.shiftEntries as any[]) : [];
+    }
+
+    return applyPublish(week, weekNo, incoming);
+  },
+
+  // DB 驅動發布：忽略前端 payload，直接以母資料表已儲存的 shiftEntries 發布
+  async publishShiftsFromSaved(weekNo: number) {
+    const wk = normalizeWeekNo(weekNo);
+    const week = SUMMER_WEEKS.find((w) => w.no === wk);
+    if (!week) throw err(400, "weekNo 只允許 1-9");
+    const [row] = await db.select().from(summerScheduleAssignments).where(
+      and(eq(summerScheduleAssignments.version, "v40"), eq(summerScheduleAssignments.weekNo, wk))
     );
-
-    // 2. 取消舊資料
-    for (const s of existing) {
-      await storage.deleteShift(s.id, "summer-schedule-publish", "重新發布暑假排班", true);
-    }
-
-    // 3. 寫入新 shifts
-    let inserted = 0;
-    for (const item of incoming) {
-      const noteTag = `暑假排班v40｜weekNo=${weekNo}`;
-      const notes = item.notes ? `${item.notes}｜${noteTag}` : noteTag;
-      const shiftData: InsertShift = {
-        employeeId: item.employeeId,
-        venueId: item.venueId,
-        date: item.date,
-        startTime: item.startTime,
-        endTime: item.endTime,
-        role: item.role || "教練",
-        notes,
-      };
-      await storage.createShift(shiftData, "summer-schedule-publish");
-      inserted++;
-    }
-
-    return { success: true, message: "已發布到員工前台", inserted };
+    const incoming = Array.isArray(row?.shiftEntries) ? (row!.shiftEntries as any[]) : [];
+    return applyPublish(week, wk, incoming);
   },
 
   async getMySummerShifts(weekNo: number, lineId: string) {

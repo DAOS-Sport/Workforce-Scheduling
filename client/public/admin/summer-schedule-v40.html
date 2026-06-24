@@ -37,6 +37,8 @@
 .result-busy{background:#eef2ff;color:#3730a3;font-weight:900;border-radius:8px;padding:4px 7px;display:inline-block;margin:2px 3px 2px 0;border:1px solid #c7d2fe}
 .result-empty{color:#94a3b8;font-weight:900}
 .avail-actions{display:flex;gap:8px;flex-wrap:wrap}
+.availability-delete{border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;border-radius:8px;padding:5px 8px;font-weight:900;cursor:pointer}
+.availability-delete:hover{background:#fee2e2}
 @media(max-width:1800px){.avail-layout{grid-template-columns:1fr}.avail-result{min-width:980px}}
 
 .questionnaire{background:#fff;border:1px solid #d8e4f1;border-radius:16px;box-shadow:0 8px 20px rgba(15,23,42,.05);overflow:hidden;margin-bottom:14px}
@@ -429,6 +431,220 @@ tr.zero-enroll.force-open .force-badge{display:inline-block}
 .simplified-mode .force-badge{display:none}
 .simplified-mode .has-issue td{background-image:linear-gradient(to right, rgba(254,242,242,.8), rgba(255,255,255,0));}
 body.section-duty section[data-section], body.section-course section[data-section], body.section-holiday section[data-section], body.section-manual section[data-section]{display:none}
+/* 先選館別：只顯示選定館別的卡片（data-venue-view=all 顯示全部） */
+body[data-venue-view="新北高中"] .venue-card:not([data-venue-card="新北高中"]),
+body[data-venue-view="三重商工"] .venue-card:not([data-venue-card="三重商工"]),
+body[data-venue-view="三民高中"] .venue-card:not([data-venue-card="三民高中"]){display:none!important}
+.venue-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px;padding:12px 16px;background:linear-gradient(135deg,#eff6ff,#ffffff);border:1px solid #dbeafe;border-radius:14px}
+.venue-bar-label{font-size:13px;font-weight:1000;color:#1e3a8a;letter-spacing:.5px}
+.venue-pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.venue-pill{font-size:13.5px;font-weight:1000;padding:8px 16px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;transition:all .12s}
+.venue-pill:hover{background:#eff6ff;border-color:#93c5fd}
+.venue-pill.active{background:#1d4ed8;border-color:#1d4ed8;color:#fff;box-shadow:0 2px 10px rgba(29,78,216,.28)}
+/* 問題一：櫃台輸入式（與救生並列）；櫃台展開格用藍色系與救生（綠）區隔，利於視覺化 */
+.duty-inputs{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:4px 0 12px}
+.duty-input-group{border:1px solid #e2e8f0;border-radius:12px;padding:8px;background:#fbfdff}
+.duty-input-group.fd{border-color:#bae6fd;background:#f5fbff}
+.duty-input-group.lg{border-color:#bbf7d0;background:#f4fdf8}
+.duty-input-head{font-size:12.5px;font-weight:1000;padding:4px 6px 8px}
+.duty-input-group.fd .duty-input-head{color:#0369a1}
+.duty-input-group.lg .duty-input-head{color:#047857}
+.frontdesk-inputs{display:grid;gap:10px}
+.source-title.fd-title{background:#e0f2fe;color:#0369a1}
+.frontdesk-source{min-height:64px}
+.frontdesk-display{cursor:pointer}
+.frontdesk-lines{display:flex;flex-wrap:wrap;gap:4px;min-height:30px;padding:4px}
+.frontdesk-lines .shift{display:inline-flex;flex-direction:column;background:#e0f2fe;border:1px solid #7dd3fc;color:#0369a1;border-radius:8px;padding:3px 7px;font-size:12px;font-weight:700}
+.frontdesk-lines .shift small{font-size:10px;color:#0891b2;font-weight:600}
+.frontdesk-lines .empty{color:#94a3b8;font-size:11px}
+.duty-sheet-wrap{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:10px;background:#fbfdff}
+.duty-sheet{border:1px solid #d8e4f1;border-radius:12px;background:#fff;overflow:hidden}
+.duty-sheet.frontdesk{border-color:#bae6fd}
+.duty-sheet.lifeguard{border-color:#bbf7d0}
+.duty-sheet-title{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 11px;font-size:13px;font-weight:1000;border-bottom:1px solid #d8e4f1}
+.duty-sheet.frontdesk .duty-sheet-title{background:#e0f2fe;color:#0369a1}
+.duty-sheet.lifeguard .duty-sheet-title{background:#dcfce7;color:#047857}
+.duty-sheet-title small{font-size:11px;font-weight:800;color:#64748b}
+.duty-grid-scroll{overflow:auto}
+.duty-grid{border-collapse:collapse;width:100%;min-width:720px}
+.duty-grid th{position:sticky;top:0;z-index:1;padding:7px 6px;font-size:12px}
+.duty-grid th small{display:block;font-size:10px;color:#64748b;font-weight:800}
+.duty-grid .row-head{width:38px;min-width:38px;background:#f8fafc;color:#64748b}
+.duty-grid-cell{min-width:112px;height:58px;padding:0;background:#fff}
+.duty-grid-cell .editbox{min-height:42px;padding:6px 7px 2px;font-size:12.5px;line-height:1.35;border-radius:0}
+.duty-grid-cell .cell-status{font-size:10px;min-height:17px;padding:2px 6px}
+.duty-grid-cell:focus-within{box-shadow:inset 0 0 0 2px #1d4ed8}
+.duty-sheet-actions{display:flex;gap:7px;padding:8px 10px;border-top:1px solid #e2e8f0;background:#f8fafc}
+.duty-sheet-actions .mini-btn{padding:5px 8px}
+@media(max-width:820px){.duty-inputs{grid-template-columns:1fr}}
+@media(max-width:1180px){.duty-sheet-wrap{grid-template-columns:1fr}}
+/* 外部課程（外接資料源）唯讀區，紫色系區隔 */
+.external-block{margin-top:16px;border-top:1px dashed #cbd5e1;padding-top:12px}
+.external-head{font-size:13.5px;font-weight:1000;color:#6d28d9;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.external-head .ext-badge{font-size:10.5px;font-weight:800;background:#f3e8ff;color:#6d28d9;border:1px solid #ddd6fe;border-radius:999px;padding:2px 8px}
+.external-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.external-table th{background:#faf5ff;color:#6d28d9;text-align:left;padding:6px 9px;border-bottom:1px solid #e9d5ff;font-size:11.5px}
+.external-table td{padding:6px 9px;border-bottom:1px solid #f1f5f9}
+.external-table .external-count{font-weight:1000;color:#6d28d9;text-align:right}
+.external-table .external-total td{background:#faf5ff;font-weight:1000}
+.external-empty{color:#94a3b8;font-size:12px;padding:8px}
+
+/* ===== 新設計：排班視覺化舞台（sv- 前綴，系統字型） ===== */
+#svStage{--life:#2E76C2;--desk:#7C5BC0;--coach:#C4742E;--coach-soft:#F8EBDC;--svok:#2E9E6B;--svok-bg:#E4F4EC;--svun:#D79324;--svun-bg:#FBF0DA;--svem:#D84F45;--svem-bg:#FBE6E4;--svov:#5566C9;--svov-bg:#E8EAF8;--svcl:#AEB6C5;--svcl-bg:#F0F2F6;--svline:#E2E7F0;--svink:#16223D;--svink2:#56617A;--svink3:#9098AB;margin-bottom:14px}
+#svStage .mono{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.sv-controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.sv-seg,.sv-views,.sv-seg2{display:inline-flex;background:#fff;border:1px solid var(--svline);border-radius:9px;padding:3px}
+.sv-seg button,.sv-views button,.sv-seg2 button{appearance:none;border:0;background:transparent;color:var(--svink2);font:inherit;font-size:13px;font-weight:600;padding:7px 15px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all .12s}
+.sv-seg button .mono{font-size:11px;opacity:.75;font-weight:500}
+.sv-seg button[aria-selected="true"],.sv-views button[aria-selected="true"],.sv-seg2 button[aria-selected="true"]{background:#15316A;color:#fff}
+.sv-views button[aria-selected="true"]{background:#15316A}
+.sv-seg2 button[aria-selected="true"]{background:#f1f5f9;color:var(--svink)}
+.sv-cnt{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;font-size:11px;font-weight:700;background:var(--svem);color:#fff}
+.sv-cnt.zero{background:var(--svok)}
+.sv-panel{background:#fff;border:1px solid var(--svline);border-radius:12px;box-shadow:0 1px 2px rgba(20,30,60,.05),0 8px 22px rgba(20,30,60,.05);overflow:hidden}
+.sv-phead{display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--svline)}
+.sv-phead h2{margin:0;font-size:17px;font-weight:700}
+.sv-phead .sv-sub{color:var(--svink3);font-size:12.5px}
+.sv-ptags{margin-left:auto;display:flex;gap:7px}
+.sv-tag{font-size:11.5px;padding:3px 10px;border-radius:999px;background:#F7F9FC;color:var(--svink2);border:1px solid var(--svline)}
+/* 時間軸 */
+.sv-tl{padding:6px 18px 16px}
+.sv-ruler{display:flex;height:24px;position:relative;margin-bottom:2px}
+.sv-gut{width:120px;flex:none;padding-right:12px;display:flex;align-items:center;justify-content:flex-end}
+.sv-track{flex:1;position:relative}
+.sv-tick{position:absolute;top:0;transform:translateX(-50%);font-size:10.5px;color:var(--svink3);white-space:nowrap}
+.sv-tick.sv-edge{transform:none}
+.sv-tlbody{position:relative}
+.sv-grid{position:absolute;left:120px;right:0;top:0;bottom:0;pointer-events:none;z-index:0}
+.sv-gl{position:absolute;top:0;bottom:0;width:1px;background:var(--svline)}
+.sv-gl.noon{background:#CDD5E3}
+.sv-role{position:relative;z-index:1;border-top:1px solid var(--svline);padding:12px 0}
+.sv-role:first-child{border-top:0}
+.sv-rhead{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.sv-rname{display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px}
+.sv-rdot{width:9px;height:9px;border-radius:50%}
+.sv-rdot.life{background:var(--life)}.sv-rdot.desk{background:var(--desk)}.sv-rdot.coach{background:var(--coach)}
+.sv-rneed{font-size:11.5px;color:var(--svink3)}
+.sv-rstat{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:3px 11px;border-radius:999px}
+.sv-dotg{width:7px;height:7px;border-radius:50%}
+.sv-rstat.s-ok{background:var(--svok-bg);color:var(--svok)}.sv-rstat.s-ok .sv-dotg{background:var(--svok)}
+.sv-rstat.s-empty{background:var(--svem-bg);color:var(--svem)}.sv-rstat.s-empty .sv-dotg{background:var(--svem)}
+.sv-editbtn{margin-left:auto;appearance:none;border:1px solid var(--svline);background:#fff;color:var(--svink2);font:inherit;font-size:12px;font-weight:600;padding:5px 11px;border-radius:7px;cursor:pointer}
+.sv-editbtn:hover{border-color:#1E4694;color:#15316A;background:#eff6ff}
+.sv-trow{display:flex;align-items:center;min-height:32px}
+.sv-emp{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:108px}
+.sv-mut{color:var(--svink3);font-weight:400}
+.sv-bar{position:absolute;top:2px;height:22px;border-radius:6px;display:flex;align-items:center;gap:6px;padding:0 9px;color:#fff;font-size:11.5px;white-space:nowrap;overflow:hidden;cursor:default}
+.sv-bar:hover{filter:brightness(1.06)}
+.sv-bar.life{background:var(--life)}.sv-bar.desk{background:var(--desk)}
+.sv-bar .sv-bh{font-size:10.5px;opacity:.78;margin-left:auto}
+.sv-covrow{display:flex;align-items:center;margin-top:7px}
+.sv-covrow .sv-gut{font-size:11px;color:var(--svink3)}
+.sv-cov{position:absolute;top:0;height:24px;border-radius:5px;display:flex;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:700;border:1px solid transparent;cursor:default}
+.sv-cov.c-ok{background:var(--svok-bg);color:var(--svok);border-color:#BFE6D1}
+.sv-cov.c-under{background:var(--svun-bg);color:#9A6A12;border-color:#EAD2A0}
+.sv-cov.c-empty{background:var(--svem-bg);color:var(--svem);border-color:#EFC0BB}
+.sv-cov.c-over{background:var(--svov-bg);color:var(--svov);border-color:#C7CDF0}
+.sv-cov .sv-cg{font-size:9px}
+.sv-covrow .sv-track,.sv-trow .sv-track{height:24px}
+.sv-cbar{position:absolute;top:2px;height:22px;border-radius:6px;display:flex;align-items:center;gap:5px;padding:0 8px;font-size:11px;white-space:nowrap;overflow:hidden;border:1px solid;cursor:default}
+.sv-cbar .sv-code{font-weight:800;font-size:10px}
+.sv-cbar.k-ok{background:var(--coach-soft);border-color:#E3C49C;color:#8A5A22}
+.sv-cbar.k-under{background:var(--svun-bg);border-color:#EAD2A0;color:#9A6A12}
+.sv-cbar.k-empty{background:var(--svem-bg);border-color:#EFC0BB;color:var(--svem)}
+.sv-cbar.k-none{background:var(--svcl-bg);border-color:#E2E6EC;color:var(--svink3)}
+.sv-cbar .sv-miss{font-weight:800}
+/* 覆蓋總覽 */
+.sv-mxbar{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--svline);flex-wrap:wrap}
+.sv-mxhint{margin-left:auto;font-size:12px;color:var(--svink3)}
+.sv-mx{width:100%;border-collapse:separate;border-spacing:0}
+.sv-mx th,.sv-mx td{padding:0;text-align:center}
+.sv-mx thead th{background:#F7F9FC;border-bottom:1px solid var(--svline);padding:10px 8px;font-weight:700;font-size:13px}
+.sv-mx thead th.sv-corner{width:96px;text-align:left;padding-left:18px;color:var(--svink2);font-weight:500;font-size:12px}
+.sv-vh{display:flex;flex-direction:column;gap:3px;align-items:center}
+.sv-vstat{font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:999px}
+.sv-vstat.s-ok{background:var(--svok-bg);color:var(--svok)}.sv-vstat.s-empty{background:var(--svem-bg);color:var(--svem)}
+.sv-mx tbody td{border-bottom:1px solid var(--svline);border-left:1px solid var(--svline);padding:6px 7px}
+.sv-mx tbody td:first-child{text-align:left;padding-left:18px;border-left:0}
+.sv-band b{font-size:13px}.sv-band small{color:var(--svink3)}
+.sv-cell{display:flex;flex-direction:column;align-items:center;gap:2px;border-radius:8px;padding:7px 5px;cursor:default}
+.sv-cell .sv-num{font-weight:700;font-size:17px;line-height:1}
+.sv-cell .sv-req{font-size:10px;opacity:.8}
+.sv-cell .sv-who{display:flex;flex-wrap:wrap;gap:2px 5px;justify-content:center;margin-top:2px}
+.sv-cell .sv-who span{font-size:11px;opacity:.95}
+.sv-person-chip{display:inline-flex;align-items:center;gap:3px;border-radius:999px;padding:2px 7px;background:rgba(255,255,255,.72);border:1px solid rgba(15,23,42,.08);font-size:11px;font-weight:800}
+.sv-person-chip .sv-chipx{color:inherit;opacity:.75}
+.sv-person-chip .sv-chipx:hover{opacity:1;color:#dc2626}
+.sv-cell .sv-flag{font-size:9.5px;font-weight:800}
+.sv-cell.k-ok{background:var(--svok-bg);color:var(--svok)}.sv-cell.k-under{background:var(--svun-bg);color:#9A6A12}
+.sv-cell.k-empty{background:var(--svem-bg);color:var(--svem)}.sv-cell.k-over{background:var(--svov-bg);color:var(--svov)}
+.sv-cell.k-closed{background:var(--svcl-bg);color:var(--svink3)}
+/* 課程 */
+.sv-cv{padding:16px 18px}
+.sv-cvhead{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.sv-cvhead h3{margin:0;font-size:15px;font-weight:700}
+.sv-cvsum{margin-left:auto;display:flex;gap:8px}
+.sv-sum{font-size:12px;font-weight:700;padding:3px 11px;border-radius:999px}
+.sv-sum.ok{background:var(--svok-bg);color:var(--svok)}.sv-sum.warn{background:var(--svem-bg);color:var(--svem)}.sv-sum.mute{background:#F7F9FC;color:var(--svink2);border:1px solid var(--svline)}
+.sv-crow{display:grid;grid-template-columns:40px 110px 130px 1fr;gap:14px;align-items:center;padding:11px 14px;border:1px solid var(--svline);border-left-width:4px;border-radius:8px;margin-bottom:8px}
+.sv-crow.k-ok{border-left-color:var(--svok)}.sv-crow.k-under{border-left-color:var(--svun)}.sv-crow.k-empty{border-left-color:var(--svem)}.sv-crow.k-none{border-left-color:var(--svcl);opacity:.66}
+.sv-cbadge{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--coach-soft);color:var(--coach);font-weight:800;font-size:14px}
+.sv-ctime{font-size:13px;color:var(--svink2)}
+.sv-cen{display:flex;flex-direction:column;gap:4px}
+.sv-en{display:flex;align-items:baseline;gap:4px}
+.sv-en b{font-size:16px;font-weight:700}.sv-en small{font-size:11px;color:var(--svink3)}
+.sv-mini{height:6px;border-radius:3px;background:var(--svline);overflow:hidden;width:100px}
+.sv-mini i{display:block;height:100%;background:var(--coach);border-radius:3px}
+.sv-cright{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.sv-need{font-size:12px;color:var(--svink2);white-space:nowrap}
+.sv-cchips{display:flex;gap:6px;flex-wrap:wrap}
+.sv-cchip{display:inline-flex;align-items:center;font-size:12.5px;padding:5px 11px;border-radius:999px;background:var(--coach-soft);color:var(--coach);font-weight:600;border:1px solid #E9D3B6}
+.sv-slot{appearance:none;display:inline-flex;align-items:center;font-size:12.5px;padding:5px 11px;border-radius:999px;border:1px dashed var(--svem);color:var(--svem);font-weight:700;background:var(--svem-bg);cursor:pointer}
+.sv-cstat{font-size:12px;font-weight:800;padding:5px 12px;border-radius:999px;white-space:nowrap;min-width:54px;text-align:center}
+.sv-cstat.k-ok{background:var(--svok-bg);color:var(--svok)}.sv-cstat.k-under{background:var(--svun-bg);color:#9A6A12}.sv-cstat.k-empty{background:var(--svem-bg);color:var(--svem)}.sv-cstat.k-none{background:#F7F9FC;color:var(--svink3);border:1px solid var(--svline)}
+/* 編輯資料層：預設渲染於畫面外（保留 innerText 供存檔/發布/解析），編輯模式才移回畫面 */
+.sv-editbtn-lg{appearance:none;border:1px solid var(--line);background:#f5f8ff;color:#15316A;font:inherit;font-weight:700;font-size:13.5px;padding:12px 16px;border-radius:10px;cursor:pointer;width:100%;text-align:left;margin-top:8px}
+.sv-editbtn-lg:hover{background:#e8f0ff}
+body.sv-editing .sv-editbtn-lg{background:#15316A;color:#fff;border-color:#15316A}
+.sv-datalayer{position:absolute;left:-99999px;top:0;width:1180px}
+body.sv-editing .sv-datalayer{position:static;left:auto;width:auto;margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:10px;background:#fbfdff;box-shadow:0 8px 30px rgba(20,30,60,.08)}
+/* 排班互動：覆蓋色塊 / 矩陣格 可點擊直接排班 */
+#svStage .sv-cov{cursor:pointer}
+#svStage .sv-cov:hover{outline:2px solid #1d4ed8;outline-offset:-1px}
+#svStage .sv-cov.gap{box-shadow:inset 0 0 0 1.5px rgba(216,79,69,.5)}
+#svStage .sv-plus{font-weight:800;margin-left:3px}
+#svStage .sv-cell{cursor:pointer}
+#svStage .sv-cell:hover{outline:2px solid #1d4ed8;outline-offset:-2px}
+.sv-fillhint{font-size:10.5px!important;color:#1d4ed8!important;font-weight:800!important}
+.sv-editbtn.ghost{background:transparent;border-color:transparent;color:var(--svink3)}
+.sv-editbtn.ghost:hover{background:#eff6ff;border-color:var(--svline);color:#15316A}
+/* 課程「排班」主按鈕 */
+.sv-assignbtn{appearance:none;border:1px solid #1d4ed8;background:#1d4ed8;color:#fff;font:inherit;font-size:13px;font-weight:800;padding:7px 16px;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(29,78,216,.25)}
+.sv-assignbtn:hover{background:#1e40af}
+/* 移除鈕：bar 上的 ✕ / 教練 chip 的 ✕ */
+.sv-bar .sv-barx{appearance:none;border:0;background:rgba(255,255,255,.28);color:#fff;font-size:10px;width:16px;height:16px;line-height:15px;text-align:center;border-radius:50%;cursor:pointer;padding:0;margin-left:6px;flex:none}
+.sv-bar .sv-barx:hover{background:rgba(255,255,255,.55)}
+.sv-cchip{display:inline-flex;align-items:center;gap:2px}
+.sv-chipx{appearance:none;border:0;background:transparent;color:#b45309;font-size:11px;cursor:pointer;padding:0 1px;font-weight:800;line-height:1}
+.sv-chipx:hover{color:#dc2626}
+/* 編輯資料層美化：單欄、淺色、留白（原本兩欄各 min 980px 造成大破版橫向爆版） */
+#svEditDrawer .venue-body{grid-template-columns:1fr!important;background:#fbfdff;gap:12px;padding:12px}
+#svEditDrawer .venue-card{box-shadow:none}
+#svEditDrawer .section{box-shadow:0 1px 3px rgba(20,30,60,.06);border-radius:12px}
+#svEditDrawer th,#svEditDrawer td{border-color:#e8edf5}
+#svEditDrawer .table-wrap{max-height:none}
+#svTip{position:fixed;z-index:9999;background:#101a30;color:#fff;padding:8px 11px;border-radius:8px;font-size:12px;pointer-events:none;opacity:0;transition:opacity .12s;max-width:300px;box-shadow:0 8px 28px rgba(0,0,0,.3);line-height:1.5}
+#svTip.show{opacity:1}
+@media(max-width:820px){.sv-gut,.sv-grid{width:80px}.sv-grid{left:80px}.sv-crow{grid-template-columns:36px 1fr;row-gap:8px}.sv-cright{justify-content:flex-start}}
+/* 重設計：排班分頁讓新三視圖為主角，隱藏舊式雜亂面板 */
+#scheduleTools{display:none!important}
+.topbar.compact-top .compact-help{display:none}
+.topbar.compact-top .compact-subtitle{font-size:11px;opacity:.62;max-width:none}
+#scheduleView .right-panels{grid-template-columns:repeat(3,1fr)}
+#scheduleView .venue-bar{margin-bottom:14px}
+/* 收掉 topbar 與 venue-pills 重複的館別下拉、以及冗長 weekNote（資訊已在新視圖呈現） */
+.compact-controls .field:has(#venueFilter){display:none}
+#weekNote{display:none}
 body.section-duty section[data-section="duty"]{display:block}
 body.section-course section[data-section="course"]{display:block}
 body.section-holiday section[data-section="holiday"]{display:block}
@@ -455,7 +671,8 @@ body.section-course section[data-section="duty"], body.section-holiday section[d
 
 /* v26 員工選擇與 LINE 綁定狀態 */
 .employee-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 7px 5px}
-.employee-select-btn{font-size:11px;padding:4px 7px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;font-weight:1000;cursor:pointer;color:#0f172a}
+.employee-select-btn{font-size:14px;padding:9px 18px;border-radius:9px;border:1px solid #1d4ed8;background:#1d4ed8;color:#fff;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(29,78,216,.25)}
+.employee-select-btn:hover{background:#1e40af;border-color:#1e40af}
 .employee-select-btn:hover{background:#eff6ff;border-color:#93c5fd}
 .employee-chips{display:none!important}
 .employee-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:999px;padding:2px 6px;font-size:10.5px;font-weight:1000;color:#334155}
@@ -641,7 +858,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
     <div class="compact-row">
       <div class="compact-title">
         <h1>三館排班表</h1>
-        <div class="subtitle compact-subtitle">救生完整班段自動展開｜串接報名系統 API｜0人自動縮排｜撞班提醒｜教練選擇｜員工 API 準備｜正式資料模式｜問題分級｜手機查閱｜課程薪資規則｜員工前台發布準備｜Replit 上線準備版 v40 <span id="syncStatus" class="sync-status">就緒</span></div>
+        <div class="subtitle compact-subtitle">三館 · 救生／櫃台／課程教練 · 報名 API 即時帶入 <span id="syncStatus" class="sync-status">就緒</span></div>
       </div>
       <div class="actions compact-actions">
         <button class="btn" onclick="clearStorage()">清空</button>
@@ -655,14 +872,14 @@ body.section-manual section[data-section="duty"]{display:none!important}
 
     <div class="compact-controls">
       <div class="field"><label for="weekSelect">週別</label><select id="weekSelect"></select></div>
-      <div class="field"><label for="venueFilter">館別</label><select id="venueFilter"><option value="all">全部館別</option><option>新北高中</option><option>三重商工</option><option>三民高中</option></select></div>
+      <div class="field" style="display:none"><label for="venueFilter">館別</label><select id="venueFilter"><option value="all">全部館別</option><option>新北高中</option><option>三重商工</option><option>三民高中</option></select></div>
       <div class="week-note" id="weekNote"></div>
     </div>
 
     <details class="compact-help">
       <summary>排班格式說明</summary>
       <div class="help-grid">
-        <div><b>救生輸入</b><br><code>員工姓名 05:30-14:00</code>、<code>員工姓名 10:00-12:00 35</code></div>
+        <div><b>櫃台 / 救生格</b><br><code>王小明 櫃0800-1700</code>、<code>王小明 救05:30-14:00</code></div>
         <div><b>人數判斷</b><br>新北高中救生 2－3 人；三重、三民 1－2 人。</div>
         <div><b>撞班提醒</b><br>救生與課程同時段同人，會顯示提醒。</div>
       </div>
@@ -711,7 +928,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
       <div class="filter-group-label">顯示區塊</div>
       <div class="section-pills">
         <button class="section-pill active" id="sectionAllBtn" onclick="setSectionView('all')">全部</button>
-        <button class="section-pill" id="sectionDutyBtn" onclick="setSectionView('duty')">救生 / 櫃台</button>
+        <button class="section-pill" id="sectionDutyBtn" onclick="setSectionView('duty')">櫃台 / 救生排班</button>
         <button class="section-pill" id="sectionCourseBtn" onclick="setSectionView('course')">平日課程</button>
         <button class="section-pill" id="sectionHolidayBtn" onclick="setSectionView('holiday')">假日課程</button>
         <button class="section-pill" id="sectionManualBtn" onclick="setSectionView('manual')">手動課程</button>
@@ -731,8 +948,20 @@ body.section-manual section[data-section="duty"]{display:none!important}
 </div>
 
 <section id="scheduleView">
-  <main class="main" id="venueList"></main>
-  <div class="right-panels"><div class="panel"><h3>救生輸入範例</h3><div class="panel-content"><div class="formula">員工姓名 05:30-14:00<br>員工姓名 10:00-12:00<br>員工姓名 14:00-22:30</div></div></div><div class="panel"><h3>平日例外寫法</h3><div class="panel-content"><div class="formula">員工姓名 05:30-14:00 123<br>員工姓名 05:30-14:00 45</div>數字代表星期，1=一、2=二、3=三、4=四、5=五。</div></div><div class="panel"><h3>正式網站可再強化</h3><div class="panel-content">下一版可加：救生班段拖拉、個人總時數、日薪/時薪統計、匯出 Excel。</div></div></div>
+  <div class="venue-bar">
+    <span class="venue-bar-label">館別</span>
+    <div class="venue-pills">
+      <button type="button" class="venue-pill" data-venue-pill="新北高中" onclick="selectVenueView('新北高中')">新北高中</button>
+      <button type="button" class="venue-pill" data-venue-pill="三重商工" onclick="selectVenueView('三重商工')">三重商工</button>
+      <button type="button" class="venue-pill" data-venue-pill="三民高中" onclick="selectVenueView('三民高中')">三民高中</button>
+    </div>
+  </div>
+  <div id="svStage"></div>
+  <button id="svEditToggle" class="sv-editbtn-lg" onclick="svToggleEditing()">✎ 編輯班表資料（救生／櫃台輸入、課程教練、需求、備註）</button>
+  <div id="svEditDrawer" class="sv-datalayer">
+    <main class="main" id="venueList"></main>
+    <div class="right-panels"><div class="panel"><h3>救生格範例</h3><div class="panel-content"><div class="formula">王小明 救05:30-14:00<br>陳小華 14:00-22:30</div></div></div><div class="panel"><h3>櫃台格範例</h3><div class="panel-content"><div class="formula">王小明 櫃0800-1700<br>陳小華 13:00-21:00</div></div></div><div class="panel"><h3>時間判斷</h3><div class="panel-content"><div class="formula">08:00-17:00<br>0800-1700<br>08:00 至 17:00</div>左表自動算櫃台，右表自動算救生。</div></div></div>
+  </div>
 </section>
 
 <section id="availabilityView" class="hidden-view">
@@ -848,6 +1077,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
                   <th>週六</th>
                   <th>週日</th>
                   <th>備註</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody id="availabilityBody"></tbody>
@@ -1016,7 +1246,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
 <div class="employee-modal-backdrop" id="employeePickerModal">
   <div class="employee-modal">
     <div class="employee-modal-head">
-      <div>選擇員工</div>
+      <div id="employeePickerTitle">選擇員工</div>
       <button type="button" onclick="closeEmployeePicker()">關閉</button>
     </div>
     <div class="employee-modal-body">
@@ -1033,6 +1263,7 @@ const API_ENDPOINTS = {
   enrollmentCounts: "/api/schedule/enrollment-counts",
   scheduleAssignments: "/api/admin/schedule-assignments",
   manualCourses: "/api/admin/manual-schedule-courses",
+  salaryRates: "/api/salary-rates",
   publishShifts: "/api/admin/summer-schedule/publish-shifts",
   mySummerShifts: "/api/portal/my-summer-shifts"
 };
@@ -1085,6 +1316,47 @@ function extractApiMeta(json){
 }
 const LOCAL_STORAGE_PREFIX = "schedule-v40-";
 const LEGACY_STORAGE_PREFIX = "schedule-v39-";
+
+/* ========= v40 儲存核心：資料庫為唯一真實來源（DB single source of truth） =========
+ * scheduleState 是「目前週」的權威記憶體狀態，畫面一律從它映射；
+ * localStorage 僅作離線備援（鏡像寫入），不再是真實來源。
+ *   cells : Map<cellKey, value>      每格文字
+ *   meta  : Map<cellKey, employee[]> 員工指派 meta
+ *   loaded: 是否已從 DB 水合（true 後 getSaved 只認 state，不再讀 localStorage）
+ */
+let scheduleState = { weekNo: 0, cells: new Map(), meta: new Map(), loaded: false, updatedAt: 0 };
+let _dirty = false;
+let _saveRetryTimer = null;
+let _saveRetryDelay = 0;
+let _serverHadScheduleData = false;
+let _serverHadWorkRows = false;
+let _serverHadShiftRows = false;
+
+function currentWeekNo(){ return Number(document.getElementById('weekSelect')?.value || 0) + 1; }
+function nowHm(){ return new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false}); }
+function resetScheduleState(weekNo){
+  scheduleState = { weekNo: Number(weekNo)||0, cells: new Map(), meta: new Map(), loaded: false, updatedAt: scheduleState.updatedAt };
+  _serverHadScheduleData = false;
+  _serverHadWorkRows = false;
+  _serverHadShiftRows = false;
+}
+function markDirty(){ _dirty = true; document.body.classList.add('unsaved'); }
+function hasUnsavedChanges(){ return _dirty; }
+function isEditingFocused(){
+  const el = document.activeElement;
+  return !!(el && el.getAttribute && el.getAttribute('contenteditable') === 'true');
+}
+function isSafeToRerender(){
+  return !isEditingFocused() && !hasUnsavedChanges() && (Date.now() - (typeof _lastEditTime==='number'?_lastEditTime:0) > 1500);
+}
+// 寫入一格：state（權威）→ localStorage（離線備援）→ 視需要標記 dirty。opts.dirty===false 用於衍生/載入正規化。
+function setCellValue(key, value, opts){
+  if(!key) return;
+  const v = String(value ?? '');
+  scheduleState.cells.set(key, v);
+  try{ localStorage.setItem(LOCAL_STORAGE_PREFIX + key, v); }catch(e){}
+  if(!_isApplyingRemote && !(opts && opts.dirty === false)) markDirty();
+}
 
 const weeks = [{"no": 1, "start": "2026-07-01", "end": "2026-07-05", "activeWeekdays": [3, 4, 5], "weekday": "07/01（三）－07/03（五）", "sat": "07/04（六）", "sun": "07/05（日）", "label": "第一週｜07/01（三）－07/05（日）"}, {"no": 2, "start": "2026-07-06", "end": "2026-07-12", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "07/06（一）－07/10（五）", "sat": "07/11（六）", "sun": "07/12（日）", "label": "第二週｜07/06（一）－07/12（日）"}, {"no": 3, "start": "2026-07-13", "end": "2026-07-19", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "07/13（一）－07/17（五）", "sat": "07/18（六）", "sun": "07/19（日）", "label": "第三週｜07/13（一）－07/19（日）"}, {"no": 4, "start": "2026-07-20", "end": "2026-07-26", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "07/20（一）－07/24（五）", "sat": "07/25（六）", "sun": "07/26（日）", "label": "第四週｜07/20（一）－07/26（日）"}, {"no": 5, "start": "2026-07-27", "end": "2026-08-02", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "07/27（一）－07/31（五）", "sat": "08/01（六）", "sun": "08/02（日）", "label": "第五週｜07/27（一）－08/02（日）"}, {"no": 6, "start": "2026-08-03", "end": "2026-08-09", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "08/03（一）－08/07（五）", "sat": "08/08（六）", "sun": "08/09（日）", "label": "第六週｜08/03（一）－08/09（日）"}, {"no": 7, "start": "2026-08-10", "end": "2026-08-16", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "08/10（一）－08/14（五）", "sat": "08/15（六）", "sun": "08/16（日）", "label": "第七週｜08/10（一）－08/16（日）"}, {"no": 8, "start": "2026-08-17", "end": "2026-08-23", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "08/17（一）－08/21（五）", "sat": "08/22（六）", "sun": "08/23（日）", "label": "第八週｜08/17（一）－08/23（日）"}, {"no": 9, "start": "2026-08-24", "end": "2026-08-30", "activeWeekdays": [1, 2, 3, 4, 5], "weekday": "08/24（一）－08/28（五）", "sat": "08/29（六）", "sun": "08/30（日）", "label": "第九週｜08/24（一）－08/30（日）"}];
 
@@ -1148,7 +1420,7 @@ function refreshInlineEmployeeStatusText(){
     const newText=fixed.join('\n');
     if(newText!==text){
       box.innerText=newText;
-      localStorage.setItem(LOCAL_STORAGE_PREFIX+(box.dataset.key||''),newText);
+      setCellValue(box.dataset.key||'', newText, {dirty:false});
     }
   });
 }
@@ -1255,7 +1527,15 @@ function currentWeekKey(){return 'w'+(Number(document.getElementById('weekSelect
 function slug(str){return String(str).replace(/[()（）+＋\s\/]/g,'_').replace(/[^\u4e00-\u9fa5A-Za-z0-9_\-]/g,'').replace(/_+/g,'_').replace(/^_|_$/g,'')}
 function cellKey(venue,type,row,field){return `${currentWeekKey()}-${venue}-${type}-${row}-${field}`}
 function sourceKey(venue,period){return `${currentWeekKey()}-${venue}-lifeguard-source-${period}`}
-function getSaved(key){const prefixes=[LOCAL_STORAGE_PREFIX,LEGACY_STORAGE_PREFIX];for(const p of prefixes){const v=localStorage.getItem(p+key);if(v!==null)return v}return null}
+function frontdeskSourceKey(venue,period){return `${currentWeekKey()}-${venue}-frontdesk-source-${period}`}
+function dutyGridRowsKey(venue,role){return `${currentWeekKey()}-${venue}-${role}-dutygrid-rows`}
+function dutyGridCellKey(venue,role,row,dayNo){return `${currentWeekKey()}-${venue}-${role}-dutygrid-r${row}-d${dayNo}`}
+function getSaved(key){
+  // 已從 DB 水合：state 為唯一真實來源，不再回讀 localStorage（避免陳舊值復活造成分歧）。
+  if(scheduleState.loaded){ return scheduleState.cells.has(key) ? scheduleState.cells.get(key) : null; }
+  // 尚未載入（初始/離線）：退回 localStorage 備援（含 v39 legacy）。
+  const prefixes=[LOCAL_STORAGE_PREFIX,LEGACY_STORAGE_PREFIX];for(const p of prefixes){const v=localStorage.getItem(p+key);if(v!==null)return v}return null;
+}
 function escapeHtml(str){return String(str??'').replace(/[&<>"]/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]))}
 function sampleValue(key){return ''}
 function savedOrSample(key){return getSaved(key)??''}
@@ -1271,29 +1551,36 @@ function employeeLabel(emp){
 }
 function employeeMetaStorageKey(key){return LOCAL_STORAGE_PREFIX+'employee-meta-'+key;}
 function getEmployeeMeta(key){
+  if(scheduleState.meta.has(key)) return scheduleState.meta.get(key);
+  if(scheduleState.loaded) return [];
   try{return JSON.parse(localStorage.getItem(employeeMetaStorageKey(key))||'[]');}
   catch(e){return [];}
 }
 function saveEmployeeMeta(key, arr){
-  localStorage.setItem(employeeMetaStorageKey(key), JSON.stringify(arr.map(x=>({
+  const norm = arr.map(x=>({
     employeeId:x.employeeId||x.id,
     employeeName:x.employeeName||x.name,
     lineBound:!!x.lineBound,
     role:x.role||'',
     venueId:x.venueId||'',
     venueName:x.venueName||x.venue||''
-  }))));
+  }));
+  scheduleState.meta.set(key, norm);             // state 為權威
+  try{ localStorage.setItem(employeeMetaStorageKey(key), JSON.stringify(norm)); }catch(e){}  // 離線備援
+  if(!_isApplyingRemote) markDirty();
 }
 function employeeToolsHTML(key, includeChips=true){
   const chipsHtml=includeChips?`<div class="employee-chips" data-employee-chips="${escapeHtml(key)}"></div>`:'';
   return `<div class="employee-tools" data-employee-tools="${escapeHtml(key)}">
-    <button class="employee-select-btn" type="button" onclick="openEmployeePicker('${escapeAttr(key)}')">＋選擇員工</button>
+    <button class="employee-select-btn" type="button" onclick="openEmployeePicker('${escapeAttr(key)}')">＋ 排班</button>
     ${chipsHtml}
   </div>`;
 }
 let employeePickerTargetKey='';
 function openEmployeePicker(key){
+  svAssignTime=null;  // 一般指派（課程教練/直接寫入該格），非「姓名 時段」模式
   employeePickerTargetKey=key;
+  const t=document.getElementById('employeePickerTitle');if(t)t.textContent='排班 · 選擇員工';
   const modal=document.getElementById('employeePickerModal');
   const search=document.getElementById('employeeSearch');
   if(search) search.value='';
@@ -1324,6 +1611,24 @@ function renderEmployeePickerList(){
 function selectEmployeeForTarget(employeeId){
   const emp=employeeById(employeeId);
   if(!emp || !employeePickerTargetKey) return;
+  // 缺口排班模式：把「姓名 時段」加進救生/櫃台來源框
+  if(svAssignTime){
+    const key=employeePickerTargetKey;
+    const prev=String(getSaved(key)||'').trim();
+    const line=`${employeeDisplayNameWithLineStatus(emp)} ${svAssignTime}`;
+    const next=prev?`${prev}\n${line}`:line;
+    const srcBox=document.querySelector(`[data-key="${CSS.escape(key)}"]`);
+    if(srcBox) srcBox.innerText=next;   // 同步來源框 DOM，讓時間軸即時讀到
+    setCellValue(key, next);
+    const meta=getEmployeeMeta(key);
+    if(!meta.some(x=>String(x.employeeId)===String(emp.id))){
+      meta.push({employeeId:emp.id, employeeName:emp.name, lineBound:isLineBound(emp), role:emp.role, venueId:emp.venueId||'', venueName:emp.venueName||emp.venue||''});
+      saveEmployeeMeta(key, meta);
+    }
+    svAssignTime=null;
+    refreshEmployeeChips(); closeEmployeePicker(); validateAll(); scheduleAutoSave();
+    return;
+  }
   const box=document.querySelector(`[data-key="${CSS.escape(employeePickerTargetKey)}"]`);
   if(box){
     const lines=usefulLines(box.innerText);
@@ -1332,7 +1637,7 @@ function selectEmployeeForTarget(employeeId){
       const displayName=employeeDisplayNameWithLineStatus(emp);
       box.innerText=text ? `${text}\n${displayName}` : displayName;
     }
-    localStorage.setItem(LOCAL_STORAGE_PREFIX+employeePickerTargetKey, box.innerText.replace(/\n+$/,''));
+    setCellValue(employeePickerTargetKey, box.innerText.replace(/\n+$/,''));
   }
   const meta=getEmployeeMeta(employeePickerTargetKey);
   if(!meta.some(x=>String(x.employeeId)===String(emp.id))){
@@ -1368,10 +1673,38 @@ function content(key,ph,attrs=''){
   return `<div class="editbox" contenteditable="true" data-key="${key}" ${attrs} data-placeholder="${ph}">${escapeHtml(val).replace(/\n/g,'<br>')}</div><div class="cell-status"></div>`;
 }
 function parseTimeRange(text){const raw=String(text||'').trim();const m=raw.match(/(\d{1,2}):(\d{2})\s*[-－~～]\s*(\d{1,2}):(\d{2})/);if(!m)return null;const start=Number(m[1])*60+Number(m[2]),end=Number(m[3])*60+Number(m[4]);if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return null;return{start,end,label:`${m[1].padStart(2,'0')}:${m[2]}-${m[3].padStart(2,'0')}:${m[4]}`}}
+function parseLooseTimeRange(text){
+  const raw=String(text||'').trim();
+  const m=raw.match(/(\d{1,2}):?(\d{2})\s*(?:[-－~～]|到|至)\s*(\d{1,2}):?(\d{2})/);
+  if(!m)return null;
+  const start=Number(m[1])*60+Number(m[2]),end=Number(m[3])*60+Number(m[4]);
+  if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return null;
+  return{start,end,label:`${m[1].padStart(2,'0')}:${m[2]}-${m[3].padStart(2,'0')}:${m[4]}`,raw:m[0]};
+}
+function compactTimeLabel(label){
+  const t=parseLooseTimeRange(label);
+  if(!t)return String(label||'');
+  return `${minutesToTime(t.start).replace(':','')}-${minutesToTime(t.end).replace(':','')}`;
+}
 function timesOverlap(a,b){return!!(a&&b&&Math.max(a.start,b.start)<Math.min(a.end,b.end))}
 function normalizeName(str){return String(str||'').replace(/[0-9]/g,'').replace(/[()（）\[\]【】,:：;；、\/\\\-－]/g,' ').replace(/\s+/g,' ').trim()}
 function activeDaysForPeriod(period,week){if(period==='weekday')return week.activeWeekdays;if(period==='sat')return[6];if(period==='sun')return[7];const mm=String(period||'').match(/^manual-day-(\d)$/);if(mm)return[Number(mm[1])];return[7]}
 function dayName(d){return({1:'一',2:'二',3:'三',4:'四',5:'五',6:'六',7:'日'})[d]||d}
+function dutyPeriodForDay(dayNo){const d=Number(dayNo);if(d>=1&&d<=5)return'weekday';if(d===6)return'sat';return'sun'}
+function datesInWeek(week){
+  const start=parseISODateAsLocal(week.start),end=parseISODateAsLocal(week.end),out=[];
+  if(!start||!end)return out;
+  for(const d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+    const dayNo=d.getDay()===0?7:d.getDay();
+    out.push({
+      iso:dateToISO(d),
+      dayNo,
+      label:`${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`,
+      weekday:`週${dayName(dayNo)}`,
+    });
+  }
+  return out;
+}
 function usefulLines(text){return String(text||'').split(/\n+/).map(s=>cleanEmployeeDisplayName(s.trim())).filter(s=>s&&!/^(待排|待確認|確認中|缺|無|x|X|-|－)$/.test(s))}
 function parseShiftLines(text,period,week,sourceCell=null,sourceVenue='',metaKey=''){
   const rows=[],def=activeDaysForPeriod(period,week);
@@ -1384,7 +1717,46 @@ function parseShiftLines(text,period,week,sourceCell=null,sourceVenue='',metaKey
     const days=period==='weekday'?(dm?Array.from(new Set(dm.join('').split('').map(Number))).filter(d=>def.includes(d)):[...def]):[...def];
     const name=normalizeName(rest.replace(/[1-5]+/g,' '));
     const emp=findEmployeeForLine(name,metaKey);
-    if(name&&time&&days.length)rows.push({name,employeeId:emp?.id||'',lineBound:!!emp?.lineBound,role:emp?.role||'',employeeVenue:emp?.venue||'',time,days,raw:line,sourceCell,venue:sourceVenue,period});
+    if(name&&time&&days.length)rows.push({name,employeeId:emp?.id||'',lineBound:!!emp?.lineBound,role:emp?.role||'',employeeVenue:emp?.venue||'',time,days,raw:line,sourceCell,venue:sourceVenue,venueId:sourceCell?.dataset?.venueId||venueIdByName(sourceVenue)||'',period,key:metaKey});
+  });
+  return rows;
+}
+function roleMarkerFromLine(line){
+  if(/櫃台|櫃|front\s*desk|fd/i.test(line)) return 'frontdesk';
+  if(/救生|救|life\s*guard|lg/i.test(line)) return 'lifeguard';
+  return '';
+}
+function cleanDutyGridName(line,timeRaw){
+  return normalizeName(String(line||'')
+    .replace(timeRaw||'',' ')
+    .replace(/櫃台|櫃|救生|救|front\s*desk|life\s*guard|\bfd\b|\blg\b/ig,' ')
+    .replace(/[1-7]+/g,' '));
+}
+function parseDutyGridLines(text,role,dayNo,week,sourceCell=null,sourceVenue='',metaKey=''){
+  const rows=[];
+  usefulLines(text).forEach(line=>{
+    const time=parseLooseTimeRange(line);
+    if(!time)return;
+    const marker=roleMarkerFromLine(line);
+    if(marker && marker!==role)return;
+    const name=cleanDutyGridName(line,time.raw);
+    const emp=findEmployeeForLine(name,metaKey);
+    if(name)rows.push({
+      name,
+      employeeId:emp?.id||'',
+      lineBound:!!emp?.lineBound,
+      role:emp?.role||'',
+      employeeVenue:emp?.venue||'',
+      time,
+      days:[Number(dayNo)],
+      raw:line,
+      sourceCell,
+      venue:sourceVenue,
+      venueId:sourceCell?.dataset?.venueId||venueIdByName(sourceVenue)||'',
+      period:dutyPeriodForDay(dayNo),
+      dayNo:Number(dayNo),
+      key:metaKey
+    });
   });
   return rows;
 }
@@ -1437,9 +1809,58 @@ function countAssignmentsSingle(text,period,week,metaKey=''){
 }
 function countWeekday(text,days){const counts={};days.forEach(d=>counts[d]=0);usefulLines(text).forEach(line=>{const m=line.match(/[1-5]+/g);const ds=m?Array.from(new Set(m.join('').split('').map(Number))).filter(d=>days.includes(d)):days;ds.forEach(d=>counts[d]++)});return counts}
 function countSingle(text){return usefulLines(text).length}
+function getDutyGridRowCount(venueName,role){
+  const saved=parseInt(String(getSaved(dutyGridRowsKey(venueName,role))||''),10);
+  return Number.isFinite(saved)&&saved>0?saved:3;
+}
+function setDutyGridRowCount(venueName,role,count){
+  setCellValue(dutyGridRowsKey(venueName,role),String(Math.max(1,count)));
+}
+function dutyRoleLabel(role){return role==='frontdesk'?'櫃台':'救生'}
+function dutyRoleMarker(role){return role==='frontdesk'?'櫃':'救'}
+function dutyRoleClass(role){return role==='frontdesk'?'frontdesk':'lifeguard'}
+function buildDutyGrid(venue,week,role){
+  const dates=datesInWeek(week),rowCount=getDutyGridRowCount(venue.name,role),venueId=venue.venueId||venueIdByName(venue.name)||'';
+  const head=dates.map(d=>`<th>${d.label}<small>${d.weekday}</small></th>`).join('');
+  const rows=Array.from({length:rowCount},(_,ri)=>{
+    const cells=dates.map(d=>{
+      const key=dutyGridCellKey(venue.name,role,ri+1,d.dayNo),val=savedOrSample(key);
+      return `<td class="duty-grid-cell" data-duty-cell="true" data-duty-role="${role}" data-day-no="${d.dayNo}" data-date="${d.iso}" data-venue="${escapeHtml(venue.name)}" data-venue-id="${venueId}">
+        <div class="editbox duty-grid-entry" contenteditable="true" data-key="${key}" data-role="${role}-source" data-duty-role="${role}" data-day-no="${d.dayNo}" data-date="${d.iso}" data-venue="${escapeHtml(venue.name)}" data-venue-id="${venueId}" data-placeholder="王小明 ${dutyRoleMarker(role)}0800-1700">${escapeHtml(val).replace(/\n/g,'<br>')}</div>
+        <div class="cell-status"></div>
+      </td>`;
+    }).join('');
+    return `<tr><th class="row-head">${ri+1}</th>${cells}</tr>`;
+  }).join('');
+  const need=role==='frontdesk'?'1－2 人':`${venue.lifeguardMin}－${venue.lifeguardMax} 人`;
+  return `<div class="duty-sheet ${dutyRoleClass(role)}">
+    <div class="duty-sheet-title"><span>${dutyRoleLabel(role)}</span><small>${need}</small></div>
+    <div class="duty-grid-scroll"><table class="duty-grid"><thead><tr><th class="row-head">列</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="duty-sheet-actions"><button class="mini-btn" type="button" onclick="addDutyGridRow('${escapeAttr(venue.name)}','${role}')">＋新增列</button><button class="mini-btn" type="button" onclick="removeDutyGridRow('${escapeAttr(venue.name)}','${role}')">－刪除末列</button></div>
+  </div>`;
+}
+function addDutyGridRow(venueName,role){
+  setDutyGridRowCount(venueName,role,getDutyGridRowCount(venueName,role)+1);
+  render();
+  scheduleAutoSave();
+}
+function removeDutyGridRow(venueName,role){
+  const count=getDutyGridRowCount(venueName,role);
+  if(count<=1)return;
+  if(!confirm(`刪除 ${venueName} ${dutyRoleLabel(role)}第 ${count} 列？`))return;
+  datesInWeek(svWeek()||weeks[Number(document.getElementById('weekSelect')?.value||0)]).forEach(d=>{
+    const key=dutyGridCellKey(venueName,role,count,d.dayNo);
+    setCellValue(key,'');
+  });
+  setDutyGridRowCount(venueName,role,count-1);
+  render();
+  scheduleAutoSave();
+}
 function buildLifeguardInputs(venue,week){const periods=[['weekday','平日救生完整班段','例：員工姓名 05:30-14:00 123\n員工姓名 10:00-12:00 45'],['sat','週六救生完整班段','例：員工姓名 05:30-14:00\n員工姓名 14:00-22:30'],['sun','週日救生完整班段','例：員工姓名 05:30-14:00\n員工姓名 14:00-22:30']];return `<div class="lifeguard-inputs">${periods.map(([period,title,ph])=>{const key=sourceKey(venue.name,period),val=savedOrSample(key),venueId=venue.venueId||venueIdByName(venue.name)||'';return `<div class="source-card source-cell" data-source-cell="${period}" data-venue="${venue.name}" data-venue-id="${venueId}"><div class="source-title">${title}</div><div class="editbox lifeguard-source" contenteditable="true" data-key="${key}" data-role="lifeguard-source" data-period="${period}" data-venue="${venue.name}" data-venue-id="${venueId}" data-placeholder="${ph}">${escapeHtml(val).replace(/\n/g,'<br>')}</div>${employeeToolsHTML(key)}<div class="cell-status"></div></div>`}).join('')}</div>`}
-function buildDutyRows(venue,rows,week){return rows.map(([no,time])=>{const timeKey=cellKey(venue.name,'duty',no,'time'),rowTime=getSaved(timeKey)||time,fdWeek=cellKey(venue.name,'duty',no,'weekday-frontdesk'),fdSat=cellKey(venue.name,'duty',no,'sat-frontdesk'),fdSun=cellKey(venue.name,'duty',no,'sun-frontdesk'),note=cellKey(venue.name,'duty',no,'note');return `<tr data-duty-row="${no}"><td class="no-col">${no}</td><td class="time-cell"><div class="time-edit segment-time" contenteditable="true" data-key="${timeKey}">${escapeHtml(rowTime)}</div></td><td class="edit-cell weekday-col need-validate">${content(fdWeek,'櫃台人員',`data-role="frontdesk" data-period="weekday" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"`)}</td><td class="edit-cell lifeguard-display weekday-col" data-role="lifeguard-display" data-period="weekday" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"><div class="lifeguard-lines"><span class="empty">自動展開</span></div><div class="cell-status"></div></td><td class="edit-cell sat-col need-validate">${content(fdSat,'週六櫃台',`data-role="frontdesk" data-period="sat" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"`)}</td><td class="edit-cell lifeguard-display sat-col" data-role="lifeguard-display" data-period="sat" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"><div class="lifeguard-lines"><span class="empty">自動展開</span></div><div class="cell-status"></div></td><td class="edit-cell sun-col need-validate">${content(fdSun,'週日櫃台',`data-role="frontdesk" data-period="sun" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"`)}</td><td class="edit-cell lifeguard-display sun-col" data-role="lifeguard-display" data-period="sun" data-venue="${venue.name}" data-venue-id="${venue.venueId||venueIdByName(venue.name)||''}"><div class="lifeguard-lines"><span class="empty">自動展開</span></div><div class="cell-status"></div></td><td class="edit-cell note-col">${content(note,'備註 / 例外')}</td></tr>`}).join('')}
-function buildDutySection(venue,week){return `<section class="section" data-section="duty" data-venue="${venue.name}"><div class="section-head"><span>櫃台 / 救生排班</span><small>救生上方輸入完整班段，下方自動依時段展開</small></div>${buildLifeguardInputs(venue,week)}<div class="table-wrap"><table class="duty-table"><thead><tr><th class="no-col" rowspan="2">段</th><th rowspan="2">時段</th><th colspan="2">平日<span class="head-sub">${week.weekday}</span></th><th colspan="2">週六<span class="head-sub">${week.sat}</span></th><th colspan="2">週日<span class="head-sub">${week.sun}</span></th><th rowspan="2" class="note-col">備註 / 例外</th></tr><tr><th class="frontdesk-head">櫃台<br><span class="head-sub">1－2人</span></th><th class="lifeguard-head">救生<br><span class="head-sub">${venue.lifeguardMin}－${venue.lifeguardMax}人</span></th><th class="frontdesk-head">櫃台<br><span class="head-sub">1－2人</span></th><th class="lifeguard-head">救生<br><span class="head-sub">${venue.lifeguardMin}－${venue.lifeguardMax}人</span></th><th class="frontdesk-head">櫃台<br><span class="head-sub">1－2人</span></th><th class="lifeguard-head">救生<br><span class="head-sub">${venue.lifeguardMin}－${venue.lifeguardMax}人</span></th></tr></thead><tbody>${buildDutyRows(venue,venue.duty,week)}</tbody></table></div><div class="mini-actions"><button class="mini-btn" onclick="addDutyRow(this,'${venue.name}')">＋新增時段列</button></div></section>`}
+// 問題一：櫃台改成與救生相同的「輸入」方式 —— 上方輸入「姓名 時段 星期」，下方依時段自動展開
+function buildFrontdeskInputs(venue,week){const periods=[['weekday','平日櫃台班段','例：員工姓名 09:00-17:00 123\n員工姓名 13:00-21:00 45'],['sat','週六櫃台班段','例：員工姓名 09:00-17:00'],['sun','週日櫃台班段','例：員工姓名 09:00-17:00']];return `<div class="frontdesk-inputs">${periods.map(([period,title,ph])=>{const key=frontdeskSourceKey(venue.name,period),val=savedOrSample(key),venueId=venue.venueId||venueIdByName(venue.name)||'';return `<div class="source-card fd-source-cell" data-source-cell="${period}" data-venue="${venue.name}" data-venue-id="${venueId}"><div class="source-title fd-title">${title}</div><div class="editbox frontdesk-source" contenteditable="true" data-key="${key}" data-role="frontdesk-source" data-period="${period}" data-venue="${venue.name}" data-venue-id="${venueId}" data-placeholder="${ph}">${escapeHtml(val).replace(/\n/g,'<br>')}</div>${employeeToolsHTML(key)}<div class="cell-status"></div></div>`}).join('')}</div>`}
+function buildDutyRows(venue,rows,week){return rows.map(([no,time])=>{const timeKey=cellKey(venue.name,'duty',no,'time'),rowTime=getSaved(timeKey)||time,note=cellKey(venue.name,'duty',no,'note');const vid=venue.venueId||venueIdByName(venue.name)||'';const fdCell=p=>`<td class="edit-cell frontdesk-display ${p}-col" data-role="frontdesk-display" data-period="${p}" data-venue="${venue.name}" data-venue-id="${vid}"><div class="frontdesk-lines"><span class="empty">自動展開</span></div><div class="cell-status"></div></td>`;const lgCell=p=>`<td class="edit-cell lifeguard-display ${p}-col" data-role="lifeguard-display" data-period="${p}" data-venue="${venue.name}" data-venue-id="${vid}"><div class="lifeguard-lines"><span class="empty">自動展開</span></div><div class="cell-status"></div></td>`;return `<tr data-duty-row="${no}"><td class="no-col">${no}</td><td class="time-cell"><div class="time-edit segment-time" contenteditable="true" data-key="${timeKey}">${escapeHtml(rowTime)}</div></td>${fdCell('weekday')}${lgCell('weekday')}${fdCell('sat')}${lgCell('sat')}${fdCell('sun')}${lgCell('sun')}<td class="edit-cell note-col">${content(note,'備註 / 例外')}</td></tr>`}).join('')}
+function buildDutySection(venue,week){return `<section class="section" data-section="duty" data-venue="${venue.name}"><div class="section-head"><span>櫃台 / 救生排班</span><small>左櫃台／右救生；日期橫軸；每格可手打，例如：王小明 櫃0800-1700</small></div><div class="duty-sheet-wrap">${buildDutyGrid(venue,week,'frontdesk')}${buildDutyGrid(venue,week,'lifeguard')}</div></section>`}
 function flattenCourses(venue){const rows=[];venue.courses.forEach(c=>c.slots.forEach(s=>rows.push({courseName:c.name,code:s.code,time:s.time,id:`${slug(c.name)}-${s.code}`})));return rows}
 function flattenHolidayCourses(venue){const rows=[];(venue.holidayCourses||[]).forEach(c=>c.slots.forEach(s=>rows.push({courseName:c.name,code:s.code,time:s.time,id:`holiday-${slug(c.name)}-${s.code}`})));return rows}
 function buildCourseRow(venue,row,kind){
@@ -1584,7 +2005,8 @@ function parseManualDates(raw,baseYear){
 }
 function buildManualCourseSection(venue,week){
   const weekNo=Number(week.no);
-  const rows=getManualCourses().filter(r=>Number(r.weekNo)===weekNo && r.venueName===venue.name).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
+  const vId=String(venue.venueId||venueIdByName(venue.name)||'');
+  const rows=getManualCourses().filter(r=>Number(r.weekNo)===weekNo && (r.venueName===venue.name || (vId && String(r.venueId||'')===vId))).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
   const body=rows.length?rows.map(r=>buildManualCourseRow(venue,r,week)).join(''):`<tr><td colspan="9" class="manual-empty">本週尚未新增手動課程。</td></tr>`;
   const vSlug=slug(venue.name);
   return `<section class="section" data-section="manual"><div class="section-head"><span>本週手動課程 / 外部課程</span><small>只顯示 ${week.label} 的手動課程，會一起檢查教練撞班</small></div>
@@ -1599,6 +2021,10 @@ function buildManualCourseSection(venue,week){
       <button type="button" class="manual-add-btn" onclick="addManualCourseFromForm(this,'${escapeAttr(venue.name)}')">＋新增</button>
     </div>
     <div class="table-wrap"><table class="manual-table course-table"><thead><tr><th>日期</th><th>課程名稱</th><th>時段</th><th class="enroll-col">人數</th><th class="needed-col">需教練</th><th class="course-head">教練</th><th class="note-col">備註</th><th>來源</th><th>操作</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="external-block">
+      <div class="external-head">外部課程<span class="ext-badge">外接資料源</span><small style="font-weight:600;color:#94a3b8">報名系統帶入，唯讀</small></div>
+      <div class="external-courses" data-external-venue="${escapeHtml(venue.name)}" data-external-venue-id="${escapeHtml(venue.venueId||venueIdByName(venue.name)||'')}"><div class="external-empty">載入中…</div></div>
+    </div>
   </section>`;
 }
 function buildManualCourseRow(venue,row,week){
@@ -1666,14 +2092,23 @@ async function addManualCourseFromForm(btn,venueName){
     if(!res.ok) throw new Error('manual course create API status '+res.status);
     const raw=await res.json().catch(()=>null);
     const created=extractApiItems(raw).map(r=>normalizeManualCourseRow(r,week.no));
+    const createdWeeks=new Set();
     created.forEach(row=>{
+      // 強制對齊館別（避免 API 回傳 venueName/venueId 與目前館別比對失敗而不顯示）
+      row.venueName=venueName;
+      row.venueId=venueIdByName(venueName)||row.venueId;
       manualCourseApiCache=manualCourseApiCache.filter(r=>String(r.id)!==String(row.id)).concat(row);
       loadedManualCourseWeeks.delete(String(row.weekNo));
+      createdWeeks.add(Number(row.weekNo));
     });
     loadedManualCourseWeeks.delete(String(week.no));
     await loadManualCoursesForWeek(week.no,{force:true,rerender:false});
-    const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
-    setSyncStatus('saved','手動課程已同步 '+hm);
+    setSyncStatus('saved','手動課程已同步 '+nowHm());
+    // 若新增的課程不在目前檢視的週次，明確告知使用者它被排到哪幾週
+    if(createdWeeks.size && !createdWeeks.has(Number(week.no))){
+      const wk=[...createdWeeks].sort((a,b)=>a-b).join('、第');
+      alert(`已新增 ${created.length} 筆手動課程，分別排在第${wk}週（目前檢視第 ${week.no} 週）。請切換週次即可看到。`);
+    }
   }catch(err){
     console.warn('manual course create API failed:',err);
     setSyncStatus('error','手動課程新增失敗');
@@ -1761,8 +2196,34 @@ function buildCourseSection(venue,week){const rows=flattenCourses(venue);return 
 function buildHolidayCourseSection(venue,week){const rows=flattenHolidayCourses(venue);return `<section class="section" data-section="holiday"><div class="section-head"><span>假日游泳班 / 教練</span><small>固定 A、B、C、E、F、H、I、J，共 ${rows.length} 個時段；只排週六、週日</small></div><div class="table-wrap"><table class="course-table"><thead><tr><th>課程名稱</th><th>代碼</th><th>時段</th><th class="enroll-col">報名人數</th><th class="needed-col">需教練數</th><th class="course-head">週六<span class="head-sub">${week.sat}</span></th><th class="course-head">週日<span class="head-sub">${week.sun}</span></th><th class="note-col">備註</th></tr></thead><tbody>${rows.map(r=>buildCourseRow(venue,r,'holiday')).join('')}</tbody></table></div><div class="mini-actions"><button class="mini-btn" onclick="addHolidayCourseRow(this,'${venue.name}')">＋新增假日班時段</button></div></section>`}
 function getVenueRule(venueName,role){if(role==='frontdesk')return{min:1,max:2,label:'櫃台'};const venue=venues.find(v=>v.name===venueName);return{min:venue.lifeguardMin,max:venue.lifeguardMax,label:'救生'}}
 function validateFrontdesk(cell,week){const box=cell.querySelector('.editbox'),status=cell.querySelector('.cell-status'),rule=getVenueRule(box.dataset.venue,box.dataset.role),text=box.innerText.trim(),period=box.dataset.period;cell.classList.remove('ok','warn');if(!text){cell.classList.add('warn');status.textContent=`${rule.label}不足：最少 ${rule.min} 人`;return}if(period==='weekday'){const counts=countWeekday(text,week.activeWeekdays),bad=[];Object.entries(counts).forEach(([d,c])=>{if(c<rule.min)bad.push(`${d}不足${c}/${rule.min}`);if(c>rule.max)bad.push(`${d}超過${c}/${rule.max}`)});if(bad.length){cell.classList.add('warn');status.textContent=bad.join('、')}else{cell.classList.add('ok');status.textContent=`OK｜${Object.entries(counts).map(([d,c])=>`${d}:${c}`).join(' ')}`}}else{const count=countSingle(text);if(count<rule.min){cell.classList.add('warn');status.textContent=`${rule.label}不足：${count}/${rule.min}`}else if(count>rule.max){cell.classList.add('warn');status.textContent=`${rule.label}超過：${count}/${rule.max}`}else{cell.classList.add('ok');status.textContent=`OK｜${count}人`}}}
-function allLifeguardShifts(week){const rows=[];document.querySelectorAll('.lifeguard-source').forEach(box=>{rows.push(...parseShiftLines(box.innerText,box.dataset.period,week,box.closest('.source-cell'),box.dataset.venue,box.dataset.key))});return rows}
+function allDutyGridShifts(week,role){
+  const rows=[];
+  document.querySelectorAll(`.duty-grid-entry[data-duty-role="${role}"]`).forEach(box=>{
+    const dayNo=Number(box.dataset.dayNo);
+    rows.push(...parseDutyGridLines(box.innerText,role,dayNo,week,box.closest('.duty-grid-cell'),box.dataset.venue,box.dataset.key));
+  });
+  return rows;
+}
+function renderDutyGridCells(week,role){
+  document.querySelectorAll(`.duty-grid-cell[data-duty-role="${role}"]`).forEach(cell=>{
+    const box=cell.querySelector('.duty-grid-entry'),status=cell.querySelector('.cell-status');
+    if(!box||!status)return;
+    const text=box.innerText.trim(),total=usefulLines(text).length;
+    const parsed=parseDutyGridLines(text,role,Number(box.dataset.dayNo),week,cell,box.dataset.venue,box.dataset.key);
+    cell.classList.remove('ok','warn');
+    if(!text){status.textContent='';return;}
+    if(parsed.length<total){
+      cell.classList.add('warn');
+      status.textContent=`有 ${total-parsed.length} 筆未讀到時間`;
+    }else{
+      cell.classList.add('ok');
+      status.textContent=`已讀取 ${parsed.length} 筆`;
+    }
+  });
+}
+function allLifeguardShifts(week){const rows=allDutyGridShifts(week,'lifeguard');document.querySelectorAll('.lifeguard-source').forEach(box=>{rows.push(...parseShiftLines(box.innerText,box.dataset.period,week,box.closest('.source-cell'),box.dataset.venue,box.dataset.key))});return rows}
 function renderLifeguards(week){const shifts=allLifeguardShifts(week);document.querySelectorAll('.source-cell').forEach(cell=>{const box=cell.querySelector('.lifeguard-source'),status=cell.querySelector('.cell-status'),parsed=parseShiftLines(box.innerText,box.dataset.period,week,cell,box.dataset.venue,box.dataset.key),total=usefulLines(box.innerText).length;cell.classList.remove('ok','warn');if(!box.innerText.trim()){status.textContent='未填救生班段';return}if(parsed.length<total){cell.classList.add('warn');status.textContent=`有 ${total-parsed.length} 筆缺少時間，格式：姓名 05:30-14:00`}else{cell.classList.add('ok');status.textContent=`已讀取 ${parsed.length} 筆班段`}});document.querySelectorAll('.lifeguard-display').forEach(cell=>{const venueName=cell.dataset.venue,period=cell.dataset.period,tr=cell.closest('tr'),timeText=tr?.querySelector('.segment-time')?.innerText||'',segment=parseTimeRange(timeText),rule=getVenueRule(venueName,'lifeguard'),linesBox=cell.querySelector('.lifeguard-lines'),status=cell.querySelector('.cell-status');cell.classList.remove('ok','warn');if(!segment){linesBox.innerHTML='<span class="empty">時段格式錯誤</span>';cell.classList.add('warn');status.textContent='請用 05:30-08:00 格式';return}const days=activeDaysForPeriod(period,week),matched=shifts.filter(s=>s.venue===venueName&&timesOverlap(s.time,segment)&&s.days.some(d=>days.includes(d)));if(!matched.length){linesBox.innerHTML='<span class="empty">無救生</span>';cell.classList.add('warn');status.textContent=`救生不足：0/${rule.min}`;return}const unique=[],seen=new Set();matched.forEach(s=>{const dLabel=period==='weekday'?s.days.filter(d=>days.includes(d)).join(''):'';const key=s.name+s.time.label+dLabel;if(!seen.has(key)){seen.add(key);unique.push({...s,dLabel})}});linesBox.innerHTML=unique.map(s=>`<span class="shift">${escapeHtml(s.name)}<small>${escapeHtml(s.time.label)}${s.dLabel?'｜'+s.dLabel:''}</small></span>`).join('');const counts={};days.forEach(d=>counts[d]=new Set());matched.forEach(s=>s.days.forEach(d=>{if(counts[d])counts[d].add(s.name)}));const bad=[];Object.entries(counts).forEach(([d,set])=>{const c=set.size;if(c<rule.min)bad.push(`${dayName(d)}不足${c}/${rule.min}`);if(c>rule.max)bad.push(`${dayName(d)}超過${c}/${rule.max}`)});if(bad.length){cell.classList.add('warn');status.textContent=bad.join('、')}else{cell.classList.add('ok');status.textContent=`OK｜${Object.entries(counts).map(([d,set])=>`${dayName(d)}:${set.size}`).join(' ')}`}})}
+function renderFrontdesks(week){const shifts=allFrontdeskShifts(week);document.querySelectorAll('.fd-source-cell').forEach(cell=>{const box=cell.querySelector('.frontdesk-source'),status=cell.querySelector('.cell-status'),parsed=parseShiftLines(box.innerText,box.dataset.period,week,cell,box.dataset.venue,box.dataset.key),total=usefulLines(box.innerText).length;cell.classList.remove('ok','warn');if(!box.innerText.trim()){status.textContent='未填櫃台班段';return}if(parsed.length<total){cell.classList.add('warn');status.textContent=`有 ${total-parsed.length} 筆缺少時間，格式：姓名 09:00-17:00`}else{cell.classList.add('ok');status.textContent=`已讀取 ${parsed.length} 筆班段`}});document.querySelectorAll('.frontdesk-display').forEach(cell=>{const venueName=cell.dataset.venue,period=cell.dataset.period,tr=cell.closest('tr'),timeText=tr?.querySelector('.segment-time')?.innerText||'',segment=parseTimeRange(timeText),rule=getVenueRule(venueName,'frontdesk'),linesBox=cell.querySelector('.frontdesk-lines'),status=cell.querySelector('.cell-status');cell.classList.remove('ok','warn');if(!segment){linesBox.innerHTML='<span class="empty">時段格式錯誤</span>';return}const days=activeDaysForPeriod(period,week),matched=shifts.filter(s=>s.venue===venueName&&timesOverlap(s.time,segment)&&s.days.some(d=>days.includes(d)));if(!matched.length){linesBox.innerHTML='<span class="empty">無櫃台</span>';cell.classList.add('warn');status.textContent=`櫃台不足：0/${rule.min}`;return}const unique=[],seen=new Set();matched.forEach(s=>{const dLabel=period==='weekday'?s.days.filter(d=>days.includes(d)).join(''):'';const key=s.name+s.time.label+dLabel;if(!seen.has(key)){seen.add(key);unique.push({...s,dLabel})}});linesBox.innerHTML=unique.map(s=>`<span class="shift">${escapeHtml(s.name)}<small>${escapeHtml(s.time.label)}${s.dLabel?'｜'+s.dLabel:''}</small></span>`).join('');const counts={};days.forEach(d=>counts[d]=new Set());matched.forEach(s=>s.days.forEach(d=>{if(counts[d])counts[d].add(s.name)}));const bad=[];Object.entries(counts).forEach(([d,set])=>{const c=set.size;if(c<rule.min)bad.push(`${dayName(d)}不足${c}/${rule.min}`);if(c>rule.max)bad.push(`${dayName(d)}超過${c}/${rule.max}`)});if(bad.length){cell.classList.add('warn');status.textContent=bad.join('、')}else{cell.classList.add('ok');status.textContent=`OK｜${Object.entries(counts).map(([d,set])=>`${dayName(d)}:${set.size}`).join(' ')}`}})}
 function getNeededNumber(key){const el=document.querySelector(`[data-key="${CSS.escape(key)}"]`),raw=(el?.innerText||getSaved(key)||'').trim(),n=parseInt(raw,10);return Number.isFinite(n)&&n>0?n:null}
 function getEnrollNumberFromCell(cell){
   const tr = cell.closest('tr');
@@ -1849,20 +2310,13 @@ function extractCourseEntries(week){
   });
   return entries;
 }
+function allFrontdeskShifts(week){const rows=allDutyGridShifts(week,'frontdesk');document.querySelectorAll('.frontdesk-source').forEach(box=>{rows.push(...parseShiftLines(box.innerText,box.dataset.period,week,box.closest('.fd-source-cell'),box.dataset.venue,box.dataset.key))});return rows}
 function extractFrontdeskEntries(week){
-  const entries=[];
-  document.querySelectorAll('.editbox[data-role="frontdesk"]').forEach(box=>{
-    const cell=box.closest('.edit-cell'),tr=cell.closest('tr');
-    const time=parseTimeRange(tr?.querySelector('.segment-time')?.innerText||'');
-    if(!time) return;
-    parseAssignments(box.innerText,box.dataset.period,week,box.dataset.key).forEach(a=>{
-      entries.push({...a,roleType:'frontdesk',time,cell,venue:box.dataset.venue,rowKey:(tr?.rowIndex||'')+'|frontdesk|'+(box.dataset.key||'')});
-    });
-  });
-  return entries;
+  // 櫃台改為來源輸入框後，與救生相同：每行自帶時段
+  return allFrontdeskShifts(week).map(f=>({...f,roleType:'frontdesk',cell:f.sourceCell,rowKey:'frontdesk|'+(f.key||'')+'|'+(f.period||'')+'|'+(f.venue||'')+'|'+(f.raw||'')}));
 }
 function extractLifeguardEntries(week){
-  return allLifeguardShifts(week).map(l=>({...l,roleType:'lifeguard',cell:l.sourceCell,rowKey:'lifeguard|'+(l.period||'')+'|'+(l.venue||'')+'|'+(l.raw||'')}));
+  return allLifeguardShifts(week).map(l=>({...l,roleType:'lifeguard',cell:l.sourceCell,rowKey:'lifeguard|'+(l.key||'')+'|'+(l.period||'')+'|'+(l.venue||'')+'|'+(l.raw||'')}));
 }
 function addConflict(cell,msg){
   if(!cell) return;
@@ -2059,6 +2513,22 @@ function normalizeEnrollmentItemFromApi(row, fallbackWeekNo){
   };
 }
 
+let externalCourseData = [];
+let externalCourseLoaded = false;
+// 外部課程（外接資料源）：唯讀顯示報名系統帶入的課程/時段/報名人數，依館別+週次過濾
+function renderExternalCourses(){
+  const weekNo = currentWeekNo();
+  document.querySelectorAll('.external-courses').forEach(box=>{
+    const vId = String(box.dataset.externalVenueId||'');
+    if(!externalCourseLoaded){ box.innerHTML = '<div class="external-empty">外部報名系統未連線或尚未取得資料。</div>'; return; }
+    const rows = externalCourseData
+      .filter(r=>Number(r.weekNo)===weekNo && String(r.venueId)===vId)
+      .sort((a,b)=>String(a.courseName).localeCompare(b.courseName,'zh-Hant')||String(a.slotCode).localeCompare(b.slotCode));
+    if(!rows.length){ box.innerHTML = '<div class="external-empty">本週此館別無外部報名課程。</div>'; return; }
+    const total = rows.reduce((s,r)=>s+(Number(r.registeredCount)||0),0);
+    box.innerHTML = `<table class="external-table"><thead><tr><th>課程</th><th>時段代碼</th><th>報名人數</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${escapeHtml(r.courseName)}</td><td>${escapeHtml(r.slotCode)}</td><td class="external-count">${Number(r.registeredCount)||0}</td></tr>`).join('')}<tr class="external-total"><td colspan="2">合計</td><td class="external-count">${total}</td></tr></tbody></table>`;
+  });
+}
 function applyEnrollmentCounts(payload){
   const source = payload.source;
   const data = Array.isArray(payload.data) ? payload.data : extractApiItems(payload.data || payload);
@@ -2067,7 +2537,11 @@ function applyEnrollmentCounts(payload){
 
   if(source === 'api'){
     const fallbackWeekNo = Number(payload.filters?.weekNo) || 0;
-    data.map(row => normalizeEnrollmentItemFromApi(row, fallbackWeekNo)).forEach(item => {
+    const normalized = data.map(row => normalizeEnrollmentItemFromApi(row, fallbackWeekNo))
+      .filter(it => it.weekNo && it.venueId && it.courseName && it.slotCode);
+    externalCourseData = normalized;   // 供外部課程唯讀區使用
+    externalCourseLoaded = true;
+    normalized.forEach(item => {
       if(!item.weekNo || !item.venueId || !item.courseName || !item.slotCode) return;
 
       const key = enrollmentKeyFromParts(
@@ -2127,6 +2601,7 @@ function applyEnrollmentCounts(payload){
   });
 
   setEnrollmentStatus(source, payload.lastUpdated, payload.message);
+  renderExternalCourses();
   validateAll();
 }
 async function loadEnrollmentCounts(){
@@ -2204,7 +2679,7 @@ function applyZeroEnrollmentRows(){
       if((neededEl.innerText || '').trim() !== '0'){
         neededEl.innerText = '0';
         if(neededEl.dataset.key){
-          localStorage.setItem(LOCAL_STORAGE_PREFIX + neededEl.dataset.key, '0');
+          setCellValue(neededEl.dataset.key, '0', {dirty:false});  // 衍生值，不觸發自動儲存風暴
         }
       }
       tr.classList.add('zero-enroll');
@@ -2230,7 +2705,7 @@ function markIssueRows(){
 function classifyIssue(text){
   const t=String(text||'');
   if(/撞班|撞課|不在可排班時段|同時|超過|重複/.test(t)) return 'critical';
-  if(/不足|未填|請先填|格式錯誤|無救生/.test(t)) return 'shortage';
+  if(/不足|未填|請先填|格式錯誤|無救生|無櫃台/.test(t)) return 'shortage';
   return 'notice';
 }
 function issueGroupLabel(type){
@@ -2283,10 +2758,9 @@ function updateIssueSummary(){
 
 
 function assignedNameFromLine(line,role){
-  if(role==='lifeguard-source'){
-    const tm=line.match(/\d{1,2}:\d{2}\s*[-－~～]\s*\d{1,2}:\d{2}/);
-    const rest=tm?line.replace(tm[0],' '):line;
-    return normalizeName(rest.replace(/[1-5]+/g,' '));
+  if(role==='lifeguard-source' || role==='frontdesk-source'){
+    const tm=parseLooseTimeRange(line);
+    return cleanDutyGridName(line,tm?.raw||'');
   }
   return normalizeName(line.replace(/[1-5]+/g,' '));
 }
@@ -2337,6 +2811,20 @@ function setSectionView(section){
     document.getElementById('section'+s.charAt(0).toUpperCase()+s.slice(1)+'Btn')?.classList.toggle('active', s===section);
   });
 }
+// 先選館別：以 body[data-venue-view] 控制只顯示選定館別的卡片（CSS 過濾，不重繪、不影響存檔/發布的全館蒐集）
+function applyVenueView(){
+  const v=document.getElementById('venueFilter')?.value||'all';
+  document.body.setAttribute('data-venue-view', v);
+  document.querySelectorAll('[data-venue-pill]').forEach(btn=>{
+    btn.classList.toggle('active', btn.getAttribute('data-venue-pill')===v);
+  });
+  if(document.getElementById('svStage')) renderScheduleStage();
+}
+function selectVenueView(name){
+  const sel=document.getElementById('venueFilter');
+  if(sel) sel.value=name;
+  applyVenueView();
+}
 function applyScheduleFilters(){
   document.body.classList.toggle('hide-zero', !!document.getElementById('hideZeroToggle')?.checked);
   document.body.classList.toggle('show-issues-only', !!document.getElementById('issuesOnlyToggle')?.checked);
@@ -2347,8 +2835,8 @@ function expandAllZero(){
   if(toggle) toggle.checked=false;
   applyScheduleFilters();
 }
-function validateAll(){const week=weeks[Number(document.getElementById('weekSelect').value||0)];applyZeroEnrollmentRows();document.querySelectorAll('.need-validate').forEach(cell=>validateFrontdesk(cell,week));renderLifeguards(week);document.querySelectorAll('.course-validate').forEach(cell=>validateCourseCell(cell,week));applyConflictWarnings(week);updateIssueSummary();renderLinePushCheck();applyScheduleFilters();if(!document.getElementById('mobileView')?.classList.contains('hidden-view'))renderMobileView()}
-function render(){const week=weeks[Number(document.getElementById('weekSelect').value||0)],venueFilter=document.getElementById('venueFilter').value;document.getElementById('weekNote').textContent=`目前週別：${week.label}｜平日欄：${week.weekday}｜救生格式：姓名 時段 星期數字`;const visible=venues.filter(v=>venueFilter==='all'||v.name===venueFilter);document.getElementById('venueList').innerHTML=visible.map(v=>`<article class="venue-card" data-venue-card="${v.name}"><div class="venue-head"><div><div class="venue-title">${v.name}</div><div class="subtitle">${week.label}</div></div><div class="venue-meta">${v.tags.map((t,i)=>`<span class="tag ${['blue','green','orange'][i%3]}">${t}</span>`).join('')}</div></div><div class="venue-body">${buildDutySection(v,week)}<div class="course-stack">${buildCourseSection(v,week)}${buildHolidayCourseSection(v,week)}${buildManualCourseSection(v,week)}</div></div></article>`).join('');bindAutoSave();refreshEmployeeChips();validateAll();if(!document.getElementById('payrollView')?.classList.contains('hidden-view'))renderPayrollReport();loadEnrollmentCounts();loadManualCoursesForWeek(week.no);loadExistingScheduleAssignments();renderAvailabilityReport();refreshInlineEmployeeStatusText();}
+function validateAll(){const week=weeks[Number(document.getElementById('weekSelect').value||0)];applyZeroEnrollmentRows();renderDutyGridCells(week,'frontdesk');renderDutyGridCells(week,'lifeguard');renderFrontdesks(week);renderLifeguards(week);document.querySelectorAll('.course-validate').forEach(cell=>validateCourseCell(cell,week));applyConflictWarnings(week);updateIssueSummary();renderLinePushCheck();applyScheduleFilters();if(!document.getElementById('mobileView')?.classList.contains('hidden-view'))renderMobileView();renderScheduleStage();}
+function render(){const week=weeks[Number(document.getElementById('weekSelect').value||0)],venueFilter=document.getElementById('venueFilter').value;document.getElementById('weekNote').textContent=`目前週別：${week.label}｜平日欄：${week.weekday}｜救生格式：姓名 時段 星期數字`;const visible=venues;/* 一律建構全部館別，避免存檔/發布漏館；以 CSS 只顯示選定館別 */document.getElementById('venueList').innerHTML=visible.map(v=>`<article class="venue-card" data-venue-card="${v.name}"><div class="venue-head"><div><div class="venue-title">${v.name}</div><div class="subtitle">${week.label}</div></div><div class="venue-meta">${v.tags.map((t,i)=>`<span class="tag ${['blue','green','orange'][i%3]}">${t}</span>`).join('')}</div></div><div class="venue-body">${buildDutySection(v,week)}<div class="course-stack">${buildCourseSection(v,week)}${buildHolidayCourseSection(v,week)}${buildManualCourseSection(v,week)}</div></div></article>`).join('');bindAutoSave();refreshEmployeeChips();validateAll();if(!document.getElementById('payrollView')?.classList.contains('hidden-view'))renderPayrollReport();loadEnrollmentCounts();loadManualCoursesForWeek(week.no);loadExistingScheduleAssignments();renderAvailabilityReport();refreshInlineEmployeeStatusText();applyVenueView();}
 let _autoSaveTimer=null;
 let _lastServerUpdatedAt=0;
 let _lastEditTime=0;
@@ -2359,26 +2847,50 @@ async function saveToServer(){
   if(_isSaving)return;
   _isSaving=true;
   clearTimeout(_autoSaveTimer);
+  clearTimeout(_saveRetryTimer);
   setSyncStatus('saving','儲存中');
-  document.querySelectorAll('[contenteditable][data-key]').forEach(el=>localStorage.setItem(LOCAL_STORAGE_PREFIX+el.dataset.key,el.innerText.replace(/\n+$/,'')));
+  // flush 目前 DOM 可編輯格 → state（保險，確保 state 含最新輸入）
+  document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{
+    const v=el.innerText.replace(/\n+$/,'');
+    scheduleState.cells.set(el.dataset.key, v);
+    try{localStorage.setItem(LOCAL_STORAGE_PREFIX+el.dataset.key, v);}catch(e){}
+  });
   const payload=collectSchedulePayload();
+  if(shouldBlockProtectedEmptySave(payload)){
+    _dirty=true;
+    document.body.classList.add('unsaved');
+    setSyncStatus('error','保護：空白班表未寫入');
+    alert('保護機制：目前畫面沒有任何可辨識的排班資料，因此未寫入資料庫，避免覆蓋已排好的班。請先確認班表已載入或重新整理後再存檔。');
+    _isSaving=false;
+    return;
+  }
   try{
     const res=await fetch(API_ENDPOINTS.scheduleAssignments,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});
     if(!res.ok)throw new Error('API status '+res.status);
     const raw=await res.json().catch(()=>null);
     const saved=unwrapApiPayload(raw)||{};
     _lastServerUpdatedAt=saved.updatedAt?new Date(saved.updatedAt).getTime():Date.now();
+    scheduleState.updatedAt=_lastServerUpdatedAt;
+    _serverHadScheduleData=payloadHasScheduleValue(payload);
+    _serverHadWorkRows=payloadHasWorkRows(payload);
+    _serverHadShiftRows=payloadHasShiftRows(payload);
+    _dirty=false;
+    _saveRetryDelay=0;
     document.body.classList.remove('unsaved');
-    const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
-    setSyncStatus('saved','已儲存 '+hm);
+    setSyncStatus('saved','已儲存 '+nowHm());
   }catch(err){
     console.warn('saveToServer failed:',err);
-    setSyncStatus('error','儲存失敗，請重試');
+    setSyncStatus('error','儲存失敗，重試中…');
+    // backoff 重試；保留 _dirty=true，不更新 _lastEditTime（避免餓死輪詢）
+    _saveRetryDelay=Math.min((_saveRetryDelay||1000)*2,10000);
+    clearTimeout(_saveRetryTimer);
+    _saveRetryTimer=setTimeout(()=>{ if(_dirty) saveToServer(); }, _saveRetryDelay);
   }finally{_isSaving=false;}
 }
 function scheduleAutoSave(){
   if(_isApplyingRemote) return;
   _lastEditTime=Date.now();
+  _dirty=true;
   document.body.classList.add('unsaved');
   setSyncStatus('pending','待自動儲存');
   clearTimeout(_autoSaveTimer);
@@ -2386,45 +2898,50 @@ function scheduleAutoSave(){
 }
 function startSyncPolling(){
   setInterval(async()=>{
-    if(Date.now()-_lastEditTime<5000)return;
-    if(_isSaving)return;
-    const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
+    // 防「跳掉」：有未存編輯 / 剛編輯過 / 正在輸入 → 不套遠端，先讓本機存檔
+    if(_isSaving) return;
+    if(hasUnsavedChanges()) return;
+    if(Date.now()-_lastEditTime<5000) return;
+    if(isEditingFocused()) return;
+    const weekNo=currentWeekNo();
     let shouldRender=false;
     try{
       const res=await fetch(`${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`,{credentials:'include'});
       if(!res.ok)throw new Error('schedule assignment API status '+res.status);
       const raw=unwrapApiPayload(await res.json());
       const serverTime=raw.updatedAt?new Date(raw.updatedAt).getTime():0;
-      if(serverTime>0&&serverTime>_lastServerUpdatedAt+1000){
+      if(serverTime>0 && serverTime>_lastServerUpdatedAt+1000 && weekNo===scheduleState.weekNo){
+        // 遠端較新且仍同一週：整批套用進 state（state 為權威，不寫回個別 localStorage 避免分歧）
         const entries=Array.isArray(raw.rawEntries)?raw.rawEntries:(Array.isArray(raw.entries)?raw.entries:[]);
-        let anyNew=false;
+        _serverHadScheduleData=payloadHasScheduleValue({rawEntries:entries,assignments:raw.assignments||[],shifts:raw.shifts||[],shiftEntries:raw.shiftEntries||[]});
+        _serverHadWorkRows=payloadHasWorkRows({assignments:raw.assignments||[],shifts:raw.shifts||[],shiftEntries:raw.shiftEntries||[]});
+        _serverHadShiftRows=payloadHasShiftRows({shifts:raw.shifts||[],shiftEntries:raw.shiftEntries||[]});
         _isApplyingRemote=true;
+        const cells=new Map(), meta=new Map();
         entries.forEach(entry=>{
           if(!entry.key)return;
-          const cur=localStorage.getItem(LOCAL_STORAGE_PREFIX+entry.key);
-          if(cur!==(entry.value||'')){localStorage.setItem(LOCAL_STORAGE_PREFIX+entry.key,entry.value||'');anyNew=true;}
-          if(Array.isArray(entry.employees))saveEmployeeMeta(entry.key,entry.employees);
+          cells.set(entry.key, entry.value||'');
+          if(Array.isArray(entry.employees)) meta.set(entry.key, entry.employees);
         });
+        scheduleState={ weekNo, cells, meta, loaded:true, updatedAt:serverTime };
         _isApplyingRemote=false;
         _lastServerUpdatedAt=serverTime;
-        if(anyNew){
-          sessionStorage.removeItem(LOCAL_STORAGE_PREFIX+'loaded-week-'+weekNo);
-          shouldRender=true;
-        }
+        _dirty=false; document.body.classList.remove('unsaved');
+        shouldRender=true;
       }
     }catch(e){console.warn('sync poll:',e);}
     try{
       const manualChanged=await loadManualCoursesForWeek(weekNo,{force:true,rerender:false});
       shouldRender=shouldRender||manualChanged;
     }catch(e){console.warn('manual course sync poll:',e);}
-    if(shouldRender){
+    // 只在安全時重繪（再次確認沒有人正在輸入/未存），避免蓋掉編輯
+    if(shouldRender && isSafeToRerender()){
       render();
-      const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
-      setSyncStatus('saved','已同步 '+hm);
+      setSyncStatus('saved','已同步 '+nowHm());
     }
   },8000);
 }
-function bindAutoSave(){document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{el.addEventListener('input',()=>{const key=el.getAttribute('data-key'),text=el.innerText.replace(/\n+$/,'');localStorage.setItem(LOCAL_STORAGE_PREFIX+key,text);refreshEmployeeChips();validateAll();scheduleAutoSave();})})}
+function bindAutoSave(){document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{el.addEventListener('input',()=>{const key=el.getAttribute('data-key'),text=el.innerText.replace(/\n+$/,'');setCellValue(key,text);refreshEmployeeChips();validateAll();scheduleAutoSave();})})}
 function timePartsFromLabel(label){
   const t=parseTimeRange(label);
   if(!t) return {startTime:'',endTime:''};
@@ -2485,17 +3002,24 @@ function collectNormalizedAssignments(){
       assignments.push(item);
     });
   });
-  document.querySelectorAll('.editbox[data-role="frontdesk"]').forEach(box=>{
-    const cell=box.closest('.edit-cell'), tr=cell?.closest('tr');
-    const time=parseTimeRange(tr?.querySelector('.segment-time')?.innerText||'');
-    if(!time) return;
-    parseAssignments(box.innerText,box.dataset.period,week,box.dataset.key).forEach(a=>{
-      assignments.push(normalizedBase(weekNo,box.dataset.venue||'',box.dataset.venueId||venueIdByName(box.dataset.venue||''),'frontdesk',box.dataset.period,a.days,time,a));
+  document.querySelectorAll('.frontdesk-source[data-role="frontdesk-source"]').forEach(box=>{
+    parseShiftLines(box.innerText,box.dataset.period,week,box.closest('.fd-source-cell'),box.dataset.venue,box.dataset.key).forEach(a=>{
+      assignments.push(normalizedBase(weekNo,box.dataset.venue||'',box.dataset.venueId||venueIdByName(box.dataset.venue||''),'frontdesk',box.dataset.period,a.days,a.time,a));
+    });
+  });
+  document.querySelectorAll('.duty-grid-entry[data-duty-role="frontdesk"]').forEach(box=>{
+    parseDutyGridLines(box.innerText,'frontdesk',Number(box.dataset.dayNo),week,box.closest('.duty-grid-cell'),box.dataset.venue,box.dataset.key).forEach(a=>{
+      assignments.push(normalizedBase(weekNo,box.dataset.venue||'',box.dataset.venueId||venueIdByName(box.dataset.venue||''),'frontdesk',dutyPeriodForDay(box.dataset.dayNo),a.days,a.time,a));
     });
   });
   document.querySelectorAll('.lifeguard-source[data-role="lifeguard-source"]').forEach(box=>{
     parseShiftLines(box.innerText,box.dataset.period,week,box.closest('.source-cell'),box.dataset.venue,box.dataset.key).forEach(a=>{
       assignments.push(normalizedBase(weekNo,box.dataset.venue||'',box.dataset.venueId||venueIdByName(box.dataset.venue||''),'lifeguard',box.dataset.period,a.days,a.time,a));
+    });
+  });
+  document.querySelectorAll('.duty-grid-entry[data-duty-role="lifeguard"]').forEach(box=>{
+    parseDutyGridLines(box.innerText,'lifeguard',Number(box.dataset.dayNo),week,box.closest('.duty-grid-cell'),box.dataset.venue,box.dataset.key).forEach(a=>{
+      assignments.push(normalizedBase(weekNo,box.dataset.venue||'',box.dataset.venueId||venueIdByName(box.dataset.venue||''),'lifeguard',dutyPeriodForDay(box.dataset.dayNo),a.days,a.time,a));
     });
   });
   return assignments;
@@ -2600,12 +3124,23 @@ async function checkReplitApis(){
     probeApi('報名人數', `${API_ENDPOINTS.enrollmentCounts}?weekNo=${weekNo}&includeZero=true`),
     probeApi('排班讀取', `${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`),
     probeApi('手動課程', `${API_ENDPOINTS.manualCourses}?weekNo=${weekNo}`),
+    probeApi('薪資費率', API_ENDPOINTS.salaryRates),
     probeApi('員工前台API', `${API_ENDPOINTS.mySummerShifts}/${weekNo}`)
   ]);
   renderReplitStatus(items);
 }
 async function publishToEmployeePortal(){
-  const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
+  const weekNo=currentWeekNo();
+  // 發布前先確保已成功存檔（DB == 即將發布的內容，避免發布到舊資料）
+  if(hasUnsavedChanges()){
+    setSyncStatus('saving','發布前先儲存…');
+    await saveToServer();
+    if(hasUnsavedChanges()){
+      alert('尚有未儲存的變更且儲存失敗，請確認登入/網路後再發布，以免發布到舊資料。');
+      return;
+    }
+  }
+  // 預檢（以目前畫面估算筆數與缺漏，提供提示；真正發布以伺服器已存的資料為準）
   const shifts=collectShiftRowsForPortal();
   if(!shifts.length){
     alert('目前沒有可發布到員工前台的班表。請確認已選員工並有排班資料。');
@@ -2616,29 +3151,59 @@ async function publishToEmployeePortal(){
     alert(`有 ${missing.length} 筆資料缺少 employeeId / venueId / date / time，請先修正。`);
     return;
   }
-  if(!confirm(`準備發布第 ${weekNo} 週 ${shifts.length} 筆班表到員工前台，是否繼續？`)) return;
+  if(!confirm(`準備發布第 ${weekNo} 週約 ${shifts.length} 筆班表到員工前台（以伺服器已儲存的資料為準），是否繼續？`)) return;
   try{
-    const res=await fetch(API_ENDPOINTS.publishShifts,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({weekNo, shifts, generatedAt:new Date().toISOString()})});
+    const res=await fetch(API_ENDPOINTS.publishShifts,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({weekNo, generatedAt:new Date().toISOString()})});
     if(!res.ok) throw new Error('publish API status '+res.status);
-    alert(`已發布第 ${weekNo} 週 ${shifts.length} 筆班表到員工前台。`);
+    const raw=await res.json().catch(()=>null);
+    const result=unwrapApiPayload(raw)||{};
+    const n=(result.inserted!=null)?result.inserted:shifts.length;
+    alert(`已發布第 ${weekNo} 週 ${n} 筆班表到員工前台。`);
     checkReplitApis();
   }catch(err){
-    console.warn('publish shifts API unavailable:',err);
-    localStorage.setItem(LOCAL_STORAGE_PREFIX+'last-shifts-payload', JSON.stringify({weekNo, shifts, generatedAt:new Date().toISOString()}));
-    alert('發布 API 尚未接上。已先把 shifts payload 暫存在本機，請 Replit 後端新增 /api/admin/summer-schedule/publish-shifts 後即可發布。');
+    console.warn('publish shifts API failed:',err);
+    alert('發布失敗，請確認登入狀態與網路後再試一次。（資料已儲存於伺服器，可稍後重發）');
   }
 }
 
 const LINE_PUSH_BACKEND_API='/api/admin/schedule-assignments/push-line';
+function rawEntryHasScheduleValue(entry){
+  const key=String(entry?.key||'');
+  const value=String(entry?.value||'').trim();
+  const hasEmployees=Array.isArray(entry?.employees) && entry.employees.length>0;
+  if(!value && !hasEmployees) return false;
+  if(key.includes('-availability-')) return false;
+  if(key.includes('-dutygrid-rows')) return false;
+  if(/-course-.*-enroll$/.test(key)) return false;
+  return true;
+}
+function payloadHasScheduleValue(payload){
+  if((payload?.assignments||[]).length || (payload?.shifts||[]).length) return true;
+  return (payload?.rawEntries||[]).some(rawEntryHasScheduleValue);
+}
+function payloadHasWorkRows(payload){
+  return !!((payload?.assignments||[]).length || (payload?.shifts||[]).length || (payload?.shiftEntries||[]).length);
+}
+function payloadHasShiftRows(payload){
+  return !!((payload?.shifts||[]).length || (payload?.shiftEntries||[]).length);
+}
+function shouldBlockProtectedEmptySave(payload){
+  return (_serverHadShiftRows && !payloadHasShiftRows(payload)) || (_serverHadWorkRows && !payloadHasWorkRows(payload)) || (_serverHadScheduleData && !payloadHasScheduleValue(payload));
+}
 function collectSchedulePayload(){
   const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
   const assignments=collectNormalizedAssignments();
   const shifts=collectShiftRowsForPortal();
-  const payload={
+  // rawEntries 一律由權威 state 蒐集（涵蓋目前未顯示館別的格，避免存檔漏資料）
+  const rawEntries=[];
+  const seen=new Set();
+  scheduleState.cells.forEach((value,key)=>{ seen.add(key); rawEntries.push({key, value, employees:scheduleState.meta.get(key)||[]}); });
+  scheduleState.meta.forEach((employees,key)=>{ if(!seen.has(key)) rawEntries.push({key, value:'', employees}); });
+  return {
     version:REPLIT_READY_VERSION,
     weekNo,
     generatedAt:new Date().toISOString(),
-    rawEntries:[],
+    rawEntries,
     assignments,
     shifts,
     publishShiftsApi:API_ENDPOINTS.publishShifts,
@@ -2646,53 +3211,85 @@ function collectSchedulePayload(){
     linePushBackendApi:LINE_PUSH_BACKEND_API,
     apiEndpoints:API_ENDPOINTS
   };
-  document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{
-    payload.rawEntries.push({key:el.dataset.key, value:el.innerText.replace(/\n+$/,''), employees:getEmployeeMeta(el.dataset.key)});
-  });
-  return payload;
 }
 async function loadExistingScheduleAssignments(){
-  const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
-  const marker=LOCAL_STORAGE_PREFIX+'loaded-week-'+weekNo;
-  if(sessionStorage.getItem(marker)) return;
+  const weekNo=currentWeekNo();
+  // 已水合且同一週 → 不重抓（取代原 sessionStorage 守門，避免每次 render 都打 API）
+  if(scheduleState.loaded && scheduleState.weekNo===weekNo) return;
   try{
     const res=await fetch(`${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`,{credentials:'include'});
     if(!res.ok) throw new Error('schedule assignment API status '+res.status);
     const raw=unwrapApiPayload(await res.json());
-    sessionStorage.setItem(marker,'1');
-    if(raw.updatedAt){const t=new Date(raw.updatedAt).getTime();if(t>_lastServerUpdatedAt)_lastServerUpdatedAt=t;}
+    const serverTime=raw.updatedAt?new Date(raw.updatedAt).getTime():0;
     const entries=Array.isArray(raw.rawEntries)?raw.rawEntries:(Array.isArray(raw.entries)?raw.entries:[]);
-    if(!entries.length) return;
-    let anyNew=false;
-    _isApplyingRemote=true;
-    entries.forEach(entry=>{
-      if(!entry.key) return;
-      const existing=localStorage.getItem(LOCAL_STORAGE_PREFIX+entry.key);
-      if(existing!==entry.value){
-        localStorage.setItem(LOCAL_STORAGE_PREFIX+entry.key, entry.value||'');
-        anyNew=true;
-      }
-      if(Array.isArray(entry.employees)) saveEmployeeMeta(entry.key, entry.employees);
-    });
-    _isApplyingRemote=false;
-    if(anyNew){
+    _serverHadScheduleData=payloadHasScheduleValue({rawEntries:entries,assignments:raw.assignments||[],shifts:raw.shifts||[],shiftEntries:raw.shiftEntries||[]});
+    _serverHadWorkRows=payloadHasWorkRows({assignments:raw.assignments||[],shifts:raw.shifts||[],shiftEntries:raw.shiftEntries||[]});
+    _serverHadShiftRows=payloadHasShiftRows({shifts:raw.shifts||[],shiftEntries:raw.shiftEntries||[]});
+    if(entries.length){
+      // DB 有資料 → 以 DB 水合 state（DB 為唯一真實來源）
+      _isApplyingRemote=true;
+      const cells=new Map(), meta=new Map();
+      entries.forEach(entry=>{
+        if(!entry.key) return;
+        cells.set(entry.key, entry.value||'');
+        if(Array.isArray(entry.employees)) meta.set(entry.key, entry.employees);
+      });
+      scheduleState={ weekNo, cells, meta, loaded:true, updatedAt:serverTime };
+      _isApplyingRemote=false;
+      if(serverTime>_lastServerUpdatedAt) _lastServerUpdatedAt=serverTime;
+      _dirty=false; document.body.classList.remove('unsaved');
       render();
-    }else{
-      refreshEmployeeChips();
-      validateAll();
-      renderAvailabilityReport();
+      return;
     }
+    // DB 空 → 從本機（含 v39 legacy 與 employee-meta）遷移該週草稿進 state，並推進 DB 一次（不掉舊草稿）
+    const migrated=migrateLocalWeekIntoState(weekNo);
+    scheduleState.weekNo=weekNo;
+    scheduleState.loaded=true;
+    if(serverTime>_lastServerUpdatedAt) _lastServerUpdatedAt=serverTime;
+    render();
+    if(migrated){ saveToServer(); }  // 把本機草稿寫進母資料表 summer_schedule_assignments
   }catch(err){
+    // 載入失敗（離線）：維持 loaded=false，沿用 localStorage 備援
     console.warn('existing schedule assignment API unavailable:',err);
+    if(scheduleState.weekNo!==weekNo) scheduleState.weekNo=weekNo;
   }
+}
+// 把某週的本機 localStorage 鍵（含 v39 legacy 與 employee-meta）載入 state；回傳是否有任何資料
+function migrateLocalWeekIntoState(weekNo){
+  const wPrefix='w'+weekNo+'-';
+  let found=false;
+  _isApplyingRemote=true;
+  [LOCAL_STORAGE_PREFIX, LEGACY_STORAGE_PREFIX].forEach(sp=>{
+    Object.keys(localStorage).forEach(fullKey=>{
+      if(fullKey.indexOf(sp)!==0) return;
+      const key=fullKey.slice(sp.length);
+      if(key.indexOf('employee-meta-')===0){
+        const cellK=key.slice('employee-meta-'.length);
+        if(cellK.indexOf(wPrefix)!==0) return;
+        if(!scheduleState.meta.has(cellK)){
+          try{ const arr=JSON.parse(localStorage.getItem(fullKey)||'[]'); if(Array.isArray(arr)&&arr.length){ scheduleState.meta.set(cellK, arr); found=true; } }catch(e){}
+        }
+        return;
+      }
+      if(key.indexOf(wPrefix)!==0) return;
+      if(/^w\d+-loaded-week-/.test(key) || key.indexOf('migrated-week-')>=0) return;
+      if(!scheduleState.cells.has(key)){
+        const v=localStorage.getItem(fullKey);
+        if(v!==null && v!==''){ scheduleState.cells.set(key, v); found=true; }
+      }
+    });
+  });
+  _isApplyingRemote=false;
+  return found;
 }
 async function saveLocal(){return saveToServer();}
 function clearStorage(){
-  if(!confirm('清空目前瀏覽器暫存資料？'))return;
+  if(!confirm('清除本機離線備份？（不影響已儲存到伺服器的班表，畫面會保留目前資料）'))return;
   Object.keys(localStorage)
-    .filter(k=>/^schedule-v40-/.test(k) || /^schedule-v39-/.test(k) || /^schedule-v39-employee-meta-/.test(k) || k==='schedule-v39-course-rate-rules' || k==='schedule-v39-manual-courses')
+    .filter(k=>/^schedule-v40-/.test(k) || /^schedule-v39-/.test(k))
     .forEach(k=>localStorage.removeItem(k));
   Object.keys(sessionStorage).filter(k=>/^schedule-v40-loaded-week-/.test(k) || /^schedule-v39-loaded-week-/.test(k)).forEach(k=>sessionStorage.removeItem(k));
+  // 不清 scheduleState：從記憶體重繪，資料不掉（DB 仍為權威）
   render();
 }
 function copyPreviousWeek(){alert('正式網站：會把上一週同館別資料帶入，包含救生完整班段、櫃台、課程與假日班。')}
@@ -2716,6 +3313,15 @@ function focusLifeguardEditorFromDisplay(cell){
     sel.removeAllRanges();
     sel.addRange(range);
   }, 250);
+}
+function focusFrontdeskEditorFromDisplay(cell){
+  const venue = cell.dataset.venue, period = cell.dataset.period;
+  const source = document.querySelector(`.frontdesk-source[data-venue="${CSS.escape(venue)}"][data-period="${CSS.escape(period)}"]`);
+  if(!source) return;
+  document.querySelectorAll('.source-card.active-edit').forEach(el=>el.classList.remove('active-edit'));
+  source.closest('.source-card')?.classList.add('active-edit');
+  source.scrollIntoView({behavior:'smooth', block:'center'});
+  setTimeout(()=>{ source.focus(); const range=document.createRange(); range.selectNodeContents(source); range.collapse(false); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }, 250);
 }
 
 
@@ -2833,7 +3439,7 @@ function showView(view){
   document.getElementById('tabPayroll')?.classList.toggle('active', isPayroll);
   document.getElementById('tabMobile')?.classList.toggle('active', isMobile);
   if(isAvail){loadAvailabilityFromDB();}
-  if(isPayroll){renderPayrollReport();}
+  if(isPayroll){renderPayrollReport();loadBackendPayrollRates().then(renderPayrollReport);}
   if(isMobile){renderMobileView();}
 }
 function setAvailabilityApiMode(isApi){
@@ -2916,6 +3522,7 @@ function buildAvailabilityRow(no,row={}){
       <td class="avail-input">${availCellReadonly(availabilityKey(no,'sat'),row.sat||'')}</td>
       <td class="avail-input">${availCellReadonly(availabilityKey(no,'sun'),row.sun||'')}</td>
       <td class="note-col">${availCellReadonly(availabilityKey(no,'note'),row.note||'')}</td>
+      <td class="no-col">${row.notSubmitted?'<span class="result-empty">未填報</span>':`<button class="availability-delete" type="button" onclick="deleteAvailabilityRecord('${escapeAttr(employeeId)}')">刪除</button>`}</td>
     </tr>`;
   }
   // Manual-entry mode: use localStorage-aware editable cells
@@ -2926,6 +3533,7 @@ function buildAvailabilityRow(no,row={}){
     <td class="avail-input">${availCell(availabilityKey(no,'sat'),row.sat||'','週六可排班時段')}</td>
     <td class="avail-input">${availCell(availabilityKey(no,'sun'),row.sun||'','週日可排班時段')}</td>
     <td class="note-col">${availCell(availabilityKey(no,'note'),row.note||'','備註')}</td>
+    <td class="no-col"><button class="availability-delete" type="button" onclick="removeAvailabilityRow(this)">移除</button></td>
   </tr>`;
 }
 function addAvailabilityRow(){
@@ -2938,16 +3546,43 @@ function addAvailabilityRow(){
   last.querySelectorAll('[contenteditable]').forEach(el=>el.addEventListener('input',renderAvailabilityReport));
   last.scrollIntoView({behavior:'smooth',block:'center'});
 }
+function removeAvailabilityRow(btn){
+  const tr=btn.closest('tr');
+  if(!tr) return;
+  tr.remove();
+  renderAvailabilityReport();
+}
+async function deleteAvailabilityRecord(employeeId){
+  const weekIdx=Number(document.getElementById('weekSelect')?.value||0);
+  const weekNo=(weeks[weekIdx]?.no)||(weekIdx+1);
+  if(!employeeId){alert('缺少員工 ID，無法刪除這筆填報。');return;}
+  if(!confirm(`刪除這位員工第 ${weekNo} 週的可排班填報？`)) return;
+  setSyncStatus('saving','刪除可排班填報中');
+  try{
+    const res=await fetch(`/api/admin/summer-availability/${encodeURIComponent(employeeId)}/${encodeURIComponent(weekNo)}`,{
+      method:'DELETE',
+      credentials:'include'
+    });
+    if(!res.ok) throw new Error('summer availability delete API status '+res.status);
+    setSyncStatus('saved','已刪除 '+nowHm());
+    loadAvailabilityFromDB();
+  }catch(err){
+    console.warn('summer availability delete failed:',err);
+    setSyncStatus('error','可排班填報刪除失敗');
+    alert('刪除失敗，請確認登入狀態與網路後再試一次。');
+  }
+}
 function readAvailabilityRows(){
   const rows=[];
   document.querySelectorAll('#availabilityBody tr').forEach(tr=>{
     const no=tr.dataset.availRow;
+    const employeeId=(tr.dataset.employeeId||'').trim();
     const name=(tr.querySelector(`[data-key="${CSS.escape(availabilityKey(no,'name'))}"]`)?.innerText||'').trim();
     const venues=(tr.querySelector(`[data-key="${CSS.escape(availabilityKey(no,'venues'))}"]`)?.innerText||'全部').trim();
     const weekday=(tr.querySelector(`[data-key="${CSS.escape(availabilityKey(no,'weekday'))}"]`)?.innerText||'').trim();
     const sat=(tr.querySelector(`[data-key="${CSS.escape(availabilityKey(no,'sat'))}"]`)?.innerText||'').trim();
     const sun=(tr.querySelector(`[data-key="${CSS.escape(availabilityKey(no,'sun'))}"]`)?.innerText||'').trim();
-    if(name) rows.push({name,venues,weekday,sat,sun});
+    if(name) rows.push({employeeId,name,venues,weekday,sat,sun});
   });
   return rows;
 }
@@ -3041,6 +3676,39 @@ function renderAvailabilityReport(){
 
 
 
+let payrollBackendRatesLoaded=false;
+function backendPayrollRateTarget(item){
+  const text=String((item?.role||'')+' '+(item?.label||'')).toLowerCase();
+  if(/救生|lifeguard|life\s*guard/.test(text)) return 'rateLifeguard';
+  if(/櫃台|frontdesk|front\s*desk|行政/.test(text)) return 'rateFrontdesk';
+  if(/手動|manual/.test(text)) return 'rateManual';
+  if(/教練|課程|course|coach/.test(text)) return 'rateCourse';
+  return '';
+}
+async function loadBackendPayrollRates(force=false){
+  if(payrollBackendRatesLoaded && !force) return;
+  payrollBackendRatesLoaded=true;
+  try{
+    const res=await fetch(API_ENDPOINTS.salaryRates,{credentials:'include'});
+    if(!res.ok) throw new Error('salary rates API status '+res.status);
+    const items=extractApiItems(await res.json());
+    items.forEach(item=>{
+      const target=backendPayrollRateTarget(item);
+      if(!target) return;
+      const keyMap={rateCourse:'course',rateManual:'manual',rateLifeguard:'lifeguard',rateFrontdesk:'frontdesk'};
+      const storageKey=payrollRateKey(keyMap[target]);
+      if(localStorage.getItem(storageKey)!==null) return;
+      const el=document.getElementById(target);
+      const rate=Number(item.ratePerHour ?? item.rate ?? item.amount ?? 0)||0;
+      if(el && (!Number(el.value)||Number(el.value)===0)){
+        el.value=String(rate);
+        localStorage.setItem(storageKey,String(rate));
+      }
+    });
+  }catch(err){
+    console.warn('salary rates load failed:',err);
+  }
+}
 const defaultCourseRateRules=[];
 function courseRateRulesKey(){return LOCAL_STORAGE_PREFIX+'course-rate-rules';}
 function getCourseRateRules(){
@@ -3124,6 +3792,17 @@ function savePayrollRates(){
   });
 }
 function numberValue(id){return Number(document.getElementById(id)?.value||0)||0;}
+function moneyText(value){return '$'+Math.round(Number(value)||0).toLocaleString();}
+function payrollCalculationForRow(row,rates){
+  if(row.roleType==='course'){
+    const cname=courseNameForPayroll(row);
+    const rate=getPayrollRateForCourse(cname,row.source);
+    return {unit:'1 堂',rate,amount:rate,formula:`1 堂 × ${moneyText(rate)} / 堂`};
+  }
+  const hours=Number(row.hours)||0;
+  const rate=row.roleType==='frontdesk'?rates.frontdesk:rates.lifeguard;
+  return {unit:`${hours.toFixed(1)} 小時`,rate,amount:hours*rate,formula:`${hours.toFixed(1)} 小時 × ${moneyText(rate)} / 小時`};
+}
 function dateForWeekDay(week,day){
   const start=new Date(week.start+'T00:00:00');
   const startDay=start.getDay()===0?7:start.getDay();
@@ -3210,8 +3889,8 @@ function renderPayrollReport(){
   const cards=document.getElementById('payrollSummaryCards');
   const courseBody=document.getElementById('payrollCourseBreakdownBody');
   if(!body || !detail || !cards) return;
-  const rows=expandedPayrollRows();
   const rateLifeguard=numberValue('rateLifeguard'), rateFrontdesk=numberValue('rateFrontdesk');
+  const rows=expandedPayrollRows().map(r=>({...r,payCalc:payrollCalculationForRow(r,{lifeguard:rateLifeguard,frontdesk:rateFrontdesk})}));
   const map=new Map();
   const courseTotals={};
   rows.forEach(r=>{
@@ -3228,13 +3907,12 @@ function renderPayrollReport(){
       s.courseByName[cname]=(s.courseByName[cname]||0)+1;
       addCourseCount(courseTotals,cname,r.source,s.employeeName);
       s.courseHours += r.hours;
-      const courseRate=getPayrollRateForCourse(cname,r.source);
-      if(r.source==='manual'){s.manualSessions += 1; s.pay += courseRate;}
-      else{s.courseSessions += 1; s.pay += courseRate;}
+      if(r.source==='manual'){s.manualSessions += 1; s.pay += r.payCalc.amount;}
+      else{s.courseSessions += 1; s.pay += r.payCalc.amount;}
     }else if(r.roleType==='lifeguard'){
-      s.lifeguardShifts += 1; s.lifeguardHours += r.hours; s.pay += r.hours*rateLifeguard;
+      s.lifeguardShifts += 1; s.lifeguardHours += r.hours; s.pay += r.payCalc.amount;
     }else if(r.roleType==='frontdesk'){
-      s.frontdeskShifts += 1; s.frontdeskHours += r.hours; s.pay += r.hours*rateFrontdesk;
+      s.frontdeskShifts += 1; s.frontdeskHours += r.hours; s.pay += r.payCalc.amount;
     }
   });
   const stats=Array.from(map.values()).sort((a,b)=>a.employeeName.localeCompare(b.employeeName,'zh-Hant'));
@@ -3279,15 +3957,16 @@ function renderPayrollReport(){
     <td>${escapeHtml(r.workName||'')}${r.slotCode?`<br><small>${escapeHtml(r.slotCode)}</small>`:''}</td>
     <td>${escapeHtml((r.startTime||'')+'-'+(r.endTime||''))}</td>
     <td>${escapeHtml(r.registeredCount||'')}</td>
-    <td>${r.roleType==='course'?'1 堂':`${r.hours.toFixed(1)} 小時`}</td>
+    <td>${escapeHtml(r.payCalc.formula)}<br><span class="payroll-money">${moneyText(r.payCalc.amount)}</span></td>
     <td>${r.source==='manual'?'手動課程':''}</td>
   </tr>`).join(''):`<tr><td colspan="9" class="payroll-empty">目前本週沒有可統計的排班明細。</td></tr>`;
 }
 function copyPayrollCsv(){
-  const rows=expandedPayrollRows();
-  const header=['日期','星期','員工','館別','類型','課程/工作','開始','結束','人數','計算'];
+  const rateLifeguard=numberValue('rateLifeguard'), rateFrontdesk=numberValue('rateFrontdesk');
+  const rows=expandedPayrollRows().map(r=>({...r,payCalc:payrollCalculationForRow(r,{lifeguard:rateLifeguard,frontdesk:rateFrontdesk})}));
+  const header=['日期','星期','員工','館別','類型','課程/工作','開始','結束','人數','計算公式','金額'];
   const csv=[header].concat(rows.map(r=>[
-    r.date||'', r.day?`週${dayName(r.day)}`:'', r.employeeName||'', r.venueName||'', r.typeLabel||'', r.workName||'', r.startTime||'', r.endTime||'', r.registeredCount||'', r.roleType==='course'?'1堂':`${r.hours.toFixed(1)}小時`
+    r.date||'', r.day?`週${dayName(r.day)}`:'', r.employeeName||'', r.venueName||'', r.typeLabel||'', r.workName||'', r.startTime||'', r.endTime||'', r.registeredCount||'', r.payCalc.formula||'', Math.round(r.payCalc.amount||0)
   ])).map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   navigator.clipboard?.writeText(csv).then(()=>alert('已複製薪資明細 CSV')).catch(()=>alert(csv));
 }
@@ -3323,11 +4002,13 @@ function renderMobileView(){
   const staffCount=new Set(rows.map(r=>employeeKeyForPayroll(r))).size;
   const courseCount=rows.filter(r=>r.roleType==='course').length;
   const lifeguardHours=rows.filter(r=>r.roleType==='lifeguard').reduce((s,r)=>s+(r.hours||0),0);
+  const frontdeskHours=rows.filter(r=>r.roleType==='frontdesk').reduce((s,r)=>s+(r.hours||0),0);
+  const totalHours=rows.reduce((s,r)=>s+(r.hours||0),0);
   summary.innerHTML=[
     ['本週員工',`${staffCount} 人`],
     ['課程 / 手動課',`${courseCount} 堂`],
-    ['救生時數',`${lifeguardHours.toFixed(1)} 小時`],
-    ['待處理問題',`${issues.length} 項`]
+    ['救生 / 櫃台時數',`${lifeguardHours.toFixed(1)} / ${frontdeskHours.toFixed(1)} 小時`],
+    ['總時數 / 問題',`${totalHours.toFixed(1)} 小時｜${issues.length} 項`]
   ].map(([a,b])=>`<div class="mobile-stat"><span>${a}</span><b>${b}</b></div>`).join('');
   if(!issues.length){
     issueBox.innerHTML='<div class="mobile-empty">目前尚無問題。</div>';
@@ -3355,6 +4036,7 @@ function renderMobileView(){
           <span class="mobile-pill ${mobileTypeClass(r)}">${mobileTypeLabel(r)}</span>
           <b>${escapeHtml(r.startTime||'')}-${escapeHtml(r.endTime||'')}｜${escapeHtml(r.venueName||'')}</b>
           <small>${escapeHtml(r.workName||r.courseName||mobileTypeLabel(r))}${r.registeredCount?`｜${escapeHtml(r.registeredCount)}人`:''}</small>
+          <small>計算：${r.roleType==='course'?'1 堂':`${r.hours.toFixed(1)} 小時`}</small>
           <small>員工：${escapeHtml(r.employeeName||'未指定員工')}</small>
         </div>
       `).join('')}
@@ -3374,6 +4056,7 @@ function renderMobileView(){
           <span class="mobile-pill ${mobileTypeClass(r)}">${mobileTypeLabel(r)}</span>
           <b>${escapeHtml(r.date||'')} ${escapeHtml(r.startTime||'')}-${escapeHtml(r.endTime||'')}</b>
           <small>${escapeHtml(r.venueName||'')}｜${escapeHtml(r.workName||r.courseName||mobileTypeLabel(r))}</small>
+          <small>計算：${r.roleType==='course'?'1 堂':`${r.hours.toFixed(1)} 小時`}</small>
         </div>
       `).join('')}
     </div>
@@ -3381,15 +4064,294 @@ function renderMobileView(){
   renderingMobile=false;
 }
 document.addEventListener('click', (e)=>{
-  const cell = e.target.closest('.lifeguard-display');
-  if(cell) focusLifeguardEditorFromDisplay(cell);
+  const lg = e.target.closest('.lifeguard-display');
+  if(lg) focusLifeguardEditorFromDisplay(lg);
+  const fd = e.target.closest('.frontdesk-display');
+  if(fd) focusFrontdeskEditorFromDisplay(fd);
 });
+
+/* ===================== 新設計：排班視覺化舞台（時間軸 / 覆蓋總覽 / 課程教練） =====================
+ * 視覺參考使用者設計稿；資料全接真實系統（解析函式 + 報名 API + scheduleState）；
+ * 編輯仍走資料層（「✎ 編輯」抽屜的既有輸入框/教練格）→ 任一編輯後 validateAll 末端呼叫
+ * renderScheduleStage() 重繪此舞台。存檔/發布/驗證沿用既有管線，不動 data-* 契約。
+ */
+const SV_AX0=5.5*60, SV_AX1=22.5*60, SV_AXW=SV_AX1-SV_AX0;
+let svState={view:'timeline', day:'weekday', matrixRole:'lifeguard'};
+let svAssignTime=null;  // 設定後，員工挑選會把「姓名 時段」加進救生/櫃台來源框（直接從缺口排班）
+// 從覆蓋缺口/格子直接排班：開員工挑選 modal，選完把「姓名 時段」加進該館別+時段的來源框
+function svAssignShift(venueName, role, dayNo, segLabel){
+  const key=dutyGridTargetKeyForFill(venueName,role,Number(dayNo)||svSelectedDayNo());
+  svAssignTime=`${dutyRoleMarker(role)}${compactTimeLabel(segLabel)}`;
+  employeePickerTargetKey=key;
+  const t=document.getElementById('employeePickerTitle');
+  if(t)t.textContent=`排${role==='lifeguard'?'救生':'櫃台'}：${venueName} ${svSelectedDayLabel()} ${segLabel}`;
+  const s=document.getElementById('employeeSearch');if(s)s.value='';
+  renderEmployeePickerList();
+  document.getElementById('employeePickerModal')?.classList.add('show');
+}
+const SV_DAYLABEL={weekday:'平日',sat:'週六',sun:'週日'};
+const SV_ROLE={lifeguard:{label:'救生',cls:'life'},frontdesk:{label:'櫃台',cls:'desk'}};
+const SV_STLABEL={ok:'達標',under:'不足',empty:'未排',over:'超量',closed:'未營運',none:'免排'};
+function svPct(m){return ((m-SV_AX0)/SV_AXW)*100;}
+function svClamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function svFmt(m){return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;}
+function svHrs(a,b){const h=(b-a)/60;return (Number.isInteger(h)?h:h.toFixed(1))+'h';}
+function svWeek(){return weeks[Number(document.getElementById('weekSelect')?.value||0)];}
+function svCurrentVenue(){const f=document.getElementById('venueFilter')?.value;return venues.find(v=>v.name===f)||venues[0];}
+function svDutySegs(venue){return (venue.duty||[]).map(([no,t])=>{const r=parseTimeRange(t)||{start:0,end:0};return {no,label:t,a:r.start,b:r.end};});}
+function svRule(venue,role){return getVenueRule(venue.name,role);}
+function svTip(s){return encodeURIComponent(s);}
+function svDayOptions(week){return datesInWeek(week);}
+function svSelectedDayNo(week=svWeek()){
+  const opts=svDayOptions(week);
+  const n=Number(svState.day);
+  if(opts.some(d=>Number(d.dayNo)===n))return n;
+  if(svState.day==='sat'&&opts.some(d=>d.dayNo===6))return 6;
+  if(svState.day==='sun'&&opts.some(d=>d.dayNo===7))return 7;
+  if(svState.day==='weekday'){
+    const first=(week?.activeWeekdays||[]).find(d=>opts.some(x=>x.dayNo===d));
+    if(first)return first;
+  }
+  return opts[0]?.dayNo||1;
+}
+function svSelectedPeriod(week=svWeek()){return dutyPeriodForDay(svSelectedDayNo(week));}
+function svSelectedDayLabel(week=svWeek()){
+  const d=svDayOptions(week).find(x=>x.dayNo===svSelectedDayNo(week));
+  return d?`${d.label} ${d.weekday}`:(SV_DAYLABEL[svSelectedPeriod(week)]||'');
+}
+function dutyGridTargetKeyForFill(venueName,role,dayNo){
+  let count=getDutyGridRowCount(venueName,role);
+  for(let i=1;i<=count;i++){
+    const key=dutyGridCellKey(venueName,role,i,dayNo);
+    if(!String(getSaved(key)||'').trim())return key;
+  }
+  setDutyGridRowCount(venueName,role,count+1);
+  render();
+  return dutyGridCellKey(venueName,role,count+1,dayNo);
+}
+/* 班段（救生/櫃台）依目前 day 過濾，來源＝真實輸入框 */
+function svShifts(venue,week,role){
+  const dayNo=svSelectedDayNo(week);
+  const all=role==='lifeguard'?allLifeguardShifts(week):allFrontdeskShifts(week);
+  return all.filter(s=>s.venue===venue.name && (s.days||[]).includes(dayNo))
+    .map(s=>({name:s.name,a:s.time.start,b:s.time.end,employeeId:s.employeeId,lineBound:s.lineBound,days:s.days||[],raw:s.raw,key:s.key||''}))
+    .sort((x,y)=>x.a-y.a||String(x.name).localeCompare(String(y.name),'zh-Hant'));
+}
+function svCountAt(list,mid){let c=0,names=[];list.forEach(s=>{if(s.a<=mid&&mid<s.b){c++;names.push(s.name);}});return{c,names};}
+function svStatus(count,rule){if(count===0)return'empty';if(count<rule.min)return'under';if(count>rule.max)return'over';return'ok';}
+function svSegCov(list,seg,rule){let worst=Infinity,wn=[];for(let m=seg.a;m<seg.b;m+=15){const r=svCountAt(list,m);if(r.c<worst){worst=r.c;wn=r.names;}}if(worst===Infinity)worst=0;return{count:worst,state:svStatus(worst,rule),names:wn};}
+function svSegMembers(list,seg){
+  const out=[],seen=new Set();
+  list.forEach(s=>{
+    if(!(s.a<seg.b && s.b>seg.a)) return;
+    const id=[s.key||'',s.raw||'',s.name||'',s.a,s.b].join('|');
+    if(seen.has(id)) return;
+    seen.add(id);
+    out.push(s);
+  });
+  return out.sort((a,b)=>a.a-b.a||String(a.name).localeCompare(String(b.name),'zh-Hant'));
+}
+function svRoleIssues(venue,week,role){const list=svShifts(venue,week,role),rule=svRule(venue,role);let n=0;svDutySegs(venue).forEach(seg=>{const c=svSegCov(list,seg,rule);if(c.state==='empty'||c.state==='under')n++;});return n;}
+function svVenueIssues(venue,week){return svRoleIssues(venue,week,'lifeguard')+svRoleIssues(venue,week,'frontdesk');}
+/* 課程模型：報名來自已填的 .enroll-count，需求/教練/備註來自 scheduleState */
+function svCourses(venue,week){
+  const period=svSelectedPeriod(week),dayNo=svSelectedDayNo(week);
+  const rows=period==='weekday'?flattenCourses(venue):flattenHolidayCourses(venue);
+  return rows.map(r=>{
+    const t=parseTimeRange(r.time)||{start:0,end:0};
+    const enEl=document.querySelector(`[data-key="${CSS.escape(cellKey(venue.name,'course',r.id,'enroll'))}"]`);
+    const enrolled=parseInt((enEl?.innerText||'').trim(),10);
+    const need=parseInt(String(getSaved(cellKey(venue.name,'course',r.id,'needed'))||'').trim(),10);
+    const coaches=parseAssignments(String(getSaved(cellKey(venue.name,'course',r.id,period))||''),period,week).filter(a=>(a.days||[]).includes(dayNo)).map(a=>a.name);
+    return {code:r.code,courseName:r.courseName,a:t.start,b:t.end,label:r.time,id:r.id,
+      enrolled:Number.isFinite(enrolled)?enrolled:0,need:Number.isFinite(need)?need:0,coaches};
+  });
+}
+// 移除：把某一行（姓名 時段）從救生/櫃台來源框刪掉
+function svRemoveLine(key, rawEnc){
+  const raw=decodeURIComponent(rawEnc||'').trim();
+  if(!raw) return;
+  const prev=String(getSaved(key)||'');
+  let done=false;
+  const next=prev.split(/\r?\n/).filter(l=>{ if(!done && l.trim()===raw){done=true;return false;} return true;}).join('\n').replace(/\n+$/,'');
+  const box=document.querySelector(`[data-key="${CSS.escape(key)}"]`);
+  if(box) box.innerText=next;
+  setCellValue(key, next);
+  refreshEmployeeChips(); validateAll(); scheduleAutoSave();
+}
+// 移除：把某位教練從課程教練格刪掉
+function svRemoveCoach(key, name){
+  const prev=String(getSaved(key)||'');
+  let done=false;
+  const next=prev.split(/\r?\n/).filter(l=>{ if(done) return true; const cn=cleanEmployeeDisplayName(l.replace(/[0-9]+/g,'')).trim(); if(cn===name || l.includes(name)){done=true;return false;} return true;}).join('\n').replace(/\n+$/,'');
+  const box=document.querySelector(`[data-key="${CSS.escape(key)}"]`);
+  if(box) box.innerText=next;
+  setCellValue(key, next);
+  refreshEmployeeChips(); validateAll(); scheduleAutoSave();
+}
+function svCourseStatus(c){
+  if(c.enrolled===0)return'none';
+  if(!(c.need>0))return'under';
+  if(c.coaches.length===0)return'empty';
+  if(c.coaches.length<c.need)return'under';
+  return'ok';
+}
+function svCourseSummary(list){
+  return list.reduce((acc,c)=>{
+    if(c.enrolled>0){
+      acc.active++;
+      if(!(c.need>0)) acc.needUnset++;
+      else acc.missing+=Math.max(c.need-c.coaches.length,0);
+    }
+    return acc;
+  },{active:0,needUnset:0,missing:0});
+}
+function svCourseSummaryText(sum){
+  if(sum.needUnset>0)return`需求未設定 ${sum.needUnset} 門`;
+  if(sum.missing>0)return`缺 ${sum.missing} 位教練`;
+  if(sum.active>0)return'教練已配齊';
+  return'無需排教練';
+}
+function svCourseSummaryClass(sum){return (sum.needUnset>0||sum.missing>0)?'s-empty':'s-ok';}
+function svCourseMiss(venue,week){const s=svCourseSummary(svCourses(venue,week));return s.needUnset+s.missing;}
+/* ---- 時間軸 ---- */
+function svRuler(){let t='<span class="sv-tick mono sv-edge" style="left:0%">05:30</span>';for(let h=8;h<=22;h+=2){t+=`<span class="sv-tick mono" style="left:${svPct(h*60)}%">${String(h).padStart(2,'0')}:00</span>`;}return `<div class="sv-ruler"><div class="sv-gut"></div><div class="sv-track">${t}</div></div>`;}
+function svGrid(){let g='';for(let h=8;h<=22;h+=2){g+=`<div class="sv-gl ${h===12?'noon':''}" style="left:${svPct(h*60)}%"></div>`;}return `<div class="sv-grid">${g}</div>`;}
+function svRoleLane(venue,week,role){
+  const meta=SV_ROLE[role],rule=svRule(venue,role),list=svShifts(venue,week,role);
+  const dayNo=svSelectedDayNo(week);
+  const byName=[],map={};list.forEach(s=>{if(!map[s.name]){map[s.name]=[];byName.push(s.name);}map[s.name].push(s);});
+  let rows=byName.length?byName.map(name=>{
+    const bars=map[name].map(s=>{const L=svClamp(svPct(s.a),0,100),W=Math.max(svClamp(svPct(s.b),0,100)-L,0);
+      const tip=`${name}　${svFmt(s.a)}–${svFmt(s.b)}　${svHrs(s.a,s.b)}${s.lineBound?'':'（未綁定LINE）'}　▸ 按 ✕ 移除`;
+      return `<div class="sv-bar ${meta.cls}" style="left:${L}%;width:${W}%" data-tip="${svTip(tip)}"><span class="mono">${svFmt(s.a)}–${svFmt(s.b)}</span><span class="sv-bh mono">${svHrs(s.a,s.b)}</span><button class="sv-barx" data-rm-key="${escapeAttr(s.key||'')}" data-rm-raw="${svTip(s.raw||'')}" title="移除">✕</button></div>`;}).join('');
+    return `<div class="sv-trow"><div class="sv-gut"><span class="sv-emp">${escapeHtml(name)}</span></div><div class="sv-track">${bars}</div></div>`;
+  }).join(''):`<div class="sv-trow"><div class="sv-gut"><span class="sv-emp sv-mut">— 未排 —</span></div><div class="sv-track"></div></div>`;
+  // 覆蓋 chips
+  let chips='';svDutySegs(venue).forEach(seg=>{const c=svSegCov(list,seg,rule),L=svPct(seg.a),W=svPct(seg.b)-svPct(seg.a);
+    const gl=c.state==='empty'?'✕':(c.state==='under'?'▾':(c.state==='over'?'▴':'✓'));
+    const gap=(c.state==='empty'||c.state==='under');
+    const tip=`${seg.label}　在班 ${c.count} 人（需 ${rule.min}–${rule.max}）　${SV_STLABEL[c.state]}${c.names.length?'｜'+c.names.join('、'):''}　▸ 點此排班`;
+    const fill=`data-fill-venue="${escapeAttr(venue.name)}" data-fill-role="${role}" data-fill-day="${dayNo}" data-fill-seg="${escapeAttr(seg.label)}"`;
+    chips+=`<div class="sv-cov c-${c.state}${gap?' gap':''}" style="left:${L}%;width:${W}%" ${fill} data-tip="${svTip(tip)}"><span class="sv-cg">${gl}</span><span class="mono">${c.count}</span>${gap?'<span class="sv-plus">＋</span>':''}</div>`;});
+  const iss=svRoleIssues(venue,week,role),st=iss===0?'ok':'empty';
+  return `<div class="sv-role"><div class="sv-rhead"><span class="sv-rname"><span class="sv-rdot ${meta.cls}"></span>${meta.label}</span><span class="sv-rneed mono">需 ${rule.min}–${rule.max} 人</span><span class="sv-rstat s-${st}"><span class="sv-dotg"></span>${iss===0?'全時段達標':iss+' 個缺口'}</span><button class="sv-editbtn ghost" data-edit-role="${role}" data-edit-day="${dayNo}">✎ 進階編輯</button></div>${rows}<div class="sv-covrow"><div class="sv-gut sv-fillhint">點色塊排班 ▸</div><div class="sv-track">${chips}</div></div></div>`;
+}
+function svCoachLane(venue,week){
+  const list=svCourses(venue,week),sum=svCourseSummary(list);let bars='';
+  list.forEach(c=>{const k=svCourseStatus(c);
+    const L=svClamp(svPct(c.a),0,100),W=Math.max(svClamp(svPct(c.b),0,100)-L,0),lack=Math.max(c.need-c.coaches.length,0);
+    const tail=k==='none'?'免排':(!(c.need>0)?'未填需求':(k==='empty'?`缺${c.need}`:(k==='under'?`缺${lack}`:'')));
+    const tip=`課程 ${c.code}　${c.label}｜報名 ${c.enrolled} 人｜需 ${c.need>0?c.need:'未填'} 位｜已排 ${c.coaches.length} 位${c.coaches.length?'：'+c.coaches.join('、'):''}`;
+    bars+=`<div class="sv-cbar k-${k}" style="left:${L}%;width:${W}%" data-tip="${svTip(tip)}"><span class="sv-code mono">${c.code}</span><span>${c.coaches.length?escapeHtml(c.coaches.join('·')):''}</span>${tail?`<span class="sv-miss">${tail}</span>`:''}</div>`;});
+  return `<div class="sv-role"><div class="sv-rhead"><span class="sv-rname"><span class="sv-rdot coach"></span>課程教練</span><span class="sv-rneed mono">${svSelectedPeriod(week)==='weekday'?'平日課':'假日課'} ${list.length} 門</span><span class="sv-rstat ${svCourseSummaryClass(sum)}"><span class="sv-dotg"></span>${svCourseSummaryText(sum)}</span><button class="sv-editbtn" data-edit-view="courses">✎ 排課程教練</button></div><div class="sv-trow"><div class="sv-gut"><span class="sv-emp sv-mut">課程</span></div><div class="sv-track">${bars}</div></div></div>`;
+}
+function svRenderTimeline(venue,week){
+  return `<div class="sv-panel"><div class="sv-phead"><h2>${escapeHtml(venue.name)}</h2><span class="sv-sub mono">${venue.duty?venue.duty[0][1].split('-')[0]:''}–${venue.duty?venue.duty[venue.duty.length-1][1].split('-')[1]:''} · ${svSelectedDayLabel(week)}</span><div class="sv-ptags"><span class="sv-tag">救生 ${venue.lifeguardMin}–${venue.lifeguardMax}</span><span class="sv-tag">櫃台 1–2</span></div></div><div class="sv-tl">${svRuler()}<div class="sv-tlbody">${svGrid()}${svRoleLane(venue,week,'lifeguard')}${svRoleLane(venue,week,'frontdesk')}${svCoachLane(venue,week)}</div></div></div>`;
+}
+/* ---- 覆蓋總覽（時段 × 三館） ---- */
+const SV_BANDS=[['05:30','08:00'],['08:00','10:00'],['10:00','12:00'],['12:00','14:00'],['14:00','16:00'],['16:00','18:00'],['18:00','20:00'],['20:00','22:30']];
+function svRenderCoverage(week){
+  const role=svState.matrixRole,dayNo=svSelectedDayNo(week);
+  const head=venues.map(v=>{const iss=svRoleIssues(v,week,role);return `<th><div class="sv-vh"><b>${escapeHtml(v.name)}</b><span class="sv-vstat ${iss>0?'s-empty':'s-ok'}">${iss>0?iss+' 缺口':'全達標'}</span></div></th>`;}).join('');
+  const rows=SV_BANDS.map(([aS,bS])=>{const a=parseTimeRange(aS+'-'+bS).start,b=parseTimeRange(aS+'-'+bS).end;
+    const cells=venues.map(v=>{const list=svShifts(v,week,role),rule=svRule(v,role);
+      const open=v.duty[0]?parseTimeRange(v.duty[0][1]).start:0,close=v.duty[v.duty.length-1]?parseTimeRange(v.duty[v.duty.length-1][1]).end:0;
+      if(b<=open||a>=close)return `<td><div class="sv-cell k-closed"><span class="sv-num">–</span></div></td>`;
+      const seg={a:Math.max(a,open),b:Math.min(b,close)};
+      const c=svSegCov(list,seg,rule),k=c.state,members=svSegMembers(list,seg);
+      const flag=k==='empty'?'未排':(k==='under'?'不足':(k==='over'?'超量':''));
+      const who=members.length?members.map(s=>`<span class="sv-person-chip">${escapeHtml(s.name)}<button class="sv-chipx" data-rm-key="${escapeAttr(s.key||'')}" data-rm-raw="${svTip(s.raw||'')}" title="移除">✕</button></span>`).join(''):'<span>未排</span>';
+      const names=members.map(s=>s.name);
+      const tip=`${v.name} ${aS}–${bS}｜在班 ${c.count} 人（需 ${rule.min}–${rule.max}）${names.length?'｜'+names.join('、'):''}　▸ 點空白處排班，按姓名旁 ✕ 移除`;
+      const fill=`data-fill-venue="${escapeAttr(v.name)}" data-fill-role="${role}" data-fill-day="${dayNo}" data-fill-seg="${aS}-${bS}"`;
+      return `<td><div class="sv-cell k-${k}" ${fill} data-tip="${svTip(tip)}"><span class="sv-num">${c.count}</span><span class="sv-req mono">需 ${rule.min}–${rule.max}</span><div class="sv-who">${who}</div>${flag?`<span class="sv-flag">${flag}</span>`:''}</div></td>`;}).join('');
+    return `<tr><td class="sv-band"><b>${aS}</b><small class="mono">–${bS}</small></td>${cells}</tr>`;}).join('');
+  return `<div class="sv-panel"><div class="sv-mxbar"><div class="sv-seg2" id="svMxRole"><button data-role="lifeguard" aria-selected="${role==='lifeguard'}"><span class="sv-rdot life"></span>救生</button><button data-role="frontdesk" aria-selected="${role==='frontdesk'}"><span class="sv-rdot desk"></span>櫃台</button></div><span class="sv-mxhint">${svSelectedDayLabel(week)} · 數字＝該時段最低在班，名單＝在班人員，顏色＝是否達標</span></div><table class="sv-mx"><thead><tr><th class="sv-corner">時段＼館別</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+/* ---- 課程教練 ---- */
+function svCourseRow(venue,c){
+  const k=svCourseStatus(c),lack=Math.max(c.need-c.coaches.length,0),w=svClamp(Math.round(c.enrolled/24*100),0,100);
+  const pill=k==='none'?'免排':(!(c.need>0)?'需求未設定':(k==='under'?`缺${lack}`:SV_STLABEL[k]));
+  const key=cellKey(venue.name,'course',c.id,svSelectedPeriod());
+  const chips=c.coaches.map(n=>`<span class="sv-cchip">${escapeHtml(n)}<button class="sv-chipx" data-rmc-key="${escapeAttr(key)}" data-rmc-name="${escapeAttr(n)}" title="移除">✕</button></span>`).join('');
+  const btn=`<button class="sv-assignbtn" data-edit-course="${escapeAttr(key)}">${c.coaches.length?'＋ 排班':'排班'}</button>`;
+  return `<div class="sv-crow k-${k}"><span class="sv-cbadge mono">${c.code}</span><span class="sv-ctime mono">${escapeHtml(c.label)}</span><div class="sv-cen"><div class="sv-en"><b class="mono">${c.enrolled}</b><small>人</small></div>${c.enrolled?`<div class="sv-mini"><i style="width:${w}%"></i></div>`:''}</div><div class="sv-cright"><span class="sv-need mono">需 ${c.need>0?c.need:'未填'} 位</span><div class="sv-cchips">${chips}${btn}</div><span class="sv-cstat k-${k}">${pill}</span></div></div>`;
+}
+function svRenderCourses(venue,week){
+  const list=svCourses(venue,week),sum=svCourseSummary(list);
+  const head=`<div class="sv-cvsum">${`<span class="sv-sum mute">${list.length} 門</span>`}${(sum.needUnset>0||sum.missing>0)?`<span class="sv-sum warn">${svCourseSummaryText(sum)}</span>`:`<span class="sv-sum ok">${svCourseSummaryText(sum)}</span>`}</div>`;
+  const body=list.length?list.map(c=>svCourseRow(venue,c)).join(''):'<div class="sv-mut" style="padding:8px 2px">本館本日無課程</div>';
+  return `<div class="sv-panel"><div class="sv-cv"><div class="sv-cvhead"><span class="sv-rdot coach"></span><h3>${escapeHtml(venue.name)} · ${svSelectedDayLabel(week)} 課程</h3>${head}</div>${body}</div></div>`;
+}
+/* ---- 控制列 + 舞台 dispatcher ---- */
+function svControls(){
+  const week=svWeek();
+  const selected=svSelectedDayNo(week);
+  const dayBtn=(d)=>`<button data-sv-day="${d.dayNo}" aria-selected="${selected===d.dayNo}">${d.weekday}<span class="mono">${d.label}</span></button>`;
+  const viewBtn=(v,label,n)=>`<button data-sv-view="${v}" aria-selected="${svState.view===v}">${label}${n!=null?`<span class="sv-cnt ${n===0?'zero':''} mono">${n}</span>`:''}</button>`;
+  const covN=venues.reduce((s,v)=>s+svVenueIssues(v,week),0);
+  const courseN=venues.reduce((s,v)=>s+svCourseMiss(v,week),0);
+  return `<div class="sv-controls"><div class="sv-seg" id="svDaySeg">${svDayOptions(week).map(dayBtn).join('')}</div>
+    <div class="sv-views" id="svViewTabs">${viewBtn('timeline','時間軸',null)}${viewBtn('matrix','覆蓋總覽',covN)}${viewBtn('courses','課程教練',courseN)}</div></div>`;
+}
+function renderScheduleStage(){
+  const stage=document.getElementById('svStage');if(!stage)return;
+  const week=svWeek(),venue=svCurrentVenue();if(!week||!venue){stage.innerHTML='';return;}
+  if(svState.view==='excel')svState.view='timeline';
+  let body;
+  if(svState.view==='matrix')body=svRenderCoverage(week);
+  else if(svState.view==='courses')body=svRenderCourses(venue,week);
+  else body=svRenderTimeline(venue,week);
+  stage.innerHTML=svControls()+body;
+  svWireStage();
+}
+function svWireStage(){
+  document.querySelectorAll('#svDaySeg button').forEach(b=>b.onclick=()=>{svState.day=b.dataset.svDay;renderScheduleStage();});
+  document.querySelectorAll('#svViewTabs button').forEach(b=>b.onclick=()=>{svState.view=b.dataset.svView;renderScheduleStage();});
+  const mr=document.getElementById('svMxRole');if(mr)mr.querySelectorAll('button').forEach(b=>b.onclick=()=>{svState.matrixRole=b.dataset.role;renderScheduleStage();});
+  // 排班：點覆蓋色塊/格子 → 直接排該時段
+  document.querySelectorAll('#svStage [data-fill-role]').forEach(el=>el.onclick=()=>svAssignShift(el.dataset.fillVenue,el.dataset.fillRole,el.dataset.fillDay,el.dataset.fillSeg));
+  // 移除：時間軸 bar 的 ✕ / 課程教練 chip 的 ✕
+  document.querySelectorAll('#svStage [data-rm-key]').forEach(el=>el.onclick=(e)=>{e.stopPropagation();svRemoveLine(el.dataset.rmKey, el.dataset.rmRaw);});
+  document.querySelectorAll('#svStage [data-rmc-key]').forEach(el=>el.onclick=(e)=>{e.stopPropagation();svRemoveCoach(el.dataset.rmcKey, el.dataset.rmcName);});
+  // 課程教練：開員工挑選直接指派（不必開舊抽屜）
+  document.querySelectorAll('[data-edit-course]').forEach(b=>b.onclick=()=>openEmployeePicker(b.dataset.editCourse));
+  // 課程 lane 的「排課程教練」→ 切到課程視圖
+  document.querySelectorAll('[data-edit-view="courses"]').forEach(b=>b.onclick=()=>{svState.view='courses';renderScheduleStage();});
+  // 進階編輯：展開抽屜並跳到對應救生/櫃台輸入框（自訂時段/星期/刪除）
+  document.querySelectorAll('[data-edit-role]').forEach(b=>b.onclick=()=>svJumpToEditor(b.dataset.editRole,b.dataset.editDay));
+}
+function svSetEditLabel(){const b=document.getElementById('svEditToggle');if(!b)return;const on=document.body.classList.contains('sv-editing');b.textContent=on?'▾ 收起編輯資料層':'✎ 編輯班表資料（救生／櫃台輸入、課程教練、需求、備註）';}
+function svToggleEditing(){document.body.classList.toggle('sv-editing');svSetEditLabel();if(document.body.classList.contains('sv-editing'))document.getElementById('svEditDrawer')?.scrollIntoView({behavior:'smooth',block:'start'});}
+function svOpenDrawer(){document.body.classList.add('sv-editing');svSetEditLabel();}
+function svOpenDrawerScroll(sel){svOpenDrawer();const el=document.querySelector(sel);if(el)el.scrollIntoView({behavior:'smooth',block:'center'});}
+function svJumpToEditor(role,dayNo){
+  svOpenDrawer();
+  const venue=svCurrentVenue();
+  const src=document.querySelector(`.duty-grid-entry[data-venue="${CSS.escape(venue.name)}"][data-duty-role="${CSS.escape(role)}"][data-day-no="${CSS.escape(String(dayNo||svSelectedDayNo()))}"]`);
+  if(!src)return;
+  src.scrollIntoView({behavior:'smooth',block:'center'});
+  setTimeout(()=>{src.focus();const r=document.createRange();r.selectNodeContents(src);r.collapse(false);const s=window.getSelection();s.removeAllRanges();s.addRange(r);},250);
+}
+/* sv 工具提示 */
+(function svInitTip(){
+  let el=document.getElementById('svTip');
+  if(!el){el=document.createElement('div');el.id='svTip';document.body.appendChild(el);}
+  function move(e){let x=e.clientX+14,y=e.clientY+14;const r=el.getBoundingClientRect();if(x+r.width>innerWidth-8)x=e.clientX-r.width-14;if(y+r.height>innerHeight-8)y=e.clientY-r.height-14;el.style.left=x+'px';el.style.top=y+'px';}
+  document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest('[data-tip]');if(!t)return;el.textContent=decodeURIComponent(t.dataset.tip);el.classList.add('show');move(e);});
+  document.addEventListener('mousemove',e=>{if(el.classList.contains('show'))move(e);});
+  document.addEventListener('mouseout',e=>{if(e.target.closest&&e.target.closest('[data-tip]'))el.classList.remove('show');});
+})();
 
 async function bootSummerScheduleV40(){
   const loggedIn = await ensureAdminLoggedIn();
   if(!loggedIn) return;
 
-  document.getElementById('weekSelect')?.addEventListener('change',()=>{
+  document.getElementById('weekSelect')?.addEventListener('change', async ()=>{
+    // 切週前先 flush 未存編輯，避免舊週鍵被孤立而遺失
+    if(hasUnsavedChanges()){ await saveToServer(); }
+    resetScheduleState(currentWeekNo());  // 重置為新週（loaded=false → render 尾端會重新從 DB 水合）
     render();
     // 若目前在「可排班時段」頁籤，重新從 API 載入新週次資料
     const availView=document.getElementById('availabilityView');
@@ -3403,18 +4365,21 @@ async function bootSummerScheduleV40(){
   });
 
   document.getElementById('venueFilter')?.addEventListener('change',()=>{
-    render();
-    renderAvailabilityReport();
-    renderPayrollReport();
+    // 切館別只切 CSS 視圖（不重繪、不丟焦點/未存編輯）；全部館別仍在 DOM 內供存檔/發布
+    applyVenueView();
   });
 
   purgeLegacyStorageOnce();
   initWeeks();
+  // 先選館別：預設聚焦第一個館別（venue-first 入口）
+  const _vf=document.getElementById('venueFilter');
+  if(_vf && _vf.value==='all'){ _vf.value='新北高中'; }
   await loadEmployeesForSchedule();
   render();
   buildAvailabilityPage();
   renderAvailabilityReport();
   renderPayrollReport();
+  loadBackendPayrollRates().then(renderPayrollReport);
   startSyncPolling();
 }
 

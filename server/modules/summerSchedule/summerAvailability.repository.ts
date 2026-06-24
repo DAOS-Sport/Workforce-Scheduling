@@ -30,6 +30,19 @@ export const summerAvailabilityRepository = {
       .where(eq(summerAvailabilities.weekNo, weekNo));
   },
 
+  async deleteByEmployeeAndWeek(employeeId: number, weekNo: number): Promise<number> {
+    const rows = await db
+      .delete(summerAvailabilities)
+      .where(
+        and(
+          eq(summerAvailabilities.employeeId, employeeId),
+          eq(summerAvailabilities.weekNo, weekNo)
+        )
+      )
+      .returning({ id: summerAvailabilities.id });
+    return rows.length;
+  },
+
   async upsert(data: InsertSummerAvailability): Promise<SummerAvailability> {
     // JSONB columns with $type<> require an explicit cast due to Drizzle ORM
     // type inference limitations with createInsertSchema and JSONB arrays.
