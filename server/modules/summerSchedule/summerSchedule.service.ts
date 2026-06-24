@@ -22,6 +22,110 @@ function err(status: number, message: string): Error {
   return e;
 }
 
+function normalizeWeekNo(value: any): number {
+  const weekNo = Number(value);
+  if (!Number.isInteger(weekNo) || weekNo < 1 || weekNo > 9) {
+    throw err(400, "weekNo 只允許 1-9");
+  }
+  return weekNo;
+}
+
+function normalizeOptionalText(value: any): string | null {
+  const text = String(value ?? "").trim();
+  return text ? text : null;
+}
+
+function normalizeRequiredText(value: any, message: string): string {
+  const text = String(value ?? "").trim();
+  if (!text) throw err(400, message);
+  return text;
+}
+
+function normalizeNonNegativeInt(value: any): number {
+  const n = Number.parseInt(String(value ?? "0"), 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function normalizeOptionalInt(value: any): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function normalizeDate(value: any): string {
+  const date = normalizeRequiredText(value, "date 為必填");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw err(400, "date 格式須為 YYYY-MM-DD");
+  }
+  return date;
+}
+
+function normalizeTime(value: any, fieldName: string): string {
+  const time = normalizeRequiredText(value, `${fieldName} 為必填`);
+  if (!/^\d{2}:\d{2}$/.test(time)) {
+    throw err(400, `${fieldName} 格式須為 HH:MM`);
+  }
+  return time;
+}
+
+function normalizeManualCourseVenueId(value: any): number {
+  const venueId = Number(value);
+  if (!Number.isInteger(venueId) || venueId <= 0) {
+    throw err(400, "venueId 為必填");
+  }
+  return venueId;
+}
+
+export function normalizeManualCourseCreateInput(item: any): InsertManualScheduleCourse {
+  const startTime = normalizeTime(item.startTime, "startTime");
+  const endTime = normalizeTime(item.endTime, "endTime");
+  if (startTime >= endTime) {
+    throw err(400, "endTime 必須晚於 startTime");
+  }
+
+  return {
+    weekNo: normalizeWeekNo(item.weekNo),
+    date: normalizeDate(item.date),
+    venueId: normalizeManualCourseVenueId(item.venueId),
+    venueName: normalizeOptionalText(item.venueName ?? item.venue),
+    courseName: normalizeRequiredText(item.courseName, "courseName 為必填"),
+    startTime,
+    endTime,
+    registeredCount: normalizeNonNegativeInt(item.registeredCount),
+    requiredCoaches: normalizeNonNegativeInt(item.requiredCoaches ?? 1),
+    employeeId: normalizeOptionalInt(item.employeeId),
+    employeeName: normalizeOptionalText(item.employeeName),
+    note: normalizeOptionalText(item.note),
+    status: item.status === "deleted" ? "deleted" : "active",
+  };
+}
+
+export function normalizeManualCoursePatchInput(item: any): Partial<InsertManualScheduleCourse> {
+  const patch: Partial<InsertManualScheduleCourse> = {};
+
+  if (item.weekNo !== undefined) patch.weekNo = normalizeWeekNo(item.weekNo);
+  if (item.date !== undefined) patch.date = normalizeDate(item.date);
+  if (item.venueId !== undefined) patch.venueId = normalizeManualCourseVenueId(item.venueId);
+  if (item.venueName !== undefined || item.venue !== undefined) patch.venueName = normalizeOptionalText(item.venueName ?? item.venue);
+  if (item.courseName !== undefined) patch.courseName = normalizeRequiredText(item.courseName, "courseName 為必填");
+  if (item.startTime !== undefined) patch.startTime = normalizeTime(item.startTime, "startTime");
+  if (item.endTime !== undefined) patch.endTime = normalizeTime(item.endTime, "endTime");
+  if (item.registeredCount !== undefined) patch.registeredCount = normalizeNonNegativeInt(item.registeredCount);
+  if (item.requiredCoaches !== undefined) patch.requiredCoaches = normalizeNonNegativeInt(item.requiredCoaches);
+  if (item.employeeId !== undefined) patch.employeeId = normalizeOptionalInt(item.employeeId);
+  if (item.employeeName !== undefined) patch.employeeName = normalizeOptionalText(item.employeeName);
+  if (item.note !== undefined) patch.note = normalizeOptionalText(item.note);
+  if (item.status !== undefined) patch.status = item.status === "deleted" ? "deleted" : "active";
+
+  const startTime = patch.startTime ?? item.startTime;
+  const endTime = patch.endTime ?? item.endTime;
+  if (startTime !== undefined && endTime !== undefined && String(startTime) >= String(endTime)) {
+    throw err(400, "endTime 必須晚於 startTime");
+  }
+
+  return patch;
+}
+
 // 外部報名系統回傳全部梯次資料，每筆有 termStartDate。
 // 用日期範圍比對 SUMMER_WEEKS 來篩出正確週次，不傳 termId 給外部 API。
 
@@ -278,23 +382,25 @@ export const summerScheduleService = {
   },
 
   async saveScheduleAssignments(payload: any) {
-    const { version = "v40", weekNo, rawEntries, assignments, shifts: shiftEntries } = payload;
+    const { version = "v40", rawEntries, assignments, shifts: shiftEntries } = payload;
+    const weekNo = normalizeWeekNo(payload.weekNo);
+    const updatedAt = new Date();
     const [existing] = await db.select().from(summerScheduleAssignments).where(
       and(eq(summerScheduleAssignments.version, version), eq(summerScheduleAssignments.weekNo, weekNo))
     );
     const data: InsertSummerScheduleAssignment = {
       version,
       weekNo,
-      rawEntries: rawEntries ?? [],
-      assignments: assignments ?? [],
-      shiftEntries: shiftEntries ?? [],
+      rawEntries: Array.isArray(rawEntries) ? rawEntries : [],
+      assignments: Array.isArray(assignments) ? assignments : [],
+      shiftEntries: Array.isArray(shiftEntries) ? shiftEntries : [],
     };
     if (existing) {
-      await db.update(summerScheduleAssignments).set({ ...data, updatedAt: new Date() }).where(eq(summerScheduleAssignments.id, existing.id));
+      await db.update(summerScheduleAssignments).set({ ...data, updatedAt }).where(eq(summerScheduleAssignments.id, existing.id));
     } else {
       await db.insert(summerScheduleAssignments).values(data);
     }
-    return { success: true };
+    return { success: true, updatedAt: updatedAt.toISOString() };
   },
 
   async getManualCourses(weekNo: number) {
@@ -304,34 +410,26 @@ export const summerScheduleService = {
   },
 
   async createManualCourse(data: InsertManualScheduleCourse) {
-    const [row] = await db.insert(manualScheduleCourses).values(data).returning();
+    const [row] = await db.insert(manualScheduleCourses).values(normalizeManualCourseCreateInput(data)).returning();
     return row;
   },
 
   async createManualCourses(items: any[]) {
     if (!items.length) return [];
-    const sanitized = items.map((item: any) => ({
-      weekNo: Number(item.weekNo) || 0,
-      date: String(item.date || ""),
-      venueId: Number(item.venueId) || 0,
-      venueName: item.venueName ? String(item.venueName) : null,
-      courseName: String(item.courseName || ""),
-      startTime: String(item.startTime || ""),
-      endTime: String(item.endTime || ""),
-      registeredCount: Number(item.registeredCount) || 0,
-      requiredCoaches: Number(item.requiredCoaches) || 0,
-      note: item.note ? String(item.note) : null,
-      status: "active" as const,
-    }));
+    const sanitized = items.map((item: any) => normalizeManualCourseCreateInput(item));
     return db.insert(manualScheduleCourses).values(sanitized).returning();
   },
 
   async updateManualCourse(id: number, data: Partial<InsertManualScheduleCourse>) {
-    const [row] = await db.update(manualScheduleCourses).set({ ...data, updatedAt: new Date() }).where(eq(manualScheduleCourses.id, id)).returning();
+    if (!Number.isInteger(id) || id <= 0) throw err(400, "id 格式錯誤");
+    const patch = normalizeManualCoursePatchInput(data);
+    const [row] = await db.update(manualScheduleCourses).set({ ...patch, updatedAt: new Date() }).where(eq(manualScheduleCourses.id, id)).returning();
+    if (!row) throw err(404, "找不到手動課程");
     return row;
   },
 
   async deleteManualCourse(id: number) {
+    if (!Number.isInteger(id) || id <= 0) throw err(400, "id 格式錯誤");
     await db.update(manualScheduleCourses).set({ status: "deleted", updatedAt: new Date() }).where(eq(manualScheduleCourses.id, id));
     return { success: true };
   },

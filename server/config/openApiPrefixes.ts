@@ -5,6 +5,7 @@
  *  - /api/portal/       → 員工 LIFF portal（cookie 走 employee session 或 LIFF token）
  *  - /api/liff/         → LIFF 登入回呼
  *  - /api/line/         → LINE webhook（X-Line-Signature 驗證）
+ *  - /api/ragic/webhook/ → Ragic webhook（RAGIC_WEBHOOK_SECRET 驗證）
  *  - /api/internal/     → server-to-server（X-Internal-Token 驗證）
  *  - /api/anomaly-report 員工通報入口（公開表單）
  *  - /api/announcements/active → 員工 portal 顯示公告
@@ -18,6 +19,7 @@ export const OPEN_API_PREFIXES = [
   "/api/portal/",
   "/api/liff/",
   "/api/line/",
+  "/api/ragic/webhook/",
   "/api/internal/",
   "/api/anomaly-report",
   "/api/announcements/active",

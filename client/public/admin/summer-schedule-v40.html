@@ -377,7 +377,10 @@ tr.zero-enroll.force-open .force-badge{display:inline-block}
   border-radius:999px;
   font-size:11px;
   font-weight:700;
-  display:inline-block;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:76px;
   transition:background .3s,color .3s;
   background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;
 }
@@ -491,6 +494,7 @@ body.section-course section[data-section="duty"], body.section-holiday section[d
 .manual-field label{display:block;font-size:11px;font-weight:1000;color:#9a3412;margin-bottom:4px}
 .manual-field input,.manual-field select{width:100%;border:1px solid #fdba74;border-radius:9px;padding:8px 9px;font-weight:850;background:#fff;font-family:inherit;font-size:13px}
 .manual-add-btn{border:1px solid #ea580c;background:#f97316;color:#fff;border-radius:10px;padding:8px 10px;font-weight:1000;cursor:pointer;white-space:nowrap}
+.manual-add-btn:disabled{opacity:.58;cursor:not-allowed;transform:none}
 .manual-help{padding:7px 10px;background:#fffaf3;border-bottom:1px solid #fed7aa;color:#9a3412;font-size:12px;font-weight:900;line-height:1.55}
 .manual-table{min-width:1080px}
 .manual-table th{background:#ffedd5;color:#9a3412}
@@ -1174,7 +1178,7 @@ async function loadEmployeesForSchedule(){
   }catch(err){
     console.warn('employees API unavailable, no employee data loaded:', err);
     employees = [];
-    showEmployeeApiMessage('員工資料讀取失敗，請確認 /api/employees/for-schedule 是否正常');
+    showEmployeeApiMessage('員工資料讀取失敗，請確認 /api/admin/summer-employees 是否正常');
   }
 
   populateQuestionnaireEmployees();
@@ -1339,6 +1343,7 @@ function selectEmployeeForTarget(employeeId){
   closeEmployeePicker();
   validateAll();
   renderAvailabilityReport();
+  scheduleAutoSave();
 }
 function refreshEmployeeChips(){
   document.querySelectorAll('[data-employee-chips]').forEach(el=>{el.innerHTML='';});
@@ -1459,6 +1464,7 @@ function venueIdByName(name){
 }
 let manualCourseApiCache=[];
 const loadedManualCourseWeeks=new Set();
+const _manualCoursePatchTimers=new Map();
 function manualCoursesKey(){return LOCAL_STORAGE_PREFIX+'manual-courses';}
 function getLocalManualCourses(){
   try{return JSON.parse(localStorage.getItem(manualCoursesKey())||'[]');}
@@ -1478,32 +1484,68 @@ function getManualCourses(){
 function saveManualCourses(rows){
   localStorage.setItem(manualCoursesKey(), JSON.stringify(rows));
 }
-async function loadManualCoursesForWeek(weekNo){
-  if(!weekNo || loadedManualCourseWeeks.has(String(weekNo))) return;
-  loadedManualCourseWeeks.add(String(weekNo));
-  try{
-    const res=await fetch(`${API_ENDPOINTS.manualCourses}?weekNo=${weekNo}`,{credentials:'include'});
-    if(!res.ok) throw new Error('manual course API status '+res.status);
-    const raw=await res.json();
-    const items=Array.isArray(raw)?raw:(Array.isArray(raw.items)?raw.items:(Array.isArray(raw.courses)?raw.courses:[]));
-    const normalized=items.map(r=>({
-      id:r.id,
-      source:'manual',
+function normalizeManualCourseRow(r,fallbackWeekNo){
+  return {
+    id:r.id,
+    source:'manual',
+    date:r.date,
+    weekNo:Number(r.weekNo)||Number(fallbackWeekNo)||0,
+    venueId:r.venueId||'',
+    venueName:r.venueName||r.venue||'',
+    courseName:r.courseName||'',
+    startTime:r.startTime||'',
+    endTime:r.endTime||'',
+    registeredCount:Number(r.registeredCount)||0,
+    requiredCoaches:Number(r.requiredCoaches)||0,
+    note:r.note||'',
+    updatedAt:r.updatedAt||''
+  };
+}
+function manualCourseSignatureForWeek(weekNo){
+  return JSON.stringify(manualCourseApiCache
+    .filter(r=>Number(r.weekNo)===Number(weekNo))
+    .map(r=>({
+      id:String(r.id),
       date:r.date,
-      weekNo:Number(r.weekNo)||weekNo,
-      venueId:r.venueId||'',
-      venueName:r.venueName||r.venue||'',
+      venueId:String(r.venueId||''),
+      venueName:r.venueName||'',
       courseName:r.courseName||'',
       startTime:r.startTime||'',
       endTime:r.endTime||'',
       registeredCount:Number(r.registeredCount)||0,
       requiredCoaches:Number(r.requiredCoaches)||0,
       note:r.note||''
-    }));
-    manualCourseApiCache=manualCourseApiCache.filter(r=>Number(r.weekNo)!==Number(weekNo)).concat(normalized);
-    render();
+    }))
+    .sort((a,b)=>(a.date+a.startTime+a.id).localeCompare(b.date+b.startTime+b.id)));
+}
+function replaceManualCoursesForWeek(weekNo,rows){
+  manualCourseApiCache=manualCourseApiCache
+    .filter(r=>Number(r.weekNo)!==Number(weekNo))
+    .concat(rows);
+}
+async function loadManualCoursesForWeek(weekNo,options={}){
+  if(!weekNo) return false;
+  const force=!!options.force;
+  const rerender=options.rerender!==false;
+  const key=String(weekNo);
+  if(!force && loadedManualCourseWeeks.has(key)) return false;
+  loadedManualCourseWeeks.add(key);
+  const before=manualCourseSignatureForWeek(weekNo);
+  try{
+    const res=await fetch(`${API_ENDPOINTS.manualCourses}?weekNo=${weekNo}`,{credentials:'include'});
+    if(!res.ok) throw new Error('manual course API status '+res.status);
+    const raw=await res.json();
+    const items=extractApiItems(raw);
+    const normalized=items.map(r=>normalizeManualCourseRow(r,weekNo));
+    replaceManualCoursesForWeek(weekNo,normalized);
+    const after=manualCourseSignatureForWeek(weekNo);
+    const changed=before!==after;
+    if(changed && rerender) render();
+    return changed;
   }catch(err){
-    console.warn('manual schedule course API unavailable, using local manual courses only:',err);
+    console.warn('manual schedule course API unavailable:',err);
+    if(force) setSyncStatus('error','手動課程同步失敗');
+    return false;
   }
 }
 function weekNoForDate(dateStr){
@@ -1579,7 +1621,7 @@ function buildManualCourseRow(venue,row,week){
     <td class="enroll-col"><div class="time-edit enroll-count" contenteditable="true" data-key="${enrollKey}" oninput="updateManualCourseField('${escapeAttr(id)}','registeredCount',this.innerText)">${escapeHtml(enrollVal)}</div></td>
     <td class="needed-col"><div class="time-edit need-count" contenteditable="true" data-key="${neededKey}" data-placeholder="幾位" oninput="updateManualCourseField('${escapeAttr(id)}','requiredCoaches',this.innerText)">${escapeHtml(neededVal)}</div></td>
     <td class="edit-cell course-validate">${content(coachKey,'選擇教練',`data-role="course" data-period="manual-day-${day}" data-venue="${venue.name}" data-needed-key="${neededKey}"`)}</td>
-    <td class="edit-cell note-col">${content(noteKey,'手動課程備註')}</td>
+    <td class="edit-cell note-col">${content(noteKey,'手動課程備註',`oninput="updateManualCourseField('${escapeAttr(id)}','note',this.innerText)"`)}</td>
     <td class="enroll-col">手動</td>
     <td class="no-col"><button class="manual-delete" type="button" onclick="deleteManualCourse('${escapeAttr(id)}')">刪除</button></td>
   </tr>`;
@@ -1599,7 +1641,6 @@ async function addManualCourseFromForm(btn,venueName){
   if(!courseName){alert('請輸入課程名稱');return;}
   if(!startTime||!endTime||startTime>=endTime){alert('請確認開始與結束時間');return;}
   const newRows=dates.map(date=>({
-    id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
     source:'manual',
     date,
     weekNo:weekNoForDate(date),
@@ -1613,6 +1654,8 @@ async function addManualCourseFromForm(btn,venueName){
     note,
     createdAt:new Date().toISOString()
   }));
+  btn.disabled=true;
+  setSyncStatus('saving','手動課程新增中');
   try{
     const res=await fetch(API_ENDPOINTS.manualCourses,{
       method:'POST',
@@ -1621,13 +1664,24 @@ async function addManualCourseFromForm(btn,venueName){
       body:JSON.stringify({items:newRows})
     });
     if(!res.ok) throw new Error('manual course create API status '+res.status);
+    const raw=await res.json().catch(()=>null);
+    const created=extractApiItems(raw).map(r=>normalizeManualCourseRow(r,week.no));
+    created.forEach(row=>{
+      manualCourseApiCache=manualCourseApiCache.filter(r=>String(r.id)!==String(row.id)).concat(row);
+      loadedManualCourseWeeks.delete(String(row.weekNo));
+    });
     loadedManualCourseWeeks.delete(String(week.no));
-    await loadManualCoursesForWeek(week.no);
+    await loadManualCoursesForWeek(week.no,{force:true,rerender:false});
+    const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
+    setSyncStatus('saved','手動課程已同步 '+hm);
   }catch(err){
-    console.warn('manual course create API unavailable, saving to local fallback:',err);
-    const rows=getLocalManualCourses();
-    saveManualCourses(rows.concat(newRows));
+    console.warn('manual course create API failed:',err);
+    setSyncStatus('error','手動課程新增失敗');
+    alert('手動課程新增失敗，資料沒有同步到伺服器。請確認登入狀態與網路後再試一次。');
+    btn.disabled=false;
+    return;
   }
+  btn.disabled=false;
   form.querySelector('.manual-dates').value='';
   form.querySelector('.manual-name').value='';
   form.querySelector('.manual-note').value='';
@@ -1643,37 +1697,63 @@ function updateManualCourseCache(id,row){
     manualCourseApiCache=manualCourseApiCache.map(r=>String(r.id)===String(id)?row:r);
   }
 }
-async function updateManualCourseField(id,field,value){
+function queueManualCoursePatch(id,row){
+  clearTimeout(_manualCoursePatchTimers.get(String(id)));
+  _lastEditTime=Date.now();
+  setSyncStatus('pending','待自動儲存');
+  _manualCoursePatchTimers.set(String(id),setTimeout(async()=>{
+    if(!/^\d+$/.test(String(id))){
+      setSyncStatus('error','手動課程尚未同步到伺服器');
+      return;
+    }
+    try{
+      const res=await fetch(`${API_ENDPOINTS.manualCourses}/${encodeURIComponent(id)}`,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body:JSON.stringify(row)
+      });
+      if(!res.ok) throw new Error('manual course patch API status '+res.status);
+      const raw=await res.json().catch(()=>null);
+      const saved=unwrapApiPayload(raw) || row;
+      updateManualCourseCache(id,normalizeManualCourseRow(saved,row.weekNo));
+      const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
+      setSyncStatus('saved','已儲存 '+hm);
+    }catch(err){
+      console.warn('manual course patch API failed:',err);
+      setSyncStatus('error','手動課程儲存失敗');
+    }finally{
+      _manualCoursePatchTimers.delete(String(id));
+    }
+  },700));
+}
+function updateManualCourseField(id,field,value){
   const row=getManualCourses().find(r=>String(r.id)===String(id));
   if(!row) return;
   if(field==='registeredCount'||field==='requiredCoaches') row[field]=Number.parseInt(String(value||'').trim(),10)||0;
   else row[field]=String(value||'').trim();
   updateManualCourseCache(id,row);
-  try{
-    const res=await fetch(`${API_ENDPOINTS.manualCourses}/${encodeURIComponent(id)}`,{
-      method:'PATCH',
-      headers:{'Content-Type':'application/json'},
-      credentials:'include',
-      body:JSON.stringify(row)
-    });
-    if(!res.ok) throw new Error('manual course patch API status '+res.status);
-  }catch(err){
-    console.warn('manual course patch API unavailable, local fallback kept:',err);
-  }
+  queueManualCoursePatch(id,row);
 }
 async function deleteManualCourse(id){
   if(!confirm('刪除這筆手動課程？')) return;
-  manualCourseApiCache=manualCourseApiCache.filter(r=>String(r.id)!==String(id));
-  saveManualCourses(getLocalManualCourses().filter(r=>String(r.id)!==String(id)));
-  Object.keys(localStorage).filter(k=>k.includes(`-manual-${id}-`) || k.includes(`employee-meta-`) && k.includes(`-manual-${id}-`)).forEach(k=>localStorage.removeItem(k));
+  setSyncStatus('saving','刪除手動課程中');
   try{
     const res=await fetch(`${API_ENDPOINTS.manualCourses}/${encodeURIComponent(id)}`,{
       method:'DELETE',
       credentials:'include'
     });
     if(!res.ok) throw new Error('manual course delete API status '+res.status);
+    manualCourseApiCache=manualCourseApiCache.filter(r=>String(r.id)!==String(id));
+    saveManualCourses(getLocalManualCourses().filter(r=>String(r.id)!==String(id)));
+    Object.keys(localStorage).filter(k=>k.includes(`-manual-${id}-`) || k.includes(`employee-meta-`) && k.includes(`-manual-${id}-`)).forEach(k=>localStorage.removeItem(k));
+    const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
+    setSyncStatus('saved','已刪除 '+hm);
   }catch(err){
-    console.warn('manual course delete API unavailable, local delete kept:',err);
+    console.warn('manual course delete API failed:',err);
+    setSyncStatus('error','手動課程刪除失敗');
+    alert('手動課程刪除失敗，伺服器資料沒有變更。請確認登入狀態與網路後再試一次。');
+    return;
   }
   render();
 }
@@ -2273,61 +2353,76 @@ let _autoSaveTimer=null;
 let _lastServerUpdatedAt=0;
 let _lastEditTime=0;
 let _isSaving=false;
+let _isApplyingRemote=false;
 function setSyncStatus(state,text){const el=document.getElementById('syncStatus');if(!el)return;el.className='sync-status'+(state?' '+state:'');el.textContent=text;}
 async function saveToServer(){
   if(_isSaving)return;
   _isSaving=true;
   clearTimeout(_autoSaveTimer);
-  setSyncStatus('saving','⏳ 儲存中...');
+  setSyncStatus('saving','儲存中');
   document.querySelectorAll('[contenteditable][data-key]').forEach(el=>localStorage.setItem(LOCAL_STORAGE_PREFIX+el.dataset.key,el.innerText.replace(/\n+$/,'')));
   const payload=collectSchedulePayload();
   try{
     const res=await fetch(API_ENDPOINTS.scheduleAssignments,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});
     if(!res.ok)throw new Error('API status '+res.status);
-    _lastServerUpdatedAt=Date.now();
+    const raw=await res.json().catch(()=>null);
+    const saved=unwrapApiPayload(raw)||{};
+    _lastServerUpdatedAt=saved.updatedAt?new Date(saved.updatedAt).getTime():Date.now();
     document.body.classList.remove('unsaved');
     const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
-    setSyncStatus('saved','✓ 已儲存 '+hm);
+    setSyncStatus('saved','已儲存 '+hm);
   }catch(err){
     console.warn('saveToServer failed:',err);
-    setSyncStatus('error','✕ 儲存失敗，請重試');
+    setSyncStatus('error','儲存失敗，請重試');
   }finally{_isSaving=false;}
 }
 function scheduleAutoSave(){
+  if(_isApplyingRemote) return;
   _lastEditTime=Date.now();
-  setSyncStatus('pending','● 未儲存');
+  document.body.classList.add('unsaved');
+  setSyncStatus('pending','待自動儲存');
   clearTimeout(_autoSaveTimer);
-  _autoSaveTimer=setTimeout(()=>saveToServer(),2000);
+  _autoSaveTimer=setTimeout(()=>saveToServer(),900);
 }
 function startSyncPolling(){
   setInterval(async()=>{
     if(Date.now()-_lastEditTime<5000)return;
     if(_isSaving)return;
+    const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
+    let shouldRender=false;
     try{
-      const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
       const res=await fetch(`${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`,{credentials:'include'});
-      if(!res.ok)return;
-      const raw=await res.json();
+      if(!res.ok)throw new Error('schedule assignment API status '+res.status);
+      const raw=unwrapApiPayload(await res.json());
       const serverTime=raw.updatedAt?new Date(raw.updatedAt).getTime():0;
       if(serverTime>0&&serverTime>_lastServerUpdatedAt+1000){
         const entries=Array.isArray(raw.rawEntries)?raw.rawEntries:(Array.isArray(raw.entries)?raw.entries:[]);
         let anyNew=false;
+        _isApplyingRemote=true;
         entries.forEach(entry=>{
           if(!entry.key)return;
           const cur=localStorage.getItem(LOCAL_STORAGE_PREFIX+entry.key);
           if(cur!==(entry.value||'')){localStorage.setItem(LOCAL_STORAGE_PREFIX+entry.key,entry.value||'');anyNew=true;}
           if(Array.isArray(entry.employees))saveEmployeeMeta(entry.key,entry.employees);
         });
+        _isApplyingRemote=false;
         _lastServerUpdatedAt=serverTime;
         if(anyNew){
           sessionStorage.removeItem(LOCAL_STORAGE_PREFIX+'loaded-week-'+weekNo);
-          render();
-          const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
-          setSyncStatus('saved','↻ 已同步 '+hm);
+          shouldRender=true;
         }
       }
     }catch(e){console.warn('sync poll:',e);}
-  },15000);
+    try{
+      const manualChanged=await loadManualCoursesForWeek(weekNo,{force:true,rerender:false});
+      shouldRender=shouldRender||manualChanged;
+    }catch(e){console.warn('manual course sync poll:',e);}
+    if(shouldRender){
+      render();
+      const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
+      setSyncStatus('saved','已同步 '+hm);
+    }
+  },8000);
 }
 function bindAutoSave(){document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{el.addEventListener('input',()=>{const key=el.getAttribute('data-key'),text=el.innerText.replace(/\n+$/,'');localStorage.setItem(LOCAL_STORAGE_PREFIX+key,text);refreshEmployeeChips();validateAll();scheduleAutoSave();})})}
 function timePartsFromLabel(label){
@@ -2560,15 +2655,16 @@ async function loadExistingScheduleAssignments(){
   const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
   const marker=LOCAL_STORAGE_PREFIX+'loaded-week-'+weekNo;
   if(sessionStorage.getItem(marker)) return;
-  sessionStorage.setItem(marker,'1');
   try{
     const res=await fetch(`${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`,{credentials:'include'});
     if(!res.ok) throw new Error('schedule assignment API status '+res.status);
-    const raw=await res.json();
+    const raw=unwrapApiPayload(await res.json());
+    sessionStorage.setItem(marker,'1');
     if(raw.updatedAt){const t=new Date(raw.updatedAt).getTime();if(t>_lastServerUpdatedAt)_lastServerUpdatedAt=t;}
     const entries=Array.isArray(raw.rawEntries)?raw.rawEntries:(Array.isArray(raw.entries)?raw.entries:[]);
     if(!entries.length) return;
     let anyNew=false;
+    _isApplyingRemote=true;
     entries.forEach(entry=>{
       if(!entry.key) return;
       const existing=localStorage.getItem(LOCAL_STORAGE_PREFIX+entry.key);
@@ -2578,6 +2674,7 @@ async function loadExistingScheduleAssignments(){
       }
       if(Array.isArray(entry.employees)) saveEmployeeMeta(entry.key, entry.employees);
     });
+    _isApplyingRemote=false;
     if(anyNew){
       render();
     }else{
@@ -2699,7 +2796,7 @@ function populateQuestionnaireEmployees(){
   const sel=document.getElementById('qEmployeeSelect');
   if(!sel) return;
   if(!employees.length){
-    sel.innerHTML='<option value="">尚未取得員工資料，請先串接 /api/employees/for-schedule</option>';
+    sel.innerHTML='<option value="">尚未取得員工資料，請先確認 /api/admin/summer-employees</option>';
     return;
   }
   const options=['<option value="">請選擇員工</option>'].concat([...employees]
@@ -3324,7 +3421,7 @@ async function bootSummerScheduleV40(){
 document.addEventListener('DOMContentLoaded', bootSummerScheduleV40);
 /*
 Replit 後端必接 API 規格：
-1. GET  /api/employees/for-schedule -> {items:[{id,name,role,venueId,venueName,lineBound,lineDisplayName,lineBoundAt}]}
+1. GET  /api/admin/summer-employees -> {items:[{id,name,role,venueId,venueName,lineBound,lineDisplayName,lineBoundAt}]}
 2. GET  /api/schedule/enrollment-counts?weekNo=1&includeZero=true -> {items:[{weekNo,venueId,courseId,slotId,slotCode,registeredCount}]}
 3. GET  /api/admin/schedule-assignments?weekNo=1 -> {rawEntries:[], assignments:[]}
 4. POST /api/admin/schedule-assignments -> 儲存本頁 rawEntries / assignments / shifts payload。

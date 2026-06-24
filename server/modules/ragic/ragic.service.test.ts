@@ -99,7 +99,7 @@ describe("syncFromRagic", () => {
     const existingInH01 = employee({ id: 1, employeeCode: "E001", role: "救生" });
     const missingFromH01 = employee({ id: 2, employeeCode: "E999", role: "櫃台" });
     const inactiveMissing = employee({ id: 3, employeeCode: "E998", role: "救生", status: "inactive" });
-    const outOfScopeMissing = employee({ id: 4, employeeCode: "E997", role: "教練" });
+    const outOfScopeMissing = employee({ id: 4, employeeCode: "E997", role: "清潔" });
 
     mockFetchAllRagicRecords.mockResolvedValue({
       "1": ragicRecord({ 員工編號: "E001" }),
@@ -128,5 +128,50 @@ describe("syncFromRagic", () => {
       outOfScopeMissing.id,
       expect.anything(),
     );
+  });
+
+  it("creates active coach employees from H01", async () => {
+    mockFetchAllRagicRecords.mockResolvedValue({
+      "1": ragicRecord({ 應徵職務: ["教練"] }),
+    });
+    mockStorage.getEmployeeByCode.mockResolvedValue(undefined);
+
+    const result = await syncFromRagic();
+
+    expect(result.created).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(mockStorage.createEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({
+        employeeCode: "E001",
+        role: "教練",
+        status: "active",
+      }),
+    );
+  });
+
+  it("soft-deactivates an existing employee when H01 changes the role outside the sync scope", async () => {
+    mockFetchAllRagicRecords.mockResolvedValue({
+      "1": ragicRecord({ 應徵職務: ["清潔人員"] }),
+    });
+    mockStorage.getEmployeeByCode.mockResolvedValue(employee({ id: 1, status: "active", role: "救生" }));
+
+    const result = await syncFromRagic();
+
+    expect(result.updated).toBe(1);
+    expect(result.deactivated).toBe(1);
+    expect(mockStorage.updateEmployee).toHaveBeenCalledWith(1, { status: "inactive" });
+  });
+
+  it("does not count an already inactive employee as updated when H01 is also not active", async () => {
+    mockFetchAllRagicRecords.mockResolvedValue({
+      "1": ragicRecord({ 在職狀態: "離職" }),
+    });
+    mockStorage.getEmployeeByCode.mockResolvedValue(employee({ id: 1, status: "inactive" }));
+
+    const result = await syncFromRagic();
+
+    expect(result.updated).toBe(0);
+    expect(result.deactivated).toBe(0);
+    expect(mockStorage.updateEmployee).not.toHaveBeenCalled();
   });
 });
