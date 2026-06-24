@@ -2503,16 +2503,24 @@ async function loadExistingScheduleAssignments(){
     if(!res.ok) throw new Error('schedule assignment API status '+res.status);
     const raw=await res.json();
     const entries=Array.isArray(raw.rawEntries)?raw.rawEntries:(Array.isArray(raw.entries)?raw.entries:[]);
+    if(!entries.length) return;
+    let anyNew=false;
     entries.forEach(entry=>{
       if(!entry.key) return;
-      localStorage.setItem(LOCAL_STORAGE_PREFIX+entry.key, entry.value||'');
+      const existing=localStorage.getItem(LOCAL_STORAGE_PREFIX+entry.key);
+      if(existing!==entry.value){
+        localStorage.setItem(LOCAL_STORAGE_PREFIX+entry.key, entry.value||'');
+        anyNew=true;
+      }
       if(Array.isArray(entry.employees)) saveEmployeeMeta(entry.key, entry.employees);
-      const el=document.querySelector(`[data-key="${CSS.escape(entry.key)}"]`);
-      if(el) el.innerText=entry.value||'';
     });
-    refreshEmployeeChips();
-    validateAll();
-    renderAvailabilityReport();
+    if(anyNew){
+      render();
+    }else{
+      refreshEmployeeChips();
+      validateAll();
+      renderAvailabilityReport();
+    }
   }catch(err){
     console.warn('existing schedule assignment API unavailable:',err);
   }
