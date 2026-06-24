@@ -191,6 +191,27 @@ function parseRagicRecord(record: Record<string, any>): RagicEmployee | null {
   };
 }
 
+async function deactivateLocalEmployeesMissingFromRagic(
+  ragicEmployeeCodes: Set<string>,
+  dryRun: boolean,
+): Promise<number> {
+  if (ragicEmployeeCodes.size === 0) return 0;
+
+  const localEmployees = await storage.getAllEmployees();
+  let deactivated = 0;
+
+  for (const employee of localEmployees) {
+    if (employee.status !== "active") continue;
+    if (!SYNC_ROLES.includes(employee.role)) continue;
+    if (ragicEmployeeCodes.has(employee.employeeCode)) continue;
+
+    if (!dryRun) await storage.updateEmployee(employee.id, { status: "inactive" });
+    deactivated++;
+  }
+
+  return deactivated;
+}
+
 export async function syncFromRagic(dryRun = false): Promise<{
   created: number;
   updated: number;
@@ -224,6 +245,7 @@ export async function syncFromRagic(dryRun = false): Promise<{
 
   const regions = await storage.getRegions();
   const regionMap = new Map(regions.map((r) => [r.code, r.id]));
+  const ragicEmployeeCodes = new Set<string>();
 
   for (const [ragicId, record] of Object.entries(data)) {
     try {
@@ -232,6 +254,7 @@ export async function syncFromRagic(dryRun = false): Promise<{
         addSkip("姓名或員工編號空白");
         continue;
       }
+      ragicEmployeeCodes.add(parsed.employeeCode);
 
       if (!SYNC_ROLES.includes(parsed.role)) {
         addSkip(`職務不在同步範圍(${parsed.rawRole || "空白"})`);
@@ -265,9 +288,14 @@ export async function syncFromRagic(dryRun = false): Promise<{
 
         if (parsed.status) {
           updateData.status = parsed.status;
+          if (parsed.status === "inactive" && existing.status !== "inactive") {
+            result.deactivated++;
+          }
         } else if (parsed.rawStatus && INACTIVE_STATUSES.includes(parsed.rawStatus)) {
           updateData.status = "inactive";
-          result.deactivated++;
+          if (existing.status !== "inactive") {
+            result.deactivated++;
+          }
         }
 
         if (!dryRun) await storage.updateEmployee(existing.id, updateData);
@@ -305,6 +333,9 @@ export async function syncFromRagic(dryRun = false): Promise<{
       result.errors.push(`Record ${ragicId}: ${err.message}`);
     }
   }
+
+  const missingDeactivated = await deactivateLocalEmployeesMissingFromRagic(ragicEmployeeCodes, dryRun);
+  result.deactivated += missingDeactivated;
 
   console.log(`[ragic] ${dryRun ? "[預覽] " : ""}同步完成 — 新增:${result.created} 更新:${result.updated} 略過:${result.skipped} 停用:${result.deactivated} 錯誤:${result.errors.length}`);
   if (Object.keys(result.skipReasons).length > 0) {

@@ -270,6 +270,7 @@ export const summerScheduleService = {
     return {
       version: row.version,
       weekNo: row.weekNo,
+      updatedAt: row.updatedAt ?? null,
       rawEntries: row.rawEntries ?? [],
       assignments: row.assignments ?? [],
       shifts: row.shiftEntries ?? [],

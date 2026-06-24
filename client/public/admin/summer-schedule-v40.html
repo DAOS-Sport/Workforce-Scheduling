@@ -370,18 +370,21 @@ tr.force-open td:first-child{box-shadow:inset 4px 0 0 #f97316}
 .course-table th:nth-child(3){z-index:5}
 tr.zero-enroll .force-badge{display:none}
 tr.zero-enroll.force-open .force-badge{display:inline-block}
-.unsaved-dot{
-  display:none;
-  margin-left:6px;
-  padding:2px 7px;
+.unsaved-dot{display:none}
+.sync-status{
+  margin-left:8px;
+  padding:2px 9px;
   border-radius:999px;
-  background:#fff7ed;
-  color:#9a3412;
-  border:1px solid #fed7aa;
   font-size:11px;
-  font-weight:1000;
+  font-weight:700;
+  display:inline-block;
+  transition:background .3s,color .3s;
+  background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;
 }
-body.unsaved .unsaved-dot{display:inline-block}
+.sync-status.pending{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+.sync-status.saving{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+.sync-status.saved{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+.sync-status.error{background:#fef2f2;color:#991b1b;border-color:#fecaca}
 @media(max-width:1200px){
   .schedule-tools{grid-template-columns:1fr}
   .filter-tools{justify-content:flex-start}
@@ -634,13 +637,13 @@ body.section-manual section[data-section="duty"]{display:none!important}
     <div class="compact-row">
       <div class="compact-title">
         <h1>三館排班表</h1>
-        <div class="subtitle compact-subtitle">救生完整班段自動展開｜串接報名系統 API｜0人自動縮排｜撞班提醒｜教練選擇｜員工 API 準備｜正式資料模式｜問題分級｜手機查閱｜課程薪資規則｜員工前台發布準備｜Replit 上線準備版 v40 <span class="unsaved-dot">尚未儲存</span></div>
+        <div class="subtitle compact-subtitle">救生完整班段自動展開｜串接報名系統 API｜0人自動縮排｜撞班提醒｜教練選擇｜員工 API 準備｜正式資料模式｜問題分級｜手機查閱｜課程薪資規則｜員工前台發布準備｜Replit 上線準備版 v40 <span id="syncStatus" class="sync-status">就緒</span></div>
       </div>
       <div class="actions compact-actions">
         <button class="btn" onclick="clearStorage()">清空</button>
         <button class="btn" onclick="copyPreviousWeek()">複製上週</button>
         <button class="btn" onclick="checkReplitApis()">檢查 API</button>
-        <button class="btn green" onclick="saveLocal()">儲存排班</button>
+        <button class="btn green" onclick="saveToServer()">立即儲存</button>
         <button class="btn primary" onclick="publishToEmployeePortal()">發布員工前台</button>
         <button class="btn" onclick="window.print()">列印</button>
       </div>
@@ -718,7 +721,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
     <div class="filter-block">
       <div class="filter-group-label">操作</div>
       <button class="btn" onclick="expandAllZero()">顯示全部 0 人</button>
-      <button class="btn green" onclick="saveLocal()">儲存排班</button>
+      <button class="btn green" onclick="saveToServer()">立即儲存</button>
     </div>
   </div>
 </div>
@@ -2266,7 +2269,67 @@ function expandAllZero(){
 }
 function validateAll(){const week=weeks[Number(document.getElementById('weekSelect').value||0)];applyZeroEnrollmentRows();document.querySelectorAll('.need-validate').forEach(cell=>validateFrontdesk(cell,week));renderLifeguards(week);document.querySelectorAll('.course-validate').forEach(cell=>validateCourseCell(cell,week));applyConflictWarnings(week);updateIssueSummary();renderLinePushCheck();applyScheduleFilters();if(!document.getElementById('mobileView')?.classList.contains('hidden-view'))renderMobileView()}
 function render(){const week=weeks[Number(document.getElementById('weekSelect').value||0)],venueFilter=document.getElementById('venueFilter').value;document.getElementById('weekNote').textContent=`目前週別：${week.label}｜平日欄：${week.weekday}｜救生格式：姓名 時段 星期數字`;const visible=venues.filter(v=>venueFilter==='all'||v.name===venueFilter);document.getElementById('venueList').innerHTML=visible.map(v=>`<article class="venue-card" data-venue-card="${v.name}"><div class="venue-head"><div><div class="venue-title">${v.name}</div><div class="subtitle">${week.label}</div></div><div class="venue-meta">${v.tags.map((t,i)=>`<span class="tag ${['blue','green','orange'][i%3]}">${t}</span>`).join('')}</div></div><div class="venue-body">${buildDutySection(v,week)}<div class="course-stack">${buildCourseSection(v,week)}${buildHolidayCourseSection(v,week)}${buildManualCourseSection(v,week)}</div></div></article>`).join('');bindAutoSave();refreshEmployeeChips();validateAll();if(!document.getElementById('payrollView')?.classList.contains('hidden-view'))renderPayrollReport();loadEnrollmentCounts();loadManualCoursesForWeek(week.no);loadExistingScheduleAssignments();renderAvailabilityReport();refreshInlineEmployeeStatusText();}
-function bindAutoSave(){document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{el.addEventListener('input',()=>{const key=el.getAttribute('data-key'),text=el.innerText.replace(/\n+$/,'');localStorage.setItem(LOCAL_STORAGE_PREFIX+key,text);refreshEmployeeChips();validateAll()})})}
+let _autoSaveTimer=null;
+let _lastServerUpdatedAt=0;
+let _lastEditTime=0;
+let _isSaving=false;
+function setSyncStatus(state,text){const el=document.getElementById('syncStatus');if(!el)return;el.className='sync-status'+(state?' '+state:'');el.textContent=text;}
+async function saveToServer(){
+  if(_isSaving)return;
+  _isSaving=true;
+  clearTimeout(_autoSaveTimer);
+  setSyncStatus('saving','⏳ 儲存中...');
+  document.querySelectorAll('[contenteditable][data-key]').forEach(el=>localStorage.setItem(LOCAL_STORAGE_PREFIX+el.dataset.key,el.innerText.replace(/\n+$/,'')));
+  const payload=collectSchedulePayload();
+  try{
+    const res=await fetch(API_ENDPOINTS.scheduleAssignments,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});
+    if(!res.ok)throw new Error('API status '+res.status);
+    _lastServerUpdatedAt=Date.now();
+    document.body.classList.remove('unsaved');
+    const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
+    setSyncStatus('saved','✓ 已儲存 '+hm);
+  }catch(err){
+    console.warn('saveToServer failed:',err);
+    setSyncStatus('error','✕ 儲存失敗，請重試');
+  }finally{_isSaving=false;}
+}
+function scheduleAutoSave(){
+  _lastEditTime=Date.now();
+  setSyncStatus('pending','● 未儲存');
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer=setTimeout(()=>saveToServer(),2000);
+}
+function startSyncPolling(){
+  setInterval(async()=>{
+    if(Date.now()-_lastEditTime<5000)return;
+    if(_isSaving)return;
+    try{
+      const weekNo=Number(document.getElementById('weekSelect')?.value||0)+1;
+      const res=await fetch(`${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`,{credentials:'include'});
+      if(!res.ok)return;
+      const raw=await res.json();
+      const serverTime=raw.updatedAt?new Date(raw.updatedAt).getTime():0;
+      if(serverTime>0&&serverTime>_lastServerUpdatedAt+1000){
+        const entries=Array.isArray(raw.rawEntries)?raw.rawEntries:(Array.isArray(raw.entries)?raw.entries:[]);
+        let anyNew=false;
+        entries.forEach(entry=>{
+          if(!entry.key)return;
+          const cur=localStorage.getItem(LOCAL_STORAGE_PREFIX+entry.key);
+          if(cur!==(entry.value||'')){localStorage.setItem(LOCAL_STORAGE_PREFIX+entry.key,entry.value||'');anyNew=true;}
+          if(Array.isArray(entry.employees))saveEmployeeMeta(entry.key,entry.employees);
+        });
+        _lastServerUpdatedAt=serverTime;
+        if(anyNew){
+          sessionStorage.removeItem(LOCAL_STORAGE_PREFIX+'loaded-week-'+weekNo);
+          render();
+          const hm=new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false});
+          setSyncStatus('saved','↻ 已同步 '+hm);
+        }
+      }
+    }catch(e){console.warn('sync poll:',e);}
+  },15000);
+}
+function bindAutoSave(){document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{el.addEventListener('input',()=>{const key=el.getAttribute('data-key'),text=el.innerText.replace(/\n+$/,'');localStorage.setItem(LOCAL_STORAGE_PREFIX+key,text);refreshEmployeeChips();validateAll();scheduleAutoSave();})})}
 function timePartsFromLabel(label){
   const t=parseTimeRange(label);
   if(!t) return {startTime:'',endTime:''};
@@ -2502,6 +2565,7 @@ async function loadExistingScheduleAssignments(){
     const res=await fetch(`${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`,{credentials:'include'});
     if(!res.ok) throw new Error('schedule assignment API status '+res.status);
     const raw=await res.json();
+    if(raw.updatedAt){const t=new Date(raw.updatedAt).getTime();if(t>_lastServerUpdatedAt)_lastServerUpdatedAt=t;}
     const entries=Array.isArray(raw.rawEntries)?raw.rawEntries:(Array.isArray(raw.entries)?raw.entries:[]);
     if(!entries.length) return;
     let anyNew=false;
@@ -2525,22 +2589,7 @@ async function loadExistingScheduleAssignments(){
     console.warn('existing schedule assignment API unavailable:',err);
   }
 }
-async function saveLocal(){
-  document.querySelectorAll('[contenteditable][data-key]').forEach(el=>localStorage.setItem(LOCAL_STORAGE_PREFIX+el.dataset.key,el.innerText.replace(/\n+$/,'')));
-  const payload=collectSchedulePayload();
-  try{
-    const res=await fetch(API_ENDPOINTS.scheduleAssignments,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});
-    if(!res.ok) throw new Error('API status '+res.status);
-    document.body.classList.remove('unsaved');
-    alert(`已儲存第 ${payload.weekNo} 週排班。\nNormalized assignments：${payload.assignments.length} 筆\n員工前台 shifts：${payload.shifts.length} 筆`);
-    checkReplitApis();
-  }catch(err){
-    console.warn('schedule assignment API unavailable, local fallback saved:',err);
-    localStorage.setItem(LOCAL_STORAGE_PREFIX+'last-payload',JSON.stringify(payload));
-    document.body.classList.remove('unsaved');
-    alert(`後端 /api/admin/schedule-assignments 尚未接上，已先暫存在本機。\nNormalized assignments：${payload.assignments.length} 筆\n員工前台 shifts：${payload.shifts.length} 筆`);
-  }
-}
+async function saveLocal(){return saveToServer();}
 function clearStorage(){
   if(!confirm('清空目前瀏覽器暫存資料？'))return;
   Object.keys(localStorage)
@@ -3269,6 +3318,7 @@ async function bootSummerScheduleV40(){
   buildAvailabilityPage();
   renderAvailabilityReport();
   renderPayrollReport();
+  startSyncPolling();
 }
 
 document.addEventListener('DOMContentLoaded', bootSummerScheduleV40);
