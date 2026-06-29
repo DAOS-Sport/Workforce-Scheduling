@@ -1959,14 +1959,6 @@ async function loadManualCoursesForWeek(weekNo,options={}){
     const items=extractApiItems(raw);
     const normalized=items.map(r=>normalizeManualCourseRow(r,weekNo));
     replaceManualCoursesForWeek(weekNo,normalized);
-    // 把 DB 正確值寫入 scheduleState.cells，覆蓋自動存檔可能寫入的舊空值/零值
-    normalized.forEach(r=>{
-      const vname=r.venueName||'';
-      if(!vname || r.id==null) return;
-      scheduleState.cells.set(cellKey(vname,'manual',r.id,'enroll'), String(r.registeredCount??0));
-      scheduleState.cells.set(cellKey(vname,'manual',r.id,'needed'), String(r.requiredCoaches??0));
-      scheduleState.cells.set(cellKey(vname,'manual',r.id,'note'),   r.note??'');
-    });
     const after=manualCourseSignatureForWeek(weekNo);
     const changed=before!==after;
     if(changed && rerender) render();
@@ -2058,14 +2050,14 @@ function buildManualCourseRow(venue,row,week){
   const neededKey=cellKey(venue.name,'manual',id,'needed');
   const coachKey=cellKey(venue.name,'manual',id,'coach');
   const noteKey=cellKey(venue.name,'manual',id,'note');
-  const enrollVal=getSaved(enrollKey) ?? row.registeredCount ?? '';
-  const neededVal=getSaved(neededKey) ?? row.requiredCoaches ?? '';
-  const noteVal=getSaved(noteKey) ?? row.note ?? '';
+  const enrollVal=row.registeredCount ?? '';
+  const neededVal=row.requiredCoaches ?? '';
+  const noteVal=row.note ?? '';
   const timeLabel=`${row.startTime}-${row.endTime}`;
   const rowAttrs=`data-course-row="${escapeHtml(rowId)}" data-manual-course-row="${escapeHtml(id)}" data-venue-name="${escapeHtml(venue.name)}" data-venue-id="${escapeHtml(row.venueId || venueIdByName(venue.name))}" data-course-name="${escapeHtml(row.courseName)}" data-course-id="" data-term-id="" data-week-no="${escapeHtml(row.weekNo)}" data-slot-id="" data-slot-code="MANUAL" data-course-kind="manual" data-manual-date="${escapeHtml(row.date)}"`;
   return `<tr ${rowAttrs}>
     <td class="manual-date-col">${escapeHtml(formatManualDate(row.date))}</td>
-    <td class="course-name"><div class="time-edit" contenteditable="true" data-key="${cellKey(venue.name,'manual',id,'name')}" oninput="updateManualCourseField('${escapeAttr(id)}','courseName',this.innerText)">${escapeHtml(getSaved(cellKey(venue.name,'manual',id,'name')) ?? row.courseName)}</div></td>
+    <td class="course-name"><div class="time-edit" contenteditable="true" data-key="${cellKey(venue.name,'manual',id,'name')}" oninput="updateManualCourseField('${escapeAttr(id)}','courseName',this.innerText)">${escapeHtml(row.courseName)}</div></td>
     <td class="time-cell">${escapeHtml(timeLabel)}</td>
     <td class="enroll-col"><div class="time-edit enroll-count" contenteditable="true" data-key="${enrollKey}" oninput="updateManualCourseField('${escapeAttr(id)}','registeredCount',this.innerText)">${escapeHtml(enrollVal)}</div></td>
     <td class="needed-col"><div class="time-edit need-count" contenteditable="true" data-key="${neededKey}" data-placeholder="幾位" oninput="updateManualCourseField('${escapeAttr(id)}','requiredCoaches',this.innerText)">${escapeHtml(neededVal)}</div></td>
