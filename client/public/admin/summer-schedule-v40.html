@@ -1997,17 +1997,32 @@ function formatManualDate(dateStr){
 }
 function parseManualDates(raw,baseYear){
   const out=[], seen=new Set();
-  String(raw||'').split(/[\s,，、;；]+/).map(s=>s.trim()).filter(Boolean).forEach(token=>{
-    let y=baseYear, m='', d='';
+  function pushIso(iso){if(!seen.has(iso)&&weekNoForDate(iso)){seen.add(iso);out.push(iso);}}
+  function tokenToIso(token,y){
     let mm=token.match(/^(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);
-    if(mm){y=Number(mm[1]);m=mm[2];d=mm[3];}
-    else{
-      mm=token.match(/^(\d{1,2})[\/.-](\d{1,2})$/);
-      if(mm){m=mm[1];d=mm[2];}
+    if(mm)return`${Number(mm[1])}-${String(Number(mm[2])).padStart(2,'0')}-${String(Number(mm[3])).padStart(2,'0')}`;
+    mm=token.match(/^(\d{1,2})[\/.-](\d{1,2})$/);
+    if(mm)return`${y}-${String(Number(mm[1])).padStart(2,'0')}-${String(Number(mm[2])).padStart(2,'0')}`;
+    return null;
+  }
+  // 先按空白/逗號/頓號/分號切開，再處理每段（可能含 ~ 範圍）
+  String(raw||'').split(/[\s,，、;；]+/).map(s=>s.trim()).filter(Boolean).forEach(token=>{
+    // 支援日期範圍：07/05~07/16 或 07/05～07/16
+    const rangeMatch=token.match(/^([^~～]+)[~～]([^~～]+)$/);
+    if(rangeMatch){
+      const startIso=tokenToIso(rangeMatch[1].trim(),baseYear);
+      const endIso=tokenToIso(rangeMatch[2].trim(),baseYear);
+      if(!startIso||!endIso)return;
+      const cur=new Date(startIso+'T00:00:00'), fin=new Date(endIso+'T00:00:00');
+      if(isNaN(cur)||isNaN(fin)||cur>fin)return;
+      for(const d=new Date(cur);d<=fin;d.setDate(d.getDate()+1)){
+        const iso=d.toISOString().slice(0,10);
+        pushIso(iso);
+      }
+      return;
     }
-    if(!m||!d) return;
-    const iso=`${y}-${String(Number(m)).padStart(2,'0')}-${String(Number(d)).padStart(2,'0')}`;
-    if(!seen.has(iso) && weekNoForDate(iso)){seen.add(iso);out.push(iso);}
+    const iso=tokenToIso(token,baseYear);
+    if(iso)pushIso(iso);
   });
   return out;
 }
@@ -2018,7 +2033,7 @@ function buildManualCourseSection(venue,week){
   const body=rows.length?rows.map(r=>buildManualCourseRow(venue,r,week)).join(''):`<tr><td colspan="9" class="manual-empty">本週尚未新增手動課程。</td></tr>`;
   const vSlug=slug(venue.name);
   return `<section class="section" data-section="manual"><div class="section-head"><span>本週手動課程 / 外部課程</span><small>只顯示 ${week.label} 的手動課程，會一起檢查教練撞班</small></div>
-    <div class="manual-help">用途：補習班游泳、包班、臨時加課、外部合作課。可一次輸入多個日期，例如：07/06、07/13、07/20，系統會自動放到各週。</div>
+    <div class="manual-help">用途：補習班游泳、包班、臨時加課、外部合作課。可輸入單一日期（07/06、07/13）或日期範圍（07/05~07/16），多筆用頓號分隔，系統會自動展開並放到各週。</div>
     <div class="manual-form" data-manual-form="${escapeHtml(venue.name)}">
       <div class="manual-field"><label>日期，可多筆</label><input class="manual-dates" placeholder="07/06、07/13、07/20"></div>
       <div class="manual-field"><label>課程名稱</label><input class="manual-name" placeholder="補習班游泳"></div>
@@ -2073,7 +2088,8 @@ async function addManualCourseFromForm(btn,venueName){
   const note=(form.querySelector('.manual-note')?.value||'').trim();
   if(!dates.length){alert('請輸入日期，例如 07/06、07/13、07/20');return;}
   if(!courseName){alert('請輸入課程名稱');return;}
-  if(!startTime||!endTime||startTime>=endTime){alert('請確認開始與結束時間');return;}
+  if(!startTime||!endTime){alert('請輸入開始與結束時間');return;}
+  if(startTime>=endTime){alert(`結束時間（${endTime}）必須晚於開始時間（${startTime}），請重新確認`);return;}
   const newRows=dates.map(date=>({
     source:'manual',
     date,
