@@ -1959,6 +1959,14 @@ async function loadManualCoursesForWeek(weekNo,options={}){
     const items=extractApiItems(raw);
     const normalized=items.map(r=>normalizeManualCourseRow(r,weekNo));
     replaceManualCoursesForWeek(weekNo,normalized);
+    // 把 DB 正確值寫入 scheduleState.cells，覆蓋自動存檔可能寫入的舊空值/零值
+    normalized.forEach(r=>{
+      const vname=r.venueName||'';
+      if(!vname || r.id==null) return;
+      scheduleState.cells.set(cellKey(vname,'manual',r.id,'enroll'), String(r.registeredCount??0));
+      scheduleState.cells.set(cellKey(vname,'manual',r.id,'needed'), String(r.requiredCoaches??0));
+      scheduleState.cells.set(cellKey(vname,'manual',r.id,'note'),   r.note??'');
+    });
     const after=manualCourseSignatureForWeek(weekNo);
     const changed=before!==after;
     if(changed && rerender) render();
@@ -2047,7 +2055,7 @@ function buildManualCourseRow(venue,row,week){
     <td class="enroll-col"><div class="time-edit enroll-count" contenteditable="true" data-key="${enrollKey}" oninput="updateManualCourseField('${escapeAttr(id)}','registeredCount',this.innerText)">${escapeHtml(enrollVal)}</div></td>
     <td class="needed-col"><div class="time-edit need-count" contenteditable="true" data-key="${neededKey}" data-placeholder="幾位" oninput="updateManualCourseField('${escapeAttr(id)}','requiredCoaches',this.innerText)">${escapeHtml(neededVal)}</div></td>
     <td class="edit-cell course-validate">${content(coachKey,'選擇教練',`data-role="course" data-period="manual-day-${day}" data-venue="${venue.name}" data-needed-key="${neededKey}"`)}</td>
-    <td class="edit-cell note-col">${content(noteKey,'手動課程備註',`oninput="updateManualCourseField('${escapeAttr(id)}','note',this.innerText)"`)}</td>
+    <td class="edit-cell note-col"><div class="editbox" contenteditable="true" data-key="${noteKey}" oninput="updateManualCourseField('${escapeAttr(id)}','note',this.innerText)" data-placeholder="手動課程備註">${escapeHtml(noteVal).replace(/\n/g,'<br>')}</div><div class="cell-status"></div></td>
     <td class="enroll-col">手動</td>
     <td class="no-col"><button class="manual-delete" type="button" onclick="deleteManualCourse('${escapeAttr(id)}')">刪除</button></td>
   </tr>`;
