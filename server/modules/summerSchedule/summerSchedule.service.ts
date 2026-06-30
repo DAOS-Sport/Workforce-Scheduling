@@ -205,10 +205,10 @@ function normalizeSlotCode(value: any): string {
 
 // DB venues 表 id 對應：三重商工=1, 新北高中=2, 三民高中=3
 // 外部報名系統的 venueId（1,3,4）與排班系統內部 venueId 不同，需要對應。
-// 外部 1=三重商工→DB 1, 外部 3=新北高中→DB 2, 外部 4=三民高中→DB 3
+// 外部 1=新北高中→DB 2, 外部 3=三重商工→DB 1, 外部 4=三民高中→DB 3
 const EXTERNAL_VENUE_ID_MAP: Record<number, number> = {
-  1: 1,
-  3: 2,
+  1: 2,
+  3: 1,
   4: 3,
 };
 
