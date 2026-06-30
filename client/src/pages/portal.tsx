@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, parseISO, getDay } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, parseISO, getDay, addDays } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SummerShiftCard } from "@/components/SummerShiftCard";
 import {
   CalendarDays, Phone, MapPin, Clock, Users, ShieldCheck,
-  ChevronLeft, ChevronRight, Calendar, List,
+  ChevronLeft, ChevronRight, Calendar, List, LayoutGrid,
   Video, FileText, Image as ImageIcon, CheckCircle2, Lock, UserCheck,
   AlertTriangle, ClipboardCheck, BookOpen, Navigation, Loader2, XCircle,
   Wifi, Signal, Copy, MessageSquareWarning, Camera, X, ImagePlus, Send,
@@ -3546,6 +3546,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [addAvailEnd, setAddAvailEnd] = useState("17:00");
   const [leaveTypeSheet, setLeaveTypeSheet] = useState<string | null>(null);
   const [summerWeekNo, setSummerWeekNo] = useState<number>(1);
+  const [summerViewMode, setSummerViewMode] = useState<"list" | "calendar">("list");
   const [summerAvailWeekNo, setSummerAvailWeekNo] = useState<number>(1);
   const [saVenues, setSaVenues] = useState<string[]>([]);
   const [saWeekdays, setSaWeekdays] = useState<number[]>([]);
@@ -4332,11 +4333,33 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
       {activeView === "summer" && (
         <div className="max-w-lg mx-auto p-4 pb-8">
           <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
+            {/* Header */}
             <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
               <Sun className="h-4 w-4 text-juns-teal" />
-              <span className="text-sm font-semibold text-juns-navy">暑假教練課表</span>
+              <span className="text-sm font-semibold text-juns-navy flex-1">暑假教練課表</span>
+              {/* 視圖切換 */}
+              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+                <button
+                  onClick={() => setSummerViewMode("list")}
+                  className={`p-1.5 rounded-md transition-colors ${summerViewMode === "list" ? "bg-white shadow-sm text-juns-teal" : "text-slate-400 hover:text-slate-600"}`}
+                  title="條列式"
+                  data-testid="btn-summer-view-list"
+                >
+                  <List className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setSummerViewMode("calendar")}
+                  className={`p-1.5 rounded-md transition-colors ${summerViewMode === "calendar" ? "bg-white shadow-sm text-juns-teal" : "text-slate-400 hover:text-slate-600"}`}
+                  title="行事曆"
+                  data-testid="btn-summer-view-calendar"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
+
             <div className="p-4">
+              {/* 週次選擇 */}
               <div className="flex items-center gap-2 mb-3">
                 <label className="text-sm text-slate-500">選擇週次</label>
                 <select
@@ -4349,30 +4372,147 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
                     <option key={w} value={w}>第 {w} 週</option>
                   ))}
                 </select>
+                {summerScheduleData?.week?.label && (
+                  <span className="text-xs text-slate-400">{summerScheduleData.week.label}</span>
+                )}
               </div>
+
+              {/* 載入中 / 錯誤 */}
               {summerLoading ? (
                 <div className="h-24 bg-slate-100 rounded-lg animate-pulse" />
               ) : summerError ? (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">
                   {(summerError as Error).message || "暑假班表讀取失敗"}
                 </div>
-              ) : summerShifts.length === 0 ? (
-                <p className="text-sm text-center text-slate-400 py-3">這一週尚未排班</p>
+              ) : summerViewMode === "list" ? (
+                /* ── 條列式 ── */
+                summerShifts.length === 0 ? (
+                  <p className="text-sm text-center text-slate-400 py-3">這一週尚未排班</p>
+                ) : (
+                  <div className="space-y-2">
+                    {summerShifts.map((s, idx) => (
+                      <SummerShiftCard
+                        key={s.id ?? `${s.date}-${s.startTime}-${idx}`}
+                        date={s.date}
+                        startTime={s.startTime}
+                        endTime={s.endTime}
+                        venueName={s.venueName}
+                        role={s.role}
+                        notes={s.notes}
+                        idx={idx}
+                      />
+                    ))}
+                  </div>
+                )
               ) : (
-                <div className="space-y-2">
-                  {summerShifts.map((s, idx) => (
-                    <SummerShiftCard
-                      key={s.id ?? `${s.date}-${s.startTime}-${idx}`}
-                      date={s.date}
-                      startTime={s.startTime}
-                      endTime={s.endTime}
-                      venueName={s.venueName}
-                      role={s.role}
-                      notes={s.notes}
-                      idx={idx}
-                    />
-                  ))}
-                </div>
+                /* ── 行事曆式 ── */
+                (() => {
+                  const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
+                  // 從 API week 資料取得本週起始日（週一）；若無則用今天往前推算
+                  const weekStart = summerScheduleData?.week?.startDate
+                    ? parseISO(summerScheduleData.week.startDate)
+                    : (() => {
+                        const today = new Date();
+                        const dow = today.getDay(); // 0=Sun
+                        const diffToMon = dow === 0 ? -6 : 1 - dow;
+                        return addDays(today, diffToMon);
+                      })();
+                  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+                  // 依日期分組
+                  const byDate = new Map<string, typeof summerShifts>();
+                  summerShifts.forEach((s) => {
+                    const key = s.date; // "MM/DD" or "YYYY-MM-DD"
+                    if (!byDate.has(key)) byDate.set(key, []);
+                    byDate.get(key)!.push(s);
+                  });
+
+                  // 判斷某天是否有班（比對 "MM/DD" 格式）
+                  const shiftsForDay = (d: Date) => {
+                    const mmdd = format(d, "MM/dd").replace(/^0/, "").replace("/0", "/");
+                    // 嘗試 MM/DD、M/D、YYYY-MM-DD 三種格式
+                    const isoKey = format(d, "yyyy-MM-dd");
+                    const mmddKey = format(d, "MM/dd");
+                    const mdKey = `${d.getMonth() + 1}/${d.getDate()}`;
+                    return byDate.get(mmddKey) ?? byDate.get(mdKey) ?? byDate.get(isoKey) ?? byDate.get(mmdd) ?? [];
+                  };
+
+                  const hasAnyShift = summerShifts.length > 0;
+
+                  return (
+                    <div>
+                      {!hasAnyShift && (
+                        <p className="text-sm text-center text-slate-400 py-3 mb-2">這一週尚未排班</p>
+                      )}
+                      {/* 7欄行事曆格線 */}
+                      <div className="grid grid-cols-7 gap-px bg-slate-200 rounded-lg overflow-hidden border border-slate-200">
+                        {days.map((d, i) => {
+                          const shifts = shiftsForDay(d);
+                          const isWeekend = i >= 5;
+                          return (
+                            <div
+                              key={i}
+                              className={`flex flex-col min-h-[80px] ${isWeekend ? "bg-slate-50" : "bg-white"}`}
+                              data-testid={`cal-day-${i}`}
+                            >
+                              {/* 日期標頭 */}
+                              <div className={`text-center py-1 border-b border-slate-100 ${isWeekend ? "bg-slate-100" : "bg-slate-50"}`}>
+                                <div className={`text-[10px] font-semibold ${isWeekend ? "text-slate-400" : "text-juns-navy"}`}>
+                                  {DAY_LABELS[i]}
+                                </div>
+                                <div className={`text-[11px] font-bold ${shifts.length > 0 ? "text-juns-teal" : isWeekend ? "text-slate-400" : "text-slate-600"}`}>
+                                  {format(d, "d")}
+                                </div>
+                              </div>
+                              {/* 班次 */}
+                              <div className="flex-1 p-0.5 space-y-0.5">
+                                {shifts.map((s, si) => (
+                                  <div
+                                    key={si}
+                                    className="rounded bg-teal-50 border border-teal-200 px-0.5 py-0.5"
+                                    title={`${s.startTime}-${s.endTime} ${s.venueName}${s.notes ? `\n${s.notes}` : ""}`}
+                                  >
+                                    <div className="text-[9px] font-bold text-teal-700 leading-tight truncate">{s.startTime}</div>
+                                    <div className="text-[8px] text-teal-600 leading-tight truncate">{s.venueName.replace(/（.*?）/g, "").replace(/[（(].*?[）)]/g, "")}</div>
+                                    {s.notes && <div className="w-1 h-1 rounded-full bg-amber-400 mt-0.5 ml-auto" />}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* 圖例 */}
+                      {hasAnyShift && (
+                        <div className="flex items-center gap-3 mt-2 px-1">
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded bg-teal-50 border border-teal-200" />
+                            <span className="text-[10px] text-slate-500">有班</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            <span className="text-[10px] text-slate-500">有備註</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 ml-auto">長按可看詳情</span>
+                        </div>
+                      )}
+                      {/* 行事曆下方仍顯示有班日的詳細資料 */}
+                      {hasAnyShift && (
+                        <div className="mt-3 space-y-1.5">
+                          <p className="text-[11px] font-semibold text-slate-500 mb-1">本週班次詳情</p>
+                          {summerShifts.map((s, idx) => (
+                            <div key={idx} className="flex items-start gap-2 text-xs border border-slate-100 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                              <div className="text-juns-navy font-semibold w-10 shrink-0">{s.date}</div>
+                              <div className="text-slate-500 w-20 shrink-0">{s.startTime}–{s.endTime}</div>
+                              <div className="flex-1 truncate text-slate-600">{s.venueName}</div>
+                              {s.notes && <div className="text-[10px] text-blue-600 shrink-0 max-w-[60px] truncate">{s.notes}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
               )}
             </div>
           </div>
