@@ -673,6 +673,9 @@ body.section-manual section[data-section="manual"]{display:block}
 body.section-duty .course-stack, body.section-course .course-stack, body.section-holiday .course-stack, body.section-manual .course-stack{display:grid}
 body.section-course .venue-body, body.section-holiday .venue-body, body.section-manual .venue-body{grid-template-columns:1fr}
 body.section-course section[data-section="duty"], body.section-holiday section[data-section="duty"], body.section-manual section[data-section="duty"]{display:none!important}
+/* 隱藏各館「櫃台 / 救生」手填格子（資料仍保留於 DOM 供存檔/發布） */
+section[data-section="duty"]{display:none!important}
+#sectionDutyBtn{display:none!important}
 .check-mode .issue-panel{display:block}
 .check-mode .right-panels{display:grid}
 .check-mode .cell-status{display:block!important}
