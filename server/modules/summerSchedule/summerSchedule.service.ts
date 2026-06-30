@@ -1,7 +1,7 @@
 import { storage } from "../../storage";
 import { db } from "../../db";
-import { eq, and, like, gte, lte, or } from "drizzle-orm";
-import { shifts, summerScheduleAssignments, manualScheduleCourses, type InsertShift, type InsertSummerScheduleAssignment, type InsertManualScheduleCourse } from "@shared/schema";
+import { eq, and, like, gte, lte, or, ne } from "drizzle-orm";
+import { shifts, summerScheduleAssignments, manualScheduleCourses, dispatchShifts, type InsertShift, type InsertSummerScheduleAssignment, type InsertManualScheduleCourse } from "@shared/schema";
 import { isValidLineUserId } from "../line/lineSignature";
 
 const SUMMER_WEEKS = [
@@ -672,6 +672,33 @@ export const summerScheduleService = {
         };
       })
       .filter(Boolean);
+
+    // 合併派遣人員班次（下方表格「派遣人員」）
+    const dispRows = await db.select().from(dispatchShifts).where(
+      and(
+        gte(dispatchShifts.date, week.startDate),
+        lte(dispatchShifts.date, week.endDate),
+        ne(dispatchShifts.status, "cancelled")
+      )
+    );
+    dispRows.forEach((d) => {
+      const roleKind = resolveDutyRoleKind(d.role, d.notes);
+      if (!roleKind) return;
+      const name = d.dispatchName || "未知派遣";
+      items.push({
+        id: `dispatch-${d.id}`,
+        employeeId: d.linkedEmployeeId ?? null,
+        employeeName: name,
+        venueId: d.venueId ?? null,
+        venueName: venueMap.get(d.venueId ?? -1)?.name ?? venueMap.get(d.venueId ?? -1)?.shortName ?? "未知",
+        date: d.date,
+        startTime: d.startTime,
+        endTime: d.endTime,
+        role: d.role,
+        roleKind,
+        notes: d.notes ?? "",
+      } as any);
+    });
 
     return { items };
   },
