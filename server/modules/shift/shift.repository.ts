@@ -1,5 +1,5 @@
 import { db } from "../../db";
-import { eq, and, gte, lte, inArray, desc, not, like } from "drizzle-orm";
+import { eq, and, gte, lte, inArray, desc, not, like, or } from "drizzle-orm";
 import {
   shifts,
   shiftAuditLog,
@@ -24,7 +24,11 @@ export const shiftRepository = {
         gte(shifts.date, startDate),
         lte(shifts.date, endDate),
         eq(shifts.status, "active"),
-        not(like(shifts.notes, "%暑假排班v40%"))
+        or(
+          not(like(shifts.notes, "%暑假排班v40%")),
+          like(shifts.notes, "%暑假救生排班%"),
+          like(shifts.notes, "%暑假櫃台排班%")
+        )
       )
     );
   },
@@ -41,7 +45,11 @@ export const shiftRepository = {
         gte(shifts.date, startDate),
         lte(shifts.date, endDate),
         eq(shifts.status, "active"),
-        not(like(shifts.notes, "%暑假排班v40%"))
+        or(
+          not(like(shifts.notes, "%暑假排班v40%")),
+          like(shifts.notes, "%暑假救生排班%"),
+          like(shifts.notes, "%暑假櫃台排班%")
+        )
       )
     );
   },
