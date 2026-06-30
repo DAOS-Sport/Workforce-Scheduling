@@ -1286,7 +1286,8 @@ const API_ENDPOINTS = {
   manualCourses: "/api/admin/manual-schedule-courses",
   salaryRates: "/api/salary-rates",
   publishShifts: "/api/admin/summer-schedule/publish-shifts",
-  mySummerShifts: "/api/portal/my-summer-shifts"
+  mySummerShifts: "/api/portal/my-summer-shifts",
+  dutyShifts: "/api/admin/summer-schedule/duty-shifts"
 };
 
 function unwrapApiPayload(json){
@@ -4188,6 +4189,7 @@ document.addEventListener('click', (e)=>{
  */
 const SV_AX0=5.5*60, SV_AX1=22.5*60, SV_AXW=SV_AX1-SV_AX0;
 let svState={view:'timeline', day:'weekday', matrixRole:'lifeguard'};
+let _svPublishedDutyShifts=[];
 let svAssignTime=null;  // 設定後，員工挑選會把「姓名 時段」加進救生/櫃台來源框（直接從缺口排班）
 // 從覆蓋缺口/格子直接排班：開員工挑選 modal，選完把「姓名 時段」加進該館別+時段的來源框
 function svAssignShift(venueName, role, dayNo, segLabel){
@@ -4243,10 +4245,34 @@ function dutyGridTargetKeyForFill(venueName,role,dayNo){
 /* 班段（救生/櫃台）依目前 day 過濾，來源＝真實輸入框 */
 function svShifts(venue,week,role){
   const dayNo=svSelectedDayNo(week);
+  const roleTag=role==='lifeguard'?'暑假救生排班':'暑假櫃台排班';
+  // 已發布班次（從 DB 拉取）— 以此為優先資料來源
+  const published=_svPublishedDutyShifts
+    .filter(s=>s.venueId===venue.venueId && s.notes?.includes(roleTag))
+    .map(s=>{
+      const d=new Date(s.date),dn=d.getDay()===0?7:d.getDay();
+      if(dn!==dayNo)return null;
+      const[sh,sm]=(s.startTime||'00:00').split(':').map(Number);
+      const[eh,em]=(s.endTime||'00:00').split(':').map(Number);
+      return{name:s.employeeName,a:sh*60+sm,b:eh*60+em,employeeId:s.employeeId,lineBound:true,days:[dn],raw:`${s.employeeName} ${(s.startTime||'').slice(0,5)}-${(s.endTime||'').slice(0,5)}`,key:`published-${s.id}`,isPublished:true};
+    }).filter(Boolean);
+  if(published.length>0){
+    return published.sort((x,y)=>x.a-y.a||String(x.name).localeCompare(String(y.name),'zh-Hant'));
+  }
+  // 若無已發布班次，從 DOM 讀取（手動輸入）
   const all=role==='lifeguard'?allLifeguardShifts(week):allFrontdeskShifts(week);
   return all.filter(s=>s.venue===venue.name && (s.days||[]).includes(dayNo))
-    .map(s=>({name:s.name,a:s.time.start,b:s.time.end,employeeId:s.employeeId,lineBound:s.lineBound,days:s.days||[],raw:s.raw,key:s.key||''}))
+    .map(s=>({name:s.name,a:s.time.start,b:s.time.end,employeeId:s.employeeId,lineBound:s.lineBound,days:s.days||[],raw:s.raw,key:s.key||'',isPublished:false}))
     .sort((x,y)=>x.a-y.a||String(x.name).localeCompare(String(y.name),'zh-Hant'));
+}
+async function fetchPublishedDutyShifts(weekNo){
+  try{
+    const res=await fetch(`${API_ENDPOINTS.dutyShifts}?weekNo=${weekNo}`,{credentials:'include'});
+    if(!res.ok)return;
+    const raw=await res.json();
+    _svPublishedDutyShifts=(raw?.data?.items||raw?.items||[]);
+    renderScheduleStage();
+  }catch(e){console.warn('fetchPublishedDutyShifts failed',e);}
 }
 function svCountAt(list,mid){let c=0,names=[];list.forEach(s=>{if(s.a<=mid&&mid<s.b){c++;names.push(s.name);}});return{c,names};}
 function svStatus(count,rule){if(count===0)return'empty';if(count<rule.min)return'under';if(count>rule.max)return'over';return'ok';}
@@ -4334,8 +4360,9 @@ function svRoleLane(venue,week,role){
   const byName=[],map={};list.forEach(s=>{if(!map[s.name]){map[s.name]=[];byName.push(s.name);}map[s.name].push(s);});
   let rows=byName.length?byName.map(name=>{
     const bars=map[name].map(s=>{const L=svClamp(svPct(s.a),0,100),W=Math.max(svClamp(svPct(s.b),0,100)-L,0);
-      const tip=`${name}　${svFmt(s.a)}–${svFmt(s.b)}　${svHrs(s.a,s.b)}${s.lineBound?'':'（未綁定LINE）'}　▸ 按 ✕ 移除`;
-      return `<div class="sv-bar ${meta.cls}" style="left:${L}%;width:${W}%" data-tip="${svTip(tip)}"><span class="mono">${svFmt(s.a)}–${svFmt(s.b)}</span><span class="sv-bh mono">${svHrs(s.a,s.b)}</span><button class="sv-barx" data-rm-key="${escapeAttr(s.key||'')}" data-rm-raw="${svTip(s.raw||'')}" title="移除">✕</button></div>`;}).join('');
+      const tip=s.isPublished?`${name}　${svFmt(s.a)}–${svFmt(s.b)}　${svHrs(s.a,s.b)}（已發布班次）`:`${name}　${svFmt(s.a)}–${svFmt(s.b)}　${svHrs(s.a,s.b)}${s.lineBound?'':'（未綁定LINE）'}　▸ 按 ✕ 移除`;
+      const rmBtn=s.isPublished?'':`<button class="sv-barx" data-rm-key="${escapeAttr(s.key||'')}" data-rm-raw="${svTip(s.raw||'')}" title="移除">✕</button>`;
+      return `<div class="sv-bar ${meta.cls}" style="left:${L}%;width:${W}%" data-tip="${svTip(tip)}"><span class="mono">${svFmt(s.a)}–${svFmt(s.b)}</span><span class="sv-bh mono">${svHrs(s.a,s.b)}</span>${rmBtn}</div>`;}).join('');
     return `<div class="sv-trow"><div class="sv-gut"><span class="sv-emp">${escapeHtml(name)}</span></div><div class="sv-track">${bars}</div></div>`;
   }).join(''):`<div class="sv-trow"><div class="sv-gut"><span class="sv-emp sv-mut">— 未排 —</span></div><div class="sv-track"></div></div>`;
   // 覆蓋 chips
@@ -4463,7 +4490,9 @@ async function bootSummerScheduleV40(){
     // 切週前先 flush 未存編輯，避免舊週鍵被孤立而遺失
     if(hasUnsavedChanges()){ await saveToServer(); }
     resetScheduleState(currentWeekNo());  // 重置為新週（loaded=false → render 尾端會重新從 DB 水合）
+    _svPublishedDutyShifts=[];
     render();
+    fetchPublishedDutyShifts(currentWeekNo());
     // 若目前在「可排班時段」頁籤，重新從 API 載入新週次資料
     const availView=document.getElementById('availabilityView');
     if(availView && !availView.classList.contains('hidden-view')){
@@ -4487,6 +4516,7 @@ async function bootSummerScheduleV40(){
   if(_vf && _vf.value==='all'){ _vf.value='新北高中'; }
   await loadEmployeesForSchedule();
   render();
+  fetchPublishedDutyShifts(currentWeekNo());
   buildAvailabilityPage();
   renderAvailabilityReport();
   renderPayrollReport();

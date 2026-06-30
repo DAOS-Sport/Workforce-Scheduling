@@ -87,6 +87,16 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
     }
   });
 
+  // 取得已發布的救生/櫃台班次（供後台時間軸同步顯示）
+  app.get("/api/admin/summer-schedule/duty-shifts", requireAdmin, async (req, res) => {
+    try {
+      const weekNo = parseInt(req.query.weekNo as string, 10) || 1;
+      ok(res, await summerScheduleService.getPublishedDutyShifts(weekNo));
+    } catch (err: any) {
+      fail(res, 500, err.message);
+    }
+  });
+
   // 發布到員工前台 shifts
   // 新版前端只送 {weekNo} → 服務端讀取母資料表已儲存的 shiftEntries 發布（DB 驅動，republish 永遠一致）。
   // 舊版若帶 {weekNo, shifts:[...]} 仍相容。

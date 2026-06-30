@@ -1,6 +1,6 @@
 import { storage } from "../../storage";
 import { db } from "../../db";
-import { eq, and, like, gte, lte } from "drizzle-orm";
+import { eq, and, like, gte, lte, or } from "drizzle-orm";
 import { shifts, summerScheduleAssignments, manualScheduleCourses, type InsertShift, type InsertSummerScheduleAssignment, type InsertManualScheduleCourse } from "@shared/schema";
 import { isValidLineUserId } from "../line/lineSignature";
 
@@ -589,6 +589,44 @@ export const summerScheduleService = {
     );
     const incoming = Array.isArray(row?.shiftEntries) ? (row!.shiftEntries as any[]) : [];
     return applyPublish(week, wk, incoming);
+  },
+
+  async getPublishedDutyShifts(weekNo: number) {
+    const week = SUMMER_WEEKS.find((w) => w.no === weekNo);
+    if (!week) return { items: [] };
+
+    const rows = await db.select().from(shifts).where(
+      and(
+        gte(shifts.date, week.startDate),
+        lte(shifts.date, week.endDate),
+        eq(shifts.status, "active"),
+        like(shifts.notes, "%暑假排班v40%"),
+        or(
+          like(shifts.notes, "%暑假救生排班%"),
+          like(shifts.notes, "%暑假櫃台排班%")
+        )
+      )
+    );
+
+    const employees = await storage.getAllEmployees();
+    const empMap = new Map(employees.map((e) => [e.id, e.name]));
+    const venues = await storage.getAllVenues();
+    const venueMap = new Map(venues.map((v) => [v.id, v]));
+
+    const items = rows.map((s) => ({
+      id: s.id,
+      employeeId: s.employeeId,
+      employeeName: empMap.get(s.employeeId) ?? "未知",
+      venueId: s.venueId,
+      venueName: venueMap.get(s.venueId)?.name ?? "未知",
+      date: s.date,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      role: s.role,
+      notes: s.notes ?? "",
+    }));
+
+    return { items };
   },
 
   async getMySummerShifts(weekNo: number, lineId: string) {
