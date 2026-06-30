@@ -2781,7 +2781,7 @@ async function loadEnrollmentCounts(){
     const items = extractApiItems(json);
     const meta = extractApiMeta(json);
 
-    console.log('[summer enrollment] items:', items.length, 'meta:', meta);
+    console.log('[summer enrollment] items:', items.length, 'rawVenueSample:', meta.debug?.rawVenueSample, 'meta:', meta);
 
     applyEnrollmentCounts({
       source: 'api',

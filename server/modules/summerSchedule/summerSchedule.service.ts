@@ -204,12 +204,13 @@ function normalizeSlotCode(value: any): string {
 }
 
 // DB venues 表 id 對應：三重商工=1, 新北高中=2, 三民高中=3
-// 外部報名系統的 venueId（1,3,4）與排班系統內部 venueId 不同，需要對應。
-// 外部 1=新北高中→DB 2, 外部 3=三重商工→DB 1, 外部 4=三民高中→DB 3
+// 外部報名系統的 venueId 與排班系統內部 venueId 不同，需要對應。
+// 確認映射：檢查 /api/admin/summer-schedule/enrollment-counts?weekNo=N&debug=1
+// 的 debug.rawVenueSample 欄位即可看到外部 API 實際回傳的 venueId 值。
 const EXTERNAL_VENUE_ID_MAP: Record<number, number> = {
-  1: 2,
-  3: 1,
-  4: 3,
+  1: 1,  // 外部 1 → DB 1（三重商工）
+  3: 2,  // 外部 3 → DB 2（新北高中）
+  4: 3,  // 外部 4 → DB 3（三民高中）
 };
 
 function normalizeVenueId(row: any): number | null {
@@ -454,6 +455,22 @@ export const summerScheduleService = {
 
     const items = Array.from(map.values());
 
+    // 收集 raw venueId 樣本供映射確認（每個 raw venueId 取一筆代表）
+    const rawVenueSampleMap = new Map<number, any>();
+    for (const row of weekItems) {
+      const rawId = Number(row.venueId ?? row.venue_id ?? row.locationId ?? row.location_id);
+      if (!rawVenueSampleMap.has(rawId)) {
+        rawVenueSampleMap.set(rawId, {
+          rawVenueId: rawId,
+          venueName: row.venueName ?? row.venue ?? row.locationName ?? null,
+          mappedDbId: EXTERNAL_VENUE_ID_MAP[rawId] ?? rawId,
+          sampleCourse: row.courseName ?? row.course ?? row.className ?? null,
+        });
+      }
+    }
+    const rawVenueSample = Array.from(rawVenueSampleMap.values()).sort((a, b) => a.rawVenueId - b.rawVenueId);
+    console.log("[summer enrollment] raw venue sample:", JSON.stringify(rawVenueSample));
+
     return {
       items,
       lastUpdated: raw.lastUpdated || new Date().toISOString(),
@@ -463,6 +480,7 @@ export const summerScheduleService = {
         rawCount: allItems.length,
         weekFilteredCount: weekItems.length,
         normalizedCount: items.length,
+        rawVenueSample,
       },
     };
   },
