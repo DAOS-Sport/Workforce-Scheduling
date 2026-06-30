@@ -1633,14 +1633,13 @@ function confirmTempCoach(){
     svAssignTime=null;
   }else{
     // 課程教練模式：把姓名加進該課程格
-    const box=document.querySelector(`[data-key="${CSS.escape(employeePickerTargetKey)}"]`);
-    if(box){
-      const lines=usefulLines(box.innerText);
-      if(!lines.some(l=>l.trim()===name)){
-        const text=box.innerText.trim();
-        box.innerText=text?`${text}\n${name}`:name;
-      }
-      setCellValue(employeePickerTargetKey,box.innerText.replace(/\n+$/,''));
+    {
+      const prev=(getSaved(employeePickerTargetKey)||'').trim();
+      const prevLines=usefulLines(prev);
+      const newValue=prevLines.some(l=>l.trim()===name)?prev:(prev?`${prev}\n${name}`:name);
+      const box=document.querySelector(`[data-key="${CSS.escape(employeePickerTargetKey)}"]`);
+      if(box) box.innerHTML=escapeHtml(newValue).replace(/\n/g,'<br>');
+      setCellValue(employeePickerTargetKey,newValue);
     }
   }
   if(nameInput)nameInput.value='';
@@ -1687,15 +1686,14 @@ function selectEmployeeForTarget(employeeId){
     refreshEmployeeChips(); closeEmployeePicker(); validateAll(); scheduleAutoSave();
     return;
   }
-  const box=document.querySelector(`[data-key="${CSS.escape(employeePickerTargetKey)}"]`);
-  if(box){
-    const lines=usefulLines(box.innerText);
-    if(!lines.some(line=>cleanEmployeeDisplayName(line)===emp.name||normalizeName(line).includes(emp.name))){
-      const text=box.innerText.trim();
-      const displayName=employeeDisplayNameWithLineStatus(emp);
-      box.innerText=text ? `${text}\n${displayName}` : displayName;
-    }
-    setCellValue(employeePickerTargetKey, box.innerText.replace(/\n+$/,''));
+  {
+    const displayName=employeeDisplayNameWithLineStatus(emp);
+    const prev=(getSaved(employeePickerTargetKey)||'').trim();
+    const prevLines=usefulLines(prev);
+    const newValue=prevLines.some(line=>cleanEmployeeDisplayName(line)===emp.name||normalizeName(line).includes(emp.name))?prev:(prev?`${prev}\n${displayName}`:displayName);
+    const box=document.querySelector(`[data-key="${CSS.escape(employeePickerTargetKey)}"]`);
+    if(box) box.innerHTML=escapeHtml(newValue).replace(/\n/g,'<br>');
+    setCellValue(employeePickerTargetKey, newValue);
   }
   const meta=getEmployeeMeta(employeePickerTargetKey);
   if(!meta.some(x=>String(x.employeeId)===String(emp.id))){
@@ -2997,8 +2995,9 @@ async function saveToServer(){
   clearTimeout(_autoSaveTimer);
   clearTimeout(_saveRetryTimer);
   setSyncStatus('saving','儲存中');
-  // flush 目前 DOM 可編輯格 → state（保險，確保 state 含最新輸入）
+  // flush 目前 DOM 可編輯格 → state（只更新可見格；display:none 隱藏館別的格 innerText 回傳空字串，不得覆蓋已儲存的值）
   document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{
+    if(el.offsetParent===null) return; // 跳過 display:none 隱藏的元素
     const v=el.innerText.replace(/\n+$/,'');
     scheduleState.cells.set(el.dataset.key, v);
     try{localStorage.setItem(LOCAL_STORAGE_PREFIX+el.dataset.key, v);}catch(e){}
