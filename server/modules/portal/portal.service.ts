@@ -284,7 +284,8 @@ export const portalService = {
     ]);
     const isSummerCourse = (n: string | null | undefined) =>
       !!n?.includes("暑假排班v40") && !n.includes("暑假救生排班") && !n.includes("暑假櫃台排班");
-    const myShifts = rawShifts.filter((s) => !isSummerCourse(s.notes));
+    // 派遣班次不顯示在員工前台班表
+    const myShifts = rawShifts.filter((s) => !isSummerCourse(s.notes) && !s.isDispatch);
     const emp = await storage.getEmployee(employeeId);
 
     const allVenueIds = Array.from(new Set([
@@ -340,7 +341,8 @@ export const portalService = {
       _isDispatchRecord: true,
     }));
 
-    return [...enrichedRegular, ...enrichedDispatch];
+    // 派遣班次不顯示在員工前台班表（enrichedDispatch 不回傳）
+    return enrichedRegular;
   },
 
   async updateShiftCertificate(shiftId: number, employeeId: number, certificateImageUrl: string | null, actor: string) {
