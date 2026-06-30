@@ -2077,7 +2077,7 @@ function parseManualDates(raw,baseYear){
 function buildManualCourseSection(venue,week){
   const weekNo=Number(week.no);
   const vId=String(venue.venueId||venueIdByName(venue.name)||'');
-  const rows=getManualCourses().filter(r=>Number(r.weekNo)===weekNo && (r.venueName===venue.name || (vId && String(r.venueId||'')===vId))).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
+  const rows=getManualCourses().filter(r=>Number(r.weekNo)===weekNo && (r.venueName ? r.venueName===venue.name : (vId && String(r.venueId||'')===vId))).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
   const body=rows.length?rows.map(r=>buildManualCourseRow(venue,r,week)).join(''):`<tr><td colspan="9" class="manual-empty">本週尚未新增手動課程。</td></tr>`;
   const vSlug=slug(venue.name);
   return `<section class="section" data-section="manual"><div class="section-head"><span>本週手動課程 / 外部課程</span><small>只顯示 ${week.label} 的手動課程，會一起檢查教練撞班</small></div>
