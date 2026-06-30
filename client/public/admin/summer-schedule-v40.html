@@ -1272,6 +1272,10 @@ body.section-manual section[data-section="duty"]{display:none!important}
     </div>
     <div class="employee-modal-body">
       <input class="employee-search" id="employeeSearch" placeholder="搜尋姓名、職務、館別" oninput="renderEmployeePickerList()">
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0 4px;border-bottom:1px solid #e2e8f0;margin-bottom:4px;">
+        <input id="tempCoachName" placeholder="臨時帶班姓名（直接輸入）" style="flex:1;padding:5px 9px;border:1.5px solid #cbd5e1;border-radius:6px;font-size:13px;outline:none;" onkeydown="if(event.key==='Enter')confirmTempCoach()">
+        <button type="button" onclick="confirmTempCoach()" style="padding:5px 12px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">確認帶班</button>
+      </div>
       <div class="employee-list" id="employeePickerList"></div>
     </div>
   </div>
@@ -1606,10 +1610,42 @@ function openEmployeePicker(key){
   const modal=document.getElementById('employeePickerModal');
   const search=document.getElementById('employeeSearch');
   if(search) search.value='';
+  const tempInput=document.getElementById('tempCoachName');
+  if(tempInput) tempInput.value='';
   renderEmployeePickerList();
   modal?.classList.add('show');
 }
 function closeEmployeePicker(){document.getElementById('employeePickerModal')?.classList.remove('show');}
+function confirmTempCoach(){
+  const nameInput=document.getElementById('tempCoachName');
+  const name=(nameInput?.value||'').trim();
+  if(!name){nameInput?.focus();return;}
+  if(!confirm(`確認「${name}」為臨時帶班？`))return;
+  if(svAssignTime){
+    // 救生/櫃台缺口排班模式：加「姓名 時段」到來源框
+    const key=employeePickerTargetKey;
+    const prev=String(getSaved(key)||'').trim();
+    const line=`${name} ${svAssignTime}`;
+    const next=prev?`${prev}\n${line}`:line;
+    const srcBox=document.querySelector(`[data-key="${CSS.escape(key)}"]`);
+    if(srcBox)srcBox.innerText=next;
+    setCellValue(key,next);
+    svAssignTime=null;
+  }else{
+    // 課程教練模式：把姓名加進該課程格
+    const box=document.querySelector(`[data-key="${CSS.escape(employeePickerTargetKey)}"]`);
+    if(box){
+      const lines=usefulLines(box.innerText);
+      if(!lines.some(l=>l.trim()===name)){
+        const text=box.innerText.trim();
+        box.innerText=text?`${text}\n${name}`:name;
+      }
+      setCellValue(employeePickerTargetKey,box.innerText.replace(/\n+$/,''));
+    }
+  }
+  if(nameInput)nameInput.value='';
+  refreshEmployeeChips();closeEmployeePicker();validateAll();renderAvailabilityReport();scheduleAutoSave();
+}
 function renderEmployeePickerList(){
   const box=document.getElementById('employeePickerList');
   if(!box) return;
