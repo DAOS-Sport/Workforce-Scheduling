@@ -273,6 +273,8 @@ function normalizeEnrollmentRow(row: any, weekNo: number, termId: number) {
     courseName,
     slotCode,
     registeredCount,
+    isClosed: row.isClosed === true,
+    closureReason: (row.closureReason ?? null) as string | null,
   };
 }
 
@@ -441,6 +443,11 @@ export const summerScheduleService = {
         map.set(key, item);
       } else {
         existing.registeredCount += item.registeredCount;
+        // 任一梯次關班 → 整合計視為關班
+        if (item.isClosed) {
+          existing.isClosed = true;
+          existing.closureReason = item.closureReason ?? existing.closureReason;
+        }
       }
     }
 

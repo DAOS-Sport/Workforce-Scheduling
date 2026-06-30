@@ -240,6 +240,17 @@ tr.zero-enroll .note-col .editbox:empty:before{
   content:"手動";
   color:#ea580c;
 }
+tr.course-closed{background:#fff5f5;}
+tr.course-closed .auto-count{
+  background:#fee2e2;
+  border-color:#fca5a5;
+  color:#991b1b;
+  cursor:default;
+}
+tr.course-closed .auto-count:after{content:"關班";color:#dc2626;}
+.closed-badge{display:inline-block;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle;}
+tr.external-closed{background:#fff5f5;}
+tr.external-closed td{color:#991b1b;}
 .enrollment-status{
   display:inline-block;
   margin-left:8px;
@@ -2564,7 +2575,9 @@ function normalizeEnrollmentItemFromApi(row, fallbackWeekNo){
     venueId: String(row.venueId || '').trim(),
     courseName: row.courseName || '',
     slotCode: String(row.slotCode || '').trim().toUpperCase(),
-    registeredCount: Number(row.registeredCount) || 0
+    registeredCount: Number(row.registeredCount) || 0,
+    isClosed: row.isClosed === true,
+    closureReason: row.closureReason ?? null
   };
 }
 
@@ -2580,8 +2593,8 @@ function renderExternalCourses(){
       .filter(r=>Number(r.weekNo)===weekNo && String(r.venueId)===vId)
       .sort((a,b)=>String(a.courseName).localeCompare(b.courseName,'zh-Hant')||String(a.slotCode).localeCompare(b.slotCode));
     if(!rows.length){ box.innerHTML = '<div class="external-empty">本週此館別無外部報名課程。</div>'; return; }
-    const total = rows.reduce((s,r)=>s+(Number(r.registeredCount)||0),0);
-    box.innerHTML = `<table class="external-table"><thead><tr><th>課程</th><th>時段代碼</th><th>報名人數</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${escapeHtml(r.courseName)}</td><td>${escapeHtml(r.slotCode)}</td><td class="external-count">${Number(r.registeredCount)||0}</td></tr>`).join('')}<tr class="external-total"><td colspan="2">合計</td><td class="external-count">${total}</td></tr></tbody></table>`;
+    const total = rows.filter(r=>!r.isClosed).reduce((s,r)=>s+(Number(r.registeredCount)||0),0);
+    box.innerHTML = `<table class="external-table"><thead><tr><th>課程</th><th>時段代碼</th><th>報名人數</th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.isClosed?'external-closed':''}" title="${r.isClosed&&r.closureReason?`關班原因：${escapeHtml(r.closureReason)}`:''}"><td>${escapeHtml(r.courseName)}${r.isClosed?'<span class="closed-badge">關班</span>':''}</td><td>${escapeHtml(r.slotCode)}</td><td class="external-count">${r.isClosed?'—':Number(r.registeredCount)||0}</td></tr>`).join('')}<tr class="external-total"><td colspan="2">合計（不含關班）</td><td class="external-count">${total}</td></tr></tbody></table>`;
   });
 }
 function applyEnrollmentCounts(payload){
@@ -2589,6 +2602,7 @@ function applyEnrollmentCounts(payload){
   const data = Array.isArray(payload.data) ? payload.data : extractApiItems(payload.data || payload);
 
   const map = new Map();
+  const closedMap = new Map(); // key -> {isClosed, reason}
 
   if(source === 'api'){
     const fallbackWeekNo = Number(payload.filters?.weekNo) || 0;
@@ -2614,6 +2628,12 @@ function applyEnrollmentCounts(payload){
       }else{
         map.set(key, Math.max(Number(old)||0, item.registeredCount));
       }
+      // 關班追蹤：任一項目關班則整合計視為關班
+      if(item.isClosed){
+        closedMap.set(key,{isClosed:true,reason:item.closureReason??null});
+      }else if(!closedMap.has(key)){
+        closedMap.set(key,{isClosed:false,reason:null});
+      }
     });
   }
 
@@ -2630,13 +2650,30 @@ function applyEnrollmentCounts(payload){
       ? (map.has(key) ? Number(map.get(key)) || 0 : 0)
       : 0;
 
+    // 關班判斷
+    const closureInfo = closedMap.get(key) ?? {isClosed:false, reason:null};
+    if(source === 'api'){
+      if(closureInfo.isClosed){
+        tr.classList.add('course-closed');
+        tr.setAttribute('data-is-closed','true');
+      }else{
+        tr.classList.remove('course-closed');
+        tr.removeAttribute('data-is-closed');
+      }
+    }
+
     const enrollEl = tr.querySelector('.enroll-count');
     const neededEl = tr.querySelector('.need-count');
 
     if(enrollEl){
       const overrideKey=(enrollEl.dataset.key||'')+':override';
       enrollEl.setAttribute('data-system-count',String(count));
-      if(getSaved(overrideKey)==='1'){
+      if(closureInfo.isClosed){
+        // 關班：固定顯示 0，CSS 顯示「關班」標籤，不允許手動覆蓋
+        enrollEl.innerText='0';
+        enrollEl.classList.remove('loading','api','mock','empty','manual');
+        enrollEl.setAttribute('title', closureInfo.reason ? `關班原因：${closureInfo.reason}` : '此時段已關班');
+      }else if(getSaved(overrideKey)==='1'){
         // 手動覆蓋模式：保留使用者輸入值，不被 API 覆蓋
         const savedVal=getSaved(enrollEl.dataset.key||'');
         enrollEl.innerText=savedVal!==null?String(savedVal):String(count);
@@ -2657,12 +2694,16 @@ function applyEnrollmentCounts(payload){
     }
 
     if(neededEl){
-      const current = (neededEl.innerText || '').trim();
-
-      if(count === 0){
-        neededEl.innerText = '0';
-      }else if(current === '0'){
-        neededEl.innerText = '';
+      if(closureInfo.isClosed){
+        // 關班課程不需排教練
+        neededEl.innerText='0';
+      }else{
+        const current = (neededEl.innerText || '').trim();
+        if(count === 0){
+          neededEl.innerText = '0';
+        }else if(current === '0'){
+          neededEl.innerText = '';
+        }
       }
     }
   });
