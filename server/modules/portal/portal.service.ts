@@ -278,10 +278,13 @@ export const portalService = {
   },
 
   async getMyShifts(employeeId: number, startDate: string, endDate: string) {
-    const [myShifts, myDispatchShifts] = await Promise.all([
+    const [rawShifts, myDispatchShifts] = await Promise.all([
       storage.getShiftsByEmployeeAndDateRange(employeeId, startDate, endDate),
       storage.getDispatchShiftsByLinkedEmployee(employeeId, startDate, endDate),
     ]);
+    const isSummerCourse = (n: string | null | undefined) =>
+      !!n?.includes("暑假排班v40") && !n.includes("暑假救生排班") && !n.includes("暑假櫃台排班");
+    const myShifts = rawShifts.filter((s) => !isSummerCourse(s.notes));
     const emp = await storage.getEmployee(employeeId);
 
     const allVenueIds = Array.from(new Set([

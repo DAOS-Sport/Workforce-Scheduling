@@ -599,7 +599,13 @@ export const summerScheduleService = {
     if (!employee) throw err(404, "找不到此 LINE 帳號對應的員工資料");
 
     const empShifts = await storage.getShiftsByEmployeeAndDateRange(employee.id, week.startDate, week.endDate);
-    const summerShifts = empShifts.filter((s) => s.notes?.includes("暑假排班v40") && s.status === "active");
+    const summerShifts = empShifts.filter(
+      (s) =>
+        s.notes?.includes("暑假排班v40") &&
+        s.status === "active" &&
+        !s.notes.includes("暑假救生排班") &&
+        !s.notes.includes("暑假櫃台排班")
+    );
 
     const venues = await storage.getAllVenues();
     const venueMap = new Map(venues.map((v) => [v.id, v]));
