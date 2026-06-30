@@ -2050,8 +2050,8 @@ function buildManualCourseRow(venue,row,week){
   const neededKey=cellKey(venue.name,'manual',id,'needed');
   const coachKey=cellKey(venue.name,'manual',id,'coach');
   const noteKey=cellKey(venue.name,'manual',id,'note');
-  const enrollVal=row.registeredCount ?? '';
-  const neededVal=row.requiredCoaches ?? '';
+  const enrollVal=row.registeredCount != null ? String(row.registeredCount) : '';
+  const neededVal=row.requiredCoaches != null ? String(row.requiredCoaches) : '';
   const noteVal=row.note ?? '';
   const timeLabel=`${row.startTime}-${row.endTime}`;
   const rowAttrs=`data-course-row="${escapeHtml(rowId)}" data-manual-course-row="${escapeHtml(id)}" data-venue-name="${escapeHtml(venue.name)}" data-venue-id="${escapeHtml(row.venueId || venueIdByName(venue.name))}" data-course-name="${escapeHtml(row.courseName)}" data-course-id="" data-term-id="" data-week-no="${escapeHtml(row.weekNo)}" data-slot-id="" data-slot-code="MANUAL" data-course-kind="manual" data-manual-date="${escapeHtml(row.date)}"`;
@@ -2579,6 +2579,7 @@ function applyEnrollmentCounts(payload){
   }
 
   document.querySelectorAll('tr[data-course-row]').forEach(tr => {
+    if(tr.dataset.courseKind === 'manual') return; // 手動課程格自行管理人數，不被 enrollment API 覆蓋
     const weekNo = Number(tr.dataset.weekNo || 0);
     const venueId = String(tr.dataset.venueId || '').trim();
     const courseName = tr.dataset.courseName || '';
@@ -2624,6 +2625,7 @@ async function loadEnrollmentCounts(){
   const weekNo = Number(document.getElementById('weekSelect')?.value||0)+1;
 
   document.querySelectorAll('.enroll-count').forEach(el => {
+    if(el.closest('tr[data-course-kind="manual"]')) return; // 手動課程格自行管理人數，不碰
     el.innerText = '...';
     el.classList.add('loading');
   });
@@ -2681,6 +2683,7 @@ function rowForceOpen(tr){
 }
 function applyZeroEnrollmentRows(){
   document.querySelectorAll('tr[data-course-row]').forEach(tr=>{
+    if(tr.dataset.courseKind === 'manual') return; // 手動課程格自行管理，不被 zero-enroll 邏輯覆蓋
     const enrollEl = tr.querySelector('.enroll-count');
     const neededEl = tr.querySelector('.need-count');
     if(!enrollEl || !neededEl) return;
