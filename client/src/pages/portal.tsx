@@ -437,7 +437,7 @@ const VIEW_TITLES: Record<PortalView, string> = {
   guidelines: "員工守則",
   sop: "系統使用說明",
   availability: "排班意願",
-  summer: "我的暑假班表",
+  summer: "暑假教練課表",
   "summer-avail": "暑假可排班時段填報",
 };
 
@@ -467,7 +467,7 @@ function SideMenuDrawer({
       label: "排班協作",
       items: [
         { view: "schedule", label: "我的班表", icon: CalendarDays },
-        { view: "summer", label: "我的暑假班表", icon: Sun },
+        { view: "summer", label: "暑假教練課表", icon: Sun },
         { view: "summer-avail", label: "暑假可排班時段填報", icon: ClipboardCheck },
         { view: "coworkers", label: "工作夥伴", icon: Users },
         { view: "availability", label: "排班意願", icon: CalendarDays },
@@ -4334,7 +4334,7 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
           <div className="border border-juns-border rounded-xl bg-white overflow-hidden">
             <div className="px-4 py-3 border-b border-juns-border flex items-center gap-2">
               <Sun className="h-4 w-4 text-juns-teal" />
-              <span className="text-sm font-semibold text-juns-navy">我的暑假班表</span>
+              <span className="text-sm font-semibold text-juns-navy">暑假教練課表</span>
             </div>
             <div className="p-4">
               <div className="flex items-center gap-2 mb-3">
