@@ -203,8 +203,9 @@ function normalizeSlotCode(value: any): string {
     .replace(/\s+/g, "");
 }
 
-// 外部報名系統的 venueId（1,3,4）與排班系統內部 venueId（1,2,3）不同，需要對應。
-// 新北高中=1→1, 三重商工=3→2, 三民高中=4→3
+// DB venues 表 id 對應：三重商工=1, 新北高中=2, 三民高中=3
+// 外部報名系統的 venueId（1,3,4）與排班系統內部 venueId 不同，需要對應。
+// 外部 1=三重商工→DB 1, 外部 3=新北高中→DB 2, 外部 4=三民高中→DB 3
 const EXTERNAL_VENUE_ID_MAP: Record<number, number> = {
   1: 1,
   3: 2,
@@ -218,9 +219,9 @@ function normalizeVenueId(row: any): number | null {
   }
 
   const name = normalizeText(row.venueName ?? row.venue ?? row.locationName ?? row.location);
-  if (name.includes("\u65b0\u5317")) return 1;
-  if (name.includes("\u4e09\u91cd")) return 2;
-  if (name.includes("\u4e09\u6c11")) return 3;
+  if (name.includes("\u4e09\u91cd")) return 1; // 三重 → DB id 1
+  if (name.includes("\u65b0\u5317")) return 2; // 新北 → DB id 2
+  if (name.includes("\u4e09\u6c11")) return 3; // 三民 → DB id 3
 
   return null;
 }
