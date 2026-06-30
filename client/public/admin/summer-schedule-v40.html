@@ -230,6 +230,16 @@ tr.zero-enroll .note-col .editbox:empty:before{
   font-weight:900;
   line-height:1.1;
 }
+.auto-count[contenteditable="true"]{cursor:text;}
+.auto-count.manual{
+  background:#fff7ed;
+  border-color:#f97316;
+  color:#c2410c;
+}
+.auto-count.manual:after{
+  content:"手動";
+  color:#ea580c;
+}
 .enrollment-status{
   display:inline-block;
   margin-left:8px;
@@ -1870,7 +1880,7 @@ function buildCourseRow(venue,row,kind){
     noteKey=cellKey(venue.name,'course',rowId,'note'),
     neededVal=savedOrSample(neededKey);
   const rowAttrs=`data-course-row="${escapeHtml(rowId)}" data-venue-name="${escapeHtml(venue.name)}" data-venue-id="${escapeHtml(venue.venueId || venueIdByName(venue.name) || '')}" data-course-name="${escapeHtml(row.courseName)}" data-course-id="${escapeHtml(row.courseId || '')}" data-term-id="" data-week-no="${currentWeekKey().replace('w','')}" data-slot-id="${escapeHtml(row.slotId || '')}" data-slot-code="${escapeHtml(row.code)}" data-course-kind="${escapeHtml(kind)}"`;
-  const enrollCell=`<td class="enroll-col"><div class="time-edit enroll-count auto-count loading" data-key="${enrollKey}" data-auto-enrollment="true" data-placeholder="系統帶入">載入中</div></td>`;
+  const enrollCell=`<td class="enroll-col"><div class="time-edit enroll-count auto-count loading" contenteditable="true" data-key="${enrollKey}" data-auto-enrollment="true" data-placeholder="系統帶入" oninput="onEnrollOverride(this)" ondblclick="resetEnrollOverride(this)" title="點擊可輸入手動人數；雙擊重置回系統值">載入中</div></td>`;
   if(kind==='weekday'){
     const weekdayKey=cellKey(venue.name,'course',rowId,'weekday');
     return `<tr ${rowAttrs}><td class="course-name">${escapeHtml(row.courseName)}<span class="id-hint">API: venue_id / course_id / term_id / slot_id</span></td><td class="course-code">${escapeHtml(row.code)}</td><td class="time-cell">${escapeHtml(row.time)}</td>${enrollCell}<td class="needed-col"><div class="time-edit need-count" contenteditable="true" data-key="${neededKey}" data-placeholder="幾位">${escapeHtml(neededVal)}</div></td><td class="edit-cell weekday-col course-validate">${content(weekdayKey,'平日教練，請選擇員工 123',`data-role="course" data-period="weekday" data-venue="${venue.name}" data-needed-key="${neededKey}"`)}</td><td class="edit-cell note-col">${content(noteKey,'人數 / 體驗 / 備註')}</td></tr>`;
@@ -2185,6 +2195,35 @@ function updateManualCourseField(id,field,value){
   else row[field]=String(value||'').trim();
   updateManualCourseCache(id,row);
   queueManualCoursePatch(id,row);
+}
+function onEnrollOverride(el){
+  const key=el.dataset.key;
+  if(!key) return;
+  const v=(el.innerText||'').replace(/\n+$/,'').trim();
+  scheduleState.cells.set(key,v);
+  scheduleState.cells.set(key+':override','1');
+  el.classList.add('manual');
+  el.classList.remove('api','empty','mock','loading');
+  el.setAttribute('title','雙擊可重置回系統值');
+  _lastEditTime=Date.now();
+  _dirty=true;
+  document.body.classList.add('unsaved');
+  setSyncStatus('pending','待自動儲存');
+}
+function resetEnrollOverride(el){
+  const key=el.dataset.key;
+  if(!key||!scheduleState.cells.has(key+':override')) return;
+  scheduleState.cells.delete(key+':override');
+  const sysCount=el.dataset.systemCount||'0';
+  el.innerText=sysCount;
+  scheduleState.cells.set(key,sysCount);
+  el.classList.remove('manual');
+  el.classList.add('api');
+  el.setAttribute('title','點擊可輸入手動人數；雙擊重置回系統值');
+  _lastEditTime=Date.now();
+  _dirty=true;
+  document.body.classList.add('unsaved');
+  setSyncStatus('pending','待自動儲存');
 }
 async function deleteManualCourse(id){
   if(!confirm('刪除這筆手動課程？')) return;
@@ -2595,15 +2634,26 @@ function applyEnrollmentCounts(payload){
     const neededEl = tr.querySelector('.need-count');
 
     if(enrollEl){
-      enrollEl.innerText = String(count);
-      enrollEl.classList.remove('loading','api','mock','empty');
-      enrollEl.classList.add(source === 'api' ? 'api' : 'empty');
-      enrollEl.setAttribute(
-        'title',
-        source === 'api'
-          ? '\u7531 /api/schedule/enrollment-counts \u7cbe\u6e96\u5e36\u5165'
-          : 'API \u672a\u9023\u7dda\uff0c\u66ab\u7121\u5831\u540d\u4eba\u6578\u8cc7\u6599'
-      );
+      const overrideKey=(enrollEl.dataset.key||'')+':override';
+      enrollEl.setAttribute('data-system-count',String(count));
+      if(getSaved(overrideKey)==='1'){
+        // 手動覆蓋模式：保留使用者輸入值，不被 API 覆蓋
+        const savedVal=getSaved(enrollEl.dataset.key||'');
+        enrollEl.innerText=savedVal!==null?String(savedVal):String(count);
+        enrollEl.classList.remove('loading','api','mock','empty');
+        enrollEl.classList.add('manual');
+        enrollEl.setAttribute('title','雙擊可重置回系統值');
+      }else{
+        enrollEl.innerText = String(count);
+        enrollEl.classList.remove('loading','api','mock','empty','manual');
+        enrollEl.classList.add(source === 'api' ? 'api' : 'empty');
+        enrollEl.setAttribute(
+          'title',
+          source === 'api'
+            ? '由 /api/schedule/enrollment-counts 帶入；點擊可手動覆蓋；雙擊重置'
+            : 'API 未連線，暫無報名人數資料；點擊可手動輸入'
+        );
+      }
     }
 
     if(neededEl){
@@ -2626,6 +2676,7 @@ async function loadEnrollmentCounts(){
 
   document.querySelectorAll('.enroll-count').forEach(el => {
     if(el.closest('tr[data-course-kind="manual"]')) return; // 手動課程格自行管理人數，不碰
+    if(el.dataset.key && getSaved(el.dataset.key+':override')==='1') return; // 手動覆蓋格：保留目前顯示值
     el.innerText = '...';
     el.classList.add('loading');
   });
