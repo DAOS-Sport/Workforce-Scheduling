@@ -614,36 +614,65 @@ export const summerScheduleService = {
     const week = SUMMER_WEEKS.find((w) => w.no === weekNo);
     if (!week) return { items: [] };
 
+    // 改為直接抓正式後台班表 shifts，不再只抓「暑假排班v40」發布資料。
     const rows = await db.select().from(shifts).where(
       and(
         gte(shifts.date, week.startDate),
         lte(shifts.date, week.endDate),
-        eq(shifts.status, "active"),
-        like(shifts.notes, "%暑假排班v40%"),
-        or(
-          like(shifts.notes, "%暑假救生排班%"),
-          like(shifts.notes, "%暑假櫃台排班%")
-        )
+        eq(shifts.status, "active")
       )
     );
 
     const employees = await storage.getAllEmployees();
     const empMap = new Map(employees.map((e) => [e.id, e.name]));
+
     const venues = await storage.getAllVenues();
     const venueMap = new Map(venues.map((v) => [v.id, v]));
 
-    const items = rows.map((s) => ({
-      id: s.id,
-      employeeId: s.employeeId,
-      employeeName: empMap.get(s.employeeId) ?? "未知",
-      venueId: s.venueId,
-      venueName: venueMap.get(s.venueId)?.name ?? "未知",
-      date: s.date,
-      startTime: s.startTime,
-      endTime: s.endTime,
-      role: s.role,
-      notes: s.notes ?? "",
-    }));
+    function resolveDutyRoleKind(role?: string | null, notes?: string | null) {
+      const text = `${role || ""} ${notes || ""}`;
+
+      if (
+        text.includes("救生") ||
+        text.includes("守望") ||
+        text.toLowerCase().includes("lifeguard")
+      ) {
+        return "lifeguard";
+      }
+
+      if (
+        text.includes("櫃台") ||
+        text.includes("櫃檯") ||
+        text.includes("櫃臺") ||
+        text.toLowerCase().includes("frontdesk") ||
+        text.toLowerCase().includes("counter")
+      ) {
+        return "frontdesk";
+      }
+
+      return null;
+    }
+
+    const items = rows
+      .map((s) => {
+        const roleKind = resolveDutyRoleKind(s.role, s.notes);
+        if (!roleKind) return null;
+
+        return {
+          id: s.id,
+          employeeId: s.employeeId,
+          employeeName: empMap.get(s.employeeId) ?? "未知",
+          venueId: s.venueId,
+          venueName: venueMap.get(s.venueId)?.name ?? venueMap.get(s.venueId)?.shortName ?? "未知",
+          date: s.date,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          role: s.role,
+          roleKind,
+          notes: s.notes ?? "",
+        };
+      })
+      .filter(Boolean);
 
     return { items };
   },

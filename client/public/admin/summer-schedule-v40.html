@@ -4291,10 +4291,9 @@ function dutyGridTargetKeyForFill(venueName,role,dayNo){
 /* 班段（救生/櫃台）依目前 day 過濾，來源＝真實輸入框 */
 function svShifts(venue,week,role){
   const dayNo=svSelectedDayNo(week);
-  const roleTag=role==='lifeguard'?'暑假救生排班':'暑假櫃台排班';
-  // 已發布班次（從 DB 拉取）— 以此為優先資料來源
+  // 從後台正式櫃台 / 救生班表抓資料（依後端回傳的 roleKind 判斷）
   const published=_svPublishedDutyShifts
-    .filter(s=>s.venueId===venue.venueId && s.notes?.includes(roleTag))
+    .filter(s=>Number(s.venueId)===Number(venue.venueId) && s.roleKind===role)
     .map(s=>{
       const d=new Date(s.date),dn=d.getDay()===0?7:d.getDay();
       if(dn!==dayNo)return null;
