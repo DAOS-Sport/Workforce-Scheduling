@@ -203,14 +203,13 @@ function normalizeSlotCode(value: any): string {
     .replace(/\s+/g, "");
 }
 
-// DB venues 表 id 對應：三重商工=1, 新北高中=2, 三民高中=3（需與 DB venues 表一致）
-// 外部報名系統的 venueId 與排班系統內部 venueId 不同，需要對應。
-// 確認映射：檢查 /api/admin/summer-schedule/enrollment-counts?weekNo=N&debug=1
-// 的 debug.rawVenueSample 欄位即可看到外部 API 實際回傳的 venueId 值。
+// DB venues 表 id：三重商工=1, 新北高中=2, 三民高中=3
+// 外部報名系統 venueId（已實測確認）：1=新北高中, 3=三重商工, 4=三民高中
+// 故需將外部 venueId 對應到正確的 DB id。
 const EXTERNAL_VENUE_ID_MAP: Record<number, number> = {
-  1: 1,  // 外部 1 → DB 1（三重商工）
-  3: 2,  // 外部 3 → DB 2（新北高中）
-  4: 3,  // 外部 4 → DB 3（三民高中）
+  1: 2,  // 外部 1（新北高中）→ DB 2（新北高中）
+  3: 1,  // 外部 3（三重商工）→ DB 1（三重商工）
+  4: 3,  // 外部 4（三民高中）→ DB 3（三民高中）
 };
 
 function normalizeVenueId(row: any): number | null {
