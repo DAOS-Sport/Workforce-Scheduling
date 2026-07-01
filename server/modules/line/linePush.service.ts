@@ -5,6 +5,18 @@ import { getTaiwanNow, formatTaiwanDate, LEAVE_TYPES } from "./lineHelpers";
 import { isValidLineUserId } from "./lineSignature";
 import { availabilityRepository } from "../availability/availability.repository";
 
+/**
+ * 判斷該班次是否需要打卡（生救/櫃台/派遣需打卡；教練課程不需打卡）
+ */
+function isAttendanceRequired(shift: { role?: string | null; notes?: string | null }): boolean {
+  const role = String(shift.role || "").trim();
+  const notes = String(shift.notes || "").trim();
+  if (role === "教練") return false;
+  if (role.toLowerCase().includes("coach")) return false;
+  if (notes.includes("暑假課程") || notes.includes("手動課程")) return false;
+  return true;
+}
+
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 
 /** 員工入口系統連結（LIFF 或 Web Portal） */
@@ -115,7 +127,7 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
   const displayDate = `${tomorrow.getMonth() + 1}/${tomorrow.getDate()}（${tomorrowDay}）`;
 
   const allShifts = await storage.getShiftsByDate(tomorrowStr);
-  const workShifts = allShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+  const workShifts = allShifts.filter(s => !LEAVE_TYPES.includes(s.role) && isAttendanceRequired(s));
 
   const allVenues = await storage.getAllVenues();
   const venueMap = new Map<number, Venue>();
@@ -263,6 +275,7 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   const allShifts = await storage.getShiftsByDate(todayStr);
   const workShifts = allShifts.filter(s =>
     !LEAVE_TYPES.includes(s.role) &&
+    isAttendanceRequired(s) &&
     s.startTime.substring(0, 5) !== s.endTime.substring(0, 5)
   );
 
@@ -434,7 +447,7 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
   await storage.clearOldWeeklyPushNotifications(formatTaiwanDate(fourWeeksAgo)).catch(() => {});
 
   const weekShifts = await storage.getAllShiftsByDateRange(weekStartStr, weekEndStr);
-  const workShifts = weekShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+  const workShifts = weekShifts.filter(s => !LEAVE_TYPES.includes(s.role) && isAttendanceRequired(s));
 
   if (workShifts.length === 0) {
     console.log(`[週班表推播] ${weekStartStr}~${weekEndStr} 無班次，跳過`);
@@ -541,7 +554,7 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
   const weekEndStr   = formatTaiwanDate(lastSunday);
 
   const weekShifts = await storage.getAllShiftsByDateRange(weekStartStr, weekEndStr);
-  const workShifts = weekShifts.filter(s => !LEAVE_TYPES.includes(s.role));
+  const workShifts = weekShifts.filter(s => !LEAVE_TYPES.includes(s.role) && isAttendanceRequired(s));
 
   const clockRecs = await storage.getClockRecordsByDateRange(weekStartStr, weekEndStr);
 

@@ -2,6 +2,18 @@ import { storage } from "../../storage";
 
 const LEAVE_ROLES = ["休假", "特休", "病假", "事假", "公假", "喪假", "育嬰", "留職停薪"];
 
+/**
+ * 判斷該班次是否需要打卡（生救/櫃台/派遣需打卡；教練課程不需打卡）
+ */
+function isAttendanceRequired(shift: { role?: string | null; notes?: string | null }): boolean {
+  const role = String(shift.role || "").trim();
+  const notes = String(shift.notes || "").trim();
+  if (role === "教練") return false;
+  if (role.toLowerCase().includes("coach")) return false;
+  if (notes.includes("暑假課程") || notes.includes("手動課程")) return false;
+  return true;
+}
+
 function err(status: number, message: string): Error {
   const e: any = new Error(message);
   e.status = status;
@@ -97,7 +109,7 @@ export const clockService = {
       storage.getAllEmployees(),
       storage.getAllVenues(),
     ]);
-    const workShifts = allShifts.filter(s => !LEAVE_ROLES.includes(s.role));
+    const workShifts = allShifts.filter(s => !LEAVE_ROLES.includes(s.role) && isAttendanceRequired(s));
     const employeeMap = new Map(allEmployees.map(e => [e.id, e]));
     const venueMap = new Map(allVenues.map(v => [v.id, v]));
 
@@ -284,7 +296,7 @@ export const clockService = {
       storage.getAllVenues(),
     ]);
 
-    const workShifts = empShifts.filter(s => !LEAVE_ROLES.includes(s.role));
+    const workShifts = empShifts.filter(s => !LEAVE_ROLES.includes(s.role) && isAttendanceRequired(s));
     const venueMap = new Map(allVenues.map(v => [v.id, v]));
 
     const clockMap = new Map<string, typeof empClockRecords>();
