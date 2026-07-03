@@ -1,21 +1,10 @@
 import nodemailer from "nodemailer";
 import { storage } from "../../storage";
-import type { Venue, Shift, Employee } from "@shared/schema";
-import { getTaiwanNow, formatTaiwanDate, LEAVE_TYPES } from "./lineHelpers";
+import type { Venue, Shift, Employee, DispatchShift } from "@shared/schema";
+import { getTaiwanNow, formatTaiwanDate } from "./lineHelpers";
 import { isValidLineUserId } from "./lineSignature";
 import { availabilityRepository } from "../availability/availability.repository";
-
-/**
- * 判斷該班次是否需要打卡（生救/櫃台/派遣需打卡；教練課程不需打卡）
- */
-function isAttendanceRequired(shift: { role?: string | null; notes?: string | null }): boolean {
-  const role = String(shift.role || "").trim();
-  const notes = String(shift.notes || "").trim();
-  if (role === "教練") return false;
-  if (role.toLowerCase().includes("coach")) return false;
-  if (notes.includes("暑假課程") || notes.includes("手動課程")) return false;
-  return true;
-}
+import { isReviewableWorkShift, shiftReviewService } from "../shift/shiftReview.service";
 
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 
@@ -127,7 +116,7 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
   const displayDate = `${tomorrow.getMonth() + 1}/${tomorrow.getDate()}（${tomorrowDay}）`;
 
   const allShifts = await storage.getShiftsByDate(tomorrowStr);
-  const workShifts = allShifts.filter(s => !LEAVE_TYPES.includes(s.role) && isAttendanceRequired(s));
+  const workShifts = allShifts.filter(isReviewableWorkShift);
 
   const allVenues = await storage.getAllVenues();
   const venueMap = new Map<number, Venue>();
@@ -141,9 +130,10 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
   }
 
   const dispatchTomorrow = await storage.getDispatchShiftsByDate(tomorrowStr);
-  const linkedDispatchByEmployee = new Map<number, typeof dispatchTomorrow>();
+  const linkedDispatchByEmployee = new Map<number, DispatchShift[]>();
   for (const d of dispatchTomorrow) {
     if (!d.linkedEmployeeId) continue;
+    if (!isReviewableWorkShift(d)) continue;
     const arr = linkedDispatchByEmployee.get(d.linkedEmployeeId) || [];
     arr.push(d);
     linkedDispatchByEmployee.set(d.linkedEmployeeId, arr);
@@ -167,8 +157,23 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
 
     const empShifts = shiftsByEmployee.get(empId) || [];
     const empDispatch = linkedDispatchByEmployee.get(empId) || [];
-    const sortedShifts = empShifts.sort((a, b) => a.startTime.localeCompare(b.startTime));
-    const sortedDispatch = empDispatch.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const reviewedShifts: Shift[] = [];
+    const reviewedDispatch: DispatchShift[] = [];
+    for (const shift of empShifts) {
+      const reviewed = await shiftReviewService.reviewRegularShiftForPush(shift);
+      if (reviewed) reviewedShifts.push(reviewed);
+    }
+    for (const dispatchShift of empDispatch) {
+      const reviewed = await shiftReviewService.reviewDispatchShiftForPush(dispatchShift);
+      if (reviewed) reviewedDispatch.push(reviewed);
+    }
+    if (reviewedShifts.length === 0 && reviewedDispatch.length === 0) {
+      console.log(`[推撥] 跳過（推播前班表審查無有效班）: empId=${empId} date=${tomorrowStr}`);
+      skipped++;
+      continue;
+    }
+    const sortedShifts = reviewedShifts.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const sortedDispatch = reviewedDispatch.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
     const lines: string[] = [];
     lines.push(`📋 明日班表通知`);
@@ -273,11 +278,7 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   const currentTimeStr = `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
 
   const allShifts = await storage.getShiftsByDate(todayStr);
-  const workShifts = allShifts.filter(s =>
-    !LEAVE_TYPES.includes(s.role) &&
-    isAttendanceRequired(s) &&
-    s.startTime.substring(0, 5) !== s.endTime.substring(0, 5)
-  );
+  const workShifts = allShifts.filter(isReviewableWorkShift);
 
   if (workShifts.length === 0) {
     console.log(`[未打卡提醒] ${todayStr} 無上班班次`);
@@ -299,8 +300,16 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   for (const v of allVenues) venueMap.set(v.id, v);
 
   const missingEmployees: Array<{ emp: Employee; shift: Shift; venueName: string }> = [];
+  let skipped = 0;
 
-  for (const shift of workShifts) {
+  for (const candidateShift of workShifts) {
+    const shift = await shiftReviewService.reviewRegularShiftForPush(candidateShift);
+    if (!shift) {
+      console.log(`[未打卡提醒] 跳過（推播前班表審查無有效班）: 員工ID=${candidateShift.employeeId} shiftId=${candidateShift.id}`);
+      skipped++;
+      continue;
+    }
+
     const shiftStart = shift.startTime.substring(0, 5);
     const [shiftH, shiftM] = shiftStart.split(":").map(Number);
     const lateThresholdMin = (shiftH * 60 + shiftM) + 15;
@@ -334,11 +343,10 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   }
 
   if (missingEmployees.length === 0) {
-    return { notified: 0, skipped: 0 };
+    return { notified: 0, skipped };
   }
 
   let notified = 0;
-  let skipped = 0;
 
   for (const { emp, shift, venueName } of missingEmployees) {
     const shiftStart = shift.startTime.substring(0, 5);
@@ -447,7 +455,7 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
   await storage.clearOldWeeklyPushNotifications(formatTaiwanDate(fourWeeksAgo)).catch(() => {});
 
   const weekShifts = await storage.getAllShiftsByDateRange(weekStartStr, weekEndStr);
-  const workShifts = weekShifts.filter(s => !LEAVE_TYPES.includes(s.role) && isAttendanceRequired(s));
+  const workShifts = weekShifts.filter(isReviewableWorkShift);
 
   if (workShifts.length === 0) {
     console.log(`[週班表推播] ${weekStartStr}~${weekEndStr} 無班次，跳過`);
@@ -554,7 +562,7 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
   const weekEndStr   = formatTaiwanDate(lastSunday);
 
   const weekShifts = await storage.getAllShiftsByDateRange(weekStartStr, weekEndStr);
-  const workShifts = weekShifts.filter(s => !LEAVE_TYPES.includes(s.role) && isAttendanceRequired(s));
+  const workShifts = weekShifts.filter(isReviewableWorkShift);
 
   const clockRecs = await storage.getClockRecordsByDateRange(weekStartStr, weekEndStr);
 

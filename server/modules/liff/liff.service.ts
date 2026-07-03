@@ -14,6 +14,7 @@ import { storage } from "../../storage";
 import { processClockIn, formatClockInMessage } from "../line/lineClock.service";
 import { pushToLine, pushPendingGuidelinesIfAny } from "../line/linePush.service";
 import { isValidLineUserId } from "../line/lineSignature";
+import { shiftReviewService } from "../shift/shiftReview.service";
 
 export interface LiffClockInPayload {
   lineUserId?: string;
@@ -50,7 +51,7 @@ export const liffService = {
     const forcedType = clockType === "in" || clockType === "out" ? (clockType as "in" | "out") : undefined;
     const result = await processClockIn(params, latitude, longitude, forcedType, accuracy);
 
-    if (result.status === "success" || result.status === "warning") {
+    if (result.status === "success") {
       try {
         let empToNotify = null;
         if (lineUserId && isValidLineUserId(lineUserId)) {
@@ -59,6 +60,11 @@ export const liffService = {
           empToNotify = await storage.getEmployee(Number(employeeId));
         }
         if (empToNotify?.lineId && isValidLineUserId(empToNotify.lineId)) {
+          const reviewedShift = await shiftReviewService.reviewClockRecordShiftForPush(result.recordId);
+          if (!reviewedShift) {
+            console.log(`[LIFF] 跳過打卡推播（推播前班表審查無有效班）: employeeId=${empToNotify.id} recordId=${result.recordId ?? "none"}`);
+            return result;
+          }
           const msg = formatClockInMessage(result);
           await pushToLine(empToNotify.lineId, msg);
           if (result.clockType === "in") {

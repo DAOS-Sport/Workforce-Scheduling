@@ -1,5 +1,6 @@
 import { storage } from "../../storage";
 import { isValidLineUserId } from "../line/lineSignature";
+import { isReviewableWorkShift } from "../shift/shiftReview.service";
 
 function err(status: number, message: string, code?: string): Error {
   const e: any = new Error(message);
@@ -100,9 +101,9 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
   if (!emp) return baseEmpty;
 
   const myRegularAll = await storage.getShiftsByEmployeeAndDateRange(employeeId, date, date);
-  const myRegular = myRegularAll.filter(s => !isDayOff(s.startTime, s.endTime));
+  const myRegular = myRegularAll.filter(s => !isDayOff(s.startTime, s.endTime) && isReviewableWorkShift(s));
   const myDispatchAll = await storage.getDispatchShiftsByLinkedEmployee(employeeId, date, date);
-  const myDispatch = myDispatchAll.filter(ds => !isDayOff(ds.startTime, ds.endTime));
+  const myDispatch = myDispatchAll.filter(ds => ds.status !== "cancelled" && !isDayOff(ds.startTime, ds.endTime) && isReviewableWorkShift(ds));
 
   if (myRegular.length === 0 && myDispatch.length === 0) return baseEmpty;
 
@@ -143,7 +144,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
 
   const coworkerEmpIds = Array.from(new Set(
     venueShifts
-      .filter(s => s.employeeId !== employeeId && !isDayOff(s.startTime, s.endTime) && shiftBand(s.startTime) === myBand)
+      .filter(s => s.employeeId !== employeeId && !isDayOff(s.startTime, s.endTime) && isReviewableWorkShift(s) && shiftBand(s.startTime) === myBand)
       .map(s => s.employeeId)
   ));
   const coworkerEmps = await Promise.all(coworkerEmpIds.map(id => storage.getEmployee(id)));
@@ -153,6 +154,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
   for (const s of venueShifts) {
     if (s.employeeId === employeeId) continue;
     if (isDayOff(s.startTime, s.endTime)) continue;
+    if (!isReviewableWorkShift(s)) continue;
     if (shiftBand(s.startTime) !== myBand) continue;
     if (!overlaps(toInterval(date, s.startTime, s.endTime), myInterval)) continue;
     const co = empById.get(s.employeeId);
@@ -168,7 +170,9 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
   }
   for (const ds of dispatchAtMyVenue) {
     if (ds.linkedEmployeeId === employeeId) continue;
+    if (ds.status === "cancelled") continue;
     if (isDayOff(ds.startTime, ds.endTime)) continue;
+    if (!isReviewableWorkShift(ds)) continue;
     if (shiftBand(ds.startTime) !== myBand) continue;
     if (!overlaps(toInterval(date, ds.startTime, ds.endTime), myInterval)) continue;
     const cwStart = ds.startTime.slice(0, 5);

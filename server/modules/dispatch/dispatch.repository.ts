@@ -34,7 +34,12 @@ export const dispatchRepository = {
   },
 
   async getDispatchShiftsByDate(date: string): Promise<DispatchShift[]> {
-    return db.select().from(dispatchShifts).where(eq(dispatchShifts.date, date));
+    return db.select().from(dispatchShifts).where(
+      and(
+        eq(dispatchShifts.date, date),
+        ne(dispatchShifts.status, "cancelled"),
+      ),
+    );
   },
 
   async getDispatchShiftsByLinkedEmployee(employeeId: number, startDate: string, endDate: string): Promise<DispatchShift[]> {
@@ -43,6 +48,7 @@ export const dispatchRepository = {
         eq(dispatchShifts.linkedEmployeeId, employeeId),
         gte(dispatchShifts.date, startDate),
         lte(dispatchShifts.date, endDate),
+        ne(dispatchShifts.status, "cancelled"),
       )
     );
   },
