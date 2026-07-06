@@ -171,6 +171,95 @@ export function normalizeManualCoursePatchInput(item: any): Partial<InsertManual
   return patch;
 }
 
+function manualCourseEmployeeEntries(course: any, rawEntries: any[]): any[] {
+  const courseId = String(course?.id ?? "");
+  if (!courseId) return [];
+
+  const rawMatches = rawEntries.filter((entry) => {
+    const key = String(entry?.key ?? "");
+    return key.endsWith(`-manual-${courseId}-coach`) && Array.isArray(entry?.employees);
+  });
+
+  const employees = rawMatches.flatMap((entry) => entry.employees ?? []);
+  if (employees.length) return employees;
+
+  if (course.employeeId) {
+    return [{ employeeId: course.employeeId, employeeName: course.employeeName ?? "" }];
+  }
+
+  return [];
+}
+
+export function buildManualCourseShiftEntries(manualCourses: any[], rawEntries: any[], weekNo: number): any[] {
+  const rows: any[] = [];
+
+  for (const course of Array.isArray(manualCourses) ? manualCourses : []) {
+    if (!course || course.status === "deleted") continue;
+    if (Number(course.weekNo) !== Number(weekNo)) continue;
+    if (!course.id || !course.venueId || !course.date || !course.startTime || !course.endTime) continue;
+
+    for (const employee of manualCourseEmployeeEntries(course, Array.isArray(rawEntries) ? rawEntries : [])) {
+      const employeeId = Number(employee?.employeeId ?? employee?.id);
+      if (!Number.isInteger(employeeId) || employeeId <= 0) continue;
+
+      const notes = [
+        "手動課程",
+        course.courseName,
+        course.registeredCount !== undefined && course.registeredCount !== null ? `報名 ${course.registeredCount} 人` : "",
+        course.requiredCoaches !== undefined && course.requiredCoaches !== null ? `需求 ${course.requiredCoaches} 位` : "",
+        `manualCourseId:${course.id}`,
+      ].filter(Boolean).join("｜");
+
+      rows.push({
+        employeeId,
+        venueId: Number(course.venueId),
+        date: course.date,
+        startTime: String(course.startTime).slice(0, 5),
+        endTime: String(course.endTime).slice(0, 5),
+        role: "教練",
+        notes,
+        status: "active",
+        source: "summer-schedule-v40",
+        weekNo,
+        roleType: "course",
+        courseName: course.courseName ?? "",
+        slotCode: "MANUAL",
+        manualCourseId: String(course.id),
+      });
+    }
+  }
+
+  return rows;
+}
+
+export function mergeShiftEntries(primary: any[], supplemental: any[]): any[] {
+  const merged: any[] = [];
+  const seen = new Set<string>();
+
+  for (const item of [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(supplemental) ? supplemental : [])]) {
+    const key = [
+      item?.employeeId,
+      item?.venueId,
+      item?.date,
+      item?.startTime,
+      item?.endTime,
+      item?.role || "教練",
+      item?.manualCourseId || "",
+    ].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+
+  return merged;
+}
+
+async function getActiveManualCoursesForWeek(weekNo: number) {
+  return db.select().from(manualScheduleCourses).where(
+    and(eq(manualScheduleCourses.weekNo, weekNo), eq(manualScheduleCourses.status, "active"))
+  );
+}
+
 // 外部報名系統回傳全部梯次資料，每筆有 termStartDate。
 // 用日期範圍比對 SUMMER_WEEKS 來篩出正確週次，不傳 termId 給外部 API。
 
@@ -548,9 +637,7 @@ export const summerScheduleService = {
   },
 
   async getManualCourses(weekNo: number) {
-    return db.select().from(manualScheduleCourses).where(
-      and(eq(manualScheduleCourses.weekNo, weekNo), eq(manualScheduleCourses.status, "active"))
-    );
+    return getActiveManualCoursesForWeek(weekNo);
   },
 
   async createManualCourse(data: InsertManualScheduleCourse) {
@@ -587,12 +674,16 @@ export const summerScheduleService = {
     //  1) payload 帶 shifts 陣列（舊版相容）→ 用 payload
     //  2) 否則（新版只送 weekNo）→ 讀母資料表已儲存的 shiftEntries（DB 驅動，republish 與已存內容一致）
     let incoming: any[] = Array.isArray(payload?.shifts) ? payload.shifts : [];
+    let rawEntries: any[] = Array.isArray(payload?.rawEntries) ? payload.rawEntries : [];
     if (!incoming.length) {
       const [row] = await db.select().from(summerScheduleAssignments).where(
         and(eq(summerScheduleAssignments.version, "v40"), eq(summerScheduleAssignments.weekNo, weekNo))
       );
       incoming = Array.isArray(row?.shiftEntries) ? (row!.shiftEntries as any[]) : [];
+      rawEntries = Array.isArray(row?.rawEntries) ? (row!.rawEntries as any[]) : rawEntries;
     }
+    const manualCourses = await getActiveManualCoursesForWeek(weekNo);
+    incoming = mergeShiftEntries(incoming, buildManualCourseShiftEntries(manualCourses, rawEntries, weekNo));
 
     return applyPublish(week, weekNo, incoming);
   },
@@ -606,7 +697,9 @@ export const summerScheduleService = {
       and(eq(summerScheduleAssignments.version, "v40"), eq(summerScheduleAssignments.weekNo, wk))
     );
     const incoming = Array.isArray(row?.shiftEntries) ? (row!.shiftEntries as any[]) : [];
-    return applyPublish(week, wk, incoming);
+    const rawEntries = Array.isArray(row?.rawEntries) ? (row!.rawEntries as any[]) : [];
+    const manualCourses = await getActiveManualCoursesForWeek(wk);
+    return applyPublish(week, wk, mergeShiftEntries(incoming, buildManualCourseShiftEntries(manualCourses, rawEntries, wk)));
   },
 
   async getPublishedDutyShifts(weekNo: number) {

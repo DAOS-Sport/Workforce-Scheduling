@@ -1703,6 +1703,7 @@ function selectEmployeeForTarget(employeeId){
     meta.push({employeeId:emp.id, employeeName:emp.name, lineBound:isLineBound(emp), role:emp.role, venueId:emp.venueId||'', venueName:emp.venueName||emp.venue||''});
     saveEmployeeMeta(employeePickerTargetKey, meta);
   }
+  syncManualCourseCoachSelection(employeePickerTargetKey, emp);
   refreshEmployeeChips();
   closeEmployeePicker();
   validateAll();
@@ -2208,6 +2209,7 @@ async function addManualCourseFromForm(btn,venueName){
   form.querySelector('.manual-name').value='';
   form.querySelector('.manual-note').value='';
   render();
+  scheduleAutoSave();
 }
 function updateManualCourseCache(id,row){
   const localRows=getLocalManualCourses();
@@ -2254,6 +2256,22 @@ function updateManualCourseField(id,field,value){
   if(!row) return;
   if(field==='registeredCount'||field==='requiredCoaches') row[field]=Number.parseInt(String(value||'').trim(),10)||0;
   else row[field]=String(value||'').trim();
+  updateManualCourseCache(id,row);
+  queueManualCoursePatch(id,row);
+  scheduleAutoSave();
+}
+function manualCourseIdFromCoachKey(key){
+  const m=String(key||'').match(/-manual-(\d+)-coach$/);
+  return m?m[1]:'';
+}
+function syncManualCourseCoachSelection(key,emp){
+  const id=manualCourseIdFromCoachKey(key);
+  if(!id || !emp) return;
+  const row=getManualCourses().find(r=>String(r.id)===String(id));
+  if(!row) return;
+  if(String(row.employeeId||'')===String(emp.id) && String(row.employeeName||'')===String(emp.name||'')) return;
+  row.employeeId=emp.id;
+  row.employeeName=emp.name;
   updateManualCourseCache(id,row);
   queueManualCoursePatch(id,row);
 }
@@ -2307,6 +2325,7 @@ async function deleteManualCourse(id){
     return;
   }
   render();
+  scheduleAutoSave();
 }
 function buildCourseSection(venue,week){const rows=flattenCourses(venue);return `<section class="section" data-section="course"><div class="section-head"><span>平日課程 / 教練</span><small>${venue.courses.length} 門平日課程，${rows.length} 個時段；只排週一到週五</small></div><div class="table-wrap"><table class="course-table"><thead><tr><th>課程名稱</th><th>代碼</th><th>時段</th><th class="enroll-col">報名人數</th><th class="needed-col">需教練數</th><th class="course-head">平日<span class="head-sub">${week.weekday}</span></th><th class="note-col">備註</th></tr></thead><tbody>${rows.map(r=>buildCourseRow(venue,r,'weekday')).join('')}</tbody></table></div><div class="mini-actions"><button class="mini-btn" onclick="addCourseRow(this,'${venue.name}')">＋新增平日課程時段</button></div></section>`}
 function buildHolidayCourseSection(venue,week){const rows=flattenHolidayCourses(venue);return `<section class="section" data-section="holiday"><div class="section-head"><span>假日游泳班 / 教練</span><small>固定 A、B、C、E、F、H、I、J，共 ${rows.length} 個時段；只排週六、週日</small></div><div class="table-wrap"><table class="course-table"><thead><tr><th>課程名稱</th><th>代碼</th><th>時段</th><th class="enroll-col">報名人數</th><th class="needed-col">需教練數</th><th class="course-head">週六<span class="head-sub">${week.sat}</span></th><th class="course-head">週日<span class="head-sub">${week.sun}</span></th><th class="note-col">備註</th></tr></thead><tbody>${rows.map(r=>buildCourseRow(venue,r,'holiday')).join('')}</tbody></table></div><div class="mini-actions"><button class="mini-btn" onclick="addHolidayCourseRow(this,'${venue.name}')">＋新增假日班時段</button></div></section>`}
@@ -3304,7 +3323,8 @@ async function publishToEmployeePortal(){
   }
   // 預檢（以目前畫面估算筆數與缺漏，提供提示；真正發布以伺服器已存的資料為準）
   const shifts=collectShiftRowsForPortal();
-  if(!shifts.length){
+  const manualCoachRows=getManualCourses().filter(r=>Number(r.weekNo)===Number(weekNo) && r.employeeId);
+  if(!shifts.length && !manualCoachRows.length){
     alert('目前沒有可發布到員工前台的班表。請確認已選員工並有排班資料。');
     return;
   }
@@ -3313,7 +3333,8 @@ async function publishToEmployeePortal(){
     alert(`有 ${missing.length} 筆資料缺少 employeeId / venueId / date / time，請先修正。`);
     return;
   }
-  if(!confirm(`準備發布第 ${weekNo} 週約 ${shifts.length} 筆班表到員工前台（以伺服器已儲存的資料為準），是否繼續？`)) return;
+  const estimatedCount=Math.max(shifts.length, manualCoachRows.length);
+  if(!confirm(`準備發布第 ${weekNo} 週約 ${estimatedCount} 筆班表到員工前台（以伺服器已儲存的資料為準），是否繼續？`)) return;
   try{
     const res=await fetch(API_ENDPOINTS.publishShifts,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({weekNo, generatedAt:new Date().toISOString()})});
     if(!res.ok) throw new Error('publish API status '+res.status);

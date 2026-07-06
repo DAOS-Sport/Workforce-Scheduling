@@ -10,6 +10,10 @@ vi.mock("../../storage", () => ({
     getShiftsByEmployeeAndDateRange: vi.fn(),
     getDispatchShift: vi.fn(),
     getDispatchShiftsByLinkedEmployee: vi.fn(),
+    getAllShiftsByDateRange: vi.fn(),
+    clearOldWeeklyPushNotifications: vi.fn(),
+    hasWeeklyPushNotification: vi.fn(),
+    createWeeklyPushNotification: vi.fn(),
   },
 }));
 
@@ -26,7 +30,7 @@ vi.mock("./lineHelpers", async (importOriginal) => {
 });
 
 import { storage } from "../../storage";
-import { sendShiftReminders } from "./linePush.service";
+import { sendShiftReminders, sendWeeklySchedulePush } from "./linePush.service";
 
 const shift = {
   id: 10,
@@ -76,6 +80,10 @@ describe("sendShiftReminders shift review", () => {
     vi.mocked(storage.getShiftsByEmployeeAndDateRange).mockResolvedValue([]);
     vi.mocked(storage.getDispatchShift).mockResolvedValue(undefined as any);
     vi.mocked(storage.getDispatchShiftsByLinkedEmployee).mockResolvedValue([]);
+    vi.mocked(storage.getAllShiftsByDateRange).mockResolvedValue([]);
+    vi.mocked(storage.clearOldWeeklyPushNotifications).mockResolvedValue(undefined as any);
+    vi.mocked(storage.hasWeeklyPushNotification).mockResolvedValue(false);
+    vi.mocked(storage.createWeeklyPushNotification).mockResolvedValue(undefined as any);
   });
 
   it("pushes when the candidate shift is still active at send time", async () => {
@@ -99,6 +107,19 @@ describe("sendShiftReminders shift review", () => {
     vi.mocked(storage.getShift).mockResolvedValue({ ...shift, status: "cancelled" } as any);
 
     const result = await sendShiftReminders(true);
+
+    expect(result).toEqual({ sent: 0, skipped: 1, noLineId: 0 });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("skips weekly schedule push when the shift is cancelled before sending", async () => {
+    vi.mocked(storage.getAllShiftsByDateRange).mockResolvedValue([{
+      ...shift,
+      date: "2026-07-06",
+    } as any]);
+    vi.mocked(storage.getShift).mockResolvedValue({ ...shift, date: "2026-07-06", status: "cancelled" } as any);
+
+    const result = await sendWeeklySchedulePush(true);
 
     expect(result).toEqual({ sent: 0, skipped: 1, noLineId: 0 });
     expect(fetch).not.toHaveBeenCalled();

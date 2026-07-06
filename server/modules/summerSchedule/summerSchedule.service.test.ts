@@ -18,6 +18,8 @@ vi.mock("../line/lineSignature", () => ({
 }));
 
 import {
+  buildManualCourseShiftEntries,
+  mergeShiftEntries,
   normalizeManualCourseCreateInput,
   normalizeManualCoursePatchInput,
 } from "./summerSchedule.service";
@@ -85,5 +87,63 @@ describe("summer schedule manual course normalization", () => {
         endTime: "17:00",
       }),
     ).toThrow("weekNo 只允許 1-9");
+  });
+});
+
+describe("summer schedule manual course publish rows", () => {
+  it("builds coach shift rows from manual courses and raw assignment employee meta", () => {
+    const rows = buildManualCourseShiftEntries(
+      [
+        {
+          id: 42,
+          weekNo: 2,
+          date: "2026-07-06",
+          venueId: 1,
+          courseName: "補習班游泳",
+          startTime: "16:00",
+          endTime: "17:00",
+          registeredCount: 8,
+          requiredCoaches: 1,
+          status: "active",
+        },
+      ],
+      [
+        {
+          key: "w2-三重商工-manual-42-coach",
+          value: "小明",
+          employees: [{ employeeId: 7, employeeName: "小明" }],
+        },
+      ],
+      2,
+    );
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        employeeId: 7,
+        venueId: 1,
+        date: "2026-07-06",
+        startTime: "16:00",
+        endTime: "17:00",
+        role: "教練",
+        manualCourseId: "42",
+        slotCode: "MANUAL",
+      }),
+    ]);
+    expect(rows[0].notes).toContain("手動課程");
+    expect(rows[0].notes).toContain("manualCourseId:42");
+  });
+
+  it("deduplicates manual course rows already present in saved shift entries", () => {
+    const existing = {
+      employeeId: 7,
+      venueId: 1,
+      date: "2026-07-06",
+      startTime: "16:00",
+      endTime: "17:00",
+      role: "教練",
+      manualCourseId: "42",
+    };
+
+    expect(mergeShiftEntries([existing], [{ ...existing, notes: "手動課程" }])).toHaveLength(1);
   });
 });

@@ -486,8 +486,19 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
     if (!emp) { skipped++; continue; }
     if (!emp.lineId) { noLineId++; continue; }
 
+    const reviewedShifts: Shift[] = [];
+    for (const shift of empShifts) {
+      const reviewed = await shiftReviewService.reviewRegularShiftForPush(shift);
+      if (reviewed) reviewedShifts.push(reviewed);
+    }
+    if (reviewedShifts.length === 0) {
+      console.log(`[週班表推播] 跳過（推播前班表審查無有效班）: empId=${empId} week=${weekStartStr}`);
+      skipped++;
+      continue;
+    }
+
     const shiftsByDate = new Map<string, Shift[]>();
-    for (const s of empShifts) {
+    for (const s of reviewedShifts) {
       const arr = shiftsByDate.get(s.date) || [];
       arr.push(s);
       shiftsByDate.set(s.date, arr);
