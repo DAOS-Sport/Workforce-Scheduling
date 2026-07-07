@@ -2624,6 +2624,20 @@ function enrollmentKeyFromParts(weekNo, venueId, courseName, slotCode){
     String(slotCode || '').trim().toUpperCase()
   ].join('|');
 }
+function enrollmentLookupKeysForRow(weekNo, venueId, courseName, slotCode, courseKind){
+  const keys=[enrollmentKeyFromParts(weekNo, venueId, courseName, slotCode)];
+  const normalizedCourseName=normalizeCourseNameForEnrollment(courseName);
+  if(courseKind==='holiday' && normalizedCourseName==='\u6cf3\u6cf3\u5047\u65e5\u73ed'){
+    keys.push(enrollmentKeyFromParts(weekNo, venueId, '\u4e00\u822c\u6cf3\u6cf3', slotCode));
+  }
+  return Array.from(new Set(keys));
+}
+function firstEnrollmentValue(sourceMap, keys){
+  for(const key of keys){
+    if(sourceMap.has(key)) return sourceMap.get(key);
+  }
+  return undefined;
+}
 
 function normalizeCourseNameForEnrollment(name){
   const s = String(name || '')
@@ -2718,15 +2732,16 @@ function applyEnrollmentCounts(payload){
     const venueId = String(tr.dataset.venueId || '').trim();
     const courseName = tr.dataset.courseName || '';
     const slotCode = String(tr.dataset.slotCode || '').trim().toUpperCase();
+    const lookupKeys = enrollmentLookupKeysForRow(weekNo, venueId, courseName, slotCode, tr.dataset.courseKind || '');
 
-    const key = enrollmentKeyFromParts(weekNo, venueId, courseName, slotCode);
+    const countValue = firstEnrollmentValue(map, lookupKeys);
 
     const count = source === 'api'
-      ? (map.has(key) ? Number(map.get(key)) || 0 : 0)
+      ? (countValue !== undefined ? Number(countValue) || 0 : 0)
       : 0;
 
     // 關班判斷
-    const closureInfo = closedMap.get(key) ?? {isClosed:false, reason:null};
+    const closureInfo = firstEnrollmentValue(closedMap, lookupKeys) ?? {isClosed:false, reason:null};
     if(source === 'api'){
       if(closureInfo.isClosed){
         tr.classList.add('course-closed');

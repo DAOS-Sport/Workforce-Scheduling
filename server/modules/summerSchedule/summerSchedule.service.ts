@@ -368,6 +368,15 @@ function normalizeEnrollmentRow(row: any, weekNo: number, termId: number) {
   };
 }
 
+export function enrollmentRowOverlapsWeek(row: any, week: { startDate: string; endDate: string }): boolean {
+  const termStart = String(row.termStartDate || "").slice(0, 10);
+  const termEnd = String(row.termEndDate || row.termStartDate || "").slice(0, 10);
+
+  if (!termStart) return false;
+
+  return termStart <= week.endDate && termEnd >= week.startDate;
+}
+
 // 共用發布邏輯：刪掉該週已發布的 v40 班次（軟取消、寫 audit），再插入新班次。
 // publishShifts（payload 版，相容舊版）與「DB 驅動」路徑共用。
 async function applyPublish(week: { startDate: string; endDate: string }, weekNo: number, incoming: any[]) {
@@ -465,7 +474,7 @@ export const summerScheduleService = {
     }
 
     // 外部 API 回傳全部梯次，不接受 termId 過濾。
-    // 撈全部後，依 termStartDate 落在本週日期範圍內篩選。
+    // 撈全部後，依梯次日期區間與本週是否重疊篩選。
     const url = new URL(apiUrl);
     url.searchParams.set("includeZero", "true");
 
@@ -510,14 +519,12 @@ export const summerScheduleService = {
           ? raw.data
           : [];
 
-    // 用 termStartDate 比對本週範圍（startDate ≤ termStartDate ≤ endDate）
+    // 用梯次日期區間比對本週範圍。
+    // 假日班 7 月梯次會是 07/04-07/26，必須同時出現在第 1-4 週。
     const weekStart = week.startDate; // "2026-07-01"
     const weekEnd   = week.endDate;   // "2026-07-05"
 
-    const weekItems = allItems.filter((row) => {
-      const d = String(row.termStartDate || "").slice(0, 10);
-      return d >= weekStart && d <= weekEnd;
-    });
+    const weekItems = allItems.filter((row) => enrollmentRowOverlapsWeek(row, week));
 
     // 依「場館 + 課程 + 時段」彙整（同一格可能有多筆梯次累加）
     const map = new Map<string, any>();

@@ -19,6 +19,7 @@ vi.mock("../line/lineSignature", () => ({
 
 import {
   buildManualCourseShiftEntries,
+  enrollmentRowOverlapsWeek,
   mergeShiftEntries,
   normalizeManualCourseCreateInput,
   normalizeManualCoursePatchInput,
@@ -87,6 +88,32 @@ describe("summer schedule manual course normalization", () => {
         endTime: "17:00",
       }),
     ).toThrow("weekNo 只允許 1-9");
+  });
+});
+
+describe("summer schedule enrollment week matching", () => {
+  it("keeps multi-week holiday terms in every overlapping summer week", () => {
+    const holidayJulyTerm = {
+      termStartDate: "2026-07-04",
+      termEndDate: "2026-07-26",
+    };
+
+    expect(enrollmentRowOverlapsWeek(holidayJulyTerm, { startDate: "2026-07-01", endDate: "2026-07-05" })).toBe(true);
+    expect(enrollmentRowOverlapsWeek(holidayJulyTerm, { startDate: "2026-07-06", endDate: "2026-07-12" })).toBe(true);
+    expect(enrollmentRowOverlapsWeek(holidayJulyTerm, { startDate: "2026-07-13", endDate: "2026-07-19" })).toBe(true);
+    expect(enrollmentRowOverlapsWeek(holidayJulyTerm, { startDate: "2026-07-20", endDate: "2026-07-26" })).toBe(true);
+    expect(enrollmentRowOverlapsWeek(holidayJulyTerm, { startDate: "2026-07-27", endDate: "2026-08-02" })).toBe(false);
+  });
+
+  it("keeps one-week terms matched by their start date behavior", () => {
+    const weekdayTerm = {
+      termStartDate: "2026-07-06",
+      termEndDate: "2026-07-10",
+    };
+
+    expect(enrollmentRowOverlapsWeek(weekdayTerm, { startDate: "2026-07-01", endDate: "2026-07-05" })).toBe(false);
+    expect(enrollmentRowOverlapsWeek(weekdayTerm, { startDate: "2026-07-06", endDate: "2026-07-12" })).toBe(true);
+    expect(enrollmentRowOverlapsWeek(weekdayTerm, { startDate: "2026-07-13", endDate: "2026-07-19" })).toBe(false);
   });
 });
 
