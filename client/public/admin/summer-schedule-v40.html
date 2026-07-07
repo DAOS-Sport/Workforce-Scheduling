@@ -2279,8 +2279,8 @@ function onEnrollOverride(el){
   const key=el.dataset.key;
   if(!key) return;
   const v=(el.innerText||'').replace(/\n+$/,'').trim();
-  scheduleState.cells.set(key,v);
-  scheduleState.cells.set(key+':override','1');
+  setCellValue(key,v,{dirty:false});
+  setCellValue(key+':override','1',{dirty:false});
   el.classList.add('manual');
   el.classList.remove('api','empty','mock','loading');
   el.setAttribute('title','雙擊可重置回系統值');
@@ -2293,9 +2293,10 @@ function resetEnrollOverride(el){
   const key=el.dataset.key;
   if(!key||!scheduleState.cells.has(key+':override')) return;
   scheduleState.cells.delete(key+':override');
+  try{ localStorage.removeItem(LOCAL_STORAGE_PREFIX+key+':override'); }catch(e){}
   const sysCount=el.dataset.systemCount||'0';
   el.innerText=sysCount;
-  scheduleState.cells.set(key,sysCount);
+  setCellValue(key,sysCount,{dirty:false});
   el.classList.remove('manual');
   el.classList.add('api');
   el.setAttribute('title','點擊可輸入手動人數；雙擊重置回系統值');
@@ -2303,6 +2304,11 @@ function resetEnrollOverride(el){
   _dirty=true;
   document.body.classList.add('unsaved');
   setSyncStatus('pending','待自動儲存');
+}
+function syncDerivedCellValue(el,value){
+  const key=el?.dataset?.key;
+  if(!key || !scheduleState.loaded) return;
+  setCellValue(key, value, {dirty:false});
 }
 async function deleteManualCourse(id){
   if(!confirm('刪除這筆手動課程？')) return;
@@ -2740,17 +2746,23 @@ function applyEnrollmentCounts(payload){
       if(closureInfo.isClosed){
         // 關班：固定顯示 0，CSS 顯示「關班」標籤，不允許手動覆蓋
         enrollEl.innerText='0';
+        syncDerivedCellValue(enrollEl,'0');
+        scheduleState.cells.delete(overrideKey);
+        try{ localStorage.removeItem(LOCAL_STORAGE_PREFIX+overrideKey); }catch(e){}
         enrollEl.classList.remove('loading','api','mock','empty','manual');
         enrollEl.setAttribute('title', closureInfo.reason ? `關班原因：${closureInfo.reason}` : '此時段已關班');
       }else if(getSaved(overrideKey)==='1'){
         // 手動覆蓋模式：保留使用者輸入值，不被 API 覆蓋
         const savedVal=getSaved(enrollEl.dataset.key||'');
-        enrollEl.innerText=savedVal!==null?String(savedVal):String(count);
+        const manualVal=savedVal!==null?String(savedVal):String(count);
+        enrollEl.innerText=manualVal;
+        syncDerivedCellValue(enrollEl,manualVal);
         enrollEl.classList.remove('loading','api','mock','empty');
         enrollEl.classList.add('manual');
         enrollEl.setAttribute('title','雙擊可重置回系統值');
       }else{
         enrollEl.innerText = String(count);
+        syncDerivedCellValue(enrollEl,String(count));
         enrollEl.classList.remove('loading','api','mock','empty','manual');
         enrollEl.classList.add(source === 'api' ? 'api' : 'empty');
         enrollEl.setAttribute(
@@ -2766,12 +2778,17 @@ function applyEnrollmentCounts(payload){
       if(closureInfo.isClosed){
         // 關班課程不需排教練
         neededEl.innerText='0';
+        syncDerivedCellValue(neededEl,'0');
       }else{
         const current = (neededEl.innerText || '').trim();
         if(count === 0){
           neededEl.innerText = '0';
+          syncDerivedCellValue(neededEl,'0');
         }else if(current === '0'){
           neededEl.innerText = '';
+          syncDerivedCellValue(neededEl,'');
+        }else{
+          syncDerivedCellValue(neededEl,current);
         }
       }
     }
