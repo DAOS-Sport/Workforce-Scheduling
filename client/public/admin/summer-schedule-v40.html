@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>三館排班表｜Replit 上線準備版 v40</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
   <style>
     :root{--bg:#f3f5f8;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#d8e0ea;--blue:#1d4ed8;--blue-soft:#eaf2ff;--green:#047857;--green-soft:#ecfdf5;--orange:#b45309;--orange-soft:#fff7ed;--red:#b91c1c;--red-soft:#fef2f2;--purple:#6d28d9;--purple-soft:#f5f3ff;--radius:16px;--shadow:0 14px 34px rgba(15,23,42,.08)}
     *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#eef4ff 0,#f6f8fb 180px,#f3f5f8 100%);color:var(--text);font-family:"Microsoft JhengHei","Noto Sans TC",Arial,sans-serif;font-size:14px}.app{max-width:2280px;margin:0 auto;padding:16px 18px 28px}.topbar{position:sticky;top:0;z-index:30;background:rgba(243,245,248,.96);backdrop-filter:blur(8px);border:1px solid rgba(216,224,234,.9);border-radius:18px;padding:16px;box-shadow:0 12px 30px rgba(15,23,42,.08)}.header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:12px}h1{margin:0 0 6px;font-size:28px;letter-spacing:.5px;color:#0b1f44}.subtitle{color:var(--muted);font-weight:800;line-height:1.6;max-width:1100px}.actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}button,select,input{font-family:inherit;font-size:14px}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 12px;border-radius:10px;cursor:pointer;font-weight:900;transition:.15s ease;box-shadow:0 1px 0 rgba(15,23,42,.04)}.btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(15,23,42,.08)}.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}.btn.green{background:var(--green);border-color:var(--green);color:#fff}.filters{display:grid;grid-template-columns:320px 190px 1fr;gap:10px;align-items:end}.field label{display:block;color:var(--muted);font-size:12px;font-weight:900;margin-bottom:5px}.field select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;outline:none}.week-note{display:flex;align-items:center;padding:10px 12px;border-radius:10px;background:var(--blue-soft);color:#1e3a8a;font-weight:900;line-height:1.5;min-height:42px}.guide{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0 0}.guide-card{background:linear-gradient(180deg,#fff,#f8fbff);border:1px solid #dce7f4;border-radius:14px;padding:10px 12px;box-shadow:0 4px 12px rgba(15,23,42,.04);line-height:1.65;font-weight:850;color:#475569;min-height:92px}.guide-card b{color:#0f172a}.guide-card code{background:#f1f5f9;border:1px solid #dbe3ed;border-radius:6px;padding:1px 5px;color:#0f172a;font-weight:900}.top-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}.summary-card{background:#fff;border:1px solid #d8e4f1;border-radius:14px;padding:12px 14px;box-shadow:0 8px 20px rgba(15,23,42,.05)}.summary-card b{display:block;font-size:18px;color:#0f172a;margin-top:2px}.summary-card span{font-size:12px;font-weight:900;color:#64748b}.main{display:grid;gap:18px;margin-top:18px}.venue-card{background:var(--card);border:1px solid #d6e2f0;border-radius:18px;box-shadow:var(--shadow);overflow:hidden}.venue-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#0f2d5c,#1d4ed8 42%,#eef6ff);color:#fff}.venue-title{font-size:24px;font-weight:1000;letter-spacing:.5px}.venue-head .subtitle{color:#dbeafe}.venue-meta{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}.tag{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;border:1px solid transparent;font-size:12px;font-weight:900;white-space:nowrap;background:rgba(255,255,255,.92)!important}.tag.blue{color:var(--blue);border-color:#bfdbfe}.tag.green{color:var(--green);border-color:#bbf7d0}.tag.orange{color:var(--orange);border-color:#fed7aa}.venue-body{display:grid;grid-template-columns:minmax(980px,1.05fr) minmax(980px,1.08fr);gap:14px;padding:14px;background:#f8fbff;align-items:start}.course-stack{display:grid;gap:12px;min-width:0}.section{border:1px solid #d8e4f1;border-radius:16px;overflow:hidden;background:#fff;min-width:0;box-shadow:0 8px 20px rgba(15,23,42,.05)}.section-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#ffffff,#f1f7ff);font-weight:1000;border-left:6px solid #2563eb}.course-stack .section:nth-child(2) .section-head{border-left-color:#f97316;background:linear-gradient(90deg,#ffffff,#fff7ed)}.section-head small{color:var(--muted);font-weight:800}.lifeguard-inputs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:10px;background:#f8fafc;border-bottom:1px solid var(--line)}.source-card{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}.source-title{padding:8px 10px;background:#ecfdf5;color:#047857;font-weight:1000;border-bottom:1px solid var(--line)}.source-cell.warn .cell-status{color:#b91c1c;background:#fef2f2;border-top-color:#fecaca}.source-cell.ok .cell-status{color:#047857;background:#ecfdf5;border-top-color:#bbf7d0}.table-wrap{overflow:auto;width:100%;max-height:720px;background:#fff}table{border-collapse:collapse;width:100%}.duty-table{min-width:1100px}.course-table{min-width:980px}th,td{border:1px solid #d9e3ef;vertical-align:top}th{background:#edf4fc;text-align:center;color:#1e293b;font-weight:1000;padding:9px 8px;position:sticky;top:0;z-index:2}tbody tr:nth-child(even) td:not(.course-name):not(.time-cell):not(.needed-col):not(.enroll-col):not(.no-col){background:#fbfdff}.no-col{width:42px;text-align:center;background:#f8fafc;font-weight:1000;color:#0f172a;padding:8px}.time-cell{min-width:110px;background:#f8fafc;color:#0f172a;font-weight:1000;padding:8px;text-align:center;white-space:nowrap}.course-name{min-width:170px;background:#fff8ec;color:#7c2d12;font-weight:1000;padding:8px;line-height:1.45;border-left:4px solid #fed7aa}.course-code{width:64px;text-align:center;background:#f7f3ff;color:#5b21b6;font-weight:1000;padding:8px;white-space:nowrap;font-size:15px}.enroll-col{width:86px;min-width:86px;text-align:center;background:#ecfeff;color:#0e7490;font-weight:1000;padding:8px}.needed-col{width:86px;min-width:86px;text-align:center;background:#fff7ed;color:#c2410c;font-weight:1000;padding:8px}.time-edit{outline:0;border-radius:6px;min-height:22px;padding:4px}.time-edit:focus,.editbox:focus{background:#fffbea;box-shadow:inset 0 0 0 2px #facc15}.edit-cell{min-width:130px;height:68px;padding:0;background:#fff}.editbox{min-height:54px;outline:0;padding:8px 9px 3px;line-height:1.45;white-space:pre-wrap;border-radius:10px 10px 0 0;font-weight:850}.source-card .editbox{min-height:96px}.editbox:empty:before{content:attr(data-placeholder);color:#94a3b8;font-weight:700}.cell-status{min-height:20px;padding:3px 8px 4px;border-top:1px dashed #e2e8f0;font-size:10.5px;line-height:1.25;color:#64748b;background:#fbfdff;font-weight:900}.edit-cell.ok .cell-status{color:#166534;background:#dcfce7;border-top-color:#bbf7d0}.edit-cell.warn .cell-status{color:#991b1b;background:#fee2e2;border-top-color:#fecaca}.weekday-col{min-width:148px;background:#fffef7}.sat-col{min-width:140px}.sun-col{min-width:140px}.note-col{min-width:170px;background:#fbfbff}.frontdesk-head{background:#dbeafe;color:#1d4ed8}.lifeguard-head{background:#dcfce7;color:#047857}.course-head{background:#ede9fe;color:#6d28d9}.head-sub{display:block;color:var(--muted);font-size:12px;font-weight:800;margin-top:2px}.lifeguard-display{min-width:170px;background:#f7fffb}.lifeguard-lines{min-height:54px;padding:7px 8px;line-height:1.45;font-weight:900;white-space:pre-wrap}.lifeguard-lines .shift{display:block;margin:0 0 4px;padding:5px 7px;border-radius:9px;background:#ecfdf5;border:1px solid #bbf7d0;color:#065f46}.lifeguard-lines small{display:block;color:#047857;font-weight:800;margin-top:1px}.lifeguard-lines .empty{color:#94a3b8;font-weight:800}.mini-actions{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line);background:#f8fafc}.mini-btn{font-size:12px;padding:6px 9px;border-radius:8px;border:1px solid var(--line);background:#fff;font-weight:900;cursor:pointer}.mini-btn:hover{background:#eef6ff}.right-panels{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:14px}.panel{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 12px rgba(15,23,42,.04);overflow:hidden}.panel h3{font-size:15px;margin:0;padding:10px 12px;border-bottom:1px solid var(--line);background:#f8fafc}.panel-content{padding:10px 12px;line-height:1.75;font-weight:800;color:#475569}.formula{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:8px;margin-top:6px;color:#0f172a}@media print{body{background:#fff}.topbar,.actions,.guide,.top-summary,.right-panels,.mini-actions{display:none!important}.app{max-width:none;padding:0}.venue-card{box-shadow:none;border-radius:0;break-inside:avoid;margin-bottom:10px}.venue-body{grid-template-columns:1fr;padding:6px}.table-wrap{max-height:none;overflow:visible}th,td{font-size:10px}.editbox{min-height:45px;padding:5px}.cell-status{display:none}}@media(max-width:1800px){.venue-body{grid-template-columns:1fr}.guide,.top-summary,.right-panels{grid-template-columns:1fr 1fr}.filters{grid-template-columns:1fr}.header{flex-direction:column}.actions{justify-content:flex-start}.venue-head{align-items:flex-start;flex-direction:column}.venue-meta{justify-content:flex-start}}@media(max-width:820px){.guide,.top-summary,.right-panels,.lifeguard-inputs{grid-template-columns:1fr}.app{padding:10px}h1{font-size:22px}}
@@ -873,6 +876,115 @@ body.section-manual section[data-section="duty"]{display:none!important}
 .api-chip.fail{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
 @media(max-width:1100px){.replit-status-body{font-size:11.5px}}
 
+
+/* ===== v41 本週薪資統計重新設計（pv2）— 精致财务仪表盘 ===== */
+.pv2{--pv-ink:#151c2e;--pv-ink2:#3b4767;--pv-mut:#7c8aa8;--pv-paper:#faf8f3;--pv-card:#fff;--pv-line:#e9e3d5;--pv-line2:#eef1f6;
+  --pv-teal:#0f766e;--pv-teal-d:#0b5a54;--pv-amber:#b8730a;--pv-amber-s:#fdf1dd;--pv-emerald:#047857;--pv-emerald-s:#e6f6ee;--pv-rose:#b4315a;
+  font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;color:var(--pv-ink);position:relative;margin-top:16px;
+  background:radial-gradient(1100px 460px at 8% -12%,#e9f6f3 0,transparent 60%),radial-gradient(880px 460px at 104% -4%,#fdf1df 0,transparent 55%),var(--pv-paper);
+  border:1px solid var(--pv-line);border-radius:26px;overflow:hidden;box-shadow:0 34px 90px -34px rgba(20,27,45,.30)}
+.pv2 *{box-sizing:border-box}
+.pv2 h2,.pv2 h3,.pv2 .pv-num,.pv2 .pv2-eyebrow{font-family:"Space Grotesk","Noto Sans TC",sans-serif}
+.pv2 .pv-num{font-variant-numeric:tabular-nums;letter-spacing:.2px}
+/* hero */
+.pv2-hero{position:relative;padding:30px 34px 128px;color:#fff;overflow:hidden;background:linear-gradient(118deg,#0a3a37 0%,#0f766e 44%,#138a7f 72%,#19a294 100%)}
+.pv2-hero::before{content:"";position:absolute;inset:0;opacity:.55;background:linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px);background-size:36px 36px;-webkit-mask:radial-gradient(130% 120% at 100% 0,#000,transparent 72%);mask:radial-gradient(130% 120% at 100% 0,#000,transparent 72%)}
+.pv2-hero::after{content:"";position:absolute;right:-70px;top:-130px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,rgba(255,209,122,.40),transparent 66%)}
+.pv2-hero-row{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.pv2-eyebrow{display:inline-flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.3em;font-size:11px;text-transform:uppercase;color:#ffe4ad;margin-bottom:11px}
+.pv2-eyebrow::before{content:"";width:26px;height:2px;background:#ffcf7a;border-radius:2px}
+.pv2-hero h2{margin:0;font-size:30px;font-weight:700;letter-spacing:.4px;line-height:1.12}
+.pv2-hero p{margin:10px 0 0;max-width:660px;color:#d3f0ec;font-weight:600;line-height:1.62;font-size:13.5px}
+.pv2-hero-actions{display:flex;gap:10px;flex-wrap:wrap}
+.pv2-btn{border:1px solid rgba(255,255,255,.34);background:rgba(255,255,255,.12);color:#fff;padding:10px 15px;border-radius:12px;font-weight:800;font-size:13px;cursor:pointer;backdrop-filter:blur(6px);transition:transform .2s ease,background .2s ease,box-shadow .2s ease}
+.pv2-btn:hover{transform:translateY(-2px);background:rgba(255,255,255,.22);box-shadow:0 12px 26px -12px rgba(0,0,0,.5)}
+.pv2-btn-solid{background:#ffd07a;border-color:#ffd07a;color:#5a3d05}
+.pv2-btn-solid:hover{background:#ffdd97}
+/* KPI strip overlapping hero */
+.pv2-kpis{position:relative;z-index:3;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:22px 34px -96px}
+.pv2-kpi{background:var(--pv-card);border:1px solid var(--pv-line);border-radius:16px;padding:14px 15px;box-shadow:0 20px 44px -22px rgba(20,27,45,.5);opacity:0;transform:translateY(16px);animation:pvUp .55s cubic-bezier(.22,1,.36,1) forwards}
+.pv2-kpi:nth-child(1){animation-delay:.05s}.pv2-kpi:nth-child(2){animation-delay:.11s}.pv2-kpi:nth-child(3){animation-delay:.17s}.pv2-kpi:nth-child(4){animation-delay:.23s}.pv2-kpi:nth-child(5){animation-delay:.29s}.pv2-kpi:nth-child(6){animation-delay:.35s}
+.pv2-kpi .k-l{font-size:11.5px;font-weight:800;color:var(--pv-mut);letter-spacing:.02em;display:flex;align-items:center;gap:6px}
+.pv2-kpi .k-l i{width:7px;height:7px;border-radius:50%;background:var(--pv-teal)}
+.pv2-kpi.amber .k-l i{background:var(--pv-amber)}.pv2-kpi.emerald .k-l i{background:var(--pv-emerald)}.pv2-kpi.rose .k-l i{background:var(--pv-rose)}.pv2-kpi.ink .k-l i{background:var(--pv-ink2)}
+.pv2-kpi .k-v{font-size:23px;font-weight:700;margin-top:6px;color:var(--pv-ink);font-family:"Space Grotesk";font-variant-numeric:tabular-nums}
+.pv2-kpi .k-s{font-size:11px;font-weight:700;color:var(--pv-mut);margin-top:2px}
+@keyframes pvUp{to{opacity:1;transform:none}}
+/* body */
+.pv2-body{padding:118px 26px 26px}
+.pv2-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;margin-bottom:16px}
+.pv2-panel{background:var(--pv-card);border:1px solid var(--pv-line);border-radius:18px;overflow:hidden;box-shadow:0 12px 30px -20px rgba(20,27,45,.28)}
+.pv2-panel-h{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--pv-line2);background:linear-gradient(90deg,#fff,#fbfcfe)}
+.pv2-panel-h h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.3px;display:flex;align-items:center;gap:9px}
+.pv2-panel-h h3::before{content:"";width:5px;height:18px;border-radius:3px;background:linear-gradient(var(--pv-teal),var(--pv-teal-d))}
+.pv2-panel-h span{font-size:11.5px;font-weight:700;color:var(--pv-mut)}
+/* rates */
+.pv2-rates{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:14px 16px}
+.pv2-rate{display:flex;flex-direction:column;gap:6px}
+.pv2-rate span{font-size:11.5px;font-weight:800;color:var(--pv-amber)}
+.pv2-rate input{border:1px solid var(--pv-line);border-radius:11px;padding:10px 11px;font-weight:800;font-family:"Space Grotesk","Noto Sans TC";background:var(--pv-amber-s);color:var(--pv-ink);transition:border-color .2s,box-shadow .2s}
+.pv2-rate input:focus{outline:0;border-color:var(--pv-amber);box-shadow:0 0 0 3px rgba(184,115,10,.16);background:#fff}
+/* checklist */
+.pv2-checklist .pv2-ck-bar{height:6px;background:#eef1f6;margin:0 18px;border-radius:6px;overflow:hidden}
+.pv2-checklist .pv2-ck-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--pv-teal),#18a89a);transition:width .45s cubic-bezier(.22,1,.36,1)}
+.pv2-ck-list{list-style:none;margin:12px 0 4px;padding:0 12px 12px;display:grid;gap:7px}
+.pv2-ck-item{display:flex;gap:11px;align-items:flex-start;padding:10px 12px;border:1px solid var(--pv-line2);border-radius:12px;cursor:pointer;transition:background .18s,border-color .18s,transform .18s}
+.pv2-ck-item:hover{background:#f6faf9;border-color:#cfe6e2;transform:translateX(2px)}
+.pv2-ck-item input{position:absolute;opacity:0;pointer-events:none}
+.pv2-ck-box{flex:none;width:21px;height:21px;border-radius:7px;border:2px solid #c8d2e2;display:grid;place-items:center;transition:all .18s;margin-top:1px}
+.pv2-ck-box::after{content:"✓";font-size:13px;font-weight:900;color:#fff;transform:scale(0);transition:transform .2s cubic-bezier(.22,1.6,.4,1)}
+.pv2-ck-item.on .pv2-ck-box{background:var(--pv-teal);border-color:var(--pv-teal)}
+.pv2-ck-item.on .pv2-ck-box::after{transform:scale(1)}
+.pv2-ck-item.on .pv2-ck-t{color:var(--pv-mut);text-decoration:line-through}
+.pv2-ck-t{font-weight:800;font-size:13px;line-height:1.5}
+.pv2-ck-t small{display:block;font-weight:700;color:var(--pv-mut);font-size:11px;text-decoration:none;margin-top:1px}
+/* details (rate rules) */
+.pv2-details{margin-bottom:16px;background:var(--pv-card);border:1px solid var(--pv-line);border-radius:16px;overflow:hidden}
+.pv2-details>summary{cursor:pointer;padding:13px 18px;font-weight:800;font-size:14px;color:var(--pv-ink2);list-style:none;display:flex;align-items:center;gap:8px}
+.pv2-details>summary::before{content:"▸";color:var(--pv-teal);transition:transform .2s}
+.pv2-details[open]>summary::before{transform:rotate(90deg)}
+.pv2-details .table-wrap{padding:0 12px 12px}
+/* tables */
+.pv2-tablewrap{overflow:auto;max-height:560px}
+.pv2-table{border-collapse:separate;border-spacing:0;width:100%;min-width:760px;font-size:13px}
+.pv2-table thead th{position:sticky;top:0;z-index:2;background:#0f2a35;color:#dff4f0;font-weight:800;padding:11px 12px;text-align:left;white-space:nowrap;letter-spacing:.02em;font-size:12px}
+.pv2-table thead th:first-child{padding-left:18px}
+.pv2-table tbody td{padding:10px 12px;border-bottom:1px solid var(--pv-line2);vertical-align:middle;color:var(--pv-ink2)}
+.pv2-table tbody td:first-child{padding-left:18px}
+.pv2-table tbody tr:hover td{background:#f6faf9}
+.pv2-table .pv-name{font-weight:800;color:var(--pv-ink)}
+.pv2-table .pv-num{text-align:right;font-weight:800;color:var(--pv-ink)}
+.pv2-money{font-family:"Space Grotesk";font-weight:800;color:var(--pv-emerald);font-variant-numeric:tabular-nums}
+.pv2-sub td{background:#fbf7ee!important;font-weight:800;color:var(--pv-amber)}
+.pv2-total td{background:#f0f4fb!important;font-weight:800;color:var(--pv-ink)}
+.pv2-star{color:var(--pv-rose);font-weight:900}
+.pv2-empty{padding:22px;text-align:center;color:var(--pv-mut);font-weight:800}
+/* type badges */
+.pv2-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:800;border:1px solid transparent;white-space:nowrap}
+.pv2-badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.85}
+.pv2-badge.swim{background:#e6f3ff;color:#1266b8;border-color:#c4e2fb}
+.pv2-badge.kid{background:#eafaf0;color:#128a4d;border-color:#c3ecd3}
+.pv2-badge.ball{background:#fff1e4;color:#c2610c;border-color:#fbd9b6}
+.pv2-badge.cram{background:#f1edff;color:#6b3fd4;border-color:#dcd2fb}
+.pv2-badge.pe{background:#ffeef0;color:#c02f52;border-color:#fbccd6}
+.pv2-badge.life{background:#e6f6ee;color:#047857;border-color:#bfe6d2}
+.pv2-badge.desk{background:#e8f2ff;color:#2563eb;border-color:#c9dffb}
+.pv2-rolebadge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:7px;font-size:11px;font-weight:800;border:1px solid transparent;white-space:nowrap}
+.pv2-rolebadge.lead{background:#fff1e0;color:#b8730a;border-color:#f6d19a}
+.pv2-rolebadge.lead::before{content:"★";font-size:10px}
+.pv2-rolebadge.assist{background:#eef1ff;color:#4f46e5;border-color:#d3d9fb}
+.pv2-rolebadge.assist::before{content:"a";font-family:'Space Grotesk';font-weight:900}
+.pv2-rolebadge.coach{background:#eef4f3;color:#0f766e;border-color:#cfe6e2}
+.pv2-days{display:inline-flex;gap:3px;flex-wrap:wrap}
+.pv2-day{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:800;background:#eef4f3;color:var(--pv-teal-d)}
+.pv2-day.wknd{background:#fdeede;color:var(--pv-amber)}
+.pv2-slot{font-family:"Space Grotesk";font-weight:800;font-size:11.5px;color:#fff;background:#334155;border-radius:6px;padding:2px 7px;margin-right:6px}
+/* responsive */
+@media(max-width:1200px){.pv2-kpis{grid-template-columns:repeat(3,1fr);margin-bottom:-150px}.pv2-body{padding-top:172px}.pv2-grid{grid-template-columns:1fr}}
+@media(max-width:720px){.pv2-hero{padding:22px 18px 130px}.pv2-hero h2{font-size:24px}.pv2-kpis{grid-template-columns:repeat(2,1fr);margin-left:18px;margin-right:18px}.pv2-body{padding:20px 14px}.pv2-rates{grid-template-columns:1fr 1fr}}
+@media(prefers-reduced-motion:reduce){.pv2-kpi{animation:none;opacity:1;transform:none}.pv2-btn,.pv2-ck-item{transition:none}}
+@media print{.pv2{box-shadow:none;border:none}.pv2-hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pv2-btn,.pv2-hero-actions,.pv2-details{display:none!important}}
+
 </style>
 </head>
 <body class="simplified-mode section-all">
@@ -1133,102 +1245,104 @@ body.section-manual section[data-section="duty"]{display:none!important}
 
 
 <section id="payrollView" class="hidden-view">
-  <div class="payroll-page">
-    <div class="payroll-head">
-      <div>
-        <h2>本週薪資統計 / 教練工作明細</h2>
-        <p>依照目前週別排班資料，統計每位員工本週上了哪些課、上了幾堂、救生與櫃台時數，方便後續計算薪水。</p>
+  <div class="pv2">
+    <header class="pv2-hero">
+      <div class="pv2-hero-row">
+        <div>
+          <span class="pv2-eyebrow">Weekly Payroll · 教練工作明細</span>
+          <h2>本週薪資統計</h2>
+          <p>依課程類型自動帶入標準時數（游泳團班 1.34h、球類 1.5h、體育課 1／2h…），逐一列出每位教練上了哪些課、幾堂、多少時數，方便核算薪資。</p>
+        </div>
+        <div class="pv2-hero-actions">
+          <button class="pv2-btn" onclick="renderPayrollReport()">↻ 重新統計</button>
+          <button class="pv2-btn pv2-btn-solid" onclick="copyPayrollCsv()">⧉ 複製明細 CSV</button>
+        </div>
       </div>
-      <div class="avail-actions">
-        <button class="btn" onclick="renderPayrollReport()">重新統計</button>
-        <button class="btn green" onclick="copyPayrollCsv()">複製明細 CSV</button>
+      <div class="pv2-kpis" id="pv2Kpis"></div>
+    </header>
+
+    <div class="pv2-body">
+      <div class="pv2-grid">
+        <section class="pv2-panel">
+          <div class="pv2-panel-h"><h3>費率設定</h3><span>填入後金額即時試算</span></div>
+          <div class="pv2-rates">
+            <label class="pv2-rate"><span>游泳一般團班 / 堂</span><input id="pvr_0" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
+            <label class="pv2-rate"><span>游泳假日班 / 堂</span><input id="pvr_1" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
+            <label class="pv2-rate"><span>幼兒游泳班 / 堂</span><input id="pvr_2" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
+            <label class="pv2-rate"><span>補習班課程 / 堂</span><input id="pvr_3" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
+            <label class="pv2-rate"><span>球類課程 / 堂</span><input id="pvr_4" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
+            <label class="pv2-rate"><span>體育課(短) / 堂</span><input id="pvr_5" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
+            <label class="pv2-rate"><span>體育課(長) / 堂</span><input id="pvr_6" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
+            <label class="pv2-rate"><span>救生時薪 / 時</span><input id="rateLifeguard" type="number" min="0" value="0" oninput="savePayrollRates();renderPayrollReport()"></label>
+            <label class="pv2-rate"><span>櫃台時薪 / 時</span><input id="rateFrontdesk" type="number" min="0" value="0" oninput="savePayrollRates();renderPayrollReport()"></label>
+            <label class="pv2-rate"><span>備註</span><input id="payrollNote" placeholder="例：本頁金額僅試算" oninput="savePayrollRates()"></label>
+            <input id="rateCourse" type="hidden" value="0"><input id="rateManual" type="hidden" value="0">
+          </div>
+        </section>
+        <section class="pv2-panel pv2-checklist">
+          <div class="pv2-panel-h"><h3>結算核對清單</h3><span id="pv2CkCount">0 / 6</span></div>
+          <div class="pv2-ck-bar"><i id="pv2CkBar"></i></div>
+          <ul class="pv2-ck-list" id="pv2Checklist">
+            <li class="pv2-ck-item" data-ck="rates" onclick="pvToggleCheck(this)"><span class="pv2-ck-box"></span><span class="pv2-ck-t">已填入四項費率<small>一般 / 手動 / 救生 / 櫃台</small></span></li>
+            <li class="pv2-ck-item" data-ck="roster" onclick="pvToggleCheck(this)"><span class="pv2-ck-box"></span><span class="pv2-ck-t">名冊外教練（★）已確認身分<small>按姓名計薪、待人資綁定</small></span></li>
+            <li class="pv2-ck-item" data-ck="ctype" onclick="pvToggleCheck(this)"><span class="pv2-ck-box"></span><span class="pv2-ck-t">課程分類已確認<small>補習班辦的游泳、玩水班、高階游泳等</small></span></li>
+            <li class="pv2-ck-item" data-ck="longshift" onclick="pvToggleCheck(this)"><span class="pv2-ck-box"></span><span class="pv2-ck-t">異常長班 / 跨午夜班已核對<small>單班 &gt;13h 或收班 00:00</small></span></li>
+            <li class="pv2-ck-item" data-ck="dupid" onclick="pvToggleCheck(this)"><span class="pv2-ck-box"></span><span class="pv2-ck-t">同名重複 ID 已合併<small>避免同一人重複計薪</small></span></li>
+            <li class="pv2-ck-item" data-ck="venue" onclick="pvToggleCheck(this)"><span class="pv2-ck-box"></span><span class="pv2-ck-t">其他場館是否納入已決定<small>竹科 / 松山等非三館班表</small></span></li>
+          </ul>
+        </section>
       </div>
-    </div>
-    <div class="payroll-body">
-      <div class="payroll-rates">
-        <div class="rate-card"><label>一般課程單價 / 堂</label><input id="rateCourse" type="number" value="0" oninput="savePayrollRates();renderPayrollReport()"></div>
-        <div class="rate-card"><label>手動課程單價 / 堂</label><input id="rateManual" type="number" value="0" oninput="savePayrollRates();renderPayrollReport()"></div>
-        <div class="rate-card"><label>救生時薪</label><input id="rateLifeguard" type="number" value="0" oninput="savePayrollRates();renderPayrollReport()"></div>
-        <div class="rate-card"><label>櫃台時薪</label><input id="rateFrontdesk" type="number" value="0" oninput="savePayrollRates();renderPayrollReport()"></div>
-        <div class="rate-card"><label>備註</label><input id="payrollNote" placeholder="例：本頁金額僅試算" oninput="savePayrollRates()"></div>
-      </div>
-      <section class="avail-section" style="margin-bottom:12px">
-        <div class="avail-section-title">課程薪資規則</div>
-        <div class="rule-note">依課程名稱設定堂費；正式資料進來後，薪資統計會優先使用這裡的規則，沒有符合才用上方一般 / 手動課程單價。</div>
+
+      <details class="pv2-details">
+        <summary>課程薪資規則（進階：依課名關鍵字設定堂費）</summary>
         <div class="table-wrap">
           <table class="rate-rule-table">
-            <thead>
-              <tr>
-                <th>課程名稱關鍵字</th>
-                <th>來源</th>
-                <th>堂費</th>
-                <th>備註</th>
-                <th>操作</th>
-              </tr>
-            </thead>
+            <thead><tr><th>課程名稱關鍵字</th><th>來源</th><th>堂費</th><th>備註</th><th>操作</th></tr></thead>
             <tbody id="courseRateRulesBody"></tbody>
           </table>
+          <div class="rate-rule-actions">
+            <button class="mini-btn" onclick="addCourseRateRule()">＋新增薪資規則</button>
+            <button class="mini-btn" onclick="resetCourseRateRules()">清空薪資規則</button>
+          </div>
         </div>
-        <div class="rate-rule-actions">
-          <button class="mini-btn" onclick="addCourseRateRule()">＋新增薪資規則</button>
-          <button class="mini-btn" onclick="resetCourseRateRules()">清空薪資規則</button>
-        </div>
-      </section>
-      <div class="payroll-summary-grid" id="payrollSummaryCards"></div>
-      <section class="avail-section" style="margin-bottom:12px">
-        <div class="avail-section-title">本週課程名稱統計</div>
-        <div class="table-wrap">
-          <table class="course-total-table">
-            <thead>
-              <tr>
-                <th>課程名稱</th>
-                <th>本週總堂數</th>
-                <th>一般 / 手動</th>
-                <th>教練分配</th>
-              </tr>
-            </thead>
-            <tbody id="payrollCourseBreakdownBody"></tbody>
+      </details>
+
+      <section class="pv2-panel" style="margin-bottom:16px">
+        <div class="pv2-panel-h"><h3>課程時數彙整</h3><span>各類型分平日 / 假日 / 手動，時數不同分別計算</span></div>
+        <div class="pv2-tablewrap">
+          <table class="pv2-table">
+            <thead><tr><th>課程類型</th><th>單堂時數</th><th>平日(堂)</th><th>假日(堂)</th><th>手動(堂)</th><th>總堂數</th><th>總時數(h)</th></tr></thead>
+            <tbody id="pv2TypeBody"></tbody>
           </table>
         </div>
       </section>
-      <section class="avail-section" style="margin-bottom:12px">
-        <div class="avail-section-title">員工本週統計</div>
-        <div class="table-wrap">
-          <table class="payroll-table">
-            <thead>
-              <tr>
-                <th>員工</th>
-                <th>課程名稱堂數明細</th>
-                <th>手動課程</th>
-                <th>救生班數</th>
-                <th>櫃台班數</th>
-                <th>總時數</th>
-                <th>參考薪資</th>
-                <th>LINE</th>
-              </tr>
-            </thead>
-            <tbody id="payrollSummaryBody"></tbody>
+
+      <section class="pv2-panel" style="margin-bottom:16px">
+        <div class="pv2-panel-h"><h3>員工薪資試算 · 依課程類型單價</h3><span>每種課程單堂費用自行輸入，右側自動帶出總金額（總時數／總金額已含救生・櫃台）</span></div>
+        <div class="pv2-tablewrap">
+          <table class="pv2-table">
+            <thead><tr><th>員工</th><th>游泳一般團班/堂</th><th>游泳假日班/堂</th><th>幼兒游泳班/堂</th><th>補習班課程/堂</th><th>球類課程/堂</th><th>體育課(短)/堂</th><th>體育課(長)/堂</th><th>總時數(h)</th><th>總金額</th></tr></thead>
+            <tbody id="pv2StaffBody"></tbody>
           </table>
         </div>
       </section>
-      <section class="avail-section">
-        <div class="avail-section-title">本週工作明細</div>
-        <div class="table-wrap">
-          <table class="payroll-detail-table">
-            <thead>
-              <tr>
-                <th>日期</th>
-                <th>員工</th>
-                <th>館別</th>
-                <th>類型</th>
-                <th>課程 / 工作內容</th>
-                <th>時段</th>
-                <th>人數</th>
-                <th>計算</th>
-                <th>備註</th>
-              </tr>
-            </thead>
-            <tbody id="payrollDetailBody"></tbody>
+
+      <section class="pv2-panel" style="margin-bottom:16px">
+        <div class="pv2-panel-h"><h3>教練工作明細 · 每位教練上什麼課</h3><span>含課程類型・時數・角色（★當班下 / a助教 / 教練）</span></div>
+        <div class="pv2-tablewrap">
+          <table class="pv2-table">
+            <thead><tr><th>員工</th><th>課程</th><th>課程類型</th><th>角色</th><th>時段 / 上課星期</th><th>堂數</th><th>課程時數(h)</th></tr></thead>
+            <tbody id="pv2CoachBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="pv2-panel">
+        <div class="pv2-panel-h"><h3>本週工作明細</h3><span>逐筆排班（含課程類型與課程時數）</span></div>
+        <div class="pv2-tablewrap">
+          <table class="pv2-table">
+            <thead><tr><th>日期</th><th>員工</th><th>館別</th><th>類型</th><th>課程 / 工作內容</th><th>課程類型</th><th>時段</th><th>課程時數(h)</th><th>計算</th></tr></thead>
+            <tbody id="pv2DetailBody"></tbody>
           </table>
         </div>
       </section>
@@ -1820,14 +1934,29 @@ function parseDutyGridLines(text,role,dayNo,week,sourceCell=null,sourceVenue='',
   });
   return rows;
 }
+function tokenizeCoachLine(line){
+  // 註記規則：名字前 * = 當班下（主帶），a = 助教（a=assistance）。無前綴 = 一般教練。
+  // 一行可含多位（例：*莊柏彥*劉承翰），以前綴為分隔；無前綴時行為與舊版相同（整行一位）。
+  let s=String(line||'');
+  s=s.replace(/[＊*]/g,'\u0001*').replace(/[aAＡａ](?=[\u4e00-\u9fa5])/g,'\u0001a');
+  if(s.indexOf('\u0001')<0) return [{marker:'',body:String(line||'')}];
+  return s.split('\u0001').map(x=>x.trim()).filter(Boolean).map(x=>{
+    const mk=(x[0]==='*'||x[0]==='a')?x[0]:'';
+    return {marker:mk,body:mk?x.slice(1):x};
+  });
+}
+function coachRoleFromMarker(mk){return mk==='*'?'當班下':mk==='a'?'助教':'教練';}
 function parseAssignments(text,period,week,metaKey=''){
   const def=activeDaysForPeriod(period,week),rows=[];
   usefulLines(text).forEach(line=>{
-    const m=line.match(/[1-5]+/g);
-    const days=period==='weekday'?(m?Array.from(new Set(m.join('').split('').map(Number))).filter(d=>def.includes(d)):[...def]):[...def];
-    const name=normalizeName(line.replace(/[1-5]+/g,' '));
-    const emp=findEmployeeForLine(name,metaKey);
-    if(name&&days.length)rows.push({name,employeeId:emp?.id||'',lineBound:!!emp?.lineBound,role:emp?.role||'',employeeVenue:emp?.venue||'',days,raw:line});
+    tokenizeCoachLine(line).forEach(tok=>{
+      const body=tok.body;
+      const m=body.match(/[1-5]+/g);
+      const days=period==='weekday'?(m?Array.from(new Set(m.join('').split('').map(Number))).filter(d=>def.includes(d)):[...def]):[...def];
+      const name=normalizeName(body.replace(/[1-5]+/g,' '));
+      const emp=findEmployeeForLine(name,metaKey);
+      if(name&&days.length)rows.push({name,employeeId:emp?.id||'',lineBound:!!emp?.lineBound,role:emp?.role||'',employeeVenue:emp?.venue||'',days,raw:line,coachRole:coachRoleFromMarker(tok.marker)});
+    });
   });
   return rows;
 }
@@ -3188,7 +3317,8 @@ function normalizedBase(weekNo, venueName, venueId, roleType, dateType, days, ti
     employeeName: emp.name || a.name || '未指定員工',
     role: emp.role || a.role || '',
     lineBound: !!emp.lineBound,
-    source: roleType==='course' ? 'registration' : 'schedule'
+    source: roleType==='course' ? 'registration' : 'schedule',
+    coachRole: a.coachRole || ''
   };
 }
 function collectNormalizedAssignments(){
@@ -4010,9 +4140,9 @@ function numberValue(id){return Number(document.getElementById(id)?.value||0)||0
 function moneyText(value){return '$'+Math.round(Number(value)||0).toLocaleString();}
 function payrollCalculationForRow(row,rates){
   if(row.roleType==='course'){
-    const cname=courseNameForPayroll(row);
-    const rate=getPayrollRateForCourse(cname,row.source);
-    return {unit:'1 堂',rate,amount:rate,formula:`1 堂 × ${moneyText(rate)} / 堂`};
+    const type=(typeof classifyCourseType==='function')?classifyCourseType(row):'游泳一般團班';
+    const rate=(typeof pvTypeRate==='function')?pvTypeRate(type):0;
+    return {unit:'1 堂',rate,amount:rate,courseType:type,formula:`1 堂 × ${moneyText(rate)}（${type}）`};
   }
   const hours=Number(row.hours)||0;
   const rate=row.roleType==='frontdesk'?rates.frontdesk:rates.lifeguard;
@@ -4096,85 +4226,132 @@ function renderEmployeeCourseBreakdown(map){
   if(!entries.length) return '<span class="result-empty">無課程</span>';
   return `<div class="course-count-list">${entries.map(([name,count])=>`<span class="course-count-chip">${escapeHtml(name)}｜${count}堂</span>`).join('')}</div>`;
 }
+/* ===== v41 payroll 課程分類 + 重新設計渲染 ===== */
+const PV_TYPE_HOURS={'游泳一般團班':1.34,'游泳假日班':1.34,'幼兒游泳班':1.0,'補習班課程':1.0,'球類課程':1.5,'體育課(短)':1.0,'體育課(長)':2.0};
+const PV_TYPE_CLS={'游泳一般團班':'swim','游泳假日班':'swim','幼兒游泳班':'kid','補習班課程':'cram','球類課程':'ball','體育課(短)':'pe','體育課(長)':'pe'};
+const PV_TYPE_ORDER=['游泳一般團班','游泳假日班','幼兒游泳班','補習班課程','球類課程','體育課(短)','體育課(長)'];
+function pvRatesKey(){return (typeof LOCAL_STORAGE_PREFIX!=='undefined'?LOCAL_STORAGE_PREFIX:'')+'pv2-type-rates';}
+function pvTypeRate(t){const i=PV_TYPE_ORDER.indexOf(t);const el=document.getElementById('pvr_'+i);return el?(Number(el.value)||0):0;}
+function pvSaveTypeRates(){const o={};PV_TYPE_ORDER.forEach((t,i)=>{const el=document.getElementById('pvr_'+i);o[i]=el?el.value:'';});try{localStorage.setItem(pvRatesKey(),JSON.stringify(o));}catch(e){}}
+function pvLoadTypeRates(){let o={};try{o=JSON.parse(localStorage.getItem(pvRatesKey())||'{}');}catch(e){}PV_TYPE_ORDER.forEach((t,i)=>{const el=document.getElementById('pvr_'+i);if(el&&o[i]!=null&&o[i]!=='')el.value=o[i];});}
+function pvCourseDur(s,e){const m=t=>{const p=String(t||'').split(':');return (+p[0])*60+(+p[1]);};let a=m(s),b=m(e);if(!isFinite(a)||!isFinite(b))return 0;if(b<=a)b+=1440;return (b-a)/60;}
+function classifyCourseType(row){
+  const n=String(row.courseName||row.workName||'').replace('(假日班)','');
+  const holiday=row.dateType==='sat'||row.dateType==='sun'||row.dateType==='holiday'||row.day===6||row.day===7;
+  if(holiday) return '游泳假日班';
+  if(/羽球|籃球|桌球|棒球|排球|足球|網球|球/.test(n)) return '球類課程';
+  if(n==='立得補習班'||n==='空中美語') return '補習班課程';
+  if(n==='幼幼班游泳') return '幼兒游泳班';
+  if(n==='一般游泳(6足歲以上)'||n==='高階游泳班'||n==='玩水班') return '游泳一般團班';
+  if(/游泳$/.test(n)) return '補習班課程';
+  if(/舞蹈/.test(n)) return '補習班課程';
+  if(n.indexOf('體育課')>=0||n==='夏令營') return pvCourseDur(row.startTime,row.endTime)>=1.75?'體育課(長)':'體育課(短)';
+  return '補習班課程';
+}
+function pvBadge(type){const cls=PV_TYPE_CLS[type]||'cram';return `<span class="pv2-badge ${cls}">${escapeHtml(type)}</span>`;}
+const PV_ROLE_CLS={'當班下':'lead','助教':'assist','教練':'coach'};
+function pvRoleBadge(role){const r=role||'教練';const cls=PV_ROLE_CLS[r]||'coach';return `<span class="pv2-rolebadge ${cls}">${escapeHtml(r)}</span>`;}
+function pvDayChips(days){const order=[1,2,3,4,5,6,7];const u=order.filter(d=>days.has(d));if(!u.length)return '';return `<span class="pv2-days">${u.map(d=>`<span class="pv2-day ${d>=6?'wknd':''}">${dayName(d)}</span>`).join('')}</span>`;}
+/* checklist */
+function pvCkKey(){return (typeof LOCAL_STORAGE_PREFIX!=='undefined'?LOCAL_STORAGE_PREFIX:'')+'pv2-checklist';}
+function pvInitChecklist(){let st={};try{st=JSON.parse(localStorage.getItem(pvCkKey())||'{}')}catch(e){}
+  document.querySelectorAll('#pv2Checklist .pv2-ck-item').forEach(li=>li.classList.toggle('on',!!st[li.dataset.ck]));pvCkProgress();}
+function pvToggleCheck(li){li.classList.toggle('on');let st={};try{st=JSON.parse(localStorage.getItem(pvCkKey())||'{}')}catch(e){}
+  st[li.dataset.ck]=li.classList.contains('on');localStorage.setItem(pvCkKey(),JSON.stringify(st));pvCkProgress();}
+function pvCkProgress(){const items=document.querySelectorAll('#pv2Checklist .pv2-ck-item');if(!items.length)return;const done=[...items].filter(i=>i.classList.contains('on')).length;
+  const bar=document.getElementById('pv2CkBar'),cnt=document.getElementById('pv2CkCount');
+  if(bar)bar.style.width=(done/items.length*100)+'%';if(cnt)cnt.textContent=`${done} / ${items.length}`;}
+function pvBlockOf(r){if(r.dateType==='sat'||r.dateType==='sun'||r.dateType==='holiday'||r.day===6||r.day===7)return '假日';if(r.source==='manual')return '手動';return '平日';}
+
 function renderPayrollReport(){
   loadPayrollRates();
+  pvLoadTypeRates();
   renderCourseRateRules();
-  const body=document.getElementById('payrollSummaryBody');
-  const detail=document.getElementById('payrollDetailBody');
-  const cards=document.getElementById('payrollSummaryCards');
-  const courseBody=document.getElementById('payrollCourseBreakdownBody');
-  if(!body || !detail || !cards) return;
+  pvInitChecklist();
+  const kpis=document.getElementById('pv2Kpis');
+  const typeBody=document.getElementById('pv2TypeBody');
+  const staffBody=document.getElementById('pv2StaffBody');
+  const coachBody=document.getElementById('pv2CoachBody');
+  const detail=document.getElementById('pv2DetailBody');
+  if(!kpis||!typeBody||!staffBody||!coachBody||!detail) return;
   const rateLifeguard=numberValue('rateLifeguard'), rateFrontdesk=numberValue('rateFrontdesk');
-  const rows=expandedPayrollRows().map(r=>({...r,payCalc:payrollCalculationForRow(r,{lifeguard:rateLifeguard,frontdesk:rateFrontdesk})}));
+  const rows=expandedPayrollRows().map(r=>{
+    const o={...r,payCalc:payrollCalculationForRow(r,{lifeguard:rateLifeguard,frontdesk:rateFrontdesk})};
+    if(o.roleType==='course'){o.courseType=classifyCourseType(o);o.courseHours=PV_TYPE_HOURS[o.courseType]||0;}
+    return o;
+  });
+  // ---- per employee ----
   const map=new Map();
-  const courseTotals={};
+  const typeAgg={}; PV_TYPE_ORDER.forEach(t=>typeAgg[t]={平日:0,假日:0,手動:0});
   rows.forEach(r=>{
     const key=employeeKeyForPayroll(r);
-    if(!map.has(key)){
-      map.set(key,{employeeId:r.employeeId,employeeName:r.employeeName||'未指定員工',role:r.role||'',lineBound:!!r.lineBound,courseSessions:0,manualSessions:0,lifeguardShifts:0,frontdeskShifts:0,courseHours:0,lifeguardHours:0,frontdeskHours:0,totalHours:0,pay:0,items:[],courseByName:{}});
-    }
-    const s=map.get(key);
-    s.lineBound=s.lineBound||!!r.lineBound;
-    s.items.push(r);
-    s.totalHours += r.hours;
+    if(!map.has(key)) map.set(key,{employeeName:r.employeeName||'未指定員工',lineBound:!!r.lineBound,inRoster:!!r.employeeId,
+      courseSessions:0,courseHours:0,lifeguardShifts:0,frontdeskShifts:0,lifeguardHours:0,frontdeskHours:0,totalHours:0,pay:0,venues:{},courses:{},typeCount:{}});
+    const s=map.get(key); s.lineBound=s.lineBound||!!r.lineBound; s.inRoster=s.inRoster||!!r.employeeId; s.totalHours+=r.hours;
+    if(r.venueName) s.venues[r.venueName]=(s.venues[r.venueName]||0)+1;
     if(r.roleType==='course'){
-      const cname=courseNameForPayroll(r);
-      s.courseByName[cname]=(s.courseByName[cname]||0)+1;
-      addCourseCount(courseTotals,cname,r.source,s.employeeName);
-      s.courseHours += r.hours;
-      if(r.source==='manual'){s.manualSessions += 1; s.pay += r.payCalc.amount;}
-      else{s.courseSessions += 1; s.pay += r.payCalc.amount;}
-    }else if(r.roleType==='lifeguard'){
-      s.lifeguardShifts += 1; s.lifeguardHours += r.hours; s.pay += r.payCalc.amount;
-    }else if(r.roleType==='frontdesk'){
-      s.frontdeskShifts += 1; s.frontdeskHours += r.hours; s.pay += r.payCalc.amount;
-    }
+      s.courseSessions+=1; s.courseHours+=r.courseHours; s.pay+=r.payCalc.amount;
+      s.typeCount[r.courseType]=(s.typeCount[r.courseType]||0)+1;
+      typeAgg[r.courseType][pvBlockOf(r)]+=1;
+      const role=r.coachRole||'教練';
+      const gk=r.workName+'|'+r.courseType+'|'+(r.slotCode||'')+'|'+role;
+      if(!s.courses[gk]) s.courses[gk]={name:r.workName,type:r.courseType,role,slot:r.slotCode||'',block:pvBlockOf(r),days:new Set(),n:0,h:PV_TYPE_HOURS[r.courseType]||0};
+      s.courses[gk].days.add(r.day); s.courses[gk].n+=1;
+    }else if(r.roleType==='lifeguard'){s.lifeguardShifts+=1;s.lifeguardHours+=r.hours;s.pay+=r.payCalc.amount;}
+    else if(r.roleType==='frontdesk'){s.frontdeskShifts+=1;s.frontdeskHours+=r.hours;s.pay+=r.payCalc.amount;}
   });
-  const stats=Array.from(map.values()).sort((a,b)=>a.employeeName.localeCompare(b.employeeName,'zh-Hant'));
-  const totals=stats.reduce((acc,s)=>{
-    acc.staff+=1; acc.course+=s.courseSessions; acc.manual+=s.manualSessions; acc.lifeguard+=s.lifeguardShifts; acc.frontdesk+=s.frontdeskShifts; acc.hours+=s.totalHours; acc.pay+=s.pay; return acc;
-  },{staff:0,course:0,manual:0,lifeguard:0,frontdesk:0,hours:0,pay:0});
-  cards.innerHTML=[
-    ['員工數',`${totals.staff} 人`],
-    ['一般課程',`${totals.course} 堂`],
-    ['手動課程',`${totals.manual} 堂`],
-    ['救生 / 櫃台',`${totals.lifeguard} / ${totals.frontdesk} 班`],
-    ['總時數 / 試算薪資',`${totals.hours.toFixed(1)} 小時｜$${Math.round(totals.pay).toLocaleString()}`]
-  ].map(([label,value])=>`<div class="payroll-stat"><span>${label}</span><b>${value}</b></div>`).join('');
-  if(courseBody){
-    const courseEntries=Object.entries(courseTotals).sort((a,b)=>b[1].total-a[1].total || a[0].localeCompare(b[0],'zh-Hant'));
-    courseBody.innerHTML=courseEntries.length?courseEntries.map(([name,data])=>{
-      const byEmp=Object.entries(data.byEmployee).sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0],'zh-Hant'))
-        .map(([emp,count])=>`<span class="course-count-chip">${escapeHtml(emp)}｜${count}堂</span>`).join('');
-      return `<tr>
-        <td class="payroll-name">${escapeHtml(name)}</td>
-        <td>${data.total} 堂</td>
-        <td>一般 ${data.general} 堂｜手動 ${data.manual} 堂</td>
-        <td><div class="course-count-list">${byEmp}</div></td>
-      </tr>`;
-    }).join(''):`<tr><td colspan="4" class="payroll-empty">目前本週沒有課程資料。</td></tr>`;
-  }
-  body.innerHTML=stats.length?stats.map(s=>`<tr>
-    <td class="payroll-name">${escapeHtml(s.employeeName)}</td>
-    <td>${renderEmployeeCourseBreakdown(s.courseByName)}</td>
-    <td>${s.manualSessions} 堂</td>
-    <td>${s.lifeguardShifts} 班｜${s.lifeguardHours.toFixed(1)} 小時</td>
-    <td>${s.frontdeskShifts} 班｜${s.frontdeskHours.toFixed(1)} 小時</td>
-    <td>${s.totalHours.toFixed(1)} 小時</td>
-    <td class="payroll-money">$${Math.round(s.pay).toLocaleString()}</td>
-    <td>${lineBadge({lineBound:s.lineBound})}</td>
-  </tr>`).join(''):`<tr><td colspan="8" class="payroll-empty">目前本週沒有可統計的排班資料。</td></tr>`;
+  const stats=Array.from(map.values());
+  const T=stats.reduce((a,s)=>{a.staff++;a.cs+=s.courseSessions;a.ch+=s.courseHours;a.lg+=s.lifeguardShifts;a.lgh+=s.lifeguardHours;a.fd+=s.frontdeskShifts;a.fdh+=s.frontdeskHours;a.hours+=s.totalHours;a.pay+=s.pay;return a;},{staff:0,cs:0,ch:0,lg:0,lgh:0,fd:0,fdh:0,hours:0,pay:0});
+  // ---- KPIs ----
+  kpis.innerHTML=[
+    ['teal','員工數',`${T.staff}`,'本週有排班'],
+    ['ink','課程堂數',`${T.cs}`,'單堂計'],
+    ['amber','課程時數',`${T.ch.toFixed(1)}h`,'依類型標準時數'],
+    ['emerald','救生',`${T.lg}班`,`${T.lgh.toFixed(1)} 小時`],
+    ['emerald','櫃台',`${T.fd}班`,`${T.fdh.toFixed(1)} 小時`],
+    ['rose','試算薪資',`$${Math.round(T.pay).toLocaleString()}`,'填費率後更新']
+  ].map(([c,l,v,s])=>`<div class="pv2-kpi ${c}"><div class="k-l"><i></i>${l}</div><div class="k-v pv-num">${v}</div><div class="k-s">${s}</div></div>`).join('');
+  // ---- 課程時數彙整 ----
+  let tt={平日:0,假日:0,手動:0,tot:0,h:0};
+  typeBody.innerHTML=PV_TYPE_ORDER.map(t=>{
+    const a=typeAgg[t],tot=a.平日+a.假日+a.手動,h=tot*PV_TYPE_HOURS[t];
+    tt.平日+=a.平日;tt.假日+=a.假日;tt.手動+=a.手動;tt.tot+=tot;tt.h+=h;
+    return `<tr><td>${pvBadge(t)}</td><td class="pv-num">${PV_TYPE_HOURS[t].toFixed(2)}</td><td class="pv-num">${a.平日||''}</td><td class="pv-num">${a.假日||''}</td><td class="pv-num">${a.手動||''}</td><td class="pv-num">${tot}</td><td class="pv-num pv2-money">${h.toFixed(1)}</td></tr>`;
+  }).join('')+`<tr class="pv2-total"><td>合計</td><td></td><td class="pv-num">${tt.平日}</td><td class="pv-num">${tt.假日}</td><td class="pv-num">${tt.手動}</td><td class="pv-num">${tt.tot}</td><td class="pv-num">${tt.h.toFixed(1)}</td></tr>`;
+  // ---- 員工本週統計 ----
+  const mv=s=>{const e=Object.entries(s.venues).sort((a,b)=>b[1]-a[1]);return e.length?e[0][0]:'—';};
+  const staffSorted=stats.slice().sort((a,b)=>(b.courseHours+b.totalHours)-(a.courseHours+a.totalHours)||a.employeeName.localeCompare(b.employeeName,'zh-Hant'));
+  const colTot={},allTot={hours:0,pay:0}; PV_TYPE_ORDER.forEach(t=>colTot[t]=0);
+  staffBody.innerHTML=(staffSorted.length?staffSorted.map(s=>{
+    const cells=PV_TYPE_ORDER.map(t=>{const n=s.typeCount[t]||0;colTot[t]+=n;return `<td class="pv-num">${n||'<span style=\'color:#c3ccdb\'>·</span>'}</td>`;}).join('');
+    const totH=s.courseHours+s.lifeguardHours+s.frontdeskHours; allTot.hours+=totH; allTot.pay+=s.pay;
+    return `<tr><td class="pv-name">${escapeHtml(s.employeeName)}${s.inRoster?'':' <span class="pv2-star">★</span>'}</td>${cells}<td class="pv-num">${totH.toFixed(1)}</td><td class="pv-num pv2-money">$${Math.round(s.pay).toLocaleString()}</td></tr>`;
+  }).join(''):`<tr><td colspan="10" class="pv2-empty">目前本週沒有可統計的排班資料。</td></tr>`)
+   + (staffSorted.length?`<tr class="pv2-total"><td>合計帶出</td>${PV_TYPE_ORDER.map(t=>`<td class="pv-num">${colTot[t]||0}</td>`).join('')}<td class="pv-num">${allTot.hours.toFixed(1)}</td><td class="pv-num pv2-money">$${Math.round(allTot.pay).toLocaleString()}</td></tr>`:'');
+  // ---- 教練工作明細 ----
+  const coaches=staffSorted.filter(s=>s.courseSessions>0);
+  coachBody.innerHTML=coaches.length?coaches.map(s=>{
+    const groups=Object.values(s.courses).sort((a,b)=>({'平日':0,'假日':1,'手動':2}[a.block]-{'平日':0,'假日':1,'手動':2}[b.block])||a.name.localeCompare(b.name,'zh-Hant'));
+    let subN=0,subH=0;
+    const body=groups.map((g,i)=>{subN+=g.n;subH+=g.n*g.h;
+      const slot=(g.slot&&g.slot!=='MANUAL')?`<span class="pv2-slot">${escapeHtml(g.slot)}</span>`:`<span class="pv2-slot" style="background:#b8730a">${g.block}</span>`;
+      return `<tr>${i===0?`<td class="pv-name" rowspan="${groups.length+1}">${escapeHtml(s.employeeName)}${s.inRoster?'':' <span class="pv2-star">★</span>'}</td>`:''}
+        <td>${escapeHtml(g.name)}</td><td>${pvBadge(g.type)}</td><td>${pvRoleBadge(g.role)}</td><td>${slot}${pvDayChips(g.days)}</td><td class="pv-num">${g.n}</td><td class="pv-num pv2-money">${(g.n*g.h).toFixed(1)}</td></tr>`;
+    }).join('');
+    return body+`<tr class="pv2-sub"><td>小計</td><td></td><td></td><td></td><td class="pv-num">${subN} 堂</td><td class="pv-num">${subH.toFixed(1)} h</td></tr>`;
+  }).join(''):`<tr><td colspan="7" class="pv2-empty">目前本週沒有課程排班。</td></tr>`;
+  // ---- 本週工作明細 ----
   detail.innerHTML=rows.length?rows.map(r=>`<tr>
-    <td>${escapeHtml(r.date || '')}${r.day?`<br><small>週${dayName(r.day)}</small>`:''}</td>
-    <td class="payroll-name">${escapeHtml(r.employeeName||'未指定員工')}</td>
+    <td>${escapeHtml(r.date||'')}${r.day?`<br><small style="color:var(--pv-mut)">週${dayName(r.day)}</small>`:''}</td>
+    <td class="pv-name">${escapeHtml(r.employeeName||'未指定員工')}${r.employeeId?'':' <span class="pv2-star">★</span>'}</td>
     <td>${escapeHtml(r.venueName||'')}</td>
-    <td><span class="payroll-type ${r.typeClass}">${escapeHtml(r.typeLabel)}</span></td>
-    <td>${escapeHtml(r.workName||'')}${r.slotCode?`<br><small>${escapeHtml(r.slotCode)}</small>`:''}</td>
+    <td><span class="pv2-badge ${r.roleType==='lifeguard'?'life':r.roleType==='frontdesk'?'desk':'swim'}">${escapeHtml(r.typeLabel)}</span></td>
+    <td>${escapeHtml(r.workName||'')}${r.slotCode&&r.slotCode!=='MANUAL'?` <small style="color:var(--pv-mut)">${escapeHtml(r.slotCode)}</small>`:''}${r.roleType==='course'?' '+pvRoleBadge(r.coachRole):''}</td>
+    <td>${r.roleType==='course'?pvBadge(r.courseType):'<span style="color:var(--pv-mut)">—</span>'}</td>
     <td>${escapeHtml((r.startTime||'')+'-'+(r.endTime||''))}</td>
-    <td>${escapeHtml(r.registeredCount||'')}</td>
-    <td>${escapeHtml(r.payCalc.formula)}<br><span class="payroll-money">${moneyText(r.payCalc.amount)}</span></td>
-    <td>${r.source==='manual'?'手動課程':''}</td>
-  </tr>`).join(''):`<tr><td colspan="9" class="payroll-empty">目前本週沒有可統計的排班明細。</td></tr>`;
+    <td class="pv-num">${r.roleType==='course'?(r.courseHours||0).toFixed(2):r.hours.toFixed(1)}</td>
+    <td>${escapeHtml(r.payCalc.formula)}<br><span class="pv2-money">${moneyText(r.payCalc.amount)}</span></td>
+  </tr>`).join(''):`<tr><td colspan="9" class="pv2-empty">目前本週沒有可統計的排班明細。</td></tr>`;
 }
 function copyPayrollCsv(){
   const rateLifeguard=numberValue('rateLifeguard'), rateFrontdesk=numberValue('rateFrontdesk');
