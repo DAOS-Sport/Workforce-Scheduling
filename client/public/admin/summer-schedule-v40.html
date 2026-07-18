@@ -651,6 +651,38 @@ body[data-venue-view="三民高中"] .venue-card:not([data-venue-card="三民高
 .pv2-table .pv-name{font-weight:700;color:var(--ink)}
 .pv2-table .pv-num{text-align:right;font-weight:700;color:var(--ink)}
 .pv2-money{font-family:var(--font-display);font-weight:700;color:var(--lg);font-variant-numeric:tabular-nums}
+/* 費率矩陣 + 角色倍率調整條 */
+.pv2-multbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s4);padding:12px var(--s4) 4px}
+.pv2-mult{display:flex;align-items:center;gap:8px}
+.pv2-mult>span{font-size:11.5px;font-weight:700;color:var(--co);white-space:nowrap}
+.pv2-mult input[type=range]{width:120px;accent-color:var(--pv-teal)}
+.pv2-mult input[type=number]{width:68px;border:1px solid var(--co-line);border-radius:var(--r2);
+  padding:6px 8px;font-weight:700;font-size:12.5px;text-align:right}
+.pv2-multbar small{flex-basis:100%;color:var(--pv-mut);font-size:11.5px}
+.pv2-ratematrix td{padding:6px 8px}
+.pv2-ratecell{width:100%;min-width:76px;border:1px solid var(--co-line);border-radius:var(--r2);
+  padding:8px 9px;font-weight:700;font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+/* 角色欄用淡底暗示「由倍率帶出」，但仍可直接改 */
+.pv2-ratecell.role{background:rgba(184,115,10,.06)}
+.pv2-ratecell:focus{outline:2px solid var(--pv-teal);outline-offset:-1px;background:#fff}
+/* 教練篩選器 */
+.pv2-coachfilter{display:flex;align-items:center;gap:7px}
+.pv2-coachfilter label{font-size:11.5px;font-weight:700;color:var(--co);white-space:nowrap}
+.pv2-coachfilter select{
+  border:1px solid var(--co-line);border-radius:var(--r2);padding:9px 10px;
+  font-weight:700;font-size:13px;background:#fff;color:var(--ink);min-width:140px;max-width:200px}
+.pv2-btn-clear{padding:9px 11px!important;font-size:12px!important}
+/* 篩選中的提示條：沒篩選時 :empty 讓它完全不佔空間 */
+.pv2-filterhint{margin-top:10px;padding:9px 13px;border-radius:var(--r2);
+  background:rgba(184,115,10,.1);border:1px solid rgba(184,115,10,.28);
+  font-size:12.5px;color:var(--ink-2);font-weight:600}
+.pv2-filterhint:empty{display:none}
+@media print{.pv2-coachfilter{display:none}}
+/* 角色分項欄：是「總堂數」的子集合而非加總項，用淡底＋左框線跟主欄位區隔，
+   避免有人把它當成可以相加的欄位。 */
+.pv2-sub-col{background:rgba(184,115,10,.055);color:var(--ink-2)}
+.pv2-table th.pv2-sub-col{font-size:11px;letter-spacing:.02em}
+.pv2-sub-col:first-of-type{border-left:1px solid var(--co-line)}
 .pv2-sub td{background:var(--surface-warm)!important;font-weight:700;color:var(--co)}
 .pv2-total td{background:var(--brand-soft)!important;font-weight:700;color:var(--ink)}
 .pv2-star{color:var(--bad);font-weight:900}
@@ -1379,25 +1411,43 @@ body.section-manual section[data-section="duty"]{display:none!important}
           <p>依課程類型自動帶入標準時數（游泳團班 1.34h、球類 1.5h、體育課 1／2h…），逐一列出每位教練上了哪些課、幾堂、多少時數，方便核算薪資。</p>
         </div>
         <div class="pv2-hero-actions">
+          <div class="pv2-coachfilter">
+            <label for="pvCoachFilter">教練篩選</label>
+            <select id="pvCoachFilter" onchange="renderPayrollReport()"><option value="">全部教練</option></select>
+            <button class="pv2-btn pv2-btn-clear" onclick="pvClearCoachFilter()" title="清除篩選，顯示全部教練">✕ 清除</button>
+          </div>
           <button class="pv2-btn" onclick="renderPayrollReport()">↻ 重新統計</button>
           <button class="pv2-btn pv2-btn-solid" onclick="copyPayrollCsv()">⧉ 複製明細 CSV</button>
         </div>
       </div>
       <div class="pv2-kpis" id="pv2Kpis"></div>
+      <div class="pv2-filterhint" id="pvFilterHint"></div>
     </header>
 
     <div class="pv2-body">
       <div class="pv2-grid">
         <section class="pv2-panel">
-          <div class="pv2-panel-h"><h3>費率設定</h3><span>填入後金額即時試算</span></div>
+          <div class="pv2-panel-h"><h3>費率設定</h3><span>拉倍率自動帶出角色金額，單格仍可手動覆寫</span></div>
+          <div class="pv2-multbar">
+            <div class="pv2-mult">
+              <span>當班下倍率</span>
+              <input id="pvMultLead" type="range" min="0" max="2" step="0.05" value="0.3" oninput="pvApplyMultipliers()">
+              <input id="pvMultLeadNum" type="number" min="0" max="9" step="0.05" value="0.3" oninput="pvSyncMultFromNumber('Lead')">
+            </div>
+            <div class="pv2-mult">
+              <span>助教倍率</span>
+              <input id="pvMultAssist" type="range" min="0" max="2" step="0.05" value="0.4" oninput="pvApplyMultipliers()">
+              <input id="pvMultAssistNum" type="number" min="0" max="9" step="0.05" value="0.4" oninput="pvSyncMultFromNumber('Assist')">
+            </div>
+            <small>倍率以「教練」欄為基準換算後兩欄；改動教練金額也會重新帶出該列。</small>
+          </div>
+          <div class="pv2-tablewrap">
+            <table class="pv2-table pv2-ratematrix">
+              <thead><tr><th>課程類型</th><th>教練 / 堂</th><th>當班下 / 堂</th><th>助教 / 堂</th></tr></thead>
+              <tbody id="pvRateMatrixBody"></tbody>
+            </table>
+          </div>
           <div class="pv2-rates">
-            <label class="pv2-rate"><span>游泳一般團班 / 堂</span><input id="pvr_0" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
-            <label class="pv2-rate"><span>游泳假日班 / 堂</span><input id="pvr_1" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
-            <label class="pv2-rate"><span>幼兒游泳班 / 堂</span><input id="pvr_2" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
-            <label class="pv2-rate"><span>補習班課程 / 堂</span><input id="pvr_3" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
-            <label class="pv2-rate"><span>球類課程 / 堂</span><input id="pvr_4" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
-            <label class="pv2-rate"><span>體育課(短) / 堂</span><input id="pvr_5" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
-            <label class="pv2-rate"><span>體育課(長) / 堂</span><input id="pvr_6" type="number" min="0" value="0" oninput="pvSaveTypeRates();renderPayrollReport()"></label>
             <label class="pv2-rate"><span>救生時薪 / 時</span><input id="rateLifeguard" type="number" min="0" value="0" oninput="savePayrollRates();renderPayrollReport()"></label>
             <label class="pv2-rate"><span>櫃台時薪 / 時</span><input id="rateFrontdesk" type="number" min="0" value="0" oninput="savePayrollRates();renderPayrollReport()"></label>
             <label class="pv2-rate"><span>備註</span><input id="payrollNote" placeholder="例：本頁金額僅試算" oninput="savePayrollRates()"></label>
@@ -1433,10 +1483,10 @@ body.section-manual section[data-section="duty"]{display:none!important}
       </details>
 
       <section class="pv2-panel" style="margin-bottom:16px">
-        <div class="pv2-panel-h"><h3>課程時數彙整</h3><span>各類型分平日 / 假日 / 手動，時數不同分別計算</span></div>
+        <div class="pv2-panel-h"><h3>課程時數彙整</h3><span>各類型分平日 / 假日 / 手動，時數不同分別計算；角色欄為總堂數的分項</span></div>
         <div class="pv2-tablewrap">
           <table class="pv2-table">
-            <thead><tr><th>課程類型</th><th>單堂時數</th><th>平日(堂)</th><th>假日(堂)</th><th>手動(堂)</th><th>總堂數</th><th>總時數(h)</th></tr></thead>
+            <thead><tr><th>課程類型</th><th>單堂時數</th><th>平日(堂)</th><th>假日(堂)</th><th>手動(堂)</th><th>總堂數</th><th class="pv2-sub-col">其中·當班下(堂)</th><th class="pv2-sub-col">其中·助教(堂)</th><th>總時數(h)</th></tr></thead>
             <tbody id="pv2TypeBody"></tbody>
           </table>
         </div>
@@ -4354,8 +4404,12 @@ function moneyText(value){return '$'+Math.round(Number(value)||0).toLocaleString
 function payrollCalculationForRow(row,rates){
   if(row.roleType==='course'){
     const type=(typeof classifyCourseType==='function')?classifyCourseType(row):'游泳一般團班';
-    const rate=(typeof pvTypeRate==='function')?pvTypeRate(type):0;
-    return {unit:'1 堂',rate,amount:rate,courseType:type,formula:`1 堂 × ${moneyText(rate)}（${type}）`};
+    // coachRole 走 course 分支時必為 當班下／助教／教練 三值之一（coachRoleFromMarker），
+    // || '教練' 是對齊下游分組寫法的防禦，不是必要修復。
+    const role=row.coachRole||'教練';
+    const rate=(typeof pvTypeRate==='function')?pvTypeRate(type,role):0;
+    return {unit:'1 堂',rate,amount:rate,courseType:type,coachRole:role,
+      formula:`1 堂 × ${moneyText(rate)}（${type}・${role}）`};
   }
   const hours=Number(row.hours)||0;
   const rate=row.roleType==='frontdesk'?rates.frontdesk:rates.lifeguard;
@@ -4443,10 +4497,106 @@ function renderEmployeeCourseBreakdown(map){
 const PV_TYPE_HOURS={'游泳一般團班':1.34,'游泳假日班':1.34,'幼兒游泳班':1.0,'補習班課程':1.0,'球類課程':1.5,'體育課(短)':1.0,'體育課(長)':2.0};
 const PV_TYPE_CLS={'游泳一般團班':'swim','游泳假日班':'swim','幼兒游泳班':'kid','補習班課程':'cram','球類課程':'ball','體育課(短)':'pe','體育課(長)':'pe'};
 const PV_TYPE_ORDER=['游泳一般團班','游泳假日班','幼兒游泳班','補習班課程','球類課程','體育課(短)','體育課(長)'];
+const PV_ROLE_ORDER=['教練','當班下','助教'];   // index 0 = 基準，倍率以它換算
 function pvRatesKey(){return (typeof LOCAL_STORAGE_PREFIX!=='undefined'?LOCAL_STORAGE_PREFIX:'')+'pv2-type-rates';}
-function pvTypeRate(t){const i=PV_TYPE_ORDER.indexOf(t);const el=document.getElementById('pvr_'+i);return el?(Number(el.value)||0):0;}
-function pvSaveTypeRates(){const o={};PV_TYPE_ORDER.forEach((t,i)=>{const el=document.getElementById('pvr_'+i);o[i]=el?el.value:'';});try{localStorage.setItem(pvRatesKey(),JSON.stringify(o));}catch(e){}}
-function pvLoadTypeRates(){let o={};try{o=JSON.parse(localStorage.getItem(pvRatesKey())||'{}');}catch(e){}PV_TYPE_ORDER.forEach((t,i)=>{const el=document.getElementById('pvr_'+i);if(el&&o[i]!=null&&o[i]!=='')el.value=o[i];});}
+function pvRateInputId(ti,ri){return 'pvr_'+ti+'_'+ri;}
+
+/* localStorage schema v2：key 改為「課程類型|角色」的具名字串。
+   舊版是以 PV_TYPE_ORDER 的 index 當 key（{0..6}），語意綁在陣列排列順序上——
+   只要日後在中間插入或調換類型，舊資料就整批對到錯的類型，金額不報錯只算錯。
+   遷移一定要寫在 load 裡：pvSaveTypeRates 是整包覆寫，而每個 input 的 oninput
+   都會呼叫它，延後遷移的話使用者只要先動任何一格，舊費率就永久遺失。
+   註：JSON round-trip 後 key 是字串 "0".."6"，所以下面用 String(i) 取。 */
+function pvMigrateRates(o){
+  if(!o||typeof o!=='object') return {v:2,rates:{},mult:{}};
+  if(o.v===2) return {v:2,rates:o.rates||{},mult:o.mult||{}};
+  const rates={};
+  PV_TYPE_ORDER.forEach((t,i)=>{
+    const v=o[String(i)];
+    if(v!=null&&v!=='') rates[t+'|教練']=String(v);   // 舊值一律視為「教練」基準費率
+  });
+  return {v:2,rates,mult:{}};
+}
+function pvReadStoredRates(){
+  let o={};
+  try{o=JSON.parse(localStorage.getItem(pvRatesKey())||'{}');}catch(e){}
+  return pvMigrateRates(o);
+}
+function pvTypeRate(t,role){
+  const ti=PV_TYPE_ORDER.indexOf(t);
+  if(ti<0) return 0;
+  const ri=PV_ROLE_ORDER.indexOf(role||'教練');
+  const el=document.getElementById(pvRateInputId(ti,ri<0?0:ri));
+  return el?(Number(el.value)||0):0;
+}
+function pvMultValue(which){
+  const el=document.getElementById('pvMult'+which);
+  const n=Number(el?.value);
+  return isFinite(n)?n:(which==='Lead'?0.3:0.4);
+}
+function pvSaveTypeRates(){
+  const rates={};
+  PV_TYPE_ORDER.forEach((t,ti)=>PV_ROLE_ORDER.forEach((role,ri)=>{
+    const el=document.getElementById(pvRateInputId(ti,ri));
+    if(el) rates[t+'|'+role]=el.value;
+  }));
+  const mult={當班下:String(pvMultValue('Lead')),助教:String(pvMultValue('Assist'))};
+  try{localStorage.setItem(pvRatesKey(),JSON.stringify({v:2,rates,mult}));}catch(e){}
+}
+function pvLoadTypeRates(){
+  const st=pvReadStoredRates();
+  pvRenderRateMatrix();          // 先確保 21 格 input 存在，才有東西可回填
+  ['Lead','Assist'].forEach(w=>{
+    const k=w==='Lead'?'當班下':'助教';
+    const v=st.mult&&st.mult[k];
+    if(v==null||v==='') return;
+    const r=document.getElementById('pvMult'+w), n=document.getElementById('pvMult'+w+'Num');
+    if(r) r.value=v;
+    if(n) n.value=v;
+  });
+  PV_TYPE_ORDER.forEach((t,ti)=>PV_ROLE_ORDER.forEach((role,ri)=>{
+    const el=document.getElementById(pvRateInputId(ti,ri));
+    const v=st.rates[t+'|'+role];
+    if(el&&v!=null&&v!=='') el.value=v;
+  }));
+}
+// 矩陣只建一次；重建會清掉使用者正在輸入的格子（費率 input 是 oninput 全量重繪）
+function pvRenderRateMatrix(){
+  const body=document.getElementById('pvRateMatrixBody');
+  if(!body||body.dataset.built) return;
+  body.innerHTML=PV_TYPE_ORDER.map((t,ti)=>
+    `<tr><td>${pvBadge(t)}</td>`+PV_ROLE_ORDER.map((role,ri)=>
+      `<td><input class="pv2-ratecell${ri?' role':''}" id="${pvRateInputId(ti,ri)}" type="number" min="0" value="0"
+        oninput="pvOnRateCellInput(${ti},${ri})"></td>`).join('')+`</tr>`).join('');
+  body.dataset.built='1';
+}
+// 改「教練」欄 → 依倍率重新帶出該列後兩欄；直接改角色欄 → 視為手動覆寫，不動它
+function pvOnRateCellInput(ti,ri){
+  if(ri===0) pvApplyMultipliersToRow(ti);
+  pvSaveTypeRates();
+  renderPayrollReport();
+}
+function pvApplyMultipliersToRow(ti){
+  const base=Number(document.getElementById(pvRateInputId(ti,0))?.value)||0;
+  [['Lead',1],['Assist',2]].forEach(([w,ri])=>{
+    const el=document.getElementById(pvRateInputId(ti,ri));
+    if(el) el.value=Math.round(base*pvMultValue(w));
+  });
+}
+function pvApplyMultipliers(){
+  ['Lead','Assist'].forEach(w=>{
+    const n=document.getElementById('pvMult'+w+'Num');
+    if(n) n.value=pvMultValue(w);
+  });
+  PV_TYPE_ORDER.forEach((t,ti)=>pvApplyMultipliersToRow(ti));
+  pvSaveTypeRates();
+  renderPayrollReport();
+}
+function pvSyncMultFromNumber(which){
+  const n=document.getElementById('pvMult'+which+'Num'), r=document.getElementById('pvMult'+which);
+  if(r&&n) r.value=n.value;
+  pvApplyMultipliers();
+}
 function pvCourseDur(s,e){const m=t=>{const p=String(t||'').split(':');return (+p[0])*60+(+p[1]);};let a=m(s),b=m(e);if(!isFinite(a)||!isFinite(b))return 0;if(b<=a)b+=1440;return (b-a)/60;}
 function classifyCourseType(row){
   const n=String(row.courseName||row.workName||'').replace('(假日班)','');
@@ -4476,6 +4626,32 @@ function pvCkProgress(){const items=document.querySelectorAll('#pv2Checklist .pv
   if(bar)bar.style.width=(done/items.length*100)+'%';if(cnt)cnt.textContent=`${done} / ${items.length}`;}
 function pvBlockOf(r){if(r.dateType==='sat'||r.dateType==='sun'||r.dateType==='holiday'||r.day===6||r.day===7)return '假日';if(r.source==='manual')return '手動';return '平日';}
 
+/* ---- 教練篩選（只作用於下方兩張明細表，上方 KPI／彙整維持全體） ----
+   刻意不持久化到 localStorage：renderPayrollReport 開頭會 loadPayrollRates()/
+   pvLoadTypeRates() 回寫 input，若篩選也走同一套回填，會在互動中途覆寫使用者的選擇。 */
+function pvCoachFilterValue(){return document.getElementById('pvCoachFilter')?.value||'';}
+function pvClearCoachFilter(){
+  const el=document.getElementById('pvCoachFilter');
+  if(!el||!el.value) return;
+  el.value='';
+  renderPayrollReport();
+}
+// 費率 input 是 oninput，每敲一個字就整頁重繪。若每次都重建 option，會清掉當前
+// 選取值（下拉展開中還會被強制關閉）。所以先比對選項簽章，沒變就不動 DOM。
+function pvSyncCoachOptions(stats){
+  const el=document.getElementById('pvCoachFilter');
+  if(!el) return;
+  const list=stats.slice().sort((a,b)=>a.employeeName.localeCompare(b.employeeName,'zh-Hant'));
+  const sig=list.map(s=>s.key+''+s.employeeName).join('');
+  if(el.dataset.sig===sig) return;
+  const prev=el.value;
+  el.innerHTML='<option value="">全部教練</option>'+list.map(s=>
+    `<option value="${escapeHtml(s.key)}">${escapeHtml(s.employeeName)}${s.inRoster?'':' ★'}</option>`).join('');
+  el.dataset.sig=sig;
+  // 選項換了但原本選的人還在 → 還原；人不在了（換週）→ 自動回到全部，不要卡在空畫面。
+  el.value=list.some(s=>s.key===prev)?prev:'';
+}
+
 function renderPayrollReport(){
   loadPayrollRates();
   pvLoadTypeRates();
@@ -4495,10 +4671,12 @@ function renderPayrollReport(){
   });
   // ---- per employee ----
   const map=new Map();
-  const typeAgg={}; PV_TYPE_ORDER.forEach(t=>typeAgg[t]={平日:0,假日:0,手動:0});
+  const typeAgg={}; PV_TYPE_ORDER.forEach(t=>typeAgg[t]={平日:0,假日:0,手動:0,當班下:0,助教:0});
   rows.forEach(r=>{
     const key=employeeKeyForPayroll(r);
-    if(!map.has(key)) map.set(key,{employeeName:r.employeeName||'未指定員工',lineBound:!!r.lineBound,inRoster:!!r.employeeId,
+    // key 一起存進 stats：Array.from(map.values()) 之後 Map 的 key 就沒了，
+    // 而教練篩選必須用 key 而非姓名比對（同名不同 ID 用姓名會被混在一起）。
+    if(!map.has(key)) map.set(key,{key,employeeName:r.employeeName||'未指定員工',lineBound:!!r.lineBound,inRoster:!!r.employeeId,
       courseSessions:0,courseHours:0,lifeguardShifts:0,frontdeskShifts:0,lifeguardHours:0,frontdeskHours:0,totalHours:0,pay:0,venues:{},courses:{},typeCount:{}});
     const s=map.get(key); s.lineBound=s.lineBound||!!r.lineBound; s.inRoster=s.inRoster||!!r.employeeId; s.totalHours+=r.hours;
     if(r.venueName) s.venues[r.venueName]=(s.venues[r.venueName]||0)+1;
@@ -4507,6 +4685,9 @@ function renderPayrollReport(){
       s.typeCount[r.courseType]=(s.typeCount[r.courseType]||0)+1;
       typeAgg[r.courseType][pvBlockOf(r)]+=1;
       const role=r.coachRole||'教練';
+      // 角色欄是「其中有多少堂由當班下／助教擔任」的分項，是總堂數的子集合，
+      // 不併入 tot——否則會重演註解 4538 記載的「課程被算兩次」舊 bug。
+      if(role==='當班下'||role==='助教') typeAgg[r.courseType][role]+=1;
       const gk=r.workName+'|'+r.courseType+'|'+(r.slotCode||'')+'|'+role;
       if(!s.courses[gk]) s.courses[gk]={name:r.workName,type:r.courseType,role,slot:r.slotCode||'',block:pvBlockOf(r),days:new Set(),n:0,h:PV_TYPE_HOURS[r.courseType]||0};
       s.courses[gk].days.add(r.day); s.courses[gk].n+=1;
@@ -4514,6 +4695,11 @@ function renderPayrollReport(){
     else if(r.roleType==='frontdesk'){s.frontdeskShifts+=1;s.frontdeskHours+=r.hours;s.pay+=r.payCalc.amount;}
   });
   const stats=Array.from(map.values());
+  // 篩選只影響下方兩張明細表。KPI／課程時數彙整／員工薪資試算一律維持全體，
+  // 否則「合計帶出」「試算薪資」會變成假合計而被誤讀為本週總額。
+  pvSyncCoachOptions(stats);
+  const coachFilter=pvCoachFilterValue();
+  const visibleRows=coachFilter?rows.filter(r=>employeeKeyForPayroll(r)===coachFilter):rows;
   const T=stats.reduce((a,s)=>{a.staff++;a.cs+=s.courseSessions;a.ch+=s.courseHours;a.lg+=s.lifeguardShifts;a.lgh+=s.lifeguardHours;a.fd+=s.frontdeskShifts;a.fdh+=s.frontdeskHours;a.hours+=s.totalHours;a.pay+=s.pay;return a;},{staff:0,cs:0,ch:0,lg:0,lgh:0,fd:0,fdh:0,hours:0,pay:0});
   // ---- KPIs ----
   kpis.innerHTML=[
@@ -4525,12 +4711,12 @@ function renderPayrollReport(){
     ['rose','試算薪資',`$${Math.round(T.pay).toLocaleString()}`,'填費率後更新']
   ].map(([c,l,v,s])=>`<div class="pv2-kpi ${c}"><div class="k-l"><i></i>${l}</div><div class="k-v pv-num">${v}</div><div class="k-s">${s}</div></div>`).join('');
   // ---- 課程時數彙整 ----
-  let tt={平日:0,假日:0,手動:0,tot:0,h:0};
+  let tt={平日:0,假日:0,手動:0,tot:0,當班下:0,助教:0,h:0};
   typeBody.innerHTML=PV_TYPE_ORDER.map(t=>{
     const a=typeAgg[t],tot=a.平日+a.假日+a.手動,h=tot*PV_TYPE_HOURS[t];
-    tt.平日+=a.平日;tt.假日+=a.假日;tt.手動+=a.手動;tt.tot+=tot;tt.h+=h;
-    return `<tr><td>${pvBadge(t)}</td><td class="pv-num">${PV_TYPE_HOURS[t].toFixed(2)}</td><td class="pv-num">${a.平日||''}</td><td class="pv-num">${a.假日||''}</td><td class="pv-num">${a.手動||''}</td><td class="pv-num">${tot}</td><td class="pv-num pv2-money">${h.toFixed(1)}</td></tr>`;
-  }).join('')+`<tr class="pv2-total"><td>合計</td><td></td><td class="pv-num">${tt.平日}</td><td class="pv-num">${tt.假日}</td><td class="pv-num">${tt.手動}</td><td class="pv-num">${tt.tot}</td><td class="pv-num">${tt.h.toFixed(1)}</td></tr>`;
+    tt.平日+=a.平日;tt.假日+=a.假日;tt.手動+=a.手動;tt.tot+=tot;tt.當班下+=a.當班下;tt.助教+=a.助教;tt.h+=h;
+    return `<tr><td>${pvBadge(t)}</td><td class="pv-num">${PV_TYPE_HOURS[t].toFixed(2)}</td><td class="pv-num">${a.平日||''}</td><td class="pv-num">${a.假日||''}</td><td class="pv-num">${a.手動||''}</td><td class="pv-num">${tot}</td><td class="pv-num pv2-sub-col">${a.當班下||''}</td><td class="pv-num pv2-sub-col">${a.助教||''}</td><td class="pv-num pv2-money">${h.toFixed(1)}</td></tr>`;
+  }).join('')+`<tr class="pv2-total"><td>合計</td><td></td><td class="pv-num">${tt.平日}</td><td class="pv-num">${tt.假日}</td><td class="pv-num">${tt.手動}</td><td class="pv-num">${tt.tot}</td><td class="pv-num pv2-sub-col">${tt.當班下}</td><td class="pv-num pv2-sub-col">${tt.助教}</td><td class="pv-num">${tt.h.toFixed(1)}</td></tr>`;
   // ---- 員工本週統計 ----
   const mv=s=>{const e=Object.entries(s.venues).sort((a,b)=>b[1]-a[1]);return e.length?e[0][0]:'—';};
   // 排序鍵必須跟表格「總時數」欄顯示的數字是同一個。舊版用 courseHours+totalHours，而 totalHours
@@ -4545,7 +4731,7 @@ function renderPayrollReport(){
   }).join(''):`<tr><td colspan="10" class="pv2-empty">目前本週沒有可統計的排班資料。</td></tr>`)
    + (staffSorted.length?`<tr class="pv2-total"><td>合計帶出</td>${PV_TYPE_ORDER.map(t=>`<td class="pv-num">${colTot[t]||0}</td>`).join('')}<td class="pv-num">${allTot.hours.toFixed(1)}</td><td class="pv-num pv2-money">$${Math.round(allTot.pay).toLocaleString()}</td></tr>`:'');
   // ---- 教練工作明細 ----
-  const coaches=staffSorted.filter(s=>s.courseSessions>0);
+  const coaches=staffSorted.filter(s=>s.courseSessions>0&&(!coachFilter||s.key===coachFilter));
   coachBody.innerHTML=coaches.length?coaches.map(s=>{
     const groups=Object.values(s.courses).sort((a,b)=>({'平日':0,'假日':1,'手動':2}[a.block]-{'平日':0,'假日':1,'手動':2}[b.block])||a.name.localeCompare(b.name,'zh-Hant'));
     let subN=0,subH=0;
@@ -4555,9 +4741,9 @@ function renderPayrollReport(){
         <td>${escapeHtml(g.name)}</td><td>${pvBadge(g.type)}</td><td>${pvRoleBadge(g.role)}</td><td>${slot}${pvDayChips(g.days)}</td><td class="pv-num">${g.n}</td><td class="pv-num pv2-money">${(g.n*g.h).toFixed(1)}</td></tr>`;
     }).join('');
     return body+`<tr class="pv2-sub"><td>小計</td><td></td><td></td><td></td><td class="pv-num">${subN} 堂</td><td class="pv-num">${subH.toFixed(1)} h</td></tr>`;
-  }).join(''):`<tr><td colspan="7" class="pv2-empty">目前本週沒有課程排班。</td></tr>`;
+  }).join(''):`<tr><td colspan="7" class="pv2-empty">${coachFilter?'這位教練本週沒有課程排班。':'目前本週沒有課程排班。'}</td></tr>`;
   // ---- 本週工作明細 ----
-  detail.innerHTML=rows.length?rows.map(r=>`<tr>
+  detail.innerHTML=visibleRows.length?visibleRows.map(r=>`<tr>
     <td>${escapeHtml(r.date||'')}${r.day?`<br><small style="color:var(--pv-mut)">週${dayName(r.day)}</small>`:''}</td>
     <td class="pv-name">${escapeHtml(r.employeeName||'未指定員工')}${r.employeeId?'':' <span class="pv2-star">★</span>'}</td>
     <td>${escapeHtml(r.venueName||'')}</td>
@@ -4567,16 +4753,35 @@ function renderPayrollReport(){
     <td>${escapeHtml((r.startTime||'')+'-'+(r.endTime||''))}</td>
     <td class="pv-num">${r.roleType==='course'?(r.courseHours||0).toFixed(2):r.hours.toFixed(1)}</td>
     <td>${escapeHtml(r.payCalc.formula)}<br><span class="pv2-money">${moneyText(r.payCalc.amount)}</span></td>
-  </tr>`).join(''):`<tr><td colspan="9" class="pv2-empty">目前本週沒有可統計的排班明細。</td></tr>`;
+  </tr>`).join(''):`<tr><td colspan="9" class="pv2-empty">${coachFilter?'這位教練本週沒有排班明細。':'目前本週沒有可統計的排班明細。'}</td></tr>`;
+  // 篩選中給個明確的視覺提示＋筆數，避免使用者忘了自己開著篩選、以為資料不見了
+  const fw=document.getElementById('pvFilterHint');
+  if(fw) fw.innerHTML=coachFilter
+    ? `篩選中：<b>${escapeHtml(stats.find(s=>s.key===coachFilter)?.employeeName||'')}</b>（下方兩張明細表共 ${visibleRows.length} 筆；上方 KPI 與彙整仍為全體）`
+    : '';
 }
 function copyPayrollCsv(){
   const rateLifeguard=numberValue('rateLifeguard'), rateFrontdesk=numberValue('rateFrontdesk');
-  const rows=expandedPayrollRows().map(r=>({...r,payCalc:payrollCalculationForRow(r,{lifeguard:rateLifeguard,frontdesk:rateFrontdesk})}));
-  const header=['日期','星期','員工','館別','類型','課程/工作','開始','結束','人數','計算公式','金額'];
+  const all=expandedPayrollRows().map(r=>{
+    const o={...r,payCalc:payrollCalculationForRow(r,{lifeguard:rateLifeguard,frontdesk:rateFrontdesk})};
+    // 補上報表端才有的 enrichment，讓 CSV 也能輸出課程類型／課程時數
+    if(o.roleType==='course'){o.courseType=classifyCourseType(o);o.courseHours=PV_TYPE_HOURS[o.courseType]||0;}
+    return o;
+  });
+  // 所見即所得：畫面在篩選中，匯出就跟著篩選，否則會出現「畫面 20 筆、CSV 35 筆」
+  const coachFilter=pvCoachFilterValue();
+  const rows=coachFilter?all.filter(r=>employeeKeyForPayroll(r)===coachFilter):all;
+  // 「人數」欄留著：它在 collectNormalizedAssignments(:3599) 由報名人數格填入，不是空欄
+  const header=['日期','星期','員工','館別','類型','課程/工作','角色','課程類型','開始','結束','人數','課程時數','計算公式','金額'];
   const csv=[header].concat(rows.map(r=>[
-    r.date||'', r.day?`週${dayName(r.day)}`:'', r.employeeName||'', r.venueName||'', r.typeLabel||'', r.workName||'', r.startTime||'', r.endTime||'', r.registeredCount||'', r.payCalc.formula||'', Math.round(r.payCalc.amount||0)
+    r.date||'', r.day?`週${dayName(r.day)}`:'', r.employeeName||'', r.venueName||'', r.typeLabel||'', r.workName||'',
+    r.roleType==='course'?(r.coachRole||'教練'):'', r.roleType==='course'?(r.courseType||''):'',
+    r.startTime||'', r.endTime||'', r.registeredCount||'',
+    r.roleType==='course'?(r.courseHours||0).toFixed(2):(r.hours||0).toFixed(1),
+    r.payCalc.formula||'', Math.round(r.payCalc.amount||0)
   ])).map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  navigator.clipboard?.writeText(csv).then(()=>alert('已複製薪資明細 CSV')).catch(()=>alert(csv));
+  const note=coachFilter?`（篩選中：僅 ${rows.length} 筆）`:`（共 ${rows.length} 筆）`;
+  navigator.clipboard?.writeText(csv).then(()=>alert('已複製薪資明細 CSV '+note)).catch(()=>alert(csv));
 }
 
 function mobileTypeClass(row){
