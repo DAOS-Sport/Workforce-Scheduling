@@ -3773,6 +3773,10 @@ async function loadExistingScheduleAssignments(){
     const res=await fetch(`${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`,{credentials:'include'});
     if(!res.ok) throw new Error('schedule assignment API status '+res.status);
     const raw=unwrapApiPayload(await res.json());
+    // 兩個 await 之間使用者可能已經切週。若這是「遲到的舊週回應」，直接丟掉：
+    // 否則 3790 會把舊週的 cells 塞進 scheduleState 並 render()，新週的畫面被舊週資料灌滿，
+    // 而且 _dirty 被清掉，接著的自動存檔會把這份錯的內容寫回新週。
+    if(currentWeekNo()!==weekNo) return;
     const serverTime=raw.updatedAt?new Date(raw.updatedAt).getTime():0;
     const entries=Array.isArray(raw.rawEntries)?raw.rawEntries:(Array.isArray(raw.entries)?raw.entries:[]);
     _serverHadScheduleData=payloadHasScheduleValue({rawEntries:entries,assignments:raw.assignments||[],shifts:raw.shifts||[],shiftEntries:raw.shiftEntries||[]});
@@ -3804,6 +3808,7 @@ async function loadExistingScheduleAssignments(){
   }catch(err){
     // 載入失敗（離線）：維持 loaded=false，沿用 localStorage 備援
     console.warn('existing schedule assignment API unavailable:',err);
+    if(currentWeekNo()!==weekNo) return;   // 遲到的舊週失敗回應，不要動現在這一週的 state
     if(scheduleState.weekNo!==weekNo) scheduleState.weekNo=weekNo;
   }
 }
