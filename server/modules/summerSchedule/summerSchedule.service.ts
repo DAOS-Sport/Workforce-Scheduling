@@ -293,12 +293,17 @@ function normalizeSlotCode(value: any): string {
 }
 
 // DB venues 表 id：三重商工=1, 新北高中=2, 三民高中=3
-// 外部報名系統 venueId（已實測確認）：1=新北高中, 3=三重商工, 4=三民高中
+// 外部報名系統 venueId（2026-07-22 重新實測確認，外部系統無 id=4）：
+// 1=新北高中, 3=三重商工, 5=三民高中。
 // 故需將外部 venueId 對應到正確的 DB id。
+// 修正記錄：三民高中舊映射鍵誤寫為 4（外部系統從未存在過此 id），
+// 導致外部傳回的 venueId=5 未命中映射、原樣放行，
+// 而本系統 DB id=5 是另一個不相關場館（新竹科學園區），
+// 造成三民高中報名人數永遠顯示 0、且誤植到新竹科學園區名下。
 const EXTERNAL_VENUE_ID_MAP: Record<number, number> = {
   1: 2,  // 外部 1（新北高中）→ DB 2（新北高中）
   3: 1,  // 外部 3（三重商工）→ DB 1（三重商工）
-  4: 3,  // 外部 4（三民高中）→ DB 3（三民高中）
+  5: 3,  // 外部 5（三民高中）→ DB 3（三民高中）
 };
 
 function normalizeVenueId(row: any): number | null {
