@@ -48,6 +48,7 @@ import { mountAnnouncementRoutes } from "./announcement/announcement.routes";
 import { mountImportExportRoutes } from "./importExport";
 import { mountAvailabilityRoutes } from "./availability/availability.routes";
 import { mountSummerScheduleRoutes } from "./summerSchedule/summerSchedule.routes";
+import { mountMcpRoutes } from "./mcp/mcp.routes";
 
 export function registerModuleRoutes(httpServer: Server, app: Express): void {
   // Shift module — fully decomposed (the canonical pattern)
@@ -79,4 +80,7 @@ export function registerModuleRoutes(httpServer: Server, app: Express): void {
 
   // Spreadsheet ingest boundaries (XLSX → multi-table writes)
   mountImportExportRoutes(httpServer, app);
+
+  // MCP server — external AI clients (Claude Desktop / Code / web)
+  mountMcpRoutes(app);
 }
