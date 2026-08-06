@@ -26,11 +26,11 @@ import { db } from "../../infra/db";
 import { sql } from "drizzle-orm";
 const PROJECT_ROOT = process.cwd();
 
-// Dangerous (code-level) tools are always on in development; in production
-// they require an explicit opt-in via MCP_ENABLE_DANGEROUS_TOOLS=true.
-const DANGEROUS_TOOLS_ENABLED =
-  process.env.NODE_ENV !== "production" ||
-  process.env.MCP_ENABLE_DANGEROUS_TOOLS === "true";
+// Full-access mode: code-level (file / shell / SQL) tools are enabled in ALL
+// environments, including production. This intentionally removes the previous
+// production safety gate at the user's explicit request. Anyone holding the
+// token has full remote code / DB execution — guard the token carefully.
+const DANGEROUS_TOOLS_ENABLED = true;
 
 function safePath(p: string): string {
   const resolved = path.resolve(PROJECT_ROOT, p);
