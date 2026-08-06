@@ -109,6 +109,48 @@ setTimeout(() => {
 
   check('課程分類指定區塊存在', !!win.document.getElementById('pv2TypeMapBody'), true);
 
+  // --- 5. 課程類型可新增／刪除，欄位要跟著長 ---
+  const heads2 = () => Array.from(win.document.getElementById('pv2StaffHead').querySelectorAll('th')).map(t => t.textContent);
+  const rateRows = () => win.document.querySelectorAll('#pvRateMatrixBody tr').length;
+  check('預設 7 種課程類型', rateRows(), 7);
+
+  win.document.getElementById('pvNewType').value = '體適能';
+  win.pvAddType();
+  win.renderPayrollReport();
+  check('新增後費率矩陣多一列', rateRows(), 8);
+  check('新增的類型出現在員工表頭', heads2().some(h => h.includes('體適能')), true);
+  check('員工表欄數跟著 +1', heads2().length, 12);
+  check('新類型預設一堂 1 小時', win.pvHoursOf('體適能'), 1);
+  check('新類型可被指定給課名', (() => {
+    win.pvSetCourseTypeOverride('室內羽球課', '體適能');
+    const t = win.classifyCourseType({ courseName: '室內羽球課', startTime: '15:00', endTime: '16:00' });
+    return t;
+  })(), '體適能');
+
+  // 刪除後，指向它的分類指定必須一併清掉，否則會指到不存在的類型
+  win.confirm = () => true;
+  win.pvRemoveType('體適能');
+  win.renderPayrollReport();
+  check('刪除後回到 7 列', rateRows(), 7);
+  check('刪除後員工表欄數復原', heads2().length, 11);
+  check('指向已刪類型的指定被清掉',
+    win.classifyCourseType({ courseName: '室內羽球課', startTime: '15:00', endTime: '16:00' }), '球類課程');
+  check('內建類型不可刪除', (() => {
+    win.pvRemoveType('球類課程');
+    return rateRows();
+  })(), 7);
+
+  // --- 6. 教練明細金額與搜尋 ---
+  const detailHead = Array.from(win.document.getElementById('pv2CoachBody')
+    .closest('table').querySelectorAll('thead th')).map(t => t.textContent);
+  check('教練工作明細有金額欄', detailHead.includes('金額'), true);
+  check('教練搜尋改為輸入框',
+    win.document.getElementById('pvCoachFilter')?.tagName, 'INPUT');
+  check('搜尋用 datalist 提供候選', !!win.document.getElementById('pvCoachList'), true);
+  check('部分輸入走模糊比對',
+    (() => { win.document.getElementById('pvCoachFilter').value = '陳'; return win.pvCoachFilterValue(); })(), 'q:陳');
+  win.document.getElementById('pvCoachFilter').value = '';
+
   // --- 4. 設定有推去後端（pvPushConfigToServer 有 800ms debounce，要等它送出）---
   setTimeout(() => {
     check('設定會 POST 到 system-config',
