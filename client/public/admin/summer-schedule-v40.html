@@ -1483,7 +1483,13 @@ body.section-manual section[data-section="duty"]{display:none!important}
       </details>
 
       <section class="pv2-panel" style="margin-bottom:16px">
-        <div class="pv2-panel-h"><h3>課程分類指定</h3><span>系統會先依課名猜類型，猜錯就直接改這裡；一旦指定，該課名以後一律照指定的算</span></div>
+        <div class="pv2-panel-h"><h3>課程分類指定</h3><span>課名開頭是補習班就算補習班課程；仍不對就用右欄直接指定</span></div>
+        <div style="padding:10px 12px;background:var(--surface-2);border-bottom:1px solid var(--co-line)">
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--co);margin-bottom:4px">補習班名單（課名以這些字開頭 → 補習班課程，不論後面是球種或游泳）</label>
+          <input id="pvCramList" type="text" style="width:100%;padding:7px 9px;border:1px solid var(--co-line);border-radius:8px;font-size:13px"
+            placeholder="以逗號或空白分隔，例：樂獅, 加洲森林, 新學林"
+            onchange="pvSetCramSchools(this.value)">
+        </div>
         <div class="pv2-tablewrap">
           <table class="pv2-table">
             <thead><tr><th>課程名稱</th><th>本週堂數</th><th>系統判定</th><th>指定類型</th><th>單堂時數</th></tr></thead>
@@ -1506,7 +1512,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
         <div class="pv2-panel-h"><h3>員工薪資試算 · 依課程類型單價</h3><span>每種課程單堂費用自行輸入，右側自動帶出總金額（總時數／總金額已含救生・櫃台）</span></div>
         <div class="pv2-tablewrap">
           <table class="pv2-table">
-            <thead><tr><th>員工</th><th>游泳一般團班/堂</th><th>游泳假日班/堂</th><th>幼兒游泳班/堂</th><th>補習班課程/堂</th><th>球類課程/堂</th><th>體育課(短)/堂</th><th>體育課(長)/堂</th><th class="pv2-sub-col">其中·當班下</th><th class="pv2-sub-col">其中·助教</th><th>總時數(h)</th><th>總金額</th></tr></thead>
+            <thead><tr><th>員工</th><th>游泳一般團班/堂</th><th>游泳假日班/堂</th><th>幼兒游泳班/堂</th><th>補習班課程/堂</th><th>球類課程/堂</th><th>體育課(短)/堂</th><th>體育課(長)/堂</th><th class="pv2-sub-col">角色分項<br><small style="font-weight:500">＊當班下　a助教</small></th><th>總時數(h)</th><th>總金額</th></tr></thead>
             <tbody id="pv2StaffBody"></tbody>
           </table>
         </div>
@@ -4541,7 +4547,7 @@ function pvMigrateRates(o){
   const EMPTY={v:2,rates:{},mult:{},hours:{},typeOverrides:{}};
   if(!o||typeof o!=='object') return EMPTY;
   // v2 新增 hours/typeOverrides：漏帶就等於每次載入都把本機備援清空
-  if(o.v===2) return {v:2,rates:o.rates||{},mult:o.mult||{},hours:o.hours||{},typeOverrides:o.typeOverrides||{}};
+  if(o.v===2) return {v:2,rates:o.rates||{},mult:o.mult||{},hours:o.hours||{},typeOverrides:o.typeOverrides||{},cramSchools:o.cramSchools||null};
   const rates={};
   PV_TYPE_ORDER.forEach((t,i)=>{
     const v=o[String(i)];
@@ -4585,7 +4591,7 @@ function pvSaveTypeRates(){
     const prev=JSON.parse(localStorage.getItem(pvRatesKey())||'{}');
     const ov=(pvConfig.typeOverrides&&Object.keys(pvConfig.typeOverrides).length)
       ? pvConfig.typeOverrides : (prev.typeOverrides||{});
-    localStorage.setItem(pvRatesKey(),JSON.stringify({v:2,rates,mult,hours,typeOverrides:ov}));
+    localStorage.setItem(pvRatesKey(),JSON.stringify({v:2,rates,mult,hours,typeOverrides:ov,cramSchools:pvConfig.cramSchools||prev.cramSchools||null}));
   }catch(e){}
   pvPushConfigToServer();
 }
@@ -4612,6 +4618,7 @@ function pvLoadTypeRates(){
     if(st.typeOverrides&&Object.keys(st.typeOverrides).length) pvConfig.typeOverrides=st.typeOverrides;
     if(st.rates&&Object.keys(st.rates).length) pvConfig.rates=st.rates;
     if(st.mult&&Object.keys(st.mult).length) pvConfig.mult=st.mult;
+    if(Array.isArray(st.cramSchools)&&st.cramSchools.length) pvConfig.cramSchools=st.cramSchools;
   }
   pvSyncHoursInputs();
 }
@@ -4719,7 +4726,7 @@ async function pvLoadConfigFromServer(){
     if(!obj||typeof obj!=='object') return false;
     pvConfig={
       hours:obj.hours||{}, rates:obj.rates||{},
-      mult:obj.mult||{}, typeOverrides:obj.typeOverrides||{}
+      mult:obj.mult||{}, typeOverrides:obj.typeOverrides||{}, cramSchools:obj.cramSchools||null
     };
     pvConfigLoaded=true;
     // 後端值回填進 input：矩陣是 oninput 全量重繪，直接塞 value 即可
@@ -4744,6 +4751,37 @@ async function pvLoadConfigFromServer(){
   }
 }
 
+/* ---- 補習班名單 ----
+   課名結構是「補習班名 + 球種」（樂獅桌球、加洲森林-籃球），沒有球種就是游泳
+   （新學林、立得-游泳）。不論後面接什麼，補習班的課一律算 1 小時。
+   靠關鍵字永遠分不出「樂獅桌球(1h)」和「夏令營-羽球(1.5h)」——兩者都含「球」，
+   差別只在前面是不是補習班。名單可在薪資頁直接編輯，新簽補習班不必改程式。 */
+const PV_CRAM_DEFAULT=['加洲森林','欣蓓','樂獅','新學林','皇家達','曼斯特','空中美語','立得','立德','斯塔','小丑魚'];
+function pvCramSchools(){
+  const v=pvConfig.cramSchools;
+  return (Array.isArray(v)&&v.length)?v:PV_CRAM_DEFAULT;
+}
+function pvIsCramCourse(name){
+  const n=String(name||'').trim();
+  if(!n) return false;
+  return pvCramSchools().some(s=>s&&n.indexOf(String(s).trim())===0);
+}
+function pvSetCramSchools(raw){
+  if(!pvConfigLoaded){
+    alert('尚未讀到後端設定，暫時不能修改名單（避免蓋掉既有設定）。請重新整理頁面後再試。');
+    renderPayrollReport();
+    return;
+  }
+  pvConfig.cramSchools=String(raw||'').split(/[\s,，、;；]+/).map(s=>s.trim()).filter(Boolean);
+  try{
+    const st=JSON.parse(localStorage.getItem(pvRatesKey())||'{}');
+    st.cramSchools=pvConfig.cramSchools;
+    localStorage.setItem(pvRatesKey(),JSON.stringify(st));
+  }catch(e){}
+  pvPushConfigToServer();
+  renderPayrollReport();
+}
+
 /* ---- 課程分類指定 ---- */
 function pvSetCourseTypeOverride(name,type){
   if(!pvConfigLoaded){
@@ -4765,6 +4803,8 @@ function pvSetCourseTypeOverride(name,type){
 function renderCourseTypeMap(rows){
   const body=document.getElementById('pv2TypeMapBody');
   if(!body) return;
+  const cramInput=document.getElementById('pvCramList');
+  if(cramInput&&document.activeElement!==cramInput) cramInput.value=pvCramSchools().join('、');
   // 以課名彙總：同一課名整週共用一個分類，設一次全部生效
   const agg={};
   rows.filter(r=>r.roleType==='course').forEach(r=>{
@@ -4807,6 +4847,8 @@ function classifyCourseType(row){
   if(ov&&PV_TYPE_ORDER.indexOf(ov)>=0) return ov;
   const holiday=row.dateType==='sat'||row.dateType==='sun'||row.dateType==='holiday'||row.day===6||row.day===7;
   if(holiday) return '游泳假日班';
+  // 必須排在球類之前：否則「樂獅桌球」會先被 /球/ 吃掉，算成 1.5h。
+  if(pvIsCramCourse(n)) return '補習班課程';
   if(/羽球|籃球|桌球|棒球|排球|足球|網球|球/.test(n)) return '球類課程';
   if(n==='立得補習班'||n==='空中美語') return '補習班課程';
   if(n==='幼幼班游泳') return '幼兒游泳班';
@@ -4883,7 +4925,7 @@ function renderPayrollReport(){
     // key 一起存進 stats：Array.from(map.values()) 之後 Map 的 key 就沒了，
     // 而教練篩選必須用 key 而非姓名比對（同名不同 ID 用姓名會被混在一起）。
     if(!map.has(key)) map.set(key,{key,employeeName:r.employeeName||'未指定員工',lineBound:!!r.lineBound,inRoster:!!r.employeeId,
-      courseSessions:0,courseHours:0,lifeguardShifts:0,frontdeskShifts:0,lifeguardHours:0,frontdeskHours:0,totalHours:0,pay:0,venues:{},courses:{},typeCount:{},roleCount:{當班下:0,助教:0}});
+      courseSessions:0,courseHours:0,lifeguardShifts:0,frontdeskShifts:0,lifeguardHours:0,frontdeskHours:0,totalHours:0,pay:0,venues:{},courses:{},typeCount:{},roleCount:{當班下:0,助教:0},roleHours:{當班下:0,助教:0}});
     const s=map.get(key); s.lineBound=s.lineBound||!!r.lineBound; s.inRoster=s.inRoster||!!r.employeeId; s.totalHours+=r.hours;
     if(r.venueName) s.venues[r.venueName]=(s.venues[r.venueName]||0)+1;
     if(r.roleType==='course'){
@@ -4893,7 +4935,7 @@ function renderPayrollReport(){
       const role=r.coachRole||'教練';
       // 角色欄是「其中有多少堂由當班下／助教擔任」的分項，是總堂數的子集合，
       // 不併入 tot——否則會重演註解 4538 記載的「課程被算兩次」舊 bug。
-      if(role==='當班下'||role==='助教'){typeAgg[r.courseType][role]+=1;s.roleCount[role]+=1;}
+      if(role==='當班下'||role==='助教'){typeAgg[r.courseType][role]+=1;s.roleCount[role]+=1;s.roleHours[role]+=(r.courseHours||0);}
       const gk=r.workName+'|'+r.courseType+'|'+(r.slotCode||'')+'|'+role;
       if(!s.courses[gk]) s.courses[gk]={name:r.workName,type:r.courseType,role,slot:r.slotCode||'',block:pvBlockOf(r),days:new Set(),n:0,h:PV_TYPE_HOURS[r.courseType]||0};
       s.courses[gk].days.add(r.day); s.courses[gk].n+=1;
@@ -4930,18 +4972,25 @@ function renderPayrollReport(){
   // 已經含課程的實際時長，等於把課程算兩次，救生／櫃台只算一次 -> 名次跟顯示的時數對不上。
   const staffTotalHours=s=>s.courseHours+s.lifeguardHours+s.frontdeskHours;
   const staffSorted=stats.slice().sort((a,b)=>staffTotalHours(b)-staffTotalHours(a)||a.employeeName.localeCompare(b.employeeName,'zh-Hant'));
-  const colTot={},allTot={hours:0,pay:0},roleTot={當班下:0,助教:0}; PV_TYPE_ORDER.forEach(t=>colTot[t]=0);
+  const colTot={},allTot={hours:0,pay:0},roleTot={當班下:0,助教:0},roleHTot={當班下:0,助教:0}; PV_TYPE_ORDER.forEach(t=>colTot[t]=0);
   staffBody.innerHTML=(staffSorted.length?staffSorted.map(s=>{
     const cells=PV_TYPE_ORDER.map(t=>{const n=s.typeCount[t]||0;colTot[t]+=n;return `<td class="pv-num">${n||'<span style=\'color:#c3ccdb\'>·</span>'}</td>`;}).join('');
     const totH=staffTotalHours(s); allTot.hours+=totH; allTot.pay+=s.pay;
     // 角色欄是總堂數的子集合（同一堂課只是標明由誰擔任），不併入合計，
     // 否則會重演課程被算兩次的舊 bug。
     const rc=s.roleCount||{當班下:0,助教:0};
+    const rh=s.roleHours||{當班下:0,助教:0};
     roleTot.當班下+=rc.當班下; roleTot.助教+=rc.助教;
-    const roleCells=`<td class="pv-num pv2-sub-col">${rc.當班下||'<span style=\'color:#c3ccdb\'>·</span>'}</td><td class="pv-num pv2-sub-col">${rc.助教||'<span style=\'color:#c3ccdb\'>·</span>'}</td>`;
+    roleHTot.當班下+=rh.當班下; roleHTot.助教+=rh.助教;
+    // 原本當班下／助教各佔一欄，多數列兩欄都是「·」，白佔版面。
+    // 併成一欄 memo：*堂數(時數) a堂數(時數)，沒有就整格留白。
+    const memo=[];
+    if(rc.當班下) memo.push(`＊${rc.當班下}(${rh.當班下.toFixed(1)}h)`);
+    if(rc.助教)  memo.push(`a${rc.助教}(${rh.助教.toFixed(1)}h)`);
+    const roleCells=`<td class="pv2-sub-col" style="white-space:nowrap;font-weight:700">${memo.join('　')}</td>`;
     return `<tr><td class="pv-name">${escapeHtml(s.employeeName)}${s.inRoster?'':' <span class="pv2-star">★</span>'}</td>${cells}${roleCells}<td class="pv-num">${totH.toFixed(1)}</td><td class="pv-num pv2-money">$${Math.round(s.pay).toLocaleString()}</td></tr>`;
-  }).join(''):`<tr><td colspan="12" class="pv2-empty">目前本週沒有可統計的排班資料。</td></tr>`)
-   + (staffSorted.length?`<tr class="pv2-total"><td>合計帶出</td>${PV_TYPE_ORDER.map(t=>`<td class="pv-num">${colTot[t]||0}</td>`).join('')}<td class="pv-num pv2-sub-col">${roleTot.當班下}</td><td class="pv-num pv2-sub-col">${roleTot.助教}</td><td class="pv-num">${allTot.hours.toFixed(1)}</td><td class="pv-num pv2-money">$${Math.round(allTot.pay).toLocaleString()}</td></tr>`:'');
+  }).join(''):`<tr><td colspan="11" class="pv2-empty">目前本週沒有可統計的排班資料。</td></tr>`)
+   + (staffSorted.length?`<tr class="pv2-total"><td>合計帶出</td>${PV_TYPE_ORDER.map(t=>`<td class="pv-num">${colTot[t]||0}</td>`).join('')}<td class="pv2-sub-col" style="white-space:nowrap">＊${roleTot.當班下}(${roleHTot.當班下.toFixed(1)}h)　a${roleTot.助教}(${roleHTot.助教.toFixed(1)}h)</td><td class="pv-num">${allTot.hours.toFixed(1)}</td><td class="pv-num pv2-money">$${Math.round(allTot.pay).toLocaleString()}</td></tr>`:'');
   // ---- 教練工作明細 ----
   const coaches=staffSorted.filter(s=>s.courseSessions>0&&(!coachFilter||s.key===coachFilter));
   coachBody.innerHTML=coaches.length?coaches.map(s=>{

@@ -69,25 +69,40 @@ setTimeout(() => {
   check('改時數後 球類課程 = 1h（不再寫死）', win.pvHoursOf('球類課程'), 1);
   check('未改動的 補習班課程 仍為 1h', win.pvHoursOf('補習班課程'), 1);
 
-  // --- 2. 分類指定：這是「補習班球類 1h vs 公司球類 1.5h」的關鍵 ---
-  const lions = { courseName: '樂獅-籃球', startTime: '15:00', endTime: '16:00' };
-  const camp = { courseName: '夏令營-羽球', startTime: '15:00', endTime: '16:00' };
-  check('未指定時 樂獅-籃球 仍猜成球類（現況）', win.classifyCourseType(lions), '球類課程');
+  // --- 2. 補習班名開頭 = 補習班課程（不論後面接球種或游泳）---
+  const t = (n) => win.classifyCourseType({ courseName: n, startTime: '15:00', endTime: '16:00' });
+  check('樂獅桌球 → 補習班課程', t('樂獅桌球'), '補習班課程');
+  check('樂獅-籃球 → 補習班課程', t('樂獅-籃球'), '補習班課程');
+  check('加洲森林-棒球 → 補習班課程', t('加洲森林-棒球'), '補習班課程');
+  check('立得-游泳 → 補習班課程', t('立得-游泳'), '補習班課程');
+  check('新學林（無球種）→ 補習班課程', t('新學林'), '補習班課程');
+  // 公司自己辦的球類仍須是 1.5h，這是本次修復的另一半
+  check('夏令營-羽球 → 球類課程', t('夏令營-羽球'), '球類課程');
+  check('營隊羽球 → 球類課程', t('營隊羽球'), '球類課程');
+  check('體育課-羽球 → 球類課程', t('體育課-羽球'), '球類課程');
+  check('補習班課 1h', win.pvHoursOf('補習班課程'), 1);
 
-  win.pvSetCourseTypeOverride('樂獅-籃球', '補習班課程');
-  check('指定後 樂獅-籃球 → 補習班課程', win.classifyCourseType(lions), '補習班課程');
-  check('公司的 夏令營-羽球 不受影響', win.classifyCourseType(camp), '球類課程');
+  // 名單可編輯：加入新補習班後立刻生效，不必改程式
+  win.pvSetCramSchools('樂獅、加洲森林、新學林、立得、丙丁補習班');
+  check('新增的補習班立刻生效', t('丙丁補習班-羽球'), '補習班課程');
+  check('名單內其他補習班不受影響', t('加洲森林-棒球'), '補習班課程');
+  check('被移出名單的欣蓓回到關鍵字判斷', t('欣蓓-籃球'), '球類課程');
 
-  win.pvSetCourseTypeOverride('樂獅-籃球', '');
-  check('清空指定後回到系統判定', win.classifyCourseType(lions), '球類課程');
+  // --- 2b. 逐課名指定仍可覆寫規則 ---
+  const indoor = { courseName: '室內羽球課', startTime: '15:00', endTime: '16:00' };
+  check('室內羽球課 預設為球類', win.classifyCourseType(indoor), '球類課程');
+  win.pvSetCourseTypeOverride('室內羽球課', '補習班課程');
+  check('指定後 → 補習班課程', win.classifyCourseType(indoor), '補習班課程');
+  win.pvSetCourseTypeOverride('室內羽球課', '');
+  check('清空指定後回到系統判定', win.classifyCourseType(indoor), '球類課程');
 
-  // --- 3. 角色欄 ---
+  // --- 3. 角色分項欄 ---
   const staffHead = win.document.querySelectorAll('#pv2StaffBody')[0]
     .closest('table').querySelectorAll('thead th');
   const heads = Array.from(staffHead).map(th => th.textContent);
-  check('員工試算表有「其中·當班下」', heads.includes('其中·當班下'), true);
-  check('員工試算表有「其中·助教」', heads.includes('其中·助教'), true);
-  check('員工試算表欄數 = 12', heads.length, 12);
+  check('員工試算表有「角色分項」欄', heads.some(h => h.includes('角色分項')), true);
+  check('員工試算表欄數 = 11（兩欄併為一欄）', heads.length, 11);
+  check('補習班名單輸入框存在', !!win.document.getElementById('pvCramList'), true);
 
   const rateHead = win.document.querySelector('.pv2-ratematrix thead').querySelectorAll('th');
   check('費率矩陣有「單堂時數」欄', Array.from(rateHead).map(t => t.textContent).includes('單堂時數'), true);
