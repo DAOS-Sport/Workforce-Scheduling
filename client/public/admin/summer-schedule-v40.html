@@ -1741,15 +1741,36 @@ function employeeDisplayNameWithLineStatus(emp){
 function cleanEmployeeDisplayName(name){
   return String(name||'').replace(/（未綁定）/g,'').replace(/\(未綁定\)/g,'').replace(/（LINE未綁定）/g,'').replace(/\(LINE未綁定\)/g,'').trim();
 }
+/* 一行的實際格式是「[角色前綴]姓名[上課星期]」，例：a莊子鋐1234、*蔡霆諺。
+   舊版拿整行去比對名冊，帶前綴或星期的寫法一律認不出來（畫面顯示為未識別）。
+   但這裡認出來之後會「整行換掉並寫回 scheduleState」，所以只能換中間的姓名，
+   前綴與星期必須原樣保留——洗掉它們等於把助教身分和上課日直接存檔存掉。 */
+function splitCoachLineParts(line){
+  const clean=cleanEmployeeDisplayName(String(line||'')).trim();
+  // 前綴判斷與 tokenizeCoachLine 同一套：'a' 只在後面接中文時才算助教標記，
+  // 否則 'Anna陳美' 會被剝成 'nna陳美'。
+  const isMark=/^[＊*]/.test(clean)||/^[aAＡａ][\u4e00-\u9fa5]/.test(clean);
+  const marker=isMark?clean.slice(0,1):'';
+  const rest=isMark?clean.slice(1):clean;
+  const dm=rest.match(/^(.*?)([1-7]+)\s*$/);
+  return {marker,name:(dm?dm[1]:rest).trim(),days:dm?dm[2]:''};
+}
 function refreshInlineEmployeeStatusText(){
   document.querySelectorAll('.editbox[data-role="course"]').forEach(box=>{
     const text=boxText(box)||'';
     if(!text.trim()) return;
     const lines=text.split(/\n+/).map(s=>s.trim()).filter(Boolean);
     const fixed=lines.map(line=>{
-      const cleanName=cleanEmployeeDisplayName(line);
-      const emp=employees.find(e=>String(e.name||'').trim()===cleanName);
-      return emp?employeeDisplayNameWithLineStatus(emp):line;
+      const p=splitCoachLineParts(line);
+      if(!p.name) return line;
+      const emp=employees.find(e=>String(e.name||'').trim()===p.name);
+      if(!emp) return line;              // 一行多人（*甲*乙）等情況拆不出來，原樣保留
+      const rebuilt=`${p.marker}${emp.name}${p.days}${isEmployeeLineBound(emp)?'':'（未綁定）'}`;
+      // 自我一致性保險：重組後再拆一次，三段必須完全相同才敢寫回，
+      // 否則寧可不動。這個函式的輸出會直接進 setCellValue。
+      const chk=splitCoachLineParts(rebuilt);
+      if(chk.marker!==p.marker||chk.name!==p.name||chk.days!==p.days) return line;
+      return rebuilt;
     });
     const newText=fixed.join('\n');
     if(newText!==text){
