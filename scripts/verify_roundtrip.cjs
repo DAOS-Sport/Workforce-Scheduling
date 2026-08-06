@@ -45,15 +45,15 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     if (!p.name) return line;
     const emp = byName.get(p.name);
     if (!emp) return line;
-    const rebuilt = `${p.marker}${emp.name}${p.days}${emp.lineBound ? '' : '（未綁定）'}`;
+    const rebuilt = `${p.marker}${emp.name}${p.follow ? '跟課' : ''}${p.days}${emp.lineBound ? '' : '（未綁定）'}`;
     const chk = win.splitCoachLineParts(rebuilt);
-    if (chk.marker !== p.marker || chk.name !== p.name || chk.days !== p.days) return line;
+    if (chk.marker !== p.marker || chk.name !== p.name || chk.days !== p.days || chk.follow !== p.follow) return line;
     return rebuilt;
   };
 
   const sig = (line) => JSON.stringify(
     win.parseAssignments(line, 'weekday', week, '')
-       .map(a => ({ n: a.name, r: a.coachRole, d: (a.days || []).slice().sort() })));
+       .map(a => ({ n: a.name, r: a.coachRole, f: !!a.follow, d: (a.days || []).slice().sort() })));
 
   let total = 0, changed = 0, recognized = 0;
   const broken = [];
@@ -85,15 +85,30 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
   // 針對性檢查：帶前綴/星期的寫法
   console.log('\n--- 指標案例 ---');
-  [['a莊子鋐1234', 'a', '莊子鋐', '1234'],
-   ['a宿蘊涵2345', 'a', '宿蘊涵', '2345'],
-   ['*蔡霆諺', '*', '蔡霆諺', ''],
-   ['熊韋程', '', '熊韋程', ''],
-   ['Anna陳美', '', 'Anna陳美', ''],
-   ['*莊柏彥*劉承翰', '*', '莊柏彥*劉承翰', '']].forEach(([ln, mk, nm, dy]) => {
+  [['a莊子鋐1234', 'a', '莊子鋐', '1234', false],
+   ['a宿蘊涵2345', 'a', '宿蘊涵', '2345', false],
+   ['*蔡霆諺', '*', '蔡霆諺', '', false],
+   ['熊韋程', '', '熊韋程', '', false],
+   ['Anna陳美', '', 'Anna陳美', '', false],
+   ['*莊柏彥*劉承翰', '*', '莊柏彥*劉承翰', '', false],
+   // 跟課：姓名必須歸戶到本人，不能整串變成一個對不到名冊的新名字
+   ['侯凱捷跟課', '', '侯凱捷', '', true],
+   ['許和喆跟課', '', '許和喆', '', true],
+   ['侯凱捷跟課1234', '', '侯凱捷', '1234', true]].forEach(([ln, mk, nm, dy, fl]) => {
     const p = win.splitCoachLineParts(ln);
-    const ok = p.marker === mk && p.name === nm && p.days === dy;
-    console.log(`  ${ok ? 'OK ' : '!! '}"${ln}" -> marker=${JSON.stringify(p.marker)} name=${JSON.stringify(p.name)} days=${JSON.stringify(p.days)}`);
+    const ok = p.marker === mk && p.name === nm && p.days === dy && !!p.follow === fl;
+    console.log(`  ${ok ? 'OK ' : '!! '}"${ln}" -> marker=${JSON.stringify(p.marker)} name=${JSON.stringify(p.name)} days=${JSON.stringify(p.days)} follow=${!!p.follow}`);
+  });
+
+  // 跟課要成為角色，而且姓名要跟本人是同一個 key
+  console.log('\n--- 跟課角色 ---');
+  [['侯凱捷跟課', '跟課', '侯凱捷'],
+   ['侯凱捷', '教練', '侯凱捷'],
+   ['a侯凱捷跟課', '助教', '侯凱捷'],
+   ['*侯凱捷跟課', '當班下', '侯凱捷']].forEach(([ln, role, nm]) => {
+    const r = win.parseAssignments(ln, 'weekday', week, '')[0];
+    const ok = r && r.coachRole === role && r.name === nm;
+    console.log(`  ${ok ? 'OK ' : '!! '}"${ln}" -> name=${r ? r.name : '(無)'} role=${r ? r.coachRole : '(無)'}`);
   });
 
   console.log('\n' + '='.repeat(60));

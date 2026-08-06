@@ -704,6 +704,8 @@ body[data-venue-view="三民高中"] .venue-card:not([data-venue-card="三民高
 .pv2-rolebadge.lead::before{content:"★";font-size:10px}
 .pv2-rolebadge.assist{background:var(--over-bg);color:var(--over);border-color:var(--over-line)}
 .pv2-rolebadge.assist::before{content:"a";font-family:var(--font-display);font-weight:900}
+.pv2-rolebadge.follow{background:var(--lg-soft);color:var(--lg);border-color:var(--lg-line)}
+.pv2-rolebadge.follow::before{content:"跟";font-weight:900}
 .pv2-rolebadge.coach{background:var(--cs-soft);color:var(--cs);border-color:var(--cs-line)}
 .pv2-days{display:inline-flex;gap:3px;flex-wrap:wrap}
 .pv2-day{width:20px;height:20px;border-radius:var(--r1);display:grid;place-items:center;font-size:11px;font-weight:700;background:var(--cs-soft);color:var(--brand-d);font-variant-numeric:tabular-nums}
@@ -1439,11 +1441,11 @@ body.section-manual section[data-section="duty"]{display:none!important}
               <input id="pvMultAssist" type="range" min="0" max="2" step="0.05" value="0.4" oninput="pvApplyMultipliers()">
               <input id="pvMultAssistNum" type="number" min="0" max="9" step="0.05" value="0.4" oninput="pvSyncMultFromNumber('Assist')">
             </div>
-            <small>倍率以「教練」欄為基準換算後兩欄；改動教練金額也會重新帶出該列。</small>
+            <small>倍率以「教練」欄為基準換算當班下／助教；跟課屬見習性質，不套倍率、預設 0，需要給費用再自行填。</small>
           </div>
           <div class="pv2-tablewrap">
             <table class="pv2-table pv2-ratematrix">
-              <thead><tr><th>課程類型</th><th>單堂時數</th><th>教練 / 堂</th><th>當班下 / 堂</th><th>助教 / 堂</th></tr></thead>
+              <thead><tr><th>課程類型</th><th>單堂時數</th><th>教練 / 堂</th><th>當班下 / 堂</th><th>助教 / 堂</th><th>跟課 / 堂</th></tr></thead>
               <tbody id="pvRateMatrixBody"></tbody>
             </table>
           </div>
@@ -1483,6 +1485,17 @@ body.section-manual section[data-section="duty"]{display:none!important}
       </details>
 
       <section class="pv2-panel" style="margin-bottom:16px">
+        <div class="pv2-panel-h"><h3>姓名核對</h3><span>這些名字對不到員工名冊，會以姓名計薪且無法推播；指定對應姓名後即可歸戶</span></div>
+        <div class="pv2-tablewrap">
+          <table class="pv2-table">
+            <thead><tr><th>班表上的寫法</th><th>本週堂數</th><th>狀況</th><th>對應到名冊姓名</th></tr></thead>
+            <tbody id="pv2NameAuditBody"></tbody>
+          </table>
+        </div>
+        <datalist id="pvRosterList"></datalist>
+      </section>
+
+      <section class="pv2-panel" style="margin-bottom:16px">
         <div class="pv2-panel-h"><h3>課程分類指定</h3><span>課名開頭是補習班就算補習班課程；仍不對就用右欄直接指定</span></div>
         <div style="padding:10px 12px;background:var(--surface-2);border-bottom:1px solid var(--co-line)">
           <label style="display:block;font-size:12px;font-weight:700;color:var(--co);margin-bottom:4px">補習班名單（課名以這些字開頭 → 補習班課程，不論後面是球種或游泳）</label>
@@ -1502,7 +1515,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
         <div class="pv2-panel-h"><h3>課程時數彙整</h3><span>各類型分平日 / 假日 / 手動，時數不同分別計算；角色欄為總堂數的分項</span></div>
         <div class="pv2-tablewrap">
           <table class="pv2-table">
-            <thead><tr><th>課程類型</th><th>單堂時數</th><th>平日(堂)</th><th>假日(堂)</th><th>手動(堂)</th><th>總堂數</th><th class="pv2-sub-col">其中·當班下(堂)</th><th class="pv2-sub-col">其中·助教(堂)</th><th>總時數(h)</th></tr></thead>
+            <thead><tr><th>課程類型</th><th>單堂時數</th><th>平日(堂)</th><th>假日(堂)</th><th>手動(堂)</th><th>總堂數</th><th class="pv2-sub-col">其中·當班下(堂)</th><th class="pv2-sub-col">其中·助教(堂)</th><th class="pv2-sub-col">其中·跟課(堂)</th><th>總時數(h)</th></tr></thead>
             <tbody id="pv2TypeBody"></tbody>
           </table>
         </div>
@@ -1512,7 +1525,7 @@ body.section-manual section[data-section="duty"]{display:none!important}
         <div class="pv2-panel-h"><h3>員工薪資試算 · 依課程類型單價</h3><span>每種課程單堂費用自行輸入，右側自動帶出總金額（總時數／總金額已含救生・櫃台）</span></div>
         <div class="pv2-tablewrap">
           <table class="pv2-table">
-            <thead><tr><th>員工</th><th>游泳一般團班/堂</th><th>游泳假日班/堂</th><th>幼兒游泳班/堂</th><th>補習班課程/堂</th><th>球類課程/堂</th><th>體育課(短)/堂</th><th>體育課(長)/堂</th><th class="pv2-sub-col">角色分項<br><small style="font-weight:500">＊當班下　a助教</small></th><th>總時數(h)</th><th>總金額</th></tr></thead>
+            <thead><tr><th>員工</th><th>游泳一般團班/堂</th><th>游泳假日班/堂</th><th>幼兒游泳班/堂</th><th>補習班課程/堂</th><th>球類課程/堂</th><th>體育課(短)/堂</th><th>體育課(長)/堂</th><th class="pv2-sub-col">角色分項<br><small style="font-weight:500">＊當班下　a助教　跟跟課</small></th><th>總時數(h)</th><th>總金額</th></tr></thead>
             <tbody id="pv2StaffBody"></tbody>
           </table>
         </div>
@@ -1751,9 +1764,12 @@ function splitCoachLineParts(line){
   // 否則 'Anna陳美' 會被剝成 'nna陳美'。
   const isMark=/^[＊*]/.test(clean)||/^[aAＡａ][\u4e00-\u9fa5]/.test(clean);
   const marker=isMark?clean.slice(0,1):'';
-  const rest=isMark?clean.slice(1):clean;
+  let rest=isMark?clean.slice(1):clean;
+  const follow=hasFollowMark(rest);
+  rest=stripFollowMark(rest);
   const dm=rest.match(/^(.*?)([1-7]+)\s*$/);
-  return {marker,name:(dm?dm[1]:rest).trim(),days:dm?dm[2]:''};
+  const rawName=(dm?dm[1]:rest).trim();
+  return {marker,follow,rawName,name:pvResolveAlias(rawName),days:dm?dm[2]:''};
 }
 function refreshInlineEmployeeStatusText(){
   document.querySelectorAll('.editbox[data-role="course"]').forEach(box=>{
@@ -1765,11 +1781,11 @@ function refreshInlineEmployeeStatusText(){
       if(!p.name) return line;
       const emp=employees.find(e=>String(e.name||'').trim()===p.name);
       if(!emp) return line;              // 一行多人（*甲*乙）等情況拆不出來，原樣保留
-      const rebuilt=`${p.marker}${emp.name}${p.days}${isEmployeeLineBound(emp)?'':'（未綁定）'}`;
-      // 自我一致性保險：重組後再拆一次，三段必須完全相同才敢寫回，
+      const rebuilt=`${p.marker}${emp.name}${p.follow?'跟課':''}${p.days}${isEmployeeLineBound(emp)?'':'（未綁定）'}`;
+      // 自我一致性保險：重組後再拆一次，四段必須完全相同才敢寫回，
       // 否則寧可不動。這個函式的輸出會直接進 setCellValue。
       const chk=splitCoachLineParts(rebuilt);
-      if(chk.marker!==p.marker||chk.name!==p.name||chk.days!==p.days) return line;
+      if(chk.marker!==p.marker||chk.name!==p.name||chk.days!==p.days||chk.follow!==p.follow) return line;
       return rebuilt;
     });
     const newText=fixed.join('\n');
@@ -2226,6 +2242,31 @@ function tokenizeCoachLine(line){
   });
 }
 function coachRoleFromMarker(mk){return mk==='*'?'當班下':mk==='a'?'助教':'教練';}
+/* 「跟課」是見習／陪同，屬於身分而不是姓名的一部分。不剝掉的話，
+   「侯凱捷跟課」會變成一個對不到名冊的新人名，跟侯凱捷本人分開計薪。 */
+const COACH_FOLLOW_RE=/跟課/g;
+function stripFollowMark(s){return String(s||'').replace(COACH_FOLLOW_RE,'');}
+function hasFollowMark(s){return /跟課/.test(String(s||''));}
+/* 同一個人被打成不同寫法（異體字、形近字）時，統計會把他拆成兩個人。
+   別名表把這些寫法歸戶到名冊上的正式姓名；內容可在薪資頁編輯、存後端。
+   刻意不預設任何對應——哪兩個名字是同一人只有人資能確認，猜錯等於把
+   薪水算到別人頭上。 */
+function pvNameAliases(){
+  let m=null;
+  try{ m=(typeof pvConfig!=='undefined'&&pvConfig)?pvConfig.nameAliases:null; }catch(e){ m=null; }
+  return (m&&typeof m==='object')?m:{};
+}
+function pvResolveAlias(n){
+  const k=String(n||'').trim();
+  if(!k) return k;
+  const v=pvNameAliases()[k];
+  return (v&&String(v).trim())||k;
+}
+function coachRoleOf(marker,follow){
+  if(marker==='*'||marker==='＊') return '當班下';
+  if(marker&&/[aAＡａ]/.test(marker)) return '助教';
+  return follow?'跟課':'教練';
+}
 // 星期數字要先把時間剝掉再抓，否則「王偉 14:00-15:00」裡的 1、4、5 會被當成週一/週四/週五，
 // 教練就被默默排到錯的日子。
 const COACH_TIME_RE=/\d{1,2}\s*[:：]?\s*\d{2}\s*[-－~～至到]\s*\d{1,2}\s*[:：]?\s*\d{2}|\d{1,2}\s*[:：]\s*\d{2}/g;
@@ -2233,14 +2274,16 @@ function parseAssignments(text,period,week,metaKey=''){
   const def=activeDaysForPeriod(period,week),rows=[];
   usefulLines(text).forEach(line=>{
     tokenizeCoachLine(line).forEach(tok=>{
-      const body=tok.body;
+      const follow=hasFollowMark(tok.body);
+      const body=stripFollowMark(tok.body);
       const m=body.replace(COACH_TIME_RE,' ').match(/[1-5]+/g);
       const days=period==='weekday'?(m?Array.from(new Set(m.join('').split('').map(Number))).filter(d=>def.includes(d)):[...def]):[...def];
       const nameStr=normalizeName(body.replace(/[1-5]+/g,' '));
-      const role=coachRoleFromMarker(tok.marker);
-      splitCoachNames(nameStr).forEach(nm=>{
+      const role=coachRoleOf(tok.marker,follow);
+      splitCoachNames(nameStr).forEach(raw=>{
+        const nm=pvResolveAlias(raw);
         const emp=findEmployeeForLine(nm,metaKey);
-        if(nm&&days.length)rows.push({name:nm,employeeId:emp?.id||'',lineBound:!!emp?.lineBound,role:emp?.role||'',employeeVenue:emp?.venue||'',days,raw:line,coachRole:role});
+        if(nm&&days.length)rows.push({name:nm,rawName:raw,employeeId:emp?.id||'',lineBound:!!emp?.lineBound,role:emp?.role||'',employeeVenue:emp?.venue||'',days,raw:line,coachRole:role,follow});
       });
     });
   });
@@ -3613,7 +3656,10 @@ function normalizedBase(weekNo, venueName, venueId, roleType, dateType, days, ti
     role: emp.role || a.role || '',
     lineBound: !!emp.lineBound,
     source: roleType==='course' ? 'registration' : 'schedule',
-    coachRole: a.coachRole || ''
+    coachRole: a.coachRole || '',
+    // 別名歸戶後 employeeName 是正式姓名，但核對時要讓人看到班表上原本怎麼寫
+    rawName: a.rawName || a.name || '',
+    follow: !!a.follow
   };
 }
 function collectNormalizedAssignments(){
@@ -4554,7 +4600,7 @@ const PV_TYPE_HOURS=new Proxy({},{
 });
 const PV_TYPE_CLS={'游泳一般團班':'swim','游泳假日班':'swim','幼兒游泳班':'kid','補習班課程':'cram','球類課程':'ball','體育課(短)':'pe','體育課(長)':'pe'};
 const PV_TYPE_ORDER=['游泳一般團班','游泳假日班','幼兒游泳班','補習班課程','球類課程','體育課(短)','體育課(長)'];
-const PV_ROLE_ORDER=['教練','當班下','助教'];   // index 0 = 基準，倍率以它換算
+const PV_ROLE_ORDER=['教練','當班下','助教','跟課'];   // index 0 = 基準，倍率以它換算
 function pvRatesKey(){return (typeof LOCAL_STORAGE_PREFIX!=='undefined'?LOCAL_STORAGE_PREFIX:'')+'pv2-type-rates';}
 function pvRateInputId(ti,ri){return 'pvr_'+ti+'_'+ri;}
 
@@ -4568,7 +4614,7 @@ function pvMigrateRates(o){
   const EMPTY={v:2,rates:{},mult:{},hours:{},typeOverrides:{}};
   if(!o||typeof o!=='object') return EMPTY;
   // v2 新增 hours/typeOverrides：漏帶就等於每次載入都把本機備援清空
-  if(o.v===2) return {v:2,rates:o.rates||{},mult:o.mult||{},hours:o.hours||{},typeOverrides:o.typeOverrides||{},cramSchools:o.cramSchools||null};
+  if(o.v===2) return {v:2,rates:o.rates||{},mult:o.mult||{},hours:o.hours||{},typeOverrides:o.typeOverrides||{},cramSchools:o.cramSchools||null,nameAliases:o.nameAliases||{}};
   const rates={};
   PV_TYPE_ORDER.forEach((t,i)=>{
     const v=o[String(i)];
@@ -4612,7 +4658,7 @@ function pvSaveTypeRates(){
     const prev=JSON.parse(localStorage.getItem(pvRatesKey())||'{}');
     const ov=(pvConfig.typeOverrides&&Object.keys(pvConfig.typeOverrides).length)
       ? pvConfig.typeOverrides : (prev.typeOverrides||{});
-    localStorage.setItem(pvRatesKey(),JSON.stringify({v:2,rates,mult,hours,typeOverrides:ov,cramSchools:pvConfig.cramSchools||prev.cramSchools||null}));
+    localStorage.setItem(pvRatesKey(),JSON.stringify({v:2,rates,mult,hours,typeOverrides:ov,cramSchools:pvConfig.cramSchools||prev.cramSchools||null,nameAliases:pvConfig.nameAliases||prev.nameAliases||{}}));
   }catch(e){}
   pvPushConfigToServer();
 }
@@ -4640,6 +4686,7 @@ function pvLoadTypeRates(){
     if(st.rates&&Object.keys(st.rates).length) pvConfig.rates=st.rates;
     if(st.mult&&Object.keys(st.mult).length) pvConfig.mult=st.mult;
     if(Array.isArray(st.cramSchools)&&st.cramSchools.length) pvConfig.cramSchools=st.cramSchools;
+    if(st.nameAliases&&Object.keys(st.nameAliases).length) pvConfig.nameAliases=st.nameAliases;
   }
   pvSyncHoursInputs();
 }
@@ -4747,7 +4794,7 @@ async function pvLoadConfigFromServer(){
     if(!obj||typeof obj!=='object') return false;
     pvConfig={
       hours:obj.hours||{}, rates:obj.rates||{},
-      mult:obj.mult||{}, typeOverrides:obj.typeOverrides||{}, cramSchools:obj.cramSchools||null
+      mult:obj.mult||{}, typeOverrides:obj.typeOverrides||{}, cramSchools:obj.cramSchools||null, nameAliases:obj.nameAliases||{}
     };
     pvConfigLoaded=true;
     // 後端值回填進 input：矩陣是 oninput 全量重繪，直接塞 value 即可
@@ -4801,6 +4848,68 @@ function pvSetCramSchools(raw){
   }catch(e){}
   pvPushConfigToServer();
   renderPayrollReport();
+}
+
+/* ---- 姓名核對 ----
+   對不到名冊的姓名會用「姓名」當計薪 key，於是同一個人的兩種寫法
+   （錯字、異體字、多打「跟課」）會被算成兩個人，而且沒有 employeeId
+   就無法 LINE 推播。這裡把它們集中列出並允許當場歸戶。 */
+function pvSetNameAlias(from,to){
+  if(!pvConfigLoaded){
+    alert('尚未讀到後端設定，暫時不能修改（避免蓋掉既有設定）。請重新整理頁面後再試。');
+    renderPayrollReport();
+    return;
+  }
+  if(!pvConfig.nameAliases) pvConfig.nameAliases={};
+  const key=String(from||'').trim(), val=String(to||'').trim();
+  if(val) pvConfig.nameAliases[key]=val; else delete pvConfig.nameAliases[key];
+  try{
+    const st=JSON.parse(localStorage.getItem(pvRatesKey())||'{}');
+    st.nameAliases=pvConfig.nameAliases;
+    localStorage.setItem(pvRatesKey(),JSON.stringify(st));
+  }catch(e){}
+  pvPushConfigToServer();
+  renderPayrollReport();
+}
+function renderNameAudit(rows){
+  const body=document.getElementById('pv2NameAuditBody');
+  if(!body) return;
+  const dl=document.getElementById('pvRosterList');
+  if(dl){
+    const sig=(employees||[]).length+'';
+    if(dl.dataset.sig!==sig){
+      dl.innerHTML=(employees||[]).map(e=>`<option value="${escapeHtml(String(e.name||''))}"></option>`).join('');
+      dl.dataset.sig=sig;
+    }
+  }
+  const roster=new Set((employees||[]).map(e=>String(e.name||'').trim()));
+  const agg={};
+  rows.filter(r=>r.roleType==='course'&&!r.employeeId).forEach(r=>{
+    const shown=String(r.rawName||r.employeeName||'').trim();
+    if(!shown) return;
+    if(!agg[shown]) agg[shown]={n:0,resolved:String(r.employeeName||'').trim()};
+    agg[shown].n+=1;
+  });
+  const names=Object.keys(agg).sort((a,b)=>agg[b].n-agg[a].n||a.localeCompare(b,'zh-Hant'));
+  if(!names.length){
+    body.innerHTML='<tr><td colspan="4" class="pv2-empty">本週所有姓名都對得到名冊。</td></tr>';
+    return;
+  }
+  const alias=pvNameAliases();
+  body.innerHTML=names.map(nm=>{
+    const a=agg[nm], cur=alias[nm]||'';
+    // 已指定但仍對不到，代表指定的目標本身也不在名冊，要明確講出來
+    const state=cur
+      ? (roster.has(cur)?'<span style="color:var(--lg)">已歸戶</span>':'<span style="color:var(--over)">指定的姓名不在名冊</span>')
+      : '<span style="color:var(--over)">名冊查無</span>';
+    return `<tr>
+      <td class="pv-name">${escapeHtml(nm)}</td>
+      <td class="pv-num">${a.n}</td>
+      <td>${state}</td>
+      <td><input list="pvRosterList" class="pv2-ratecell" style="width:160px" value="${escapeHtml(cur)}"
+        placeholder="留空＝不歸戶" onchange="pvSetNameAlias('${escapeHtml(nm).replace(/'/g,"\\'")}',this.value)"></td>
+    </tr>`;
+  }).join('');
 }
 
 /* ---- 課程分類指定 ---- */
@@ -4880,7 +4989,7 @@ function classifyCourseType(row){
   return '補習班課程';
 }
 function pvBadge(type){const cls=PV_TYPE_CLS[type]||'cram';return `<span class="pv2-badge ${cls}">${escapeHtml(type)}</span>`;}
-const PV_ROLE_CLS={'當班下':'lead','助教':'assist','教練':'coach'};
+const PV_ROLE_CLS={'當班下':'lead','助教':'assist','教練':'coach','跟課':'follow'};
 function pvRoleBadge(role){const r=role||'教練';const cls=PV_ROLE_CLS[r]||'coach';return `<span class="pv2-rolebadge ${cls}">${escapeHtml(r)}</span>`;}
 function pvDayChips(days){const order=[1,2,3,4,5,6,7];const u=order.filter(d=>days.has(d));if(!u.length)return '';return `<span class="pv2-days">${u.map(d=>`<span class="pv2-day ${d>=6?'wknd':''}">${dayName(d)}</span>`).join('')}</span>`;}
 /* checklist */
@@ -4940,13 +5049,13 @@ function renderPayrollReport(){
   });
   // ---- per employee ----
   const map=new Map();
-  const typeAgg={}; PV_TYPE_ORDER.forEach(t=>typeAgg[t]={平日:0,假日:0,手動:0,當班下:0,助教:0});
+  const typeAgg={}; PV_TYPE_ORDER.forEach(t=>typeAgg[t]={平日:0,假日:0,手動:0,當班下:0,助教:0,跟課:0});
   rows.forEach(r=>{
     const key=employeeKeyForPayroll(r);
     // key 一起存進 stats：Array.from(map.values()) 之後 Map 的 key 就沒了，
     // 而教練篩選必須用 key 而非姓名比對（同名不同 ID 用姓名會被混在一起）。
     if(!map.has(key)) map.set(key,{key,employeeName:r.employeeName||'未指定員工',lineBound:!!r.lineBound,inRoster:!!r.employeeId,
-      courseSessions:0,courseHours:0,lifeguardShifts:0,frontdeskShifts:0,lifeguardHours:0,frontdeskHours:0,totalHours:0,pay:0,venues:{},courses:{},typeCount:{},roleCount:{當班下:0,助教:0},roleHours:{當班下:0,助教:0}});
+      courseSessions:0,courseHours:0,lifeguardShifts:0,frontdeskShifts:0,lifeguardHours:0,frontdeskHours:0,totalHours:0,pay:0,venues:{},courses:{},typeCount:{},roleCount:{當班下:0,助教:0,跟課:0},roleHours:{當班下:0,助教:0,跟課:0}});
     const s=map.get(key); s.lineBound=s.lineBound||!!r.lineBound; s.inRoster=s.inRoster||!!r.employeeId; s.totalHours+=r.hours;
     if(r.venueName) s.venues[r.venueName]=(s.venues[r.venueName]||0)+1;
     if(r.roleType==='course'){
@@ -4956,7 +5065,7 @@ function renderPayrollReport(){
       const role=r.coachRole||'教練';
       // 角色欄是「其中有多少堂由當班下／助教擔任」的分項，是總堂數的子集合，
       // 不併入 tot——否則會重演註解 4538 記載的「課程被算兩次」舊 bug。
-      if(role==='當班下'||role==='助教'){typeAgg[r.courseType][role]+=1;s.roleCount[role]+=1;s.roleHours[role]+=(r.courseHours||0);}
+      if(role==='當班下'||role==='助教'||role==='跟課'){typeAgg[r.courseType][role]+=1;s.roleCount[role]+=1;s.roleHours[role]+=(r.courseHours||0);}
       const gk=r.workName+'|'+r.courseType+'|'+(r.slotCode||'')+'|'+role;
       if(!s.courses[gk]) s.courses[gk]={name:r.workName,type:r.courseType,role,slot:r.slotCode||'',block:pvBlockOf(r),days:new Set(),n:0,h:PV_TYPE_HOURS[r.courseType]||0};
       s.courses[gk].days.add(r.day); s.courses[gk].n+=1;
@@ -4966,6 +5075,7 @@ function renderPayrollReport(){
   const stats=Array.from(map.values());
   // 篩選只影響下方兩張明細表。KPI／課程時數彙整／員工薪資試算一律維持全體，
   // 否則「合計帶出」「試算薪資」會變成假合計而被誤讀為本週總額。
+  renderNameAudit(rows);
   renderCourseTypeMap(rows);
   pvSyncCoachOptions(stats);
   const coachFilter=pvCoachFilterValue();
@@ -4981,19 +5091,19 @@ function renderPayrollReport(){
     ['rose','試算薪資',`$${Math.round(T.pay).toLocaleString()}`,'填費率後更新']
   ].map(([c,l,v,s])=>`<div class="pv2-kpi ${c}"><div class="k-l"><i></i>${l}</div><div class="k-v pv-num">${v}</div><div class="k-s">${s}</div></div>`).join('');
   // ---- 課程時數彙整 ----
-  let tt={平日:0,假日:0,手動:0,tot:0,當班下:0,助教:0,h:0};
+  let tt={平日:0,假日:0,手動:0,tot:0,當班下:0,助教:0,跟課:0,h:0};
   typeBody.innerHTML=PV_TYPE_ORDER.map(t=>{
     const a=typeAgg[t],tot=a.平日+a.假日+a.手動,h=tot*PV_TYPE_HOURS[t];
-    tt.平日+=a.平日;tt.假日+=a.假日;tt.手動+=a.手動;tt.tot+=tot;tt.當班下+=a.當班下;tt.助教+=a.助教;tt.h+=h;
-    return `<tr><td>${pvBadge(t)}</td><td class="pv-num">${PV_TYPE_HOURS[t].toFixed(2)}</td><td class="pv-num">${a.平日||''}</td><td class="pv-num">${a.假日||''}</td><td class="pv-num">${a.手動||''}</td><td class="pv-num">${tot}</td><td class="pv-num pv2-sub-col">${a.當班下||''}</td><td class="pv-num pv2-sub-col">${a.助教||''}</td><td class="pv-num pv2-money">${h.toFixed(1)}</td></tr>`;
-  }).join('')+`<tr class="pv2-total"><td>合計</td><td></td><td class="pv-num">${tt.平日}</td><td class="pv-num">${tt.假日}</td><td class="pv-num">${tt.手動}</td><td class="pv-num">${tt.tot}</td><td class="pv-num pv2-sub-col">${tt.當班下}</td><td class="pv-num pv2-sub-col">${tt.助教}</td><td class="pv-num">${tt.h.toFixed(1)}</td></tr>`;
+    tt.平日+=a.平日;tt.假日+=a.假日;tt.手動+=a.手動;tt.tot+=tot;tt.當班下+=a.當班下;tt.助教+=a.助教;tt.跟課+=a.跟課;tt.h+=h;
+    return `<tr><td>${pvBadge(t)}</td><td class="pv-num">${PV_TYPE_HOURS[t].toFixed(2)}</td><td class="pv-num">${a.平日||''}</td><td class="pv-num">${a.假日||''}</td><td class="pv-num">${a.手動||''}</td><td class="pv-num">${tot}</td><td class="pv-num pv2-sub-col">${a.當班下||''}</td><td class="pv-num pv2-sub-col">${a.助教||''}</td><td class="pv-num pv2-sub-col">${a.跟課||''}</td><td class="pv-num pv2-money">${h.toFixed(1)}</td></tr>`;
+  }).join('')+`<tr class="pv2-total"><td>合計</td><td></td><td class="pv-num">${tt.平日}</td><td class="pv-num">${tt.假日}</td><td class="pv-num">${tt.手動}</td><td class="pv-num">${tt.tot}</td><td class="pv-num pv2-sub-col">${tt.當班下}</td><td class="pv-num pv2-sub-col">${tt.助教}</td><td class="pv-num pv2-sub-col">${tt.跟課}</td><td class="pv-num">${tt.h.toFixed(1)}</td></tr>`;
   // ---- 員工本週統計 ----
   const mv=s=>{const e=Object.entries(s.venues).sort((a,b)=>b[1]-a[1]);return e.length?e[0][0]:'—';};
   // 排序鍵必須跟表格「總時數」欄顯示的數字是同一個。舊版用 courseHours+totalHours，而 totalHours
   // 已經含課程的實際時長，等於把課程算兩次，救生／櫃台只算一次 -> 名次跟顯示的時數對不上。
   const staffTotalHours=s=>s.courseHours+s.lifeguardHours+s.frontdeskHours;
   const staffSorted=stats.slice().sort((a,b)=>staffTotalHours(b)-staffTotalHours(a)||a.employeeName.localeCompare(b.employeeName,'zh-Hant'));
-  const colTot={},allTot={hours:0,pay:0},roleTot={當班下:0,助教:0},roleHTot={當班下:0,助教:0}; PV_TYPE_ORDER.forEach(t=>colTot[t]=0);
+  const colTot={},allTot={hours:0,pay:0},roleTot={當班下:0,助教:0,跟課:0},roleHTot={當班下:0,助教:0,跟課:0}; PV_TYPE_ORDER.forEach(t=>colTot[t]=0);
   staffBody.innerHTML=(staffSorted.length?staffSorted.map(s=>{
     const cells=PV_TYPE_ORDER.map(t=>{const n=s.typeCount[t]||0;colTot[t]+=n;return `<td class="pv-num">${n||'<span style=\'color:#c3ccdb\'>·</span>'}</td>`;}).join('');
     const totH=staffTotalHours(s); allTot.hours+=totH; allTot.pay+=s.pay;
@@ -5001,17 +5111,18 @@ function renderPayrollReport(){
     // 否則會重演課程被算兩次的舊 bug。
     const rc=s.roleCount||{當班下:0,助教:0};
     const rh=s.roleHours||{當班下:0,助教:0};
-    roleTot.當班下+=rc.當班下; roleTot.助教+=rc.助教;
-    roleHTot.當班下+=rh.當班下; roleHTot.助教+=rh.助教;
+    roleTot.當班下+=rc.當班下; roleTot.助教+=rc.助教; roleTot.跟課+=rc.跟課||0;
+    roleHTot.當班下+=rh.當班下; roleHTot.助教+=rh.助教; roleHTot.跟課+=rh.跟課||0;
     // 原本當班下／助教各佔一欄，多數列兩欄都是「·」，白佔版面。
     // 併成一欄 memo：*堂數(時數) a堂數(時數)，沒有就整格留白。
     const memo=[];
     if(rc.當班下) memo.push(`＊${rc.當班下}(${rh.當班下.toFixed(1)}h)`);
     if(rc.助教)  memo.push(`a${rc.助教}(${rh.助教.toFixed(1)}h)`);
+    if(rc.跟課)  memo.push(`跟${rc.跟課}(${rh.跟課.toFixed(1)}h)`);
     const roleCells=`<td class="pv2-sub-col" style="white-space:nowrap;font-weight:700">${memo.join('　')}</td>`;
     return `<tr><td class="pv-name">${escapeHtml(s.employeeName)}${s.inRoster?'':' <span class="pv2-star">★</span>'}</td>${cells}${roleCells}<td class="pv-num">${totH.toFixed(1)}</td><td class="pv-num pv2-money">$${Math.round(s.pay).toLocaleString()}</td></tr>`;
   }).join(''):`<tr><td colspan="11" class="pv2-empty">目前本週沒有可統計的排班資料。</td></tr>`)
-   + (staffSorted.length?`<tr class="pv2-total"><td>合計帶出</td>${PV_TYPE_ORDER.map(t=>`<td class="pv-num">${colTot[t]||0}</td>`).join('')}<td class="pv2-sub-col" style="white-space:nowrap">＊${roleTot.當班下}(${roleHTot.當班下.toFixed(1)}h)　a${roleTot.助教}(${roleHTot.助教.toFixed(1)}h)</td><td class="pv-num">${allTot.hours.toFixed(1)}</td><td class="pv-num pv2-money">$${Math.round(allTot.pay).toLocaleString()}</td></tr>`:'');
+   + (staffSorted.length?`<tr class="pv2-total"><td>合計帶出</td>${PV_TYPE_ORDER.map(t=>`<td class="pv-num">${colTot[t]||0}</td>`).join('')}<td class="pv2-sub-col" style="white-space:nowrap">＊${roleTot.當班下}(${roleHTot.當班下.toFixed(1)}h)　a${roleTot.助教}(${roleHTot.助教.toFixed(1)}h)　跟${roleTot.跟課}(${roleHTot.跟課.toFixed(1)}h)</td><td class="pv-num">${allTot.hours.toFixed(1)}</td><td class="pv-num pv2-money">$${Math.round(allTot.pay).toLocaleString()}</td></tr>`:'');
   // ---- 教練工作明細 ----
   const coaches=staffSorted.filter(s=>s.courseSessions>0&&(!coachFilter||s.key===coachFilter));
   coachBody.innerHTML=coaches.length?coaches.map(s=>{
