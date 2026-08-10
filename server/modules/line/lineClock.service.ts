@@ -4,6 +4,7 @@ import { getTaiwanNow, formatTaiwanTime, formatTaiwanDate } from "./lineHelpers"
 
 let _venueCache: { venues: import("@shared/schema").Venue[]; cachedAt: number } | null = null;
 const VENUE_CACHE_TTL = 5 * 60 * 1000;
+const ATTENDANCE_GRACE_MINUTES = 10;
 
 async function getCachedVenues(): Promise<import("@shared/schema").Venue[]> {
   const now = Date.now();
@@ -370,7 +371,7 @@ export async function processClockIn(
     const [sh, sm] = shiftInfo.startTime.split(":").map(Number);
     const shiftStartMinutes = sh * 60 + sm;
     const diff = nowMinutes - shiftStartMinutes;
-    if (diff > 0) {
+    if (diff > ATTENDANCE_GRACE_MINUTES) {
       const hours = Math.floor(diff / 60);
       const mins = diff % 60;
       lateReason = hours > 0
@@ -389,7 +390,7 @@ export async function processClockIn(
     const [eh, em] = shiftInfo.endTime.split(":").map(Number);
     const shiftEndMinutes = eh * 60 + em;
     const diff = shiftEndMinutes - nowMinutes;
-    if (diff > 0) {
+    if (diff > ATTENDANCE_GRACE_MINUTES) {
       const hours = Math.floor(diff / 60);
       const mins = diff % 60;
       lateReason = hours > 0

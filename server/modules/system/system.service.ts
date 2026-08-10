@@ -8,6 +8,32 @@ import { sendAnomalyEmail } from "../../shared/email/sendAnomalyEmail";
 import ExcelJS from "exceljs";
 
 const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
+const ATTENDANCE_GRACE_MINUTES = 10;
+
+function parseAttendanceIssueMinutes(reason: string | null | undefined, prefix: string): number | null {
+  if (!reason) return null;
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const reHM = new RegExp(`${escapedPrefix}\\s*(\\d+)\\s*小時\\s*(\\d+)\\s*分鐘`);
+  const reH = new RegExp(`${escapedPrefix}\\s*(\\d+)\\s*小時`);
+  const reM = new RegExp(`${escapedPrefix}\\s*(\\d+)\\s*分鐘`);
+  let match = reason.match(reHM);
+  if (match) return Number(match[1]) * 60 + Number(match[2]);
+  match = reason.match(reH);
+  if (match) return Number(match[1]) * 60;
+  match = reason.match(reM);
+  if (match) return Number(match[1]);
+  return reason.includes(prefix) ? ATTENDANCE_GRACE_MINUTES + 1 : null;
+}
+
+function hasAttendanceIssueBeyondGrace(
+  records: Array<{ failReason?: string | null }>,
+  prefix: string,
+): boolean {
+  return records.some((record) => {
+    const minutes = parseAttendanceIssueMinutes(record.failReason, prefix);
+    return minutes !== null && minutes > ATTENDANCE_GRACE_MINUTES;
+  });
+}
 
 function err(status: number, message: string): Error {
   const e: any = new Error(message);
@@ -461,8 +487,8 @@ export const systemService = {
           status: c.status, venue: c.matchedVenueName || "",
         }));
         const hasSuccessClockIn = clockIns.some(c => c.status === "success" || c.status === "warning");
-        const hasLateReason = clockIns.some(c => c.failReason?.includes("遲到"));
-        const hasEarlyLeave = clockOuts.some(c => c.failReason?.includes("早退"));
+        const hasLateReason = hasAttendanceIssueBeyondGrace(clockIns, "遲到");
+        const hasEarlyLeave = hasAttendanceIssueBeyondGrace(clockOuts, "早退");
         let status: "on_time" | "late" | "early_leave" | "missing_clock" | "anomaly" = "on_time";
         if (!hasSuccessClockIn && clockIns.length === 0) status = "missing_clock";
         else if (hasLateReason) status = "late";
@@ -527,7 +553,7 @@ export const systemService = {
         if (!hasSuccessIn) {
           dayResults.push({ date, status: "🔴", detail: `${vName} ${shiftTime} 未打卡` });
           hasAnomaly = true;
-        } else if (clockIns.some(c => c.failReason?.includes("遲到"))) {
+        } else if (hasAttendanceIssueBeyondGrace(clockIns, "遲到")) {
           dayResults.push({ date, status: "⚠️", detail: `${vName} ${shiftTime} 遲到` });
           hasAnomaly = true;
         } else {

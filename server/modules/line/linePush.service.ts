@@ -7,6 +7,7 @@ import { availabilityRepository } from "../availability/availability.repository"
 import { isReviewableWorkShift, shiftReviewService } from "../shift/shiftReview.service";
 
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
+const LINE_FLEX_TEXT_LIMIT = 5000;
 
 /** 員工入口系統連結（LIFF 或 Web Portal） */
 function getSystemLink(): string {
@@ -15,8 +16,135 @@ function getSystemLink(): string {
   return "";
 }
 
+function clampLineText(text: string, max = LINE_FLEX_TEXT_LIMIT): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 24).trimEnd()}\n\n...內容較長，請至系統查看完整資訊`;
+}
+
+function detectTone(text: string): { accent: string; softAccent: string; titleIcon: string } {
+  if (/❌|🔴|失敗|錯誤|異常|未打卡/.test(text)) {
+    return { accent: "#DC2626", softAccent: "#FEF2F2", titleIcon: "!" };
+  }
+  if (/⚠|遲到|早退|提醒|尚未|警告/.test(text)) {
+    return { accent: "#D97706", softAccent: "#FFFBEB", titleIcon: "!" };
+  }
+  if (/✅|成功|正常|完成/.test(text)) {
+    return { accent: "#059669", softAccent: "#ECFDF5", titleIcon: "✓" };
+  }
+  return { accent: "#2563EB", softAccent: "#EFF6FF", titleIcon: "i" };
+}
+
+function buildDecoratedFlexMessage(text: string): object {
+  const safeText = clampLineText(text.trim() || "系統通知");
+  const lines = safeText.split("\n");
+  const firstNonEmpty = lines.find(line => line.trim())?.trim() || "系統通知";
+  const title = firstNonEmpty.replace(/^[^\p{L}\p{N}]+/u, "").trim() || "系統通知";
+  const bodyText = safeText;
+  const tone = detectTone(safeText);
+
+  return {
+    type: "flex",
+    altText: title.slice(0, 400),
+    contents: {
+      type: "bubble",
+      size: "mega",
+      styles: {
+        body: { backgroundColor: "#FFFFFF" },
+        footer: { backgroundColor: "#FFFFFF" },
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "0px",
+        backgroundColor: "#FFFFFF",
+        contents: [
+          {
+            type: "box",
+            layout: "vertical",
+            paddingAll: "18px",
+            backgroundColor: tone.softAccent,
+            borderWidth: "2px",
+            borderColor: tone.accent,
+            cornerRadius: "18px",
+            contents: [
+              {
+                type: "box",
+                layout: "horizontal",
+                spacing: "10px",
+                alignItems: "center",
+                contents: [
+                  {
+                    type: "box",
+                    layout: "vertical",
+                    width: "30px",
+                    height: "30px",
+                    cornerRadius: "15px",
+                    backgroundColor: tone.accent,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    contents: [
+                      {
+                        type: "text",
+                        text: tone.titleIcon,
+                        color: "#FFFFFF",
+                        weight: "bold",
+                        size: "md",
+                        align: "center",
+                      },
+                    ],
+                  },
+                  {
+                    type: "text",
+                    text: title,
+                    size: "lg",
+                    weight: "bold",
+                    color: "#111827",
+                    wrap: true,
+                    flex: 1,
+                  },
+                ],
+              },
+              {
+                type: "separator",
+                margin: "md",
+                color: "#E5E7EB",
+              },
+              {
+                type: "text",
+                text: bodyText,
+                size: "sm",
+                color: "#1F2937",
+                wrap: true,
+                margin: "md",
+                lineSpacing: "5px",
+              },
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        paddingTop: "8px",
+        paddingBottom: "12px",
+        paddingStart: "16px",
+        paddingEnd: "16px",
+        contents: [
+          {
+            type: "text",
+            text: "Juns Sports Smart Schedule",
+            size: "xxs",
+            color: "#9CA3AF",
+            align: "center",
+          },
+        ],
+      },
+    },
+  };
+}
+
 export async function pushToLine(userId: string, text: string, extraMessages?: object[]): Promise<boolean> {
-  const messages: object[] = [{ type: "text", text }];
+  const messages: object[] = [buildDecoratedFlexMessage(text)];
   if (extraMessages) messages.push(...extraMessages);
   try {
     const resp = await fetch("https://api.line.me/v2/bot/message/push", {

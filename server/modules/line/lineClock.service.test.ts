@@ -292,8 +292,19 @@ describe("processClockIn — 排班比對", () => {
 });
 
 describe("processClockIn — 遲到 / 打卡類型", () => {
-  it("上班時間後打卡 → lateReason 包含「遲到」", async () => {
-    // getTaiwanNow mock 回 08:10，班別 08:00 → 遲到 10 分鐘
+  it("上班時間後 10 分鐘內打卡 → 不標記遲到", async () => {
+    // getTaiwanNow mock 回 08:10，班別 08:00 → 仍在 10 分鐘寬限內
+    const result = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG, "in");
+
+    expect(result.status).toBe("success");
+    expect(result.failReason).toBeNull();
+  });
+
+  it("上班時間後超過 10 分鐘打卡 → lateReason 包含「遲到」", async () => {
+    vi.mocked(storage.getShiftsByEmployeeAndDateRange).mockResolvedValue([
+      { ...mockShift, startTime: "07:59" } as any,
+    ]);
+
     const result = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG, "in");
 
     expect(result.status).toBe("success");
