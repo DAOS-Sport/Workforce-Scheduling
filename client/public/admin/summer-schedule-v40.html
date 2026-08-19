@@ -4862,6 +4862,15 @@ async function pvLoadConfigFromServer(){
       mult:obj.mult||{}, typeOverrides:obj.typeOverrides||{}, cramSchools:obj.cramSchools||null, nameAliases:obj.nameAliases||{}, types:Array.isArray(obj.types)&&obj.types.length?obj.types:null
     };
     pvConfigLoaded=true;
+    /* 先重繪矩陣，再回填。順序不能反。
+       後端可能帶回一份跟預設不同的 types（例如自訂了「補習班游泳」「補習班陸上」，
+       7 種變 9 種）。pvRenderRateMatrix 以類型清單當簽章決定要不要重建 DOM，
+       而重建時每一格都是寫死的 value="0"。若先回填再讓 renderPayrollReport()
+       去重建，剛填好的費率會被整排洗成 0 —— 而且 pvConfig 裡明明有值，
+       畫面卻全是 0，看起來像「費率沒設定」。
+       平常有 localStorage 撐著看不出來；清了快取或換一台電腦就會踩到，
+       正是 CLAUDE.md 第四條說要避免的那個病。 */
+    pvRenderRateMatrix();
     // 後端值回填進 input：矩陣是 oninput 全量重繪，直接塞 value 即可
     PV_TYPE_ORDER.forEach((t,ti)=>{
       PV_ROLE_ORDER.forEach((role,ri)=>{
