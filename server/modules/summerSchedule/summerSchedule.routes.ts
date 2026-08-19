@@ -4,6 +4,7 @@ import { summerScheduleService } from "./summerSchedule.service";
 import { summerAvailabilityRepository } from "./summerAvailability.repository";
 import { ok, fail } from "../../shared/http/response";
 import { requireAdmin } from "../../shared/middleware/requireAdmin";
+import { requireInternalToken } from "../internal/internal.auth";
 import { storage } from "../../storage";
 
 export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): void {
@@ -84,6 +85,37 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
       ok(res, await summerScheduleService.deleteManualCourse(parseInt(req.params.id as string, 10)));
     } catch (err: any) {
       fail(res, 500, err.message);
+    }
+  });
+
+  /**
+   * 從 Google 試算表匯入補習班課程。
+   *
+   * 走 requireInternalToken（吃 x-api-key / Authorization: Bearer / x-internal-token）
+   * 而不是 requireAdmin —— 呼叫端是試算表的 Apps Script，沒有瀏覽器 session。
+   * 這條路已經在用了：試算表那支 importCourseEnrollmentCounts 就是用 x-api-key
+   * 反方向從報名系統拉資料，這裡只是把同一個模式倒過來。
+   *
+   * 刻意不掛在 /api/internal 底下：internal.routes.ts 結尾有 app.use("/api/internal", 404)
+   * 的 catch-all，掛過去就得依賴模組掛載順序才會生效 —— 那是會被日後重排順序
+   * 靜默弄壞的相依。放在 /api/schedule 下沒有這個問題。
+   *
+   * body: {
+   *   dryRun?: boolean,           // true = 只回報會怎麼做，不寫入
+   *   rows: [{
+   *     cramName, sportType,      // 「補習班名稱」「項目類別」→ 課名由程式組
+   *     date, startTime, endTime,
+   *     registeredCount, requiredCoaches,
+   *     coachNames,               // 「排班人員」，字串或陣列
+   *     venueName?
+   *   }]
+   * }
+   */
+  app.post("/api/schedule/cram-courses/import", requireInternalToken, async (req, res) => {
+    try {
+      ok(res, await summerScheduleService.importCramCourses(req.body));
+    } catch (err: any) {
+      fail(res, err.status || 500, err.message);
     }
   });
 

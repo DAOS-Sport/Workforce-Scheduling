@@ -1,7 +1,7 @@
 import { storage } from "../../storage";
 import { db } from "../../db";
 import { eq, and, like, gte, lte, or, ne } from "drizzle-orm";
-import { shifts, summerScheduleAssignments, manualScheduleCourses, dispatchShifts, type InsertShift, type InsertSummerScheduleAssignment, type InsertManualScheduleCourse } from "@shared/schema";
+import { shifts, summerScheduleAssignments, manualScheduleCourses, dispatchShifts, venues as venuesTable, systemConfigs, type InsertShift, type InsertSummerScheduleAssignment, type InsertManualScheduleCourse } from "@shared/schema";
 import { isValidLineUserId } from "../line/lineSignature";
 
 const SUMMER_WEEKS = [
@@ -675,6 +675,171 @@ export const summerScheduleService = {
     if (!Number.isInteger(id) || id <= 0) throw err(400, "id 格式錯誤");
     await db.update(manualScheduleCourses).set({ status: "deleted", updatedAt: new Date() }).where(eq(manualScheduleCourses.id, id));
     return { success: true };
+  },
+
+  /**
+   * 從 Google 試算表匯入「補習班上課資訊」。
+   *
+   * ── 為什麼要這條路 ──────────────────────────────────────────────────
+   * 補習班的課一直是人手打進手動排課的，於是同一件事長出多種寫法。
+   * 2026-08-19 實測正式庫：42 種課名裡至少 12 種是同一件事的不同寫法
+   *   樂獅桌球／樂獅-桌球　斯塔／斯塔-游泳　新學林／新學林-游泳
+   *   立得／立得-游泳／立得補習班／立德（最後一個還是別的字）
+   * 而試算表那邊本來就把「補習班名稱」與「項目類別」分成兩欄，是乾淨的來源。
+   * 這裡由程式用固定格式把兩欄組成課名，人就沒有打錯的機會，
+   * 而且新項目（例如斯塔的瑜珈）自動就有，不必改程式。
+   *
+   * ── 刻意只收補習班 ─────────────────────────────────────────────────
+   * 假日班不在試算表裡（場館端確認過「這邊沒有假日班」），它走報名系統 API。
+   * 若讓假日班也從這條路進來會變成兩個來源同時寫，畫面上一堂課會出現兩次。
+   *
+   * ── 冪等 ───────────────────────────────────────────────────────────
+   * 以 (date, courseName, startTime, endTime) 當鍵：已存在就更新，不存在才新增。
+   * 巨集按兩次不會變成兩倍堂數 —— 那會直接變成兩倍薪水。
+   *
+   * ── 不自動刪除 ─────────────────────────────────────────────────────
+   * 試算表刪掉的課，這裡只會列進 stale 回報，不會自動把資料庫的刪掉。
+   * 匯入來源是人維護的表，一次誤刪就把整週課程清空的風險不值得冒。
+   */
+  async importCramCourses(payload: any) {
+    const rows: any[] = Array.isArray(payload?.rows) ? payload.rows : [];
+    const dryRun = payload?.dryRun === true;
+    if (!rows.length) throw err(400, "rows 為必填且不可為空");
+    if (rows.length > 500) throw err(400, "單次最多 500 筆");
+
+    // 員工名冊只撈一次，用來把「排班人員」的姓名對回 employeeId。
+    // 對不到不擋整批 —— 名冊外的臨時教練是常態（CLAUDE.md 第八條記載 19 個）。
+    const employees = await storage.getAllEmployees();
+    const empByName = new Map<string, any>();
+    for (const e of employees) {
+      const n = String(e.name || "").trim();
+      if (n && !empByName.has(n)) empByName.set(n, e);
+    }
+
+    // storage 只有 getVenuesByRegion，這裡要全部場館，直接查表
+    // 補習班名單：薪資頁的分類器用「課名開頭是不是補習班」來決定 1 小時還是 1.5 小時。
+    // 名單外的補習班，球類的課會被判成「球類課程 1.5h」而不是「補習班課程 1h」——
+    // CLAUDE.md 記載這個坑踩過，45 筆每堂多算 0.5 小時。
+    // 匯入時比對一次，沒在名單裡的回報出來，不要等薪水發錯才發現。
+    const PV_CRAM_DEFAULT = ["加洲森林","欣蓓","樂獅","新學林","皇家達","曼斯特","空中美語","立得","立德","斯塔","小丑魚"];
+    let cramList: string[] = PV_CRAM_DEFAULT;
+    try {
+      const [cfg] = await db.select().from(systemConfigs)
+        .where(eq(systemConfigs.key, "summer-payroll-config-v1"));
+      const parsed = cfg ? (typeof cfg.value === "string" ? JSON.parse(cfg.value) : cfg.value) : null;
+      if (Array.isArray(parsed?.cramSchools) && parsed.cramSchools.length) cramList = parsed.cramSchools;
+    } catch {
+      // 讀不到設定就用預設名單。這裡只影響「要不要提醒」，不影響匯入本身。
+    }
+    const unknownCramNames = new Set<string>();
+
+    const venues = await db.select().from(venuesTable);
+    const venueByName = new Map<string, any>();
+    for (const v of venues) {
+      for (const n of [v.name, v.shortName]) {
+        const k = String(n || "").trim();
+        if (k && !venueByName.has(k)) venueByName.set(k, v);
+      }
+    }
+
+    const inserted: any[] = [];
+    const updated: any[] = [];
+    const skipped: { row: any; reason: string }[] = [];
+    const unmatchedCoaches = new Set<string>();
+
+    for (const raw of rows) {
+      try {
+        const cram = String(raw?.cramName ?? "").trim();
+        const sport = String(raw?.sportType ?? "").trim();
+        if (!cram) { skipped.push({ row: raw, reason: "缺補習班名稱" }); continue; }
+        // 項目類別空白＝游泳。場館端的規則：有球類就打球類，沒寫就是游泳。
+        const courseName = `${cram}-${sport || "游泳"}`;
+        if (!cramList.some((c) => c && courseName.indexOf(String(c).trim()) === 0)) {
+          unknownCramNames.add(cram);
+        }
+
+        const date = normalizeDate(raw?.date);
+        const startTime = normalizeTime(raw?.startTime, "startTime");
+        const endTime = normalizeTime(raw?.endTime, "endTime");
+        if (startTime >= endTime) { skipped.push({ row: raw, reason: "結束時間不晚於開始時間" }); continue; }
+
+        const week = SUMMER_WEEKS.find((w) => date >= w.startDate && date <= w.endDate);
+        if (!week) { skipped.push({ row: raw, reason: `日期 ${date} 不在暑假 9 週範圍內` }); continue; }
+
+        const venueRaw = String(raw?.venueName ?? "").trim();
+        const venue = venueRaw ? venueByName.get(venueRaw) : undefined;
+        if (venueRaw && !venue) { skipped.push({ row: raw, reason: `對不到場館「${venueRaw}」` }); continue; }
+
+        // 教練：試算表的「排班人員」可能是多人。目前資料表只放得下一位，
+        // 多的先記在 note，等班表頁支援多教練再處理。
+        const coachNames: string[] = Array.isArray(raw?.coachNames)
+          ? raw.coachNames.map((s: any) => String(s || "").trim()).filter(Boolean)
+          : String(raw?.coachNames ?? "").split(/[、,，;；\s]+/).map((s) => s.trim()).filter(Boolean);
+        const matched = coachNames.map((n) => ({ n, e: empByName.get(n) }));
+        matched.filter((m) => !m.e).forEach((m) => unmatchedCoaches.add(m.n));
+        const firstMatched = matched.find((m) => m.e)?.e;
+
+        const noteParts: string[] = [];
+        if (coachNames.length > 1) noteParts.push(`排班人員：${coachNames.join("、")}`);
+        if (raw?.note) noteParts.push(String(raw.note).trim());
+
+        const values: any = {
+          weekNo: week.no,
+          date,
+          venueId: venue ? venue.id : normalizeManualCourseVenueId(raw?.venueId),
+          venueName: venue ? venue.name : (raw?.venueName ?? null),
+          courseName,
+          startTime,
+          endTime,
+          registeredCount: normalizeNonNegativeInt(raw?.registeredCount),
+          requiredCoaches: normalizeNonNegativeInt(raw?.requiredCoaches ?? 1),
+          employeeId: firstMatched ? firstMatched.id : null,
+          employeeName: firstMatched ? firstMatched.name : (coachNames[0] || null),
+          note: noteParts.join("｜") || null,
+          status: "active",
+        };
+
+        // 冪等鍵：同一天、同一課名、同一時段視為同一堂
+        const existing = await db.select().from(manualScheduleCourses).where(and(
+          eq(manualScheduleCourses.status, "active"),
+          eq(manualScheduleCourses.date, date),
+          eq(manualScheduleCourses.courseName, courseName),
+          eq(manualScheduleCourses.startTime, startTime),
+          eq(manualScheduleCourses.endTime, endTime),
+        ));
+
+        if (existing.length) {
+          if (!dryRun) {
+            await db.update(manualScheduleCourses)
+              .set({ ...values, updatedAt: new Date() })
+              .where(eq(manualScheduleCourses.id, existing[0].id));
+          }
+          updated.push({ id: existing[0].id, date, courseName, startTime, endTime });
+        } else {
+          if (!dryRun) {
+            await db.insert(manualScheduleCourses).values(values);
+          }
+          inserted.push({ date, courseName, startTime, endTime });
+        }
+      } catch (e: any) {
+        skipped.push({ row: raw, reason: e?.message || String(e) });
+      }
+    }
+
+    return {
+      dryRun,
+      insertedCount: inserted.length,
+      updatedCount: updated.length,
+      skippedCount: skipped.length,
+      inserted,
+      updated,
+      skipped,
+      // 對不到名冊的教練姓名。不是錯誤，但要讓人看得見 —— 靜默忽略就會有人領不到錢。
+      unmatchedCoaches: Array.from(unmatchedCoaches),
+      // 不在薪資頁「補習班名單」裡的補習班。球類的課會被算成 1.5h 而不是 1h，
+      // 也就是每堂多算 0.5 小時的錢。要在薪資頁把它們加進名單。
+      unknownCramNames: Array.from(unknownCramNames),
+    };
   },
 
   async publishShifts(payload: any) {
