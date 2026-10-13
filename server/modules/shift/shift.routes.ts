@@ -845,10 +845,19 @@ export function mountShiftRoutes(app: Express): void {
         return res.status(400).json({ message: "上個月無排班資料可複製" });
       }
 
+      // Resigned employees keep last month's shifts as a record but are not scheduled into the new month.
+      const regionEmployees = await storage.getEmployeesByRegion(region.id);
+      const activeEmployeeIds = new Set(regionEmployees.filter((e) => e.status === "active").map((e) => e.id));
+
       const results: any[] = [];
       const errors: string[] = [];
+      let skippedInactive = 0;
 
       for (const s of prevShifts) {
+        if (!activeEmployeeIds.has(s.employeeId)) {
+          skippedInactive++;
+          continue;
+        }
         const dateParts = s.date.split("-");
         const dayOfMonth = parseInt(dateParts[2], 10);
         if (dayOfMonth > targetLastDay) {
@@ -878,7 +887,8 @@ export function mountShiftRoutes(app: Express): void {
         }
       }
 
-      res.json({ created: results.length, errors, message: `已從${prevMonth}月複製 ${results.length} 筆班表` });
+      const skippedNote = skippedInactive > 0 ? `，略過離職人員 ${skippedInactive} 筆` : "";
+      res.json({ created: results.length, skippedInactive, errors, message: `已從${prevMonth}月複製 ${results.length} 筆班表${skippedNote}` });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
