@@ -10,6 +10,8 @@ vi.mock("@/components/region-pills",()=>({RegionPills:()=>null}));
 vi.mock("@/components/GoogleSheetsImportDialog",()=>({GoogleSheetsImportDialog:()=>null}));
 import SchedulePage from "./schedule";
 HTMLElement.prototype.scrollIntoView=vi.fn();
+// Pin "today": the fixture shift is on the 1st and must count as past, since upcoming shifts of resigned staff are cancellable.
+vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(new Date(2026,9,15,12));
 afterEach(()=>{cleanup();localStorage.clear();});
 const month=new Date();const yyyy=month.getFullYear(),mm=String(month.getMonth()+1).padStart(2,"0");
 const date=yyyy+"-"+mm+"-01";

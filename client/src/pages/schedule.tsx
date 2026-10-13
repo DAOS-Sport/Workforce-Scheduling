@@ -565,12 +565,14 @@ export default function SchedulePage() {
 
   const displayEmployees = useMemo(() => scheduleDisplayEmployees(pickerEmployees, scheduleMetadata, shifts), [pickerEmployees, scheduleMetadata, shifts]);
   const editableEmployeeIds = useMemo(() => new Set(pickerEmployees.map(e => e.id)), [pickerEmployees]);
+  // Shifts from today on are still ahead: a resigned employee's can be cancelled, earlier ones stay as a record.
+  const todayDateStr = format(new Date(), "yyyy-MM-dd");
   useEffect(() => {
     setSelectedShiftIds(prev => {
-      const next = new Set([...prev].filter(id => shifts.some(s => s.id === id && editableEmployeeIds.has(s.employeeId))));
+      const next = new Set([...prev].filter(id => shifts.some(s => s.id === id && (editableEmployeeIds.has(s.employeeId) || s.date >= todayDateStr))));
       return next.size === prev.size ? prev : next;
     });
-  }, [shifts, editableEmployeeIds]);
+  }, [shifts, editableEmployeeIds, todayDateStr]);
 
   const { data: dispatchShiftsData = [] } = useQuery<DispatchShift[]>({
     queryKey: ["/api/dispatch-shifts", selectedRegionsKey, dateRange.start, dateRange.end],
@@ -2240,11 +2242,13 @@ export default function SchedulePage() {
                     const isDragging = draggedShiftId === shift.id;
                     const isSelected = selectedShiftIds.has(shift.id);
 
-                    if (emp.status !== "active") {
-                      return <div key={shift.id} className={`rounded-md px-1.5 py-1 text-[10px] ${cardColor}`} data-testid={`shift-${shift.id}`} title="離職／歷史紀錄（唯讀）">
+                    const canCancelHistory = emp.status !== "active" && shift.date >= todayDateStr;
+                    if (emp.status !== "active" && !(canCancelHistory && multiSelectMode)) {
+                      return <div key={shift.id} className={`rounded-md px-1.5 py-1 text-[10px] ${cardColor}`} data-testid={`shift-${shift.id}`} title={canCancelHistory ? "離職／尚未到的班（可取消）" : "離職／歷史紀錄（唯讀）"}>
                         <div className="flex items-center justify-between gap-0.5"><span className="font-semibold truncate">{isLeave ? shift.role : venue?.shortName || "未知"}</span>{!isLeave && <span className={`text-[8px] font-bold px-1 rounded-full ${roleColor!.badge}`}>{roleShort}</span>}{(shift as any).certificateImageUrl && <span title="已附證明文件">📎</span>}</div>
                         {!isLeave && <div>{sStart}–{sEnd}</div>}
                         {shift.isDispatch && <div className="text-[9px] text-purple-600 dark:text-purple-400">派遣</div>}
+                        {canCancelHistory && <button type="button" className="mt-0.5 flex items-center gap-0.5 text-[9px] text-red-600 dark:text-red-400 hover:underline" onClick={() => { setSelectedShiftIds(new Set([shift.id])); setBatchDeleteConfirmOpen(true); }} data-testid={`button-cancel-history-shift-${shift.id}`}><Trash2 className="h-2.5 w-2.5" />取消此班</button>}
                       </div>;
                     }
                     if (multiSelectMode) {
