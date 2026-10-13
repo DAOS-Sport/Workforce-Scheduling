@@ -1,3 +1,4 @@
+import { scheduleDisplayEmployees, type ScheduleEmployee } from "@shared/schedule-history";
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
@@ -207,8 +208,8 @@ function DraggableShiftCard({ id, children, isDragging }: { id: number; children
   );
 }
 
-function DroppableCell({ id, children, className, style, "data-testid": testId }: { id: string; children: React.ReactNode; className?: string; style?: React.CSSProperties; "data-testid"?: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
+function DroppableCell({ id, children, className, style, disabled = false, "data-testid": testId }: { id: string; children: React.ReactNode; className?: string; style?: React.CSSProperties; disabled?: boolean; "data-testid"?: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled });
   return (
     <td
       ref={setNodeRef}
@@ -444,7 +445,11 @@ export default function SchedulePage() {
   const { data: allEmployees = [], isLoading: empLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees", selectedRegionsKey],
   });
-  const employees = useMemo(() => allEmployees.filter(e => e.status !== "inactive"), [allEmployees]);
+  const { data: scheduleMetadata = [], isLoading: historyLoading } = useQuery<ScheduleEmployee[]>({
+    queryKey: ["/api/employees", "schedule", selectedRegionsKey, dateRange.start, dateRange.end],
+  });
+  const inactiveHistoryIds = useMemo(() => new Set(scheduleMetadata.filter(e => e.status !== "active").map(e => e.id)), [scheduleMetadata]);
+  const employees = useMemo(() => allEmployees.filter(e => e.status === "active" && !inactiveHistoryIds.has(e.id)), [allEmployees, inactiveHistoryIds]);
 
   const { data: allSystemEmployees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees-all"],
@@ -461,8 +466,8 @@ export default function SchedulePage() {
   }, [regionsData]);
 
   const crossRegionEmployees = useMemo(() =>
-    allSystemEmployees.filter(e => (crossRegionEmployeeIds.has(e.id) || neiQinEmployeeIds.has(e.id)) && e.status !== "inactive"),
-    [allSystemEmployees, crossRegionEmployeeIds, neiQinEmployeeIds]
+    allSystemEmployees.filter(e => (crossRegionEmployeeIds.has(e.id) || neiQinEmployeeIds.has(e.id)) && e.status === "active" && !inactiveHistoryIds.has(e.id)),
+    [allSystemEmployees, crossRegionEmployeeIds, neiQinEmployeeIds, inactiveHistoryIds]
   );
 
   const pickerEmployees = useMemo(() => {
@@ -555,6 +560,15 @@ export default function SchedulePage() {
     queryKey: ["/api/shifts", selectedRegionsKey, dateRange.start, dateRange.end],
   });
 
+  const displayEmployees = useMemo(() => scheduleDisplayEmployees(pickerEmployees, scheduleMetadata, shifts), [pickerEmployees, scheduleMetadata, shifts]);
+  const editableEmployeeIds = useMemo(() => new Set(pickerEmployees.map(e => e.id)), [pickerEmployees]);
+  useEffect(() => {
+    setSelectedShiftIds(prev => {
+      const next = new Set([...prev].filter(id => shifts.some(s => s.id === id && editableEmployeeIds.has(s.employeeId))));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [shifts, editableEmployeeIds]);
+
   const { data: dispatchShiftsData = [] } = useQuery<DispatchShift[]>({
     queryKey: ["/api/dispatch-shifts", selectedRegionsKey, dateRange.start, dateRange.end],
   });
@@ -644,8 +658,8 @@ export default function SchedulePage() {
   }, [dispatchNames]);
 
   useEffect(() => {
-    if (empLoading) return;
-    const regionEmpIds = new Set(employees.map(e => e.id));
+    if (empLoading || historyLoading) return;
+    const regionEmpIds = new Set([...employees, ...scheduleMetadata.filter(e => selectedRegions.some(code => regionCodeToId.get(code) === e.regionId))].map(e => e.id));
     const shiftEmpIds = new Set(shifts.map(s => s.employeeId));
     const crossIds = new Set<number>();
     shiftEmpIds.forEach(id => {
@@ -677,7 +691,7 @@ export default function SchedulePage() {
         });
       }
     }
-  }, [shifts, employees, empLoading]);
+  }, [shifts, employees, empLoading, historyLoading, scheduleMetadata, selectedRegions, regionCodeToId]);
 
   const empVenueMap = useMemo(() => {
     const map = new Map<number, Set<string>>();
@@ -1258,6 +1272,7 @@ export default function SchedulePage() {
   };
 
   const openNewShiftDialog = (employeeId: number, dateStr: string) => {
+    if (!editableEmployeeIds.has(employeeId)) return;
     const emp = employees.find((e) => e.id === employeeId);
     setShiftEmployeeId(employeeId);
     setShiftDate(dateStr);
@@ -1278,6 +1293,7 @@ export default function SchedulePage() {
   };
 
   const openEditShiftDialog = (shift: Shift) => {
+    if (!editableEmployeeIds.has(shift.employeeId)) return;
     setShiftEmployeeId(shift.employeeId);
     setShiftDate(shift.date);
     setEditingShift(shift);
@@ -1448,7 +1464,7 @@ export default function SchedulePage() {
     }
   }, [currentMonth]);
 
-  const isLoading = venLoading || empLoading || slotsLoading;
+  const isLoading = venLoading || empLoading || historyLoading || slotsLoading;
 
   const COL_DATE_WIDTH = 76;
   const COL_LEFT_WIDTH = colLeftWidth;
@@ -1474,7 +1490,7 @@ export default function SchedulePage() {
     const targetEmpId = Number(match[1]);
     const targetDate = match[2];
     const draggedShift = shifts.find(s => s.id === shiftId);
-    if (!draggedShift) return;
+    if (!draggedShift || !editableEmployeeIds.has(draggedShift.employeeId) || !editableEmployeeIds.has(targetEmpId)) return;
     if (draggedShift.employeeId !== targetEmpId) {
       toast({ title: "不支援跨員工移動", description: "只能在同一員工的日期之間移動班卡", variant: "destructive" });
       return;
@@ -1486,9 +1502,10 @@ export default function SchedulePage() {
     } else {
       updateShift.mutate({ id: shiftId, date: targetDate, venueId: draggedShift.venueId, startTime: draggedShift.startTime, endTime: draggedShift.endTime, role: draggedShift.role, isDispatch: draggedShift.isDispatch || false });
     }
-  }, [shifts, shiftsByEmployeeDate, updateShift, toast]);
+  }, [shifts, shiftsByEmployeeDate, updateShift, toast, editableEmployeeIds]);
 
   const handleCopyShift = useCallback((shift: Shift) => {
+    if (!editableEmployeeIds.has(shift.employeeId)) return;
     setShiftClipboard({
       venueId: shift.venueId,
       startTime: shift.startTime,
@@ -1499,10 +1516,10 @@ export default function SchedulePage() {
       sourceShiftId: shift.id,
     });
     toast({ title: "已複製班卡", description: `${shift.startTime.substring(0,5)}-${shift.endTime.substring(0,5)} [${shift.role}]` });
-  }, [toast]);
+  }, [toast, editableEmployeeIds]);
 
   const handlePasteShift = useCallback((targetEmpId: number, targetDate: string) => {
-    if (!shiftClipboard) return;
+    if (!shiftClipboard || !editableEmployeeIds.has(targetEmpId)) return;
     if (shiftClipboard.employeeId !== targetEmpId) {
       toast({ title: "不支援跨員工貼上", description: "只能將班卡貼至同一員工的其他日期", variant: "destructive" });
       return;
@@ -1513,7 +1530,7 @@ export default function SchedulePage() {
     } else {
       createShift.mutate({ employeeId: targetEmpId, venueId: shiftClipboard.venueId, date: targetDate, startTime: shiftClipboard.startTime, endTime: shiftClipboard.endTime, role: shiftClipboard.role, isDispatch: shiftClipboard.isDispatch });
     }
-  }, [shiftClipboard, shiftsByEmployeeDate, updateShift, createShift, toast]);
+  }, [shiftClipboard, shiftsByEmployeeDate, updateShift, createShift, toast, editableEmployeeIds]);
 
   const shortageDates = useMemo(() => {
     const dateSet = new Set<string>();
@@ -1737,7 +1754,7 @@ export default function SchedulePage() {
                 <div className="flex gap-1">
                   <button
                     className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground"
-                    onClick={() => setScheduleVisibleEmployeeIds(new Set(pickerEmployees.map(e => e.id)))}
+                    onClick={() => setScheduleVisibleEmployeeIds(new Set(displayEmployees.map(e => e.id)))}
                   >
                     全選
                   </button>
@@ -1764,8 +1781,8 @@ export default function SchedulePage() {
                 {(() => {
                   const searchTerm = empPickerSearch.trim().toLowerCase();
                   const filteredPickerEmployees = searchTerm
-                    ? pickerEmployees.filter(e => e.name.toLowerCase().includes(searchTerm))
-                    : pickerEmployees;
+                    ? displayEmployees.filter(e => e.name.toLowerCase().includes(searchTerm))
+                    : displayEmployees;
 
                   if (searchTerm && filteredPickerEmployees.length === 0) {
                     return <div className="px-3 py-4 text-xs text-muted-foreground text-center">找不到符合的人員</div>;
@@ -1789,6 +1806,7 @@ export default function SchedulePage() {
                           >
                             <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
                             <span className="text-foreground flex-1 text-left">{emp.name}</span>
+                            {emp.status !== "active" && <span className="text-[9px] text-muted-foreground" data-testid={`history-label-${emp.id}`}>離職／歷史紀錄</span>}
                             {neiQinEmployeeIds.has(emp.id) ? (
                               <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4 shrink-0">內勤</span>
                             ) : crossRegionEmployeeIds.has(emp.id) && (
@@ -1801,19 +1819,19 @@ export default function SchedulePage() {
                   }
 
                   const groups = [
-                    { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
-                    { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
-                    { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
-                    { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
-                    { key: "ft-manager", label: "正職主管職", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "主管職" },
-                    { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
-                    { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
-                    { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
-                    { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
-                    { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
+                    { key: "ft-counter", label: "正職櫃台", filter: (e: ScheduleEmployee) => e.employmentType === "full_time" && e.role === "櫃台" },
+                    { key: "ft-rescue", label: "正職救生", filter: (e: ScheduleEmployee) => e.employmentType === "full_time" && e.role === "救生" },
+                    { key: "ft-guard", label: "正職守望", filter: (e: ScheduleEmployee) => e.employmentType === "full_time" && e.role === "守望" },
+                    { key: "ft-coach", label: "正職教練", filter: (e: ScheduleEmployee) => e.employmentType === "full_time" && e.role === "教練" },
+                    { key: "ft-manager", label: "正職主管職", filter: (e: ScheduleEmployee) => e.employmentType === "full_time" && e.role === "主管職" },
+                    { key: "pt-counter", label: "兼職櫃台", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                    { key: "pt-rescue", label: "兼職救生", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "救生" },
+                    { key: "pt-guard", label: "兼職守望", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "守望" },
+                    { key: "pt-coach", label: "兼職教練", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "教練" },
+                    { key: "pt-manager", label: "兼職主管職", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "主管職" },
                   ];
                   return groups.map(group => {
-                    const groupEmps = pickerEmployees.filter(e => group.filter(e) && !neiQinEmployeeIds.has(e.id));
+                    const groupEmps = displayEmployees.filter(e => group.filter(e) && !neiQinEmployeeIds.has(e.id));
                     if (groupEmps.length === 0) return null;
                     const allSelected = groupEmps.every(e => scheduleVisibleEmployeeIds.has(e.id));
                     const someSelected = groupEmps.some(e => scheduleVisibleEmployeeIds.has(e.id));
@@ -1851,6 +1869,7 @@ export default function SchedulePage() {
                           >
                             <Checkbox checked={scheduleVisibleEmployeeIds.has(emp.id)} className="h-3.5 w-3.5" />
                             <span className="text-foreground flex-1 text-left">{emp.name}</span>
+                            {emp.status !== "active" && <span className="text-[9px] text-muted-foreground" data-testid={`history-label-${emp.id}`}>離職／歷史紀錄</span>}
                             {neiQinEmployeeIds.has(emp.id) ? (
                               <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4 shrink-0">內勤</span>
                             ) : crossRegionEmployeeIds.has(emp.id) && (
@@ -1870,7 +1889,7 @@ export default function SchedulePage() {
                   });
                 })()}
                 {neiQinEmployeeIds.size > 0 && (() => {
-                  const nqEmps = pickerEmployees.filter(e => neiQinEmployeeIds.has(e.id));
+                  const nqEmps = displayEmployees.filter(e => neiQinEmployeeIds.has(e.id));
                   if (nqEmps.length === 0) return null;
                   const allSelected = nqEmps.every(e => scheduleVisibleEmployeeIds.has(e.id));
                   const someSelected = nqEmps.some(e => scheduleVisibleEmployeeIds.has(e.id));
@@ -2106,7 +2125,7 @@ export default function SchedulePage() {
                     ))}
                   </tr>
                 ))
-              ) : employees.length === 0 ? (
+              ) : displayEmployees.length === 0 ? (
                 <tr>
                   <td colSpan={monthDates.length + 1} className="text-center py-12 text-muted-foreground">
                     此區域尚無員工
@@ -2187,20 +2206,20 @@ export default function SchedulePage() {
                     </tr>
                   );});
                   const groups = [
-                    { key: "ft-counter", label: "正職櫃台", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "櫃台" },
-                    { key: "ft-rescue", label: "正職救生", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "救生" },
-                    { key: "ft-guard", label: "正職守望", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "守望" },
-                    { key: "ft-coach", label: "正職教練", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "教練" },
-                    { key: "ft-manager", label: "正職主管職", filter: (e: Employee) => e.employmentType === "full_time" && e.role === "主管職" },
-                    { key: "pt-counter", label: "兼職櫃台", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "櫃台" },
-                    { key: "pt-rescue", label: "兼職救生", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "救生" },
-                    { key: "pt-guard", label: "兼職守望", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "守望" },
-                    { key: "pt-coach", label: "兼職教練", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "教練" },
-                    { key: "pt-manager", label: "兼職主管職", filter: (e: Employee) => e.employmentType === "part_time" && e.role === "主管職" },
+                    { key: "ft-counter", label: "正職櫃台", filter: (e: ScheduleEmployee) => e.employmentType === "full_time" && e.role === "櫃台" },
+                    { key: "ft-rescue", label: "正職救生", filter: (e: ScheduleEmployee) => e.employmentType === "full_time" && e.role === "救生" },
+                    { key: "ft-guard", label: "正職守望", filter: (e: ScheduleEmployee) => e.employmentType === "full_time" && e.role === "守望" },
+                    { key: "ft-coach", label: "正職教練", filter: (e: ScheduleEmployee) => e.employmentType === "full_time" && e.role === "教練" },
+                    { key: "ft-manager", label: "正職主管職", filter: (e: ScheduleEmployee) => e.employmentType === "full_time" && e.role === "主管職" },
+                    { key: "pt-counter", label: "兼職櫃台", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "櫃台" },
+                    { key: "pt-rescue", label: "兼職救生", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "救生" },
+                    { key: "pt-guard", label: "兼職守望", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "守望" },
+                    { key: "pt-coach", label: "兼職教練", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "教練" },
+                    { key: "pt-manager", label: "兼職主管職", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "主管職" },
                   ];
-                  const visibleEmployees = pickerEmployees.filter(e => scheduleVisibleEmployeeIds.has(e.id));
+                  const visibleEmployees = displayEmployees.filter(e => scheduleVisibleEmployeeIds.has(e.id));
 
-                  const renderShiftCard = (shift: Shift, emp: Employee, d: Date) => {
+                  const renderShiftCard = (shift: Shift, emp: ScheduleEmployee, d: Date) => {
                     const venue = venueMap.get(shift.venueId);
                     const shiftDateStr = format(d, "yyyy-MM-dd");
                     const slots = slotsByVenueDate.get(`${shift.venueId}-${shiftDateStr}`) || [];
@@ -2216,6 +2235,13 @@ export default function SchedulePage() {
                     const isDragging = draggedShiftId === shift.id;
                     const isSelected = selectedShiftIds.has(shift.id);
 
+                    if (emp.status !== "active") {
+                      return <div key={shift.id} className={`rounded-md px-1.5 py-1 text-[10px] ${cardColor}`} data-testid={`shift-${shift.id}`} title="離職／歷史紀錄（唯讀）">
+                        <div className="flex items-center justify-between gap-0.5"><span className="font-semibold truncate">{isLeave ? shift.role : venue?.shortName || "未知"}</span>{!isLeave && <span className={`text-[8px] font-bold px-1 rounded-full ${roleColor!.badge}`}>{roleShort}</span>}{(shift as any).certificateImageUrl && <span title="已附證明文件">📎</span>}</div>
+                        {!isLeave && <div>{sStart}–{sEnd}</div>}
+                        {shift.isDispatch && <div className="text-[9px] text-purple-600 dark:text-purple-400">派遣</div>}
+                      </div>;
+                    }
                     if (multiSelectMode) {
                       return (
                         <div
@@ -2315,7 +2341,8 @@ export default function SchedulePage() {
                     );
                   };
 
-                  const renderEmpRow = (emp: Employee) => {
+                  const renderEmpRow = (emp: ScheduleEmployee) => {
+                    const canEditEmployee = emp.status === "active";
                     const isDraggedRow = rowDragEmpId === emp.id;
                     const isDragOverRow = rowDragOverEmpId === emp.id && rowDragEmpId !== null && rowDragEmpId !== emp.id;
                     return (
@@ -2352,6 +2379,7 @@ export default function SchedulePage() {
                             <span className="font-medium text-xs truncate" data-testid={`text-employee-name-${emp.id}`}>
                               {emp.name}
                             </span>
+                            {emp.status !== "active" && <span className="text-[9px] text-muted-foreground" data-testid={`history-label-${emp.id}`}>離職／歷史紀錄</span>}
                             {neiQinEmployeeIds.has(emp.id) ? (
                               <span className="text-[9px] px-1 py-0 rounded bg-blue-500/15 text-blue-500 leading-4 shrink-0">內勤</span>
                             ) : crossRegionEmployeeIds.has(emp.id) && (
@@ -2368,12 +2396,12 @@ export default function SchedulePage() {
                           const cellAnnotation = dateAnnotations.get(dateStr);
                           const cellAnnotationStyle = cellAnnotation ? ANNOTATION_COLORS[cellAnnotation.color] : null;
                           const dropId = `drop-${emp.id}-${dateStr}`;
-                          const canPaste = !!shiftClipboard && shiftClipboard.employeeId === emp.id;
+                          const canPaste = canEditEmployee && !!shiftClipboard && shiftClipboard.employeeId === emp.id;
 
                           const cellAvail = showAvailability ? (availByEmpDate.get(`${emp.id}-${dateStr}`) || []) : [];
 
                           return (
-                            <DroppableCell key={di} id={dropId} className={`p-0.5 border-b border-r relative align-top ${
+                            <DroppableCell key={di} id={dropId} disabled={!canEditEmployee} className={`p-0.5 border-b border-r relative align-top ${
                               cellAnnotationStyle ? `${cellAnnotationStyle.cell} ${cellAnnotationStyle.border}` :
                               isToday ? "bg-primary/5" : isHoliday ? "bg-yellow-100/60 dark:bg-yellow-900/20" : isWeekend ? "bg-yellow-100/60 dark:bg-yellow-900/20" : ""
                             }`} style={{ minWidth: colWidths[di] ?? COL_DATE_WIDTH, width: colWidths[di] ?? COL_DATE_WIDTH }} data-testid={`cell-${emp.id}-${dateStr}`}>
@@ -2395,7 +2423,7 @@ export default function SchedulePage() {
                               {cellShifts.length > 0 ? (
                                 <div className="space-y-0.5">
                                   {cellShifts.map((shift) => renderShiftCard(shift, emp, d))}
-                                  {!multiSelectMode && (
+                                  {canEditEmployee && !multiSelectMode && (
                                     <div className="flex items-center gap-0.5">
                                       <button
                                         className="flex-1 flex items-center justify-center py-0.5 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
@@ -2418,7 +2446,7 @@ export default function SchedulePage() {
                                   )}
                                 </div>
                               ) : (
-                                !multiSelectMode && (
+                                canEditEmployee && !multiSelectMode && (
                                   <div className="flex items-center h-[36px]">
                                     <button
                                       className="flex-1 flex items-center justify-center h-full text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-muted/30 transition-colors rounded cursor-pointer"

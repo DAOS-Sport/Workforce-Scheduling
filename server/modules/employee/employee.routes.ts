@@ -3,6 +3,20 @@ import { type Server } from "http";
 import { employeeService } from "./employee.service";
 
 export function mountEmployeeRoutes(_httpServer: Server, app: Express): void {
+  app.get("/api/employees/schedule/:regionCode/:startDate/:endDate", async (req, res) => {
+    const { regionCode, startDate, endDate } = req.params;
+    const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+      && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+    if (!validDate(startDate) || !validDate(endDate) || startDate > endDate) {
+      return res.status(400).json({ message: "日期區間格式錯誤" });
+    }
+    try {
+      res.json(await employeeService.findForSchedule(regionCode, startDate, endDate));
+    } catch {
+      res.status(500).json({ message: "無法讀取歷史班表人員" });
+    }
+  });
+
   app.get("/api/employees-all", async (_req, res) => {
     res.json(await employeeService.findAllActive());
   });

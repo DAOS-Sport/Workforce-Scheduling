@@ -49,6 +49,27 @@ export const employeeService = {
     return out;
   },
 
+  async findForSchedule(regionCodeCsv: string, startDate: string, endDate: string) {
+    const active = await this.findByRegionCodes(regionCodeCsv);
+    const ids = new Set(active.map(e => e.id));
+    for (const code of new Set(regionCodeCsv.split(",").map(c => c.trim()).filter(Boolean))) {
+      const region = await storage.getRegionByCode(code);
+      if (!region) continue;
+      const shifts = [
+        ...await storage.getShiftsByRegionAndDateRange(region.id, startDate, endDate),
+        ...await storage.getDispatchedShiftsToRegion(region.id, startDate, endDate),
+      ];
+      for (const shift of shifts) ids.add(shift.employeeId);
+    }
+    const all = ids.size ? await storage.getAllEmployees() : [];
+    const byId = new Map(all.map(e => [e.id, e]));
+    return [...ids].flatMap(id => {
+      const e = byId.get(id);
+      return e ? [{ id: e.id, name: e.name, employeeCode: e.employeeCode,
+        role: e.role, employmentType: e.employmentType, regionId: e.regionId, status: e.status }] : [];
+    });
+  },
+
   async create(payload: unknown): Promise<Employee> {
     const parsed = insertEmployeeSchema.parse(payload);
     const emp = await storage.createEmployee(parsed);
