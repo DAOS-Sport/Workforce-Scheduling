@@ -23,9 +23,11 @@ import {
   Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft,
   GraduationCap, Award, Briefcase, Monitor, Eye, Clipboard, ClipboardPaste, FileSpreadsheet,
   CheckCircle2, AlertTriangle, GripVertical, ListOrdered, SquareCheck,
-  RotateCcw, History, Loader2, Link2
+  RotateCcw, History, Loader2, Link2, Download
 } from "lucide-react";
 import { GoogleSheetsImportDialog } from "@/components/GoogleSheetsImportDialog";
+import * as XLSX from "xlsx";
+import { buildScheduleExportRows } from "@/lib/schedule-export";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
@@ -780,6 +782,42 @@ export default function SchedulePage() {
     venues.forEach((v) => map.set(v.id, v));
     return map;
   }, [venues, allVenues]);
+
+  const [exportingSchedule, setExportingSchedule] = useState(false);
+  // Exports what the grid shows (this month, the selected regions, the ticked employees), one row per shift.
+  const exportSchedule = async () => {
+    setExportingSchedule(true);
+    try {
+      const shown = displayEmployees.filter(e => scheduleVisibleEmployeeIds.has(e.id));
+      const shownIds = new Set(shown.map(e => e.id));
+      const venueIds = new Set<number>();
+      shifts.forEach(s => { if (shownIds.has(s.employeeId)) venueIds.add(s.venueId); });
+      dispatchShiftsData.forEach(d => { if (d.venueId != null) venueIds.add(d.venueId); });
+      const templates = (await Promise.all([...venueIds].map(id =>
+        queryClient.fetchQuery<VenueShiftTemplate[]>({ queryKey: ["/api/venue-shift-templates", id] }).catch(() => [] as VenueShiftTemplate[])
+      ))).flat();
+      const rows = buildScheduleExportRows({
+        shifts, employees: shown, dispatchShifts: dispatchShiftsData, venues: venueMap, regions: regionsData,
+        templates, leaveTypes: LEAVE_TYPES, startDate: dateRange.start, endDate: dateRange.end,
+      });
+      if (rows.length === 0) {
+        toast({ title: "無資料可匯出", description: "目前顯示的人員在這個月沒有班別", variant: "destructive" });
+        return;
+      }
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [{ wch: 12 }, { wch: 6 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 6 }, { wch: 24 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "班表");
+      const regionLabel = selectedRegions.map(code => regionsData.find(r => r.code === code)?.name || code).join("、");
+      const fileName = `班表_${format(currentMonth, "yyyy年M月")}_${regionLabel}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      toast({ title: "已匯出班表", description: `${fileName}（${rows.length} 列）` });
+    } catch (err: unknown) {
+      toast({ title: "匯出失敗", description: err instanceof Error ? err.message : "未知錯誤", variant: "destructive" });
+    } finally {
+      setExportingSchedule(false);
+    }
+  };
 
   const shiftsByEmployeeDate = useMemo(() => {
     const map = new Map<string, Shift[]>();
@@ -1703,6 +1741,19 @@ export default function SchedulePage() {
           >
             <FileSpreadsheet className="h-3.5 w-3.5" />
             匯入班表
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1.5 shrink-0"
+            onClick={exportSchedule}
+            disabled={exportingSchedule}
+            title="匯出目前畫面上的班表（本月、已選區域、已勾選人員），一個班別一列"
+            data-testid="button-export-schedule"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {exportingSchedule ? "匯出中..." : "匯出班表"}
           </Button>
 
           <Button
