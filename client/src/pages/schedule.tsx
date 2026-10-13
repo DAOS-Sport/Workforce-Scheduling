@@ -222,6 +222,9 @@ function DroppableCell({ id, children, className, style, disabled = false, "data
   );
 }
 
+// Stable reference: a fresh [] default would re-run the visibility effect on every render while the query has no data.
+const EMPTY_SCHEDULE_METADATA: ScheduleEmployee[] = [];
+
 export default function SchedulePage() {
   const { activeRegion, selectedRegions, toggleSelectedRegion } = useRegion();
   const selectedRegionsKey = selectedRegions.join(",");
@@ -445,7 +448,7 @@ export default function SchedulePage() {
   const { data: allEmployees = [], isLoading: empLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees", selectedRegionsKey],
   });
-  const { data: scheduleMetadata = [], isLoading: historyLoading } = useQuery<ScheduleEmployee[]>({
+  const { data: scheduleMetadata = EMPTY_SCHEDULE_METADATA, isLoading: historyLoading } = useQuery<ScheduleEmployee[]>({
     queryKey: ["/api/employees", "schedule", selectedRegionsKey, dateRange.start, dateRange.end],
   });
   const inactiveHistoryIds = useMemo(() => new Set(scheduleMetadata.filter(e => e.status !== "active").map(e => e.id)), [scheduleMetadata]);
@@ -1829,6 +1832,7 @@ export default function SchedulePage() {
                     { key: "pt-guard", label: "兼職守望", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "守望" },
                     { key: "pt-coach", label: "兼職教練", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "教練" },
                     { key: "pt-manager", label: "兼職主管職", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "主管職" },
+                    { key: "history-other", label: "其他（離職）", filter: (e: ScheduleEmployee) => e.status !== "active" && !(["full_time", "part_time"].includes(e.employmentType) && ["櫃台", "救生", "守望", "教練", "主管職"].includes(e.role)) },
                   ];
                   return groups.map(group => {
                     const groupEmps = displayEmployees.filter(e => group.filter(e) && !neiQinEmployeeIds.has(e.id));
@@ -2216,6 +2220,7 @@ export default function SchedulePage() {
                     { key: "pt-guard", label: "兼職守望", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "守望" },
                     { key: "pt-coach", label: "兼職教練", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "教練" },
                     { key: "pt-manager", label: "兼職主管職", filter: (e: ScheduleEmployee) => e.employmentType === "part_time" && e.role === "主管職" },
+                    { key: "history-other", label: "其他（離職）", filter: (e: ScheduleEmployee) => e.status !== "active" && !(["full_time", "part_time"].includes(e.employmentType) && ["櫃台", "救生", "守望", "教練", "主管職"].includes(e.role)) },
                   ];
                   const visibleEmployees = displayEmployees.filter(e => scheduleVisibleEmployeeIds.has(e.id));
 
