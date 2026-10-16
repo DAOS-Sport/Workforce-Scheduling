@@ -67,17 +67,17 @@ export default function EmployeesPage() {
   const regionId = regionsData.find((r) => r.code === activeRegion)?.id ?? 0;
 
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
-    queryKey: ["/api/employees", activeRegion],
+    queryKey: ["/api/employees", "manage", activeRegion],
   });
 
-  const filteredEmployees = employees.filter((e) => {
-    if (e.status === "inactive") return false;
-    return (
+  // 離職員工照樣列出（狀態欄顯示「離職」），排在在職員工後面。
+  const filteredEmployees = employees
+    .filter((e) =>
       e.name.includes(search) ||
       e.employeeCode.includes(search) ||
       (e.phone && e.phone.includes(search))
-    );
-  });
+    )
+    .sort((a, b) => Number(a.status !== "active") - Number(b.status !== "active"));
 
   const createEmployee = useMutation({
     mutationFn: async (data: any) => {

@@ -28,7 +28,9 @@ export const employeeService = {
     return result;
   },
 
-  async findByRegionCodes(regionCodeCsv: string): Promise<Employee[]> {
+  // includeInactive is only for the employee management page; every other
+  // caller (schedule picker, attendance, dashboard...) stays active-only.
+  async findByRegionCodes(regionCodeCsv: string, { includeInactive = false } = {}): Promise<Employee[]> {
     const codes = regionCodeCsv.split(",").map((c) => c.trim()).filter(Boolean);
     const seen = new Set<number>();
     const out: Employee[] = [];
@@ -40,7 +42,7 @@ export const employeeService = {
           ? await storage.getEmployeesForNeiQin(region.id)
           : await storage.getEmployeesByRegion(region.id);
       for (const e of list) {
-        if (e.status !== "active") continue;
+        if (!includeInactive && e.status !== "active") continue;
         if (seen.has(e.id)) continue;
         seen.add(e.id);
         out.push(e);

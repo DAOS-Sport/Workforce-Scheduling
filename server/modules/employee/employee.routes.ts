@@ -31,6 +31,11 @@ export function mountEmployeeRoutes(_httpServer: Server, app: Express): void {
     }
   });
 
+  // Employee management page: resigned employees stay listed (shown as 離職).
+  app.get("/api/employees/manage/:regionCode", async (req, res) => {
+    res.json(await employeeService.findByRegionCodes(req.params.regionCode, { includeInactive: true }));
+  });
+
   app.get("/api/employees/:regionCode", async (req, res) => {
     res.json(await employeeService.findByRegionCodes(req.params.regionCode));
   });
