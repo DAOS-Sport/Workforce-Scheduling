@@ -47,7 +47,6 @@ waitForPort = 5000
 [userenv.shared]
 VITE_LINE_CHANNEL_ID = "2009202105"
 LINE_CHANNEL_ID = "2009202105"
-LINE_CHANNEL_ACCESS_TOKEN = "<removed>"
 GMAIL_USER = "daos.ragic.system@gmail.com"
 VITE_LIFF_ID = "2009202105-UZQm1Soa"
 ENROLLMENT_API_URL = "https://dream-dream.replit.app/api/admin/schedule-enrollment-counts"
