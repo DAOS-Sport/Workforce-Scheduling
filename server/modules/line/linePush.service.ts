@@ -525,7 +525,7 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   return { notified, skipped };
 }
 
-// ── 每週班表推播（週日 19:00 推下週班表）─────────────────────────────────────
+// ── 每週班表推播（週日 12:00 推下週班表，排程見 bootstrap/scheduler.ts）─────────────────────────────────────
 export async function sendWeeklySchedulePush(force = false): Promise<{ sent: number; skipped: number; noLineId: number }> {
   const taipeiNow = getTaiwanNow();
 

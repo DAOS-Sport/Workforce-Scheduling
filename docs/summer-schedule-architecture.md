@@ -110,7 +110,7 @@
 | GET/POST | `/api/portal/summer-availability[/:weekNo]` | `summerAvailabilityRepository` | **LINE-ID** | `summer_availabilities` | 員工填報可排班（React portal 用） |
 | USE | 全域 gate `/api/*`（除 `OPEN_API_PREFIXES`） | `gateAdminApi` | — | — | 非白名單一律檢查 `session.adminId`。`/api/portal/` 在白名單；`/api/admin/` 刻意不在 |
 
-> `server/modules/summerSchedule/summerSchedule.service.ts` 新增私有 `applyPublish(week, weekNo, incoming)`（刪舊→插新共用）與 `publishShiftsFromSaved(weekNo)`；`publishShifts` 在無 `payload.shifts` 時自動讀母表 `shiftEntries`。
+> `server/modules/summerSchedule/summerSchedule.service.ts` 的私有 `applyPublish(week, weekNo, incoming)` 先整批檢查新班次，有任何一筆不合格就回 422、不動舊班；全部合格才軟取消舊班再新增。`publishShifts` 在無 `payload.shifts` 時自動讀母表 `shiftEntries`。`publishShiftsFromSaved(weekNo)` 沒有任何路由呼叫。
 
 ---
 

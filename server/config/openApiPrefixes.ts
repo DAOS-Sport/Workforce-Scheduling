@@ -2,12 +2,12 @@
  * 公開（不需 admin cookie）的 API 路徑前綴白名單。
  *
  * 這些前綴會繞過 requireAdmin middleware：
- *  - /api/portal/       → 員工 LIFF portal（cookie 走 employee session 或 LIFF token）
+ *  - /api/portal/       → 員工前台。多數路由只憑 x-line-user-id 標頭或 lineUserId 參數認人，沒有驗證是不是本人（GitHub #4）
  *  - /api/liff/         → LIFF 登入回呼
  *  - /api/line/         → LINE webhook（X-Line-Signature 驗證）
  *  - /api/ragic/webhook/ → Ragic webhook（RAGIC_WEBHOOK_SECRET 驗證）
  *  - /api/internal/     → server-to-server（X-Internal-Token 驗證）
- *  - /api/anomaly-report 員工通報入口（公開表單）
+ *  - /api/anomaly-report 員工通報入口（公開表單）。這個前綴沒有結尾斜線，管理用的 /api/anomaly-reports/* 也會一起被放行
  *  - /api/announcements/active → 員工 portal 顯示公告
  *  - /api/schedule/cram-courses/ → Google 試算表匯入補習班課程
  *      （呼叫端是試算表的 Apps Script，沒有瀏覽器 session；

@@ -3,7 +3,8 @@ import { storage } from "../../storage";
 const LEAVE_ROLES = ["休假", "特休", "病假", "事假", "公假", "喪假", "育嬰", "留職停薪"];
 
 /**
- * 判斷該班次是否需要打卡（生救/櫃台/派遣需打卡；教練課程不需打卡）
+ * 判斷 shifts 表的班次是否需要打卡：教練、暑假課程、手動課程不用，其他都要。
+ * 派遣班存在 dispatch_shifts，不經過這裡；全月異常報表不讀派遣班，只有個人月出勤會列出來。
  */
 function isAttendanceRequired(shift: { role?: string | null; notes?: string | null }): boolean {
   const role = String(shift.role || "").trim();

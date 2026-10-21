@@ -119,6 +119,7 @@ export async function processClockIn(
   const lastSuccess = successRecords[0] ?? null;
 
   // 重複打卡：距上次成功打卡不足 5 分鐘、同方向就擋下，並留一筆失敗紀錄給管理者看。
+  // 只有指定方向（強制上班或下班）才會同方向；自動判斷方向一定換方向，不會被這裡擋。
   const duplicate = duplicateClock(lastSuccess, now.getTime(), forcedClockType);
   if (duplicate && lastSuccess) {
     try {

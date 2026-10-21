@@ -4,7 +4,8 @@
  * Runtime feature flags for the 駿斯排班系統.
  *
  * Flags default to true (all features on). Set the corresponding env var to
- * "false" to disable a feature without redeploying code.
+ * "false" to disable a feature. Values are read once at startup, so the
+ * server must restart (or be republished) before a change takes effect.
  *
  * Example .env:
  *   FEATURE_RAGIC_SYNC=false

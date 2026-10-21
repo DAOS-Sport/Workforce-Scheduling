@@ -7,7 +7,9 @@
  *    when only templates exist).
  *  - Materialization (template → real slots) with explicit exclusion list.
  *  - Batch-copy across multiple venues with same-key dedupe.
- *  - Venue-shift-template CRUD + atomic batch replace.
+ *  - Venue-shift-template CRUD + batch replace (deletes first, then inserts
+ *    one by one without a transaction: a bad template midway leaves only the
+ *    ones before it).
  */
 import { storage } from "../../storage";
 import {

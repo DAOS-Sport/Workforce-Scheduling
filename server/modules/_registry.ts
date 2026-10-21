@@ -7,10 +7,10 @@
  * any inline domain routes.
  *
  * The shift module is the canonical, fully-decomposed module
- * (types/repository/audit/validation/service/routes). All 19 other
- * modules now also have a `<name>.service.ts` (Task #70 重構 A) — routes
- * import from `xxxService`, never from `storage` directly. Service-layer
- * naming convention: `xxxService.findAll() / get(id) / create(data, actor) /
+ * (types/repository/audit/validation/service/routes). Every module has a
+ * `<name>.service.ts`; routes are meant to call it rather than `storage` or
+ * `db`, but a few route files still query them directly. `storage.ts` is only
+ * a facade that forwards to the repositories. Service-layer naming convention: `xxxService.findAll() / get(id) / create(data, actor) /
  * update(id, patch, actor) / remove(id)`. Errors throw with `.status` set;
  * the route catch-block uses `err.status || 500`.
  *
@@ -54,7 +54,7 @@ export function registerModuleRoutes(httpServer: Server, app: Express): void {
   // Shift module — fully decomposed (the canonical pattern)
   mountShiftRoutes(app);
 
-  // Domain modules (pure route extraction; storage.ts remains source of truth)
+  // Domain modules
   mountRegionRoutes(httpServer, app);
   mountEmployeeRoutes(httpServer, app);
   mountVenueRoutes(httpServer, app);
