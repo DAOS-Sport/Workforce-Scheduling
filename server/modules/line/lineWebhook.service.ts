@@ -3,6 +3,7 @@ import { replyMessages } from "../../adapters/line";
 import { isValidLineUserId } from "./lineSignature";
 import { pushToLine, pushPendingGuidelinesIfAny } from "./linePush.service";
 import { processClockIn, formatClockInMessage } from "./lineClock.service";
+import { maskId } from "../../shared/log";
 
 /** 先用 reply token 回覆；LINE 拒絕或連線失敗時，有 fallbackUserId 就改用推播。 */
 async function replyToLine(replyToken: string, text: string, fallbackUserId?: string, extraMessages?: object[]): Promise<void> {
@@ -90,7 +91,7 @@ async function handleTextMessage(event: any): Promise<void> {
   }
 
   await storage.updateEmployee(employee.id, { lineId: lineUserId });
-  console.log(`[LINE Bind] 員工 ${employee.name}(${employee.employeeCode}) 綁定 LINE ID: ${lineUserId}`);
+  console.log(`[LINE Bind] 員工 ID=${employee.id} 綁定 LINE ID: ${maskId(lineUserId)}`);
 
   await replyToLine(replyToken,
     `✅ 綁定成功！\n\n` +

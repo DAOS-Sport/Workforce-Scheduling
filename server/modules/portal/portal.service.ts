@@ -3,6 +3,7 @@ import { exchangeLoginCode, fetchLoginProfile } from "../../adapters/line";
 import { isValidLineUserId } from "../line/lineSignature";
 import { isReviewableWorkShift } from "../shift/shiftReview.service";
 import { OFF_DUTY_ROLES } from "@shared/leave";
+import { maskId } from "../../shared/log";
 
 function err(status: number, message: string, code?: string): Error {
   const e: any = new Error(message);
@@ -245,7 +246,7 @@ export const portalService = {
     if (employee.status !== "active") throw err(403, "此帳號已停用");
     if (!employee.lineId || !isValidLineUserId(employee.lineId)) {
       await storage.updateEmployee(employee.id, { lineId: lineUserId });
-      console.log(`[Portal] 自動回寫 LINE ID: ${employee.name}(${employee.employeeCode}) → ${lineUserId}`);
+      console.log(`[Portal] 自動回寫 LINE ID: 員工 ID=${employee.id} → ${maskId(lineUserId)}`);
     }
     return {
       id: employee.id, name: employee.name, employeeCode: employee.employeeCode, role: employee.role,
