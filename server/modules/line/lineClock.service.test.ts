@@ -12,7 +12,7 @@
  *  - 遲到標記
  */
 
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, afterEach, beforeEach } from "vitest";
 import { processClockIn, invalidateVenueCache } from "./lineClock.service";
 
 // ── mock storage ──────────────────────────────────────────────────────────────
@@ -28,15 +28,9 @@ vi.mock("../../storage", () => ({
   },
 }));
 
-// ── mock getTaiwanNow so tests are time-stable ────────────────────────────────
-vi.mock("./lineHelpers", async (importOriginal) => {
-  const actual = await importOriginal() as Record<string, unknown>;
-  return {
-    ...actual,
-    // 2026-05-27 08:10 (台灣時間) — 上班時間之後 10 分鐘，適合大部分測試
-    getTaiwanNow: vi.fn(() => new Date(2026, 4, 27, 8, 10, 0)),
-  };
-});
+// ── 固定系統時鐘：2026-05-27 08:10（台北）＝ 00:10Z。打卡判斷用真實時間，所以不 mock getTaiwanNow，
+// 而是固定 Date；紀錄時間一律用絕對時間 tp()，測試在 UTC 與 Asia/Taipei 時區都成立（GitHub #6）。
+const tp = (hour: number, minute: number, second = 0, ms = 0) => new Date(Date.UTC(2026, 4, 27, hour - 8, minute, second, ms));
 
 import { storage } from "../../storage";
 
@@ -100,7 +94,7 @@ const mockClockRecord = {
   venueId: 1,
   shiftId: 1,
   clockType: "in" as const,
-  clockTime: new Date(2026, 4, 27, 8, 3, 0), // 7 分鐘前 (超過 dedup 5 分鐘)
+  clockTime: tp(8, 3), // 7 分鐘前 (超過 dedup 5 分鐘)
   latitude: 25.0,
   longitude: 121.0,
   distance: 0,
@@ -119,7 +113,13 @@ const OUT_OF_RANGE_LNG = 121.0;
 
 // ── 共用 setup ────────────────────────────────────────────────────────────────
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(tp(8, 10));
   vi.clearAllMocks();
   invalidateVenueCache(); // 清除場館快取，確保每個測試都讀到最新 mock
 
@@ -161,7 +161,7 @@ describe("processClockIn — 重複打卡防呆", () => {
   it("5 分鐘內同類型重複打卡 → fail 並寫入 audit 紀錄", async () => {
     const recentRecord = {
       ...mockClockRecord,
-      clockTime: new Date(2026, 4, 27, 8, 7, 0), // 3 分鐘前，在 dedup 視窗內
+      clockTime: tp(8, 7), // 3 分鐘前，在 dedup 視窗內
     };
     vi.mocked(storage.getClockRecordsByEmployee).mockResolvedValue([recentRecord as any]);
 
@@ -187,7 +187,7 @@ describe("processClockIn — 重複打卡防呆", () => {
     const recentIn = {
       ...mockClockRecord,
       clockType: "in" as const,
-      clockTime: new Date(2026, 4, 27, 8, 7, 0), // 3 分鐘前
+      clockTime: tp(8, 7), // 3 分鐘前
     };
     vi.mocked(storage.getClockRecordsByEmployee).mockResolvedValue([recentIn as any]);
 
@@ -199,8 +199,8 @@ describe("processClockIn — 重複打卡防呆", () => {
 
   it("下班後重複打卡 → 仍記為下班，可無限打卡（5 分鐘內也不擋、不翻回上班）", async () => {
     // 已上班(08:00) + 已下班(08:08)，現在 08:10：再打一次仍應是「下班」。
-    const inRec = { ...mockClockRecord, id: 100, clockType: "in" as const, clockTime: new Date(2026, 4, 27, 8, 0, 0) };
-    const outRec = { ...mockClockRecord, id: 101, clockType: "out" as const, clockTime: new Date(2026, 4, 27, 8, 8, 0) };
+    const inRec = { ...mockClockRecord, id: 100, clockType: "in" as const, clockTime: tp(8, 0) };
+    const outRec = { ...mockClockRecord, id: 101, clockType: "out" as const, clockTime: tp(8, 8) };
     vi.mocked(storage.getClockRecordsByEmployee).mockResolvedValue([inRec, outRec] as any);
 
     const result = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
@@ -214,7 +214,7 @@ describe("processClockIn — 重複打卡防呆", () => {
 
   it("上班打卡後 2 分鐘內再次點 → 防呆，不翻成下班、不重複建檔", async () => {
     // 1 分鐘前剛上班成功，再點一次不應變成下班早退。
-    const inRec = { ...mockClockRecord, id: 100, clockType: "in" as const, clockTime: new Date(2026, 4, 27, 8, 9, 0) };
+    const inRec = { ...mockClockRecord, id: 100, clockType: "in" as const, clockTime: tp(8, 9) };
     vi.mocked(storage.getClockRecordsByEmployee).mockResolvedValue([inRec] as any);
 
     const result = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
@@ -324,5 +324,28 @@ describe("processClockIn — 遲到 / 打卡類型", () => {
 
     expect(result.status).toBe("success");
     expect(storage.getEmployee).toHaveBeenCalledWith(1);
+  });
+});
+
+describe("processClockIn — 時間間隔用真實時間（GitHub #6）", () => {
+  it("重複打卡的 5 分鐘界線：4:59.999 擋、5:00 放行", async () => {
+    vi.mocked(storage.getClockRecordsByEmployee).mockResolvedValue([{ ...mockClockRecord, clockTime: tp(8, 5, 0, 1) } as any]);
+    expect((await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG, "in")).failReason).toContain("重複打卡");
+    vi.mocked(storage.getClockRecordsByEmployee).mockResolvedValue([{ ...mockClockRecord, clockTime: tp(8, 5) } as any]);
+    expect((await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG, "in")).failReason ?? "").not.toContain("重複打卡");
+  });
+
+  it("防誤翻的 2 分鐘界線：1:59.999 視為同一次上班、2:00 照常判斷", async () => {
+    vi.mocked(storage.getClockRecordsByEmployee).mockResolvedValue([{ ...mockClockRecord, clockTime: tp(8, 8, 0, 1) } as any]);
+    const repeat = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
+    expect([repeat.clockType, repeat.failReason, repeat.time]).toEqual(["in", "您剛才已完成上班打卡，無需重複", "08:08"]);
+    vi.mocked(storage.getClockRecordsByEmployee).mockResolvedValue([{ ...mockClockRecord, clockTime: tp(8, 8) } as any]);
+    expect((await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG)).failReason).not.toBe("您剛才已完成上班打卡，無需重複");
+  });
+
+  it("台北的日期與時刻來自絕對時間，不受伺服器時區影響", async () => {
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 26, 16, 30)));
+    const r = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG, "in");
+    expect([r.date, r.time]).toEqual(["2026-05-27", "00:30"]);
   });
 });

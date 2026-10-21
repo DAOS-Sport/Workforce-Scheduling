@@ -1,6 +1,6 @@
 import { storage } from "../../storage";
 import type { Shift } from "@shared/schema";
-import { getTaiwanNow, formatTaiwanTime, formatTaiwanDate } from "./lineHelpers";
+import { formatTaipeiTime, taipeiClock } from "../../core/time/taipei";
 import {
   classifyTiming,
   clockTypeForShift,
@@ -64,9 +64,10 @@ export async function processClockIn(
   forcedClockType?: "in" | "out",
   accuracy?: number
 ): Promise<ClockInResult> {
-  const now = getTaiwanNow();
-  const todayStr = formatTaiwanDate(now);
-  const timeStr = formatTaiwanTime(now);
+  // 一律用絕對時間；台北的日期與時刻明確換算，不依賴伺服器時區（GitHub #6）。
+  const now = new Date();
+  const { date: todayStr, minutes: nowMinutes } = taipeiClock(now);
+  const timeStr = formatTaipeiTime(now);
 
   let employee;
   if (params.employeeId) {
@@ -163,7 +164,7 @@ export async function processClockIn(
       clockType: "in",
       venueName: lastSuccess.matchedVenueName ?? null,
       distance: null,
-      time: formatTaiwanTime(new Date(lastSuccess.clockTime!)),
+      time: formatTaipeiTime(new Date(lastSuccess.clockTime!)),
       date: todayStr,
       shiftInfo: null,
       failReason: "您剛才已完成上班打卡，無需重複",
@@ -237,7 +238,6 @@ export async function processClockIn(
 
   const todayShifts = await storage.getShiftsByEmployeeAndDateRange(employee.id, todayStr, todayStr);
   const venueShifts = todayShifts.filter((s) => s.venueId === closestVenue.id);
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const matchingShift = venueShifts.find((s) => isInShiftWindow(nowMinutes, s));
 
   if (venueShifts.length === 0) {
