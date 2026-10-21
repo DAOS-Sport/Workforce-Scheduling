@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { describeProblems, planSummerPublish } from "./summerPublish";
 
 const week = { startDate: "2026-06-29", endDate: "2026-07-05" };
-const refs = { employeeStatus: new Map([[3, "active"], [4, "inactive"]]), venueIds: new Set([10]) };
+const refs = { employeeIds: new Set([3, 4]), venueIds: new Set([10]) };
 const row = (over: Record<string, unknown> = {}) => ({ employeeId: 3, venueId: 10, date: "2026-07-02", startTime: "09:00", endTime: "12:00", ...over });
 
 describe("summer publish plan (GitHub #8)", () => {
@@ -25,7 +25,6 @@ describe("summer publish plan (GitHub #8)", () => {
   it("each kind of bad row", () => {
     const bad = [
       row({ employeeId: 99 }),
-      row({ employeeId: 4 }),
       row({ venueId: 11 }),
       row({ date: "2026-07-06" }),
       row({ date: "2026-06-31" }),
@@ -35,13 +34,16 @@ describe("summer publish plan (GitHub #8)", () => {
     const plan = planSummerPublish(bad, week, 1, refs);
     expect(plan.ok ? [] : plan.problems.map((p) => p.code)).toEqual([
       "unknown_employee",
-      "inactive_employee",
       "unknown_venue",
       "outside_week",
       "outside_week",
       "bad_time",
       "zero_length",
     ]);
+  });
+
+  it("an employee who has since left is still accepted", () => {
+    expect(planSummerPublish([row({ employeeId: 4 })], week, 1, refs).ok).toBe(true);
   });
 
   it("an overnight shift and seconds in the time are accepted", () => {

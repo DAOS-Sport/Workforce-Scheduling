@@ -395,7 +395,7 @@ async function applyPublish(week: { startDate: string; endDate: string }, weekNo
   // 1. 先整批檢查；有任何一筆不合格就不動舊班（GitHub #8）。
   const [employees, venueRows] = await Promise.all([storage.getAllEmployees(), storage.getAllVenues()]);
   const plan = planSummerPublish(incoming, week, weekNo, {
-    employeeStatus: new Map(employees.map((e) => [e.id, e.status])),
+    employeeIds: new Set(employees.map((e) => e.id)),
     venueIds: new Set(venueRows.map((v) => v.id)),
   });
   if (!plan.ok) {

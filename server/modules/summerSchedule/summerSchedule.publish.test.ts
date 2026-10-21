@@ -18,7 +18,7 @@ const good = { employeeId: 3, venueId: 10, date: "2026-07-02", startTime: "09:00
 beforeEach(() => {
   vi.clearAllMocks();
   mockDb.select.mockImplementation(() => ({ from: (table: unknown) => ({ where: async () => (table === shifts ? [oldShift] : []) }) }));
-  mockStorage.getAllEmployees.mockResolvedValue([{ id: 3, status: "active" }]);
+  mockStorage.getAllEmployees.mockResolvedValue([{ id: 3, status: "inactive" }]);
   mockStorage.getAllVenues.mockResolvedValue([{ id: 10 }]);
 });
 

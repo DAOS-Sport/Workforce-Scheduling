@@ -6,7 +6,6 @@
 export const PUBLISH_PROBLEMS = {
   missing_field: "缺少員工、場館、日期或時間",
   unknown_employee: "找不到員工",
-  inactive_employee: "員工不是在職狀態",
   unknown_venue: "找不到場館",
   outside_week: "日期不在本週",
   bad_time: "時間格式錯誤",
@@ -20,8 +19,11 @@ export interface PublishProblem {
   code: PublishProblemCode;
 }
 
+/**
+ * 已離職的員工不擋：過去的週裡本來就有後來離職的人，重新發布要能照原樣寫回。
+ */
 export interface PublishRefs {
-  employeeStatus: ReadonlyMap<number, string>;
+  employeeIds: ReadonlySet<number>;
   venueIds: ReadonlySet<number>;
 }
 
@@ -43,9 +45,7 @@ const isCalendarDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(
 
 function problemOf(e: any, week: { startDate: string; endDate: string }, refs: PublishRefs): PublishProblemCode | null {
   if (!e || !e.employeeId || !e.venueId || !e.date || !e.startTime || !e.endTime) return "missing_field";
-  const status = refs.employeeStatus.get(Number(e.employeeId));
-  if (status === undefined) return "unknown_employee";
-  if (status !== "active") return "inactive_employee";
+  if (!refs.employeeIds.has(Number(e.employeeId))) return "unknown_employee";
   if (!refs.venueIds.has(Number(e.venueId))) return "unknown_venue";
   const date = String(e.date);
   if (!isCalendarDate(date) || date < week.startDate || date > week.endDate) return "outside_week";
