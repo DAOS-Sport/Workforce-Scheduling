@@ -2,8 +2,9 @@ import { storage } from "../../storage";
 import { fetchEnrollmentCounts } from "../../adapters/enrollment";
 import { db } from "../../db";
 import { eq, and, like, gte, lte, ne } from "drizzle-orm";
-import { shifts, summerScheduleAssignments, manualScheduleCourses, dispatchShifts, venues as venuesTable, systemConfigs, type InsertShift, type InsertSummerScheduleAssignment, type InsertManualScheduleCourse } from "@shared/schema";
+import { shifts, summerScheduleAssignments, manualScheduleCourses, dispatchShifts, venues as venuesTable, systemConfigs, type InsertSummerScheduleAssignment, type InsertManualScheduleCourse } from "@shared/schema";
 import { isValidLineUserId } from "../line/lineSignature";
+import { describeProblems, planSummerPublish } from "../../core/schedule/summerPublish";
 
 const SUMMER_WEEKS = [
   { no: 1, label: "第1週｜07/01（三）－07/05（日）", startDate: "2026-07-01", endDate: "2026-07-05" },
@@ -17,9 +18,10 @@ const SUMMER_WEEKS = [
   { no: 9, label: "第9週｜08/24（一）－08/30（日）", startDate: "2026-08-24", endDate: "2026-08-30" },
 ];
 
-function err(status: number, message: string): Error {
+function err(status: number, message: string, extra?: Record<string, unknown>): Error {
   const e: any = new Error(message);
   e.status = status;
+  e.extra = extra;
   return e;
 }
 
@@ -383,14 +385,28 @@ export function enrollmentRowOverlapsWeek(row: any, week: { startDate: string; e
   return termStart <= week.endDate && termEnd >= week.startDate;
 }
 
-// 共用發布邏輯：刪掉該週已發布的 v40 班次（軟取消、寫 audit），再插入新班次。
+// 共用發布邏輯：先整批檢查新班次，全部合格才軟取消該週已發布的 v40 班次（寫 audit）並插入新班次。
 // publishShifts（payload 版，相容舊版）與「DB 驅動」路徑共用。
 async function applyPublish(week: { startDate: string; endDate: string }, weekNo: number, incoming: any[]) {
   // 0. 空陣列保護：絕不在「無可發布班次」時執行刪除，否則會把員工該週已發布班表整週清空。
   if (!Array.isArray(incoming) || incoming.length === 0) {
     return { success: false, inserted: 0, skipped: 0, message: "此週無可發布班次，已取消發布以保留員工現有班表" };
   }
-  // 1. 找出這週已有的 summer-schedule-v40 班次（透過 notes 標記）
+  // 1. 先整批檢查；有任何一筆不合格就不動舊班（GitHub #8）。
+  const [employees, venueRows] = await Promise.all([storage.getAllEmployees(), storage.getAllVenues()]);
+  const plan = planSummerPublish(incoming, week, weekNo, {
+    employeeStatus: new Map(employees.map((e) => [e.id, e.status])),
+    venueIds: new Set(venueRows.map((v) => v.id)),
+  });
+  if (!plan.ok) {
+    throw err(
+      422,
+      `第 ${weekNo} 週有 ${plan.problems.length} 筆班次資料有誤（${describeProblems(plan.problems)}），已取消發布，員工現有班表沒有變動`,
+      { errorCode: "SUMMER_PUBLISH_INVALID_ROWS", problems: plan.problems },
+    );
+  }
+
+  // 2. 找出這週已有的 summer-schedule-v40 班次（透過 notes 標記），軟取消並寫 audit
   const existing = await db.select().from(shifts).where(
     and(
       gte(shifts.date, week.startDate),
@@ -399,36 +415,16 @@ async function applyPublish(week: { startDate: string; endDate: string }, weekNo
       eq(shifts.status, "active")
     )
   );
-
-  // 2. 取消舊資料（軟刪除 + audit）
   for (const s of existing) {
     await storage.deleteShift(s.id, "summer-schedule-publish", "重新發布暑假排班", true);
   }
 
-  // 3. 寫入新 shifts（補上 weekNo 標記；缺必要欄位者略過）
-  let inserted = 0;
-  let skipped = 0;
-  for (const item of incoming) {
-    if (!item || !item.employeeId || !item.venueId || !item.date || !item.startTime || !item.endTime) {
-      skipped++;
-      continue;
-    }
-    const noteTag = `暑假排班v40｜weekNo=${weekNo}`;
-    const notes = item.notes ? `${item.notes}｜${noteTag}` : noteTag;
-    const shiftData: InsertShift = {
-      employeeId: item.employeeId,
-      venueId: item.venueId,
-      date: item.date,
-      startTime: item.startTime,
-      endTime: item.endTime,
-      role: item.role || "教練",
-      notes,
-    };
-    await storage.createShift(shiftData, "summer-schedule-publish");
-    inserted++;
+  // 3. 寫入新班次
+  for (const shift of plan.shifts) {
+    await storage.createShift(shift, "summer-schedule-publish");
   }
 
-  return { success: true, message: "已發布到員工前台", inserted, skipped };
+  return { success: true, message: "已發布到員工前台", inserted: plan.shifts.length, skipped: 0 };
 }
 
 export const summerScheduleService = {

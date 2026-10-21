@@ -3846,9 +3846,12 @@ async function publishToEmployeePortal(){
   if(!confirm(`準備發布第 ${weekNo} 週約 ${estimatedCount} 筆班表到員工前台（以伺服器已儲存的資料為準），是否繼續？`)) return;
   try{
     const res=await fetch(API_ENDPOINTS.publishShifts,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({weekNo, generatedAt:new Date().toISOString()})});
-    if(!res.ok) throw new Error('publish API status '+res.status);
     const raw=await res.json().catch(()=>null);
     const result=unwrapApiPayload(raw)||{};
+    if(!res.ok || result.success!==true){
+      alert('發布失敗：'+(result.message||('伺服器回應 '+res.status)));
+      return;
+    }
     const n=(result.inserted!=null)?result.inserted:shifts.length;
     alert(`已發布第 ${weekNo} 週 ${n} 筆班表到員工前台。`);
     checkReplitApis();

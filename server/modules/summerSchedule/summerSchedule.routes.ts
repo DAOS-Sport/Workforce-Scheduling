@@ -136,7 +136,7 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
     try {
       ok(res, await summerScheduleService.publishShifts(req.body));
     } catch (err: any) {
-      fail(res, err.status || 500, err.message);
+      fail(res, err.status || 500, err.message, err.extra);
     }
   });
 
