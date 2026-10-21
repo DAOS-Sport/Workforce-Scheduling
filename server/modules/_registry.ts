@@ -48,6 +48,7 @@ import { mountImportExportRoutes } from "./importExport";
 import { mountAvailabilityRoutes } from "./availability/availability.routes";
 import { mountSummerScheduleRoutes } from "./summerSchedule/summerSchedule.routes";
 import { mountMcpRoutes } from "./mcp/mcp.routes";
+import { mountHealthRoutes } from "./health/health.routes";
 
 export function registerModuleRoutes(httpServer: Server, app: Express): void {
   // Shift module — fully decomposed (the canonical pattern)
@@ -82,4 +83,7 @@ export function registerModuleRoutes(httpServer: Server, app: Express): void {
 
   // MCP server — external AI clients (Claude Desktop / Code / web)
   mountMcpRoutes(app);
+
+  // Health report for the monitoring hub (token-protected, outside the admin gate)
+  mountHealthRoutes(app);
 }

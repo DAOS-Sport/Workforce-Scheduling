@@ -26,6 +26,8 @@ export const OPEN_API_PREFIXES = [
   "/api/internal/",
   "/api/anomaly-report",
   "/api/announcements/active",
+  // 健康檢查 API 自己驗 HEALTH_TOKEN（見 modules/health/health.routes.ts）。
+  "/api/health/",
   // 只開這一條子路徑，不是整個 /api/schedule/ —— 那底下還有
   // enrollment-counts 之類要後台登入的端點。
   "/api/schedule/cram-courses/",

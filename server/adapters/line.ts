@@ -5,6 +5,8 @@
  * log 文字也沿用原本的寫法。要加逾時、重試或呼叫紀錄，改這一個檔就好。
  */
 
+import { recordIntegration } from "../shared/health/healthState";
+
 const API_BASE = "https://api.line.me";
 
 function botHeaders(): Record<string, string> {
@@ -24,11 +26,14 @@ export async function pushMessages(to: string, messages: object[]): Promise<bool
     });
     if (!resp.ok) {
       console.error("[LINE] Push failed:", resp.status, await resp.text());
+      recordIntegration("line", false, `推播 HTTP ${resp.status}`);
       return false;
     }
+    recordIntegration("line", true);
     return true;
   } catch (err) {
     console.error("[LINE] Push failed:", err);
+    recordIntegration("line", false, err);
     return false;
   }
 }
@@ -43,9 +48,12 @@ export async function replyMessages(replyToken: string, messages: object[]): Pro
       headers: botHeaders(),
       body: JSON.stringify({ replyToken, messages }),
     });
+    // 回覆被拒通常只是 reply token 過期（之後會改用推播），不算外部系統故障。
+    if (resp.ok) recordIntegration("line", true);
     return resp.ok ? "ok" : "rejected";
   } catch (err) {
     console.error("[LINE] Reply failed, trying push:", err);
+    recordIntegration("line", false, err);
     return "error";
   }
 }

@@ -11,11 +11,12 @@ import {
   sendWeeklySchedulePush,
   sendWeeklyLateReport,
 } from "../line/linePush.service";
+import { trackJob } from "../../shared/health/healthState";
 
 export const syncService = {
   ragicVenues: () => syncVenuesFromRagic(),
-  ragicAll: () => syncFromRagic(),
-  shiftReminders: (force = false) => sendShiftReminders(force),
-  weeklySchedule: (force = false) => sendWeeklySchedulePush(force),
-  weeklyLateReport: (force = false) => sendWeeklyLateReport(force),
+  ragicAll: () => trackJob("ragic.sync", "manual", () => syncFromRagic(), (r) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length })),
+  shiftReminders: (force = false) => trackJob("push.shift-reminders", "manual", () => sendShiftReminders(force), (r) => ({ ...r })),
+  weeklySchedule: (force = false) => trackJob("push.weekly-schedule", "manual", () => sendWeeklySchedulePush(force), (r) => ({ ...r })),
+  weeklyLateReport: (force = false) => trackJob("report.weekly-late", "manual", () => sendWeeklyLateReport(force), (r) => ({ ...r })),
 };

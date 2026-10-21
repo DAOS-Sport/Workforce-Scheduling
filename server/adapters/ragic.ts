@@ -2,6 +2,8 @@
  * Ragic 的唯一對外出口（H01 員工表）。只負責傳輸與分頁，不含業務規則、不寫資料庫。
  */
 
+import { recordIntegration } from "../shared/health/healthState";
+
 export const RAGIC_API_URL = "https://ap7.ragic.com/xinsheng/ragicforms4/20004";
 export const PAGE_SIZE = 1000;
 export const MAX_RETRIES = 3;
@@ -19,6 +21,7 @@ async function fetchWithRetry(url: string, headers: Record<string, string>): Pro
         throw new Error(`Ragic HTTP ${response.status} ${response.statusText}`);
       }
       const data = await response.json();
+      recordIntegration("ragic", true);
       return data as Record<string, any>;
     } catch (err: any) {
       lastErr = err;
@@ -28,6 +31,7 @@ async function fetchWithRetry(url: string, headers: Record<string, string>): Pro
       }
     }
   }
+  recordIntegration("ragic", false, lastErr);
   throw lastErr ?? new Error("fetchWithRetry: unknown error");
 }
 

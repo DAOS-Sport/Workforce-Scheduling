@@ -24,6 +24,7 @@ import { type Express, type Request } from "express";
 import { type Server } from "http";
 import { timingSafeEqual } from "crypto";
 import { syncFromRagic, syncVenuesFromRagic } from "./ragic.service";
+import { trackJob } from "../../shared/health/healthState";
 
 function getWebhookSecret(req: Request): string {
   const headerSecret = req.header("x-ragic-webhook-secret");
@@ -54,7 +55,7 @@ export function mountRagicRoutes(_httpServer: Server, app: Express): void {
     }
 
     try {
-      const result = await syncFromRagic();
+      const result = await trackJob("ragic.webhook", "webhook", () => syncFromRagic(), (r) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length }));
       res.json({ message: "H01 webhook sync completed", result });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -72,7 +73,7 @@ export function mountRagicRoutes(_httpServer: Server, app: Express): void {
 
   app.post("/api/ragic-sync", async (_req, res) => {
     try {
-      res.json(await syncFromRagic());
+      res.json(await trackJob("ragic.sync", "manual", () => syncFromRagic(), (r) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length })));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -81,7 +82,7 @@ export function mountRagicRoutes(_httpServer: Server, app: Express): void {
   // Module-scoped URLs (Task #73 重構 D).
   app.post("/api/ragic/sync-employees", async (_req, res) => {
     try {
-      res.json(await syncFromRagic());
+      res.json(await trackJob("ragic.sync", "manual", () => syncFromRagic(), (r) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length })));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

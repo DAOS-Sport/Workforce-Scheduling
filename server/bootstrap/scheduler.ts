@@ -9,6 +9,7 @@ import {
 } from "../modules/line/linePush.service";
 import { featureFlags } from "../config/featureFlags";
 import { IS_PRODUCTION } from "../config/env";
+import { trackJob } from "../shared/health/healthState";
 import { log } from "../shared/log";
 
 /**
@@ -40,7 +41,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行每日 Ragic 員工同步...", "cron");
         try {
-          const syncResult = await syncFromRagic();
+          const syncResult = await trackJob("ragic.sync", "cron", () => syncFromRagic(), (r) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length }));
           log(
             `Ragic 同步完成: 新增 ${syncResult.created}, 更新 ${syncResult.updated}, 停用 ${syncResult.deactivated}, 跳過 ${syncResult.skipped}, 錯誤 ${syncResult.errors.length}`,
             "cron",
@@ -64,7 +65,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行明日班表推撥通知...", "cron");
         try {
-          const result = await sendShiftReminders();
+          const result = await trackJob("push.shift-reminders", "cron", () => sendShiftReminders(), (r) => ({ ...r }));
           log(
             `班表推撥完成: 發送 ${result.sent}, 跳過 ${result.skipped}, 無LINE ${result.noLineId}`,
             "cron",
@@ -85,7 +86,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始檢查未打卡員工...", "cron");
         try {
-          const result = await checkMissingClockIn();
+          const result = await trackJob("push.missing-clock", "cron", () => checkMissingClockIn(), (r) => ({ ...r }));
           log(
             `未打卡檢查完成: 通知 ${result.notified}, 跳過 ${result.skipped}`,
             "cron",
@@ -106,7 +107,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行每週下週班表推播...", "cron");
         try {
-          const result = await sendWeeklySchedulePush();
+          const result = await trackJob("push.weekly-schedule", "cron", () => sendWeeklySchedulePush(), (r) => ({ ...r }));
           log(
             `週班表推播完成: 發送 ${result.sent}, 跳過 ${result.skipped}, 無LINE ${result.noLineId}`,
             "cron",
@@ -127,7 +128,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行意願填報未填提醒...", "cron");
         try {
-          const result = await sendAvailabilityReminders();
+          const result = await trackJob("push.availability-reminder", "cron", () => sendAvailabilityReminders(), (r) => ({ ...r }));
           if (result.windowClosed) {
             log("意願提醒：目前無符合條件的開放視窗，略過", "cron");
           } else {
@@ -152,7 +153,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行上週遲到報告推播...", "cron");
         try {
-          const result = await sendWeeklyLateReport();
+          const result = await trackJob("report.weekly-late", "cron", () => sendWeeklyLateReport(), (r) => ({ ...r }));
           log(
             `週遲到報告推播完成: 發送 ${result.sent}, 跳過 ${result.skipped}, 無LINE ${result.noLineId}`,
             "cron",
