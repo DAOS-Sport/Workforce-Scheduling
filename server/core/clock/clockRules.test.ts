@@ -79,6 +79,13 @@ describe("duplicate and accidental repeat", () => {
     expect(duplicateClock(null, now, "in")).toBeNull();
   });
 
+  it("a record slightly in the future still blocks for at most 5 minutes; one far in the future does not block", () => {
+    const soon = duplicateClock({ clockType: "in", clockTime: at(-0.5), status: "success" }, now, "in");
+    expect(soon?.failReason).toBe("重複打卡：距上次上班打卡不足 5 分鐘（還需等待 5 分鐘）");
+    expect(duplicateClock({ clockType: "in", clockTime: at(-6), status: "success" }, now, "in")).toBeNull();
+    expect(isAccidentalRepeat({ clockType: "in", clockTime: at(-1), status: "success" }, now)).toBe(false);
+  });
+
   it("accidental repeat: within 2 minutes after clocking in, only without a forced direction", () => {
     const last = { clockType: "in", clockTime: at(1), status: "success" };
     expect(isAccidentalRepeat(last, now)).toBe(true);

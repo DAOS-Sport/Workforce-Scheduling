@@ -105,16 +105,17 @@ export function nextClockType(records: ClockEvent[]): ClockType {
 
 /**
  * 重複打卡：距上次成功打卡不足 5 分鐘、而且是同一個方向就擋下。換方向一律放行。
+ * 上次紀錄比現在晚超過 5 分鐘是異常資料，不拿來擋人，否則員工要等到那個未來時間（GitHub #6）。
  * 回傳 null 表示不擋。
  */
 export function duplicateClock(lastSuccess: ClockEvent | null, nowMs: number, forced?: ClockType): { clockType: string; failReason: string } | null {
   if (!lastSuccess?.clockTime) return null;
   const diffMinutes = (nowMs - new Date(lastSuccess.clockTime).getTime()) / 60000;
-  if (diffMinutes >= DEDUP_WINDOW_MIN) return null;
+  if (diffMinutes >= DEDUP_WINDOW_MIN || diffMinutes < -DEDUP_WINDOW_MIN) return null;
   const expectedNext: ClockType = lastSuccess.clockType === "in" ? "out" : "in";
   const intended = forced ?? expectedNext;
   if (intended !== lastSuccess.clockType) return null;
-  const remaining = Math.ceil(DEDUP_WINDOW_MIN - diffMinutes);
+  const remaining = Math.min(DEDUP_WINDOW_MIN, Math.ceil(DEDUP_WINDOW_MIN - diffMinutes));
   const lastType = lastSuccess.clockType === "in" ? "上班" : "下班";
   return {
     clockType: forced || lastSuccess.clockType,
