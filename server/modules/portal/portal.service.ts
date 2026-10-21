@@ -1,4 +1,5 @@
 import { storage } from "../../storage";
+import { exchangeLoginCode, fetchLoginProfile } from "../../adapters/line";
 import { isValidLineUserId } from "../line/lineSignature";
 import { isReviewableWorkShift } from "../shift/shiftReview.service";
 
@@ -224,23 +225,14 @@ export const portalService = {
     const channelSecret = process.env.LINE_LOGIN_CHANNEL_SECRET || process.env.LINE_CHANNEL_SECRET;
     if (!channelId || !channelSecret) throw err(500, "LINE Login 尚未設定");
 
-    const tokenRes = await fetch("https://api.line.me/oauth2/v2.1/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code", code,
-        redirect_uri: redirectUri, client_id: channelId, client_secret: channelSecret,
-      }),
-    });
+    const tokenRes = await exchangeLoginCode({ code, redirectUri, clientId: channelId, clientSecret: channelSecret });
     if (!tokenRes.ok) {
       console.error("LINE token error:", await tokenRes.text());
       throw err(401, "LINE 授權失敗");
     }
     const tokenData = await tokenRes.json();
     const accessToken = tokenData.access_token;
-    const profileRes = await fetch("https://api.line.me/v2/profile", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const profileRes = await fetchLoginProfile(accessToken);
     if (!profileRes.ok) throw err(401, "無法取得 LINE 個人資料");
 
     const profile = await profileRes.json();

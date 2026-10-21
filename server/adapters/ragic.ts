@@ -1,6 +1,5 @@
 /**
- * Ragic HTTP client — pure transport layer.
- * No business logic, no DB writes. Used by ragic.service.ts.
+ * Ragic 的唯一對外出口（H01 員工表）。只負責傳輸與分頁，不含業務規則、不寫資料庫。
  */
 
 export const RAGIC_API_URL = "https://ap7.ragic.com/xinsheng/ragicforms4/20004";

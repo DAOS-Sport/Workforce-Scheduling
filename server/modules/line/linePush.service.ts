@@ -1,12 +1,13 @@
-import nodemailer from "nodemailer";
 import { storage } from "../../storage";
+import { pushMessages } from "../../adapters/line";
+import { MAIL_SENDER, sendMail } from "../../adapters/mail";
+import { wrapNotificationHtml } from "../../shared/email/notificationLayout";
 import type { Venue, Shift, Employee, DispatchShift } from "@shared/schema";
 import { getTaiwanNow, formatTaiwanDate } from "./lineHelpers";
 import { isValidLineUserId } from "./lineSignature";
 import { availabilityRepository } from "../availability/availability.repository";
 import { isReviewableWorkShift, shiftReviewService } from "../shift/shiftReview.service";
 
-const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 const LINE_FLEX_TEXT_LIMIT = 5000;
 
 /** 員工入口系統連結（LIFF 或 Web Portal） */
@@ -146,24 +147,7 @@ function buildDecoratedFlexMessage(text: string): object {
 export async function pushToLine(userId: string, text: string, extraMessages?: object[]): Promise<boolean> {
   const messages: object[] = [buildDecoratedFlexMessage(text)];
   if (extraMessages) messages.push(...extraMessages);
-  try {
-    const resp = await fetch("https://api.line.me/v2/bot/message/push", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
-      },
-      body: JSON.stringify({ to: userId, messages }),
-    });
-    if (!resp.ok) {
-      console.error("[LINE] Push failed:", resp.status, await resp.text());
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error("[LINE] Push failed:", err);
-    return false;
-  }
+  return pushMessages(userId, messages);
 }
 
 const _guidelinePushRecord = new Map<number, string>();
@@ -360,25 +344,11 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
 // 未打卡通知的去重存在資料庫（missing_clock_notifications），重啟不會重複發。
 
 async function sendMissingClockInEmail(to: string[], subject: string, html: string) {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: process.env.GMAIL_USER || "daos.ragic.system@gmail.com",
-      pass: process.env.GMAIL_APP_PASSWORD,
-    },
-  });
-
-  await transporter.sendMail({
-    from: `"DAOS 打卡提醒系統" <${process.env.GMAIL_USER || "daos.ragic.system@gmail.com"}>`,
+  await sendMail({
+    from: `"DAOS 打卡提醒系統" <${MAIL_SENDER}>`,
     to: to.join(", "),
     subject,
-    html: `<div style="font-family: 'Microsoft JhengHei', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      ${html}
-      <hr style="margin-top: 20px; border: none; border-top: 1px solid #e5e7eb;" />
-      <p style="color: #9ca3af; font-size: 12px;">此為系統自動發送的通知郵件，請勿直接回覆。</p>
-    </div>`,
+    html: wrapNotificationHtml(html),
   });
 }
 

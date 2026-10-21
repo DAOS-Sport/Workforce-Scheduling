@@ -16,7 +16,7 @@ vi.mock("../../storage", () => ({
   storage: mockStorage,
 }));
 
-vi.mock("./ragicClient", () => ({
+vi.mock("../../adapters/ragic", () => ({
   fetchAllRagicRecords: mockFetchAllRagicRecords,
 }));
 

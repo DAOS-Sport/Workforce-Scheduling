@@ -1,5 +1,5 @@
 import { storage } from "../../storage";
-import { fetchAllRagicRecords } from "./ragicClient";
+import { fetchAllRagicRecords } from "../../adapters/ragic";
 import { isValidLineUserId } from "../line/lineSignature";
 
 // Task #50 NOTE: This module currently only syncs employees + venues.

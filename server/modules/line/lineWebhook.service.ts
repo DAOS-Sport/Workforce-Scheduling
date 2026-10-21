@@ -1,32 +1,17 @@
 import { storage } from "../../storage";
+import { replyMessages } from "../../adapters/line";
 import { isValidLineUserId } from "./lineSignature";
 import { pushToLine, pushPendingGuidelinesIfAny } from "./linePush.service";
 import { processClockIn, formatClockInMessage } from "./lineClock.service";
 
-const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
-
+/** 先用 reply token 回覆；LINE 拒絕或連線失敗時，有 fallbackUserId 就改用推播。 */
 async function replyToLine(replyToken: string, text: string, fallbackUserId?: string, extraMessages?: object[]): Promise<void> {
   const messages: object[] = [{ type: "text", text }];
   if (extraMessages) messages.push(...extraMessages);
-  try {
-    const resp = await fetch("https://api.line.me/v2/bot/message/reply", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
-      },
-      body: JSON.stringify({ replyToken, messages }),
-    });
-    if (!resp.ok && fallbackUserId) {
-      console.log("[LINE] Reply token expired, using push message instead");
-      await pushToLine(fallbackUserId, text, extraMessages);
-    }
-  } catch (err) {
-    console.error("[LINE] Reply failed, trying push:", err);
-    if (fallbackUserId) {
-      await pushToLine(fallbackUserId, text, extraMessages);
-    }
-  }
+  const outcome = await replyMessages(replyToken, messages);
+  if (outcome === "ok" || !fallbackUserId) return;
+  if (outcome === "rejected") console.log("[LINE] Reply token expired, using push message instead");
+  await pushToLine(fallbackUserId, text, extraMessages);
 }
 
 async function handleFollowEvent(event: any): Promise<void> {

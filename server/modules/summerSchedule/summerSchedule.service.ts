@@ -1,4 +1,5 @@
 import { storage } from "../../storage";
+import { fetchEnrollmentCounts } from "../../adapters/enrollment";
 import { db } from "../../db";
 import { eq, and, like, gte, lte, ne } from "drizzle-orm";
 import { shifts, summerScheduleAssignments, manualScheduleCourses, dispatchShifts, venues as venuesTable, systemConfigs, type InsertShift, type InsertSummerScheduleAssignment, type InsertManualScheduleCourse } from "@shared/schema";
@@ -478,15 +479,8 @@ export const summerScheduleService = {
       };
     }
 
-    // 外部 API 回傳全部梯次，不接受 termId 過濾。
-    // 撈全部後，依梯次日期區間與本週是否重疊篩選。
-    const url = new URL(apiUrl);
-    url.searchParams.set("includeZero", "true");
-
-    const res = await fetch(url.toString(), {
-      headers: { "x-api-key": apiKey },
-      signal: AbortSignal.timeout(10000),
-    });
+    // 外部 API 回傳全部梯次，撈全部後依梯次日期區間與本週是否重疊篩選。
+    const res = await fetchEnrollmentCounts(apiUrl, apiKey);
 
     const contentType = res.headers.get("content-type") || "";
 
