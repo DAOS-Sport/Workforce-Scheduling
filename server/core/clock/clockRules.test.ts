@@ -16,17 +16,42 @@ import {
 const venue = (id: number, lat: number, radius: number | null = 200) => ({ id, name: `場館${id}`, shortName: `館${id}`, latitude: lat, longitude: 121.5, radius });
 const metersNorth = (m: number) => 25 + m / 111320;
 
-describe("venue selection (current behavior, GitHub #3)", () => {
+describe("venue selection (GitHub #3)", () => {
   it("ranks by distance and skips venues without coordinates", () => {
     const ranked = rankVenues(25, 121.5, [venue(1, metersNorth(500)), venue(2, metersNorth(100)), { ...venue(3, 0), latitude: null }]);
     expect(ranked.map((r) => r.venue.id)).toEqual([2, 1]);
   });
 
-  it("only the nearest venue counts: a farther venue whose radius covers you is still rejected", () => {
+  it("AC-3.1: accepts a farther venue whose own radius covers you", () => {
     const ranked = rankVenues(25, 121.5, [venue(1, metersNorth(100), 50), venue(2, metersNorth(150), 300)]);
     const picked = pickVenue(ranked)!;
-    expect([picked.venue.id, picked.inRange]).toEqual([1, false]);
+    expect([picked.venue.id, picked.inRange, picked.radius]).toEqual([2, true, 300]);
     expect(nearbyVenueList(ranked).map((v) => [v.id, v.inRange])).toEqual([[1, false], [2, true]]);
+  });
+
+  it("AC-3.2: all out of range keeps the nearest as the reported venue; exact boundary is in range", () => {
+    const out = pickVenue(rankVenues(25, 121.5, [venue(1, metersNorth(400), 100), venue(2, metersNorth(900), 300)]))!;
+    expect([out.venue.id, out.inRange]).toEqual([1, false]);
+    const boundary = pickVenue([{ venue: venue(1, 25), distance: 200 }])!;
+    expect(boundary.inRange).toBe(true);
+  });
+
+  it("AC-3.2: several legal venues pick the nearest; equal distance picks the lower id", () => {
+    const near = pickVenue([{ venue: venue(5, 25, 500), distance: 300 }, { venue: venue(3, 25, 500), distance: 120 }])!;
+    expect(near.venue.id).toBe(3);
+    const tie = pickVenue([{ venue: venue(9, 25, 500), distance: 100 }, { venue: venue(4, 25, 500), distance: 100 }])!;
+    expect(tie.venue.id).toBe(4);
+  });
+
+  it("AC-3.3: a legal venue ranked sixth is still accepted", () => {
+    const tight = [1, 2, 3, 4, 5].map((id) => ({ venue: venue(id, 25, 10), distance: 50 + id }));
+    const picked = pickVenue([...tight, { venue: venue(6, 25, 1000), distance: 900 }])!;
+    expect([picked.venue.id, picked.inRange]).toEqual([6, true]);
+  });
+
+  it("venues with a non-positive radius do not take part", () => {
+    const picked = pickVenue([{ venue: venue(1, 25, -5), distance: 1 }, { venue: venue(2, 25, 300), distance: 250 }])!;
+    expect(picked.venue.id).toBe(2);
   });
 
   it("missing radius defaults to 300 m", () => {

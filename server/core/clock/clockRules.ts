@@ -64,15 +64,22 @@ export function nearbyVenueList(ranked: RankedVenue[], limit = 5): NearbyVenue[]
   }));
 }
 
+const validRadius = (r: number) => Number.isFinite(r) && r > 0;
+
 /**
- * 選場館：目前只看最近的一家，超出它的半徑就算不在範圍內（GitHub #3 的現況，刻意保留）。
- * 要改成「範圍內任一家都可以」，改這個函式就好。
+ * 選場館（GitHub #3）：每家用自己的半徑判斷，在範圍內的場館裡選最近的；距離剛好等於半徑算在範圍內，
+ * 距離相同時 id 小的優先。半徑不是正數的場館不參與。
+ * 一家都不在範圍內時，回傳最近的那家並標成不在範圍內（失敗紀錄會寫它的名稱）。
  */
 export function pickVenue<V extends VenuePoint>(ranked: RankedVenue<V>[]): { venue: V; distance: number; radius: number; inRange: boolean } | null {
-  const closest = ranked[0];
-  if (!closest) return null;
-  const radius = venueRadius(closest.venue);
-  return { venue: closest.venue, distance: closest.distance, radius, inRange: closest.distance <= radius };
+  const usable = ranked.filter((r) => validRadius(venueRadius(r.venue)));
+  if (usable.length === 0) return null;
+  const legal = usable
+    .filter((r) => r.distance <= venueRadius(r.venue))
+    .sort((a, b) => a.distance - b.distance || a.venue.id - b.venue.id);
+  const chosen = legal[0] ?? usable[0];
+  const radius = venueRadius(chosen.venue);
+  return { venue: chosen.venue, distance: chosen.distance, radius, inRange: chosen.distance <= radius };
 }
 
 export interface ClockEvent {
