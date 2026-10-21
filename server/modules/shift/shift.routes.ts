@@ -14,7 +14,7 @@
  */
 import type { Express } from "express";
 import { storage } from "../../storage";
-import { validateAllRules } from "../../labor-validation";
+import { validateAllRules } from "../../core/labor/laborValidation";
 import {
   insertShiftSchema,
   getFourWeekPeriod,

@@ -5,11 +5,11 @@
  *   - load approved overtime requests for the relevant date range
  *   - bucket the resulting errors into "blocking" vs "warning"
  *
- * The actual labor-law rules continue to live in server/labor-validation.ts;
+ * The actual labor-law rules live in server/core/labor/laborValidation.ts;
  * this service only owns the orchestration, not the rules themselves.
  */
 import { storage } from "../../storage";
-import { validateAllRules } from "../../labor-validation";
+import { validateAllRules } from "../../core/labor/laborValidation";
 import { getFourWeekPeriod, type ShiftValidationError } from "./shift.types";
 
 export type ValidationOTRecord = {

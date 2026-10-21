@@ -33,7 +33,7 @@ const DEFAULT_LIMIT = 5000;
 
 /**
  * Roles that actually mean "not working" (leave) when stored on a shift row.
- * Mirrors LEAVE_TYPES/LEAVE_ROLES used elsewhere (labor-validation, clock,
+ * Mirrors LEAVE_TYPES/LEAVE_ROLES used elsewhere (core/labor/laborValidation, clock,
  * system report). A shift whose role is one of these must never be surfaced
  * as a working shift to the CMS — otherwise it would falsely mark the employee
  * "on shift" and pollute on-shift gating.
