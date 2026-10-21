@@ -349,3 +349,17 @@ describe("processClockIn — 時間間隔用真實時間（GitHub #6）", () => 
     expect([r.date, r.time]).toEqual(["2026-05-27", "00:30"]);
   });
 });
+
+describe("processClockIn — 用各館自己的半徑選館（GitHub #3，AC-3.1）", () => {
+  it("近館半徑不夠、遠館半徑涵蓋時，打卡成功，場館、距離、半徑、班別都綁遠館", async () => {
+    const near = { ...mockVenue, id: 1, shortName: "近館", latitude: 25.0 + 100 / 111320, radius: 50 };
+    const far = { ...mockVenue, id: 2, shortName: "遠館", latitude: 25.0 - 150 / 111320, radius: 300 };
+    vi.mocked(storage.getAllVenues).mockResolvedValue([near, far] as any);
+    vi.mocked(storage.getShiftsByEmployeeAndDateRange).mockResolvedValue([{ ...mockShift, id: 2, venueId: 2 }] as any);
+
+    const r = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
+
+    expect([r.status, r.clockType, r.venueName, r.distance, r.radius, r.shiftInfo]).toEqual(["success", "in", "遠館", 150, 300, "08:00-17:00"]);
+    expect(storage.createClockRecord).toHaveBeenCalledWith(expect.objectContaining({ venueId: 2, shiftId: 2, distance: 150, matchedVenueName: "遠館", status: "success" }));
+  });
+});
