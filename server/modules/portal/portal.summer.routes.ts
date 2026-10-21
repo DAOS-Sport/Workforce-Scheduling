@@ -1,4 +1,4 @@
-import { type Express, type Request, type Response } from "express";
+import { type Express, type Request } from "express";
 import { type Server } from "http";
 import { summerScheduleService } from "../summerSchedule/summerSchedule.service";
 import { ok, fail } from "../../shared/http/response";

@@ -3,7 +3,6 @@ import { syncFromRagic } from "../modules/ragic/ragic.service";
 import {
   sendShiftReminders,
   checkMissingClockIn,
-  resetMissingClockInTracker,
   sendWeeklySchedulePush,
   sendWeeklyLateReport,
   sendAvailabilityReminders,
@@ -98,16 +97,6 @@ export function registerCronJobs(): void {
       { timezone: "Asia/Taipei" },
     );
     log("已排程每 30 分鐘（06:00-21:30）檢查未打卡員工", "cron");
-
-    // 00:00 daily — reset in-memory tracker so notifications can fire again.
-    cron.schedule(
-      "0 0 * * *",
-      () => {
-        resetMissingClockInTracker();
-      },
-      { timezone: "Asia/Taipei" },
-    );
-    log("已排程每日午夜重置未打卡追蹤記錄", "cron");
   }
 
   // Sunday 12:00 (noon) — push next-week schedule.

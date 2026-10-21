@@ -5,8 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Shield, Clock, Phone, Building2, Trash2 } from "lucide-react";
+import { AlertTriangle, Shield, Clock, Trash2 } from "lucide-react";
 import type { Venue, Shift, Employee, ShiftValidationError } from "@shared/schema";
 import { validateAllRules } from "@/lib/labor-law";
 
@@ -50,19 +49,6 @@ export function ShiftCellEditor({
   const [dispatchPhone, setDispatchPhone] = useState(currentShift?.dispatchPhone || "");
   const [violations, setViolations] = useState<ShiftValidationError[]>([]);
 
-  const handleValidate = () => {
-    if (!startTime || !endTime) return;
-    const errors = validateAllRules(
-      employee.id,
-      date,
-      startTime,
-      endTime,
-      existingShifts,
-      currentShift?.id
-    );
-    setViolations(errors);
-  };
-
   const handleTimeChange = (field: "start" | "end", value: string) => {
     if (field === "start") setStartTime(value);
     else setEndTime(value);
@@ -98,7 +84,6 @@ export function ShiftCellEditor({
   const hasBlockingError = violations.some(
     (v) => v.type === "seven_day_rest" || v.type === "daily_12h"
   );
-  const hasWarning = violations.some((v) => v.type === "rest_11h");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

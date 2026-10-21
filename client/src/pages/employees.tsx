@@ -13,7 +13,7 @@ import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, UserPlus, Phone, Mail, Edit2, RefreshCw, Download, Trash2, ShieldCheck, StarOff, Star } from "lucide-react";
+import { Search, UserPlus, Phone, Mail, Edit2, RefreshCw, Trash2, ShieldCheck, StarOff, Star } from "lucide-react";
 import type { Employee } from "@shared/schema";
 
 const ROLE_LABELS: Record<string, string> = {

@@ -1,7 +1,7 @@
 import { type Express } from "express";
 import { type Server } from "http";
 import { attendanceService } from "./attendance.service";
-import { ok, fail, notFound, badRequest } from "../../shared/http/response";
+import { ok, notFound, badRequest } from "../../shared/http/response";
 
 export function mountAttendanceRoutes(_httpServer: Server, app: Express): void {
   app.get("/api/attendance-uploads", async (_req, res) => {

@@ -1,8 +1,7 @@
 /**
  * LIFF service (Task #73 重構 D — extracted from modules/line/line.service.ts).
  *
- * Owns the LIFF clock-in orchestration: GPS-based clock-in handling,
- * automatic LINE-ID back-fill on first successful LIFF call, and the
+ * Owns the LIFF clock-in orchestration: GPS-based clock-in handling and the
  * post-clock-in LINE push (with pending-guideline reminder fan-out).
  *
  * The low-level signature/channel verification still lives under
@@ -26,15 +25,6 @@ export interface LiffClockInPayload {
 }
 
 export const liffService = {
-  async backfillLineIdIfNeeded(lineUserId: string | undefined): Promise<void> {
-    if (!lineUserId || !isValidLineUserId(lineUserId)) return;
-    const emp = await storage.getEmployeeByLineId(lineUserId);
-    if (!emp) return;
-    if (emp.lineId && isValidLineUserId(emp.lineId)) return;
-    await storage.updateEmployee(emp.id, { lineId: lineUserId });
-    console.log(`[LIFF] 自動回寫 LINE ID: ${emp.name}(${emp.employeeCode}) → ${lineUserId}`);
-  },
-
   async processLiffClockIn(payload: LiffClockInPayload) {
     const { lineUserId, employeeId, latitude, longitude, accuracy, clockType } = payload;
     if ((!lineUserId && !employeeId) || latitude === undefined || longitude === undefined) {
@@ -45,7 +35,6 @@ export const liffService = {
     console.log(
       `[Clock-in] User: ${lineUserId || `emp#${employeeId}`}, Lat: ${latitude}, Lng: ${longitude}, Accuracy: ${accuracy}m, Type: ${clockType || "auto"}`,
     );
-    await this.backfillLineIdIfNeeded(lineUserId);
 
     const params = employeeId ? { employeeId: Number(employeeId) } : { lineUserId: lineUserId! };
     const forcedType = clockType === "in" || clockType === "out" ? (clockType as "in" | "out") : undefined;

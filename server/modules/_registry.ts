@@ -25,7 +25,6 @@ import type { Express } from "express";
 import type { Server } from "http";
 
 import { mountShiftRoutes } from "./shift/shift.routes";
-import { mountAdminAuthRoutes } from "./admin/admin.routes";
 import { mountRegionRoutes } from "./region/region.routes";
 import { mountEmployeeRoutes } from "./employee/employee.routes";
 import { mountVenueRoutes } from "./venue/venue.routes";

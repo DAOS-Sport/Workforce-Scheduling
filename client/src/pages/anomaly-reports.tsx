@@ -29,12 +29,7 @@ import {
   AlertTriangle,
   Clock,
   MapPin,
-  User,
-  Hash,
-  Briefcase,
   Building2,
-  Ruler,
-  FileText,
   Bell,
   BellOff,
   Mail,
@@ -42,7 +37,6 @@ import {
   Trash2,
   Send,
   Image as ImageIcon,
-  MessageSquare,
   ZoomIn,
 } from "lucide-react";
 

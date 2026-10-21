@@ -1,12 +1,9 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { zhTW } from "date-fns/locale";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -95,7 +92,7 @@ export default function GuidelineAcksPage() {
     queryKey: ["/api/guidelines/all-acknowledgments"],
   });
 
-  const { data: guidelines = [], isLoading: guidelinesLoading } = useQuery<GuidelineListItem[]>({
+  const { data: guidelines = [] } = useQuery<GuidelineListItem[]>({
     queryKey: ["/api/guidelines"],
   });
 

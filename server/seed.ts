@@ -76,7 +76,6 @@ export async function seedDatabase() {
   }
 
   const existingVenues = await db.select().from(venues);
-  const existingNames = new Set(existingVenues.map((v) => v.shortName));
 
   let addedCount = 0;
   let updatedCount = 0;

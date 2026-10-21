@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { MapPin, CheckCircle2, AlertTriangle, XCircle, Loader2, Navigation, Smartphone, Settings, Camera, ImagePlus, X, Send } from "lucide-react";
 
 const LIFF_ID = import.meta.env.VITE_LIFF_ID || "";

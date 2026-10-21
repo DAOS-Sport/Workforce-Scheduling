@@ -8,7 +8,6 @@ import {
   type SalaryRateConfig,
   type SystemConfig,
   type MissingClockNotification,
-  type WeeklyPushNotification,
 } from "@shared/schema";
 
 export const systemRepository = {

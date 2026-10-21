@@ -11,19 +11,52 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { RegionTabs } from "@/components/region-tabs";
 import { RegionPills } from "@/components/region-pills";
 import { useRegion } from "@/lib/region-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  ChevronLeft, ChevronRight, CalendarDays, Plus, Minus, ChevronUp, ChevronDown,
-  Check, AlertCircle, Trash2, Edit2, LifeBuoy, Dumbbell, UserRound,
-  Sparkles, ShieldCheck, Settings2, X, Copy, Building2, Users, Search, ArrowRightLeft,
-  GraduationCap, Award, Briefcase, Monitor, Eye, Clipboard, ClipboardPaste, FileSpreadsheet,
-  CheckCircle2, AlertTriangle, GripVertical, ListOrdered, SquareCheck,
-  RotateCcw, History, Loader2, Link2, Download
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  Plus,
+  Minus,
+  ChevronDown,
+  Check,
+  AlertCircle,
+  Trash2,
+  Edit2,
+  LifeBuoy,
+  Dumbbell,
+  UserRound,
+  Sparkles,
+  ShieldCheck,
+  Settings2,
+  X,
+  Copy,
+  Building2,
+  Users,
+  Search,
+  ArrowRightLeft,
+  GraduationCap,
+  Award,
+  Briefcase,
+  Monitor,
+  Eye,
+  Clipboard,
+  ClipboardPaste,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertTriangle,
+  GripVertical,
+  ListOrdered,
+  SquareCheck,
+  RotateCcw,
+  History,
+  Loader2,
+  Link2,
+  Download,
 } from "lucide-react";
 import { GoogleSheetsImportDialog } from "@/components/GoogleSheetsImportDialog";
 import * as XLSX from "xlsx";

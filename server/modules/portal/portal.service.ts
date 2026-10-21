@@ -246,14 +246,7 @@ export const portalService = {
     const profile = await profileRes.json();
     const lineUserId = profile.userId;
 
-    let employee = await storage.getEmployeeByLineId(lineUserId);
-    if (!employee) {
-      const allEmps = await storage.getAllEmployees();
-      const matchByInvalidId = allEmps.find(e =>
-        e.lineId && !isValidLineUserId(e.lineId) && e.lineId === lineUserId
-      );
-      if (matchByInvalidId) employee = matchByInvalidId;
-    }
+    const employee = await storage.getEmployeeByLineId(lineUserId);
     if (!employee) {
       const e: any = err(404, "您的帳號尚未綁定。\n\n請回到 LINE 官方帳號，傳送您的「員工編號」即可自動綁定。\n綁定完成後再重新登入此頁面。");
       e.payload = { lineUserId, displayName: profile.displayName, notBound: true };
@@ -334,18 +327,7 @@ export const portalService = {
       };
     }));
 
-    const enrichedDispatch = myDispatchShifts.map((ds) => ({
-      id: -(ds.id), employeeId, venueId: ds.venueId, shiftId: null, date: ds.date,
-      startTime: ds.startTime, endTime: ds.endTime, role: ds.role, notes: ds.notes || null,
-      isDispatch: true, certificateImageUrl: null,
-      venue: ds.venueId ? (venueMap[ds.venueId] || null) : null,
-      assignedRole: toPortalDisplayRole(empRoleMap[ds.role] || ds.role || null),
-      isLeave: false,
-      leaveType: null,
-      _isDispatchRecord: true,
-    }));
-
-    // 派遣班次不顯示在員工前台班表（enrichedDispatch 不回傳）
+    // 派遣班次不顯示在員工前台班表，只回傳一般班次。
     return enrichedRegular;
   },
 

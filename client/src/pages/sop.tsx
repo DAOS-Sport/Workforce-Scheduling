@@ -3,10 +3,27 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import {
-  Calendar, Users, Building2, ClipboardCheck, MapPin, ShieldAlert,
-  CalendarCheck, Clock, FileSpreadsheet, CalendarOff, BookOpen,
-  PenLine, UserCheck, Bell, Settings, ChevronRight, Info,
-  CheckCircle2, AlertTriangle, Lightbulb, ArrowRight, ListChecks,
+  Calendar,
+  Users,
+  Building2,
+  ClipboardCheck,
+  MapPin,
+  ShieldAlert,
+  CalendarCheck,
+  Clock,
+  FileSpreadsheet,
+  CalendarOff,
+  BookOpen,
+  UserCheck,
+  Bell,
+  Settings,
+  ChevronRight,
+  Info,
+  CheckCircle2,
+  AlertTriangle,
+  Lightbulb,
+  ArrowRight,
+  ListChecks,
 } from "lucide-react";
 
 /* ─── SOP 資料結構 ──────────────────────────────────────────── */

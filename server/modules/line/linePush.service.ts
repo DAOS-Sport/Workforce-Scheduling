@@ -357,12 +357,7 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
   return { sent, skipped, noLineId };
 }
 
-// NOTE: Notification deduplication is now stored in the DB (missing_clock_notifications table)
-// so server restarts no longer cause duplicate LINE messages.
-// resetMissingClockInTracker is kept for compatibility but is a no-op.
-export function resetMissingClockInTracker() {
-  console.log("[未打卡提醒] DB 追蹤已啟用，無需重置記憶體狀態");
-}
+// 未打卡通知的去重存在資料庫（missing_clock_notifications），重啟不會重複發。
 
 async function sendMissingClockInEmail(to: string[], subject: string, html: string) {
   const transporter = nodemailer.createTransport({

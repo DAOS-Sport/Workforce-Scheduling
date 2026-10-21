@@ -1,6 +1,6 @@
 import type { Shift, ShiftValidationError } from "@shared/schema";
 import { getFourWeekPeriod, calcShiftHours } from "@shared/schema";
-import { addDays, subDays, parseISO, differenceInMinutes, format } from "date-fns";
+import { subDays, parseISO, format } from "date-fns";
 
 const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
 

@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, parseISO, getDay, addDays } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isToday, parseISO, getDay, addDays } from "date-fns";
 import { zhTW } from "date-fns/locale";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,10 +72,6 @@ interface AnnouncementItem {
   expiresAt: string | null;
 }
 
-interface CoworkerGroup {
-  venue: { id: number; shortName: string } | null;
-  coworkers: { id: number; name: string; phone: string | null; role: string; shiftRole: string; shiftTime: string | null; isDispatch?: boolean }[];
-}
 
 interface AttendanceSummary {
   total: number;
@@ -1272,42 +1267,6 @@ function GuidelineItemCard({ item, employeeId }: { item: GuidelineItem; employee
   );
 }
 
-function LiveClock() {
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const taiwanNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-  const dateStr = format(taiwanNow, "M月d日 EEEE", { locale: zhTW });
-  const timeStr = format(taiwanNow, "HH:mm");
-  const secStr = format(taiwanNow, ":ss");
-
-  return (
-    <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-live-clock">
-      <div className="py-5 text-center">
-        <p className="text-sm text-slate-500 mb-1">{dateStr}</p>
-        <div className="flex items-baseline justify-center">
-          <span
-            className="text-5xl font-bold text-juns-navy font-mono tracking-tight"
-            style={{ fontVariantNumeric: "tabular-nums" }}
-            data-testid="text-live-time"
-          >
-            {timeStr}
-          </span>
-          <span
-            className="text-2xl font-bold text-slate-400 font-mono"
-            style={{ fontVariantNumeric: "tabular-nums" }}
-          >
-            {secStr}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function LocationMap({ lat, lng }: { lat: number | null; lng: number | null }) {
   if (!lat || !lng) {
@@ -1350,56 +1309,6 @@ function LocationMap({ lat, lng }: { lat: number | null; lng: number | null }) {
   );
 }
 
-function VenueShiftInfo({ employee, result }: { employee: PortalEmployee; result: ClockInResult | null }) {
-  const today = format(new Date(), "yyyy-MM-dd");
-  const { data: todayShifts = [] } = useQuery<PortalShift[]>({
-    queryKey: ["/api/portal/my-shifts", employee.id, today, today],
-    staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      const lineId = employee.lineUserId || localStorage.getItem("portal_line_user_id") || "";
-      const res = await fetch(`/api/portal/my-shifts/${employee.id}/${today}/${today}`, {
-        headers: { "x-line-user-id": lineId },
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
-      return res.json();
-    },
-  });
-
-  const matchedVenue = result?.venueName;
-  const todayShift = (
-    matchedVenue
-      ? todayShifts.find(s => s.venue?.name === matchedVenue || s.venue?.shortName === matchedVenue)
-      : null
-  ) ?? todayShifts[0] ?? null;
-
-  return (
-    <div className="border border-juns-border rounded-xl bg-white overflow-hidden" data-testid="card-venue-shift-info">
-      <div className="p-3">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-juns-border mb-2">
-          <MapPin className="h-4 w-4 text-juns-teal shrink-0" />
-          <span className="text-sm text-juns-navy font-medium truncate">
-            {matchedVenue || (todayShift?.venue?.shortName ?? todayShift?.venue?.name ?? "尚未定位")}
-          </span>
-          {result?.distance !== undefined && result?.distance !== null && (
-            <span className="text-[10px] text-slate-400 ml-auto shrink-0 font-mono">{result.distance}m</span>
-          )}
-        </div>
-        {todayShift ? (
-          <div className="text-center text-xs text-slate-500 space-y-0.5">
-            <p>
-              上班時間 <span className="font-mono font-medium text-juns-navy">{todayShift.startTime.slice(0, 5)}</span>
-              <span className="mx-1">~</span>
-              下班時間 <span className="font-mono font-medium text-juns-navy">{todayShift.endTime.slice(0, 5)}</span>
-            </p>
-          </div>
-        ) : (
-          <p className="text-center text-xs text-slate-400">今日無排班</p>
-        )}
-      </div>
-    </div>
-  );
-}
 
 const EARLY_ARRIVAL_REASONS = [
   "提早到，先休息等上班",
@@ -3556,11 +3465,6 @@ function PortalMain({ employee }: { employee: PortalEmployee }) {
   const [saNotes, setSaNotes] = useState<string>("");
   const [copySourceDate, setCopySourceDate] = useState<string | null>(null);
   const [copyTargetDates, setCopyTargetDates] = useState<Set<string>>(new Set());
-  const addAvailDurationMin = (() => {
-    const [sh, sm] = addAvailStart.split(":").map(Number);
-    const [eh, em] = addAvailEnd.split(":").map(Number);
-    return (eh * 60 + em) - (sh * 60 + sm);
-  })();
 
   interface AvailWindowEntry { openFrom: string; openUntil: string; }
   interface AvailWindow { targetYearMonth: string; windows: AvailWindowEntry[]; openFrom?: string; openUntil?: string; }

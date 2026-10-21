@@ -3,8 +3,6 @@ import { eq, and, gte, lte, inArray, desc, not, like, or, isNull } from "drizzle
 import {
   shifts,
   shiftAuditLog,
-  employees,
-  venues,
   type Shift,
   type InsertShift,
   type ShiftAuditLog,

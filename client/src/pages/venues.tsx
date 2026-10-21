@@ -71,7 +71,7 @@ export default function VenuesPage() {
     queryKey: ["/api/venues", activeRegion],
   });
 
-  const { data: loadedTemplates = [], refetch: refetchTemplates } = useQuery<VenueShiftTemplate[]>({
+  const { data: loadedTemplates = [] } = useQuery<VenueShiftTemplate[]>({
     queryKey: ["/api/venue-shift-templates", editingVenue?.id],
     enabled: !!editingVenue,
   });
@@ -252,7 +252,6 @@ export default function VenuesPage() {
         <p className="text-xs text-muted-foreground text-center py-3">尚未設定班次範本</p>
       )}
       {rows.map((row) => {
-        const RoleIcon = ROLE_ICON_MAP[row.role] || UserRound;
         return (
           <div key={row.localId} className="flex items-center gap-1.5 flex-wrap" data-testid={`template-row-${row.localId}`}>
             <Input
@@ -323,9 +322,6 @@ export default function VenuesPage() {
     </div>
   );
 
-  const getVenueTemplateSummary = (venueId: number) => {
-    return null;
-  };
 
   return (
     <div className="flex flex-col h-full overflow-auto">

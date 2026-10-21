@@ -1,5 +1,4 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, date, time, serial, timestamp, real, unique, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, date, time, serial, timestamp, real, unique, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 

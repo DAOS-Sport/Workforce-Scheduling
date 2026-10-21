@@ -84,7 +84,7 @@ function AdminLayout({ adminName, onLogout }: { adminName: string; onLogout: () 
 
 function AdminGuard() {
   const [authKey, setAuthKey] = useState(0);
-  const { data, isLoading, error } = useQuery<{ id: number; name: string }>({
+  const { data, isLoading } = useQuery<{ id: number; name: string }>({
     queryKey: ["/api/admin/me", authKey],
     queryFn: async () => {
       const res = await fetch("/api/admin/me", { credentials: "include" });
@@ -119,7 +119,6 @@ function AppRouter() {
   const isPortal = location.startsWith("/portal");
   const isLiff = location.startsWith("/liff");
   const isMobileHr = location.startsWith("/mobile-hr");
-  const isAdminCallback = location.startsWith("/admin/callback");
 
   if (isPortal) {
     return <PortalPage />;

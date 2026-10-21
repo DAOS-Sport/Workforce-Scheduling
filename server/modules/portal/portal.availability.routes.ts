@@ -19,24 +19,10 @@ function extractLineUserId(req: import("express").Request): string | undefined {
 }
 
 interface AvailWindowEntry { openFrom: string; openUntil: string; }
-interface AvailWindow { targetYearMonth: string; windows: AvailWindowEntry[]; }
 
 /** Returns today's date string (yyyy-MM-dd) in Asia/Taipei timezone. */
 function todayTaipei(): string {
   return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Taipei" });
-}
-
-/** Returns ISO week bounds (Mon–Sun) for a given date string (yyyy-MM-dd). */
-function getIsoWeekBounds(dateStr: string): { weekStart: string; weekEnd: string } {
-  const d = new Date(dateStr);
-  const day = d.getDay(); // 0=Sun
-  const diffToMon = day === 0 ? -6 : 1 - day;
-  const mon = new Date(d);
-  mon.setDate(d.getDate() + diffToMon);
-  const sun = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
-  const fmt = (dt: Date) => dt.toISOString().slice(0, 10);
-  return { weekStart: fmt(mon), weekEnd: fmt(sun) };
 }
 
 /** Load and validate the current availability window. Returns error string if closed, null if open. */

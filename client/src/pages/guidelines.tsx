@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit2, Trash2, FileText, Video, Image, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin, Megaphone, Globe, X, ChevronLeft, ChevronRight, Loader2, GripVertical } from "lucide-react";
+import { Plus, Edit2, Trash2, FileText, Video, Image, Shield, Eye, Users, BookOpen, CalendarDays, Lock, MapPin, Megaphone, Globe, X, Loader2, GripVertical } from "lucide-react";
 import type { Guideline, GuidelineAck, Employee, Venue, Shift } from "@shared/schema";
 
 type GuidelineListItem = Omit<Guideline, "imageUrl" | "imageUrls"> & { imageCount: number };

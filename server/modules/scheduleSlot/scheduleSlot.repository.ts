@@ -2,7 +2,6 @@ import { db } from "../../db";
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import {
   scheduleSlots,
-  venues,
   type ScheduleSlot,
   type InsertScheduleSlot,
 } from "@shared/schema";
