@@ -1,7 +1,6 @@
 import type { Shift, ShiftValidationError } from "@shared/schema";
 import { getFourWeekPeriod, calcShiftHours } from "@shared/schema";
-
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
+import { LEAVE_TYPES } from "@shared/leave";
 
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(":").map(Number);

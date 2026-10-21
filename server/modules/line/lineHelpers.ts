@@ -15,4 +15,3 @@ export function formatTaiwanDate(date: Date): string {
   return `${y}-${mo}-${d}`;
 }
 
-export const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];

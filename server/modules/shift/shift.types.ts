@@ -14,6 +14,7 @@ export {
   insertShiftSchema,
   getFourWeekPeriod,
 } from "@shared/schema";
+import { LEAVE_TYPES } from "@shared/leave";
 
 /**
  * The set of role values that mark a shift as a leave entry rather than
@@ -21,16 +22,7 @@ export {
  * counted toward 12h/4-week ceilings, and never trigger seven-day-rest
  * blocks.
  */
-export const LEAVE_TYPES = [
-  "休假",
-  "特休",
-  "病假",
-  "事假",
-  "喪假",
-  "公假",
-  "生理假",
-  "國定假",
-] as const;
+export { LEAVE_TYPES };
 
 export function isLeaveRole(role: string | null | undefined): boolean {
   return !!role && (LEAVE_TYPES as readonly string[]).includes(role);

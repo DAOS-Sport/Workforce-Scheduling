@@ -12,7 +12,7 @@ export interface ScheduleExportInput {
   venues: Map<number, Venue>;
   regions: Region[];
   templates: VenueShiftTemplate[];
-  leaveTypes: string[];
+  leaveTypes: readonly string[];
   startDate: string;
   endDate: string;
 }
