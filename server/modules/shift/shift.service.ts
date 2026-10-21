@@ -6,7 +6,8 @@
  * own default status.
  *
  * Contract:
- *   - Single edit / single delete pass force=true (admin's explicit click).
+ *   - Single edit / single delete pass force=true (admin's explicit click),
+ *     and so do /batch-delete and /batch-delete-ids.
  *   - /batch and /batch-update pass force only when the body has force === true;
  *     /import-batch always passes force=true on update.
  *   - createShift never needs force (no row exists yet).
