@@ -1,85 +1,38 @@
 /**
  * Portal availability sub-routes — employee shift availability (排班意願).
  * Endpoints:
+ *   GET    /api/portal/monthly-holidays/:yearMonth  (public — no auth needed)
+ *   GET    /api/portal/availability-window  (public — no auth needed)
  *   GET    /api/portal/my-availabilities/:employeeId/:yearMonth
  *   POST   /api/portal/availability
  *   DELETE /api/portal/availability/:id
- *   GET    /api/portal/availability-window  (public — no auth needed)
  */
 import { type Express } from "express";
 import { type Server } from "http";
-import { portalService } from "./portal.service";
-import { availabilityRepository } from "../availability/availability.repository";
-import { storage } from "../../storage";
-import { ok, created, fail, badRequest, notFound } from "../../shared/http/response";
+import {
+  getMonthlyHolidays,
+  getAvailabilityWindow,
+  listMyAvailabilities,
+  submitAvailability,
+  withdrawAvailability,
+} from "./portal.availability.service";
+import { ok, created, fail } from "../../shared/http/response";
 
 function extractLineUserId(req: import("express").Request): string | undefined {
   return (req.header("x-line-user-id") as string | undefined) ??
     (typeof req.query.lineUserId === "string" ? req.query.lineUserId : undefined);
 }
 
-interface AvailWindowEntry { openFrom: string; openUntil: string; }
-
-/** Returns today's date string (yyyy-MM-dd) in Asia/Taipei timezone. */
-function todayTaipei(): string {
-  return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Taipei" });
-}
-
-/** Load and validate the current availability window. Returns error string if closed, null if open. */
-async function checkWindowOpen(targetDate?: string): Promise<string | null> {
-  const cfg = await storage.getSystemConfig("availability_window");
-  if (!cfg?.value) return "管理員尚未設定意願填寫開放時間";
-  let raw: any;
-  try { raw = JSON.parse(cfg.value); } catch { return "意願填寫設定格式錯誤"; }
-  if (!/^\d{4}-\d{2}$/.test(raw.targetYearMonth)) return "意願填寫設定格式錯誤";
-  // Backward compat: old flat format had openFrom/openUntil at top level
-  const windows: AvailWindowEntry[] = raw.windows ??
-    (raw.openFrom ? [{ openFrom: raw.openFrom, openUntil: raw.openUntil }] : []);
-  const today = todayTaipei();
-  const isOpen = windows.some(w =>
-    /^\d{4}-\d{2}-\d{2}$/.test(w.openFrom) &&
-    /^\d{4}-\d{2}-\d{2}$/.test(w.openUntil) &&
-    today >= w.openFrom && today <= w.openUntil
-  );
-  if (!isOpen) return "目前不在開放填寫期間";
-  if (targetDate) {
-    const dateMonth = targetDate.slice(0, 7);
-    if (dateMonth !== raw.targetYearMonth) {
-      return `填寫日期須屬於開放月份（${raw.targetYearMonth}）`;
-    }
-  }
-  return null;
-}
-
-/** Returns the array of holiday date strings (yyyy-MM-dd) for a given yearMonth from system_config. */
-async function getHolidaysForMonth(yearMonth: string): Promise<string[]> {
-  const cfg = await storage.getSystemConfig("monthly_holidays");
-  if (!cfg?.value) return [];
-  try {
-    const map = JSON.parse(cfg.value) as Record<string, string[]>;
-    return map[yearMonth] ?? [];
-  } catch { return []; }
-}
-
 export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express): void {
-  /** Public endpoint: returns holiday dates for a given yearMonth */
   app.get("/api/portal/monthly-holidays/:yearMonth", async (req, res) => {
     try {
-      const { yearMonth } = req.params;
-      if (!/^\d{4}-\d{2}$/.test(yearMonth)) return badRequest(res, "yearMonth 格式須為 YYYY-MM");
-      ok(res, await getHolidaysForMonth(yearMonth));
-    } catch (err: any) { fail(res, 500, err.message); }
+      ok(res, await getMonthlyHolidays(req.params.yearMonth));
+    } catch (err: any) { fail(res, err.status || 500, err.message); }
   });
 
   app.get("/api/portal/availability-window", async (_req, res) => {
     try {
-      const cfg = await storage.getSystemConfig("availability_window");
-      if (!cfg) return ok(res, null);
-      try {
-        ok(res, JSON.parse(cfg.value));
-      } catch {
-        ok(res, null);
-      }
+      ok(res, await getAvailabilityWindow());
     } catch (err: any) {
       fail(res, 500, err.message);
     }
@@ -87,114 +40,25 @@ export function mountPortalAvailabilityRoutes(_httpServer: Server, app: Express)
 
   app.get("/api/portal/my-availabilities/:employeeId/:yearMonth", async (req, res) => {
     try {
-      const employeeId = parseInt(req.params.employeeId);
-      if (isNaN(employeeId)) return badRequest(res, "無效的員工 ID");
-      const auth = await portalService.verifyCaller(employeeId, extractLineUserId(req));
-      if (!auth.ok) return fail(res, auth.status, auth.message ?? "未授權", { code: auth.code });
-      const { yearMonth } = req.params;
-      if (!/^\d{4}-\d{2}$/.test(yearMonth)) return badRequest(res, "yearMonth 格式須為 YYYY-MM");
-      ok(res, await availabilityRepository.getByEmployeeAndYearMonth(employeeId, yearMonth));
+      ok(res, await listMyAvailabilities(req.params.employeeId, req.params.yearMonth, extractLineUserId(req)));
     } catch (err: any) {
-      fail(res, 500, err.message);
+      fail(res, err.status || 500, err.message, err.extra);
     }
   });
 
   app.post("/api/portal/availability", async (req, res) => {
     try {
-      const { employeeId, date, startTime, endTime, note, entryType } = req.body;
-      const isOffRequest = entryType === "off_request";
-      if (!employeeId || !date) return badRequest(res, "缺少必要欄位");
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return badRequest(res, "date 格式須為 YYYY-MM-DD");
-      // Time-slot format validation (only when startTime/endTime are provided)
-      if (!isOffRequest && (startTime || endTime)) {
-        if (!startTime || !endTime) return badRequest(res, "缺少必要欄位");
-        if (!/^\d{2}:\d{2}(:\d{2})?$/.test(startTime) || !/^\d{2}:\d{2}(:\d{2})?$/.test(endTime)) {
-          return badRequest(res, "時間格式須為 HH:MM");
-        }
-        if (startTime >= endTime) return badRequest(res, "結束時間必須晚於開始時間");
-      }
-      const windowErr = await checkWindowOpen(date);
-      if (windowErr) return fail(res, 403, windowErr);
-      const auth = await portalService.verifyCaller(Number(employeeId), extractLineUserId(req));
-      if (!auth.ok) return fail(res, auth.status, auth.message ?? "未授權", { code: auth.code });
-      const emp = await storage.getEmployee(Number(employeeId));
-      if (!emp) return notFound(res, "找不到員工資料");
-      const empType = emp.employmentType ?? "full_time";
-      if (isOffRequest && empType !== "full_time") {
-        return badRequest(res, "兼職員工無法填寫休假意願，請選擇可上班時段");
-      }
-      // Full-time may only submit off_request entries.
-      if (!isOffRequest && empType === "full_time") {
-        return badRequest(res, "正職員工僅可填寫休假意願");
-      }
-      // Part-time without startTime/endTime is only allowed when note is "都可以"
-      if (!isOffRequest && empType !== "full_time" && !startTime && !endTime) {
-        const n = (note as string | undefined)?.trim() ?? "";
-        if (n !== "都可以") return badRequest(res, "兼職員工填寫可上班時段時須提供時間");
-      }
-      // 同一天不得重複填寫（正職、兼職皆適用）
-      const alreadyExists = await availabilityRepository.existsOnDate(Number(employeeId), date);
-      if (alreadyExists) {
-        return badRequest(res, "該日已有填寫記錄，請先刪除後再重新填寫");
-      }
-      if (isOffRequest) {
-        // 勞工請假規則第7條：事假每年上限 14 天
-        const leaveNote = (note as string | undefined)?.trim() ?? "";
-        if (leaveNote === "事假") {
-          const year = Number(date.slice(0, 4));
-          const yearCount = await availabilityRepository.countOffRequestsByNoteAndYear(Number(employeeId), "事假", year);
-          if (yearCount >= 14) {
-            return badRequest(res, `事假已達今年上限 14 天（勞工請假規則第7條）`);
-          }
-        }
-      }
-      // 假日（休館日）不得填寫意願
-      const holidays = await getHolidaysForMonth(date.slice(0, 7));
-      if (holidays.includes(date)) {
-        return badRequest(res, "該日為休館日，無法填寫排班意願");
-      }
-      if (!isOffRequest && emp.regionId) {
-        const regionVenues = await storage.getVenuesByRegion(emp.regionId);
-        const operated = regionVenues.filter((v) => v.openTime && v.closeTime);
-        if (operated.length > 0) {
-          const regionOpen = operated.map((v) => v.openTime!).sort()[0];
-          const regionClose = operated.map((v) => v.closeTime!).sort().reverse()[0];
-          const st = (startTime as string).slice(0, 5);
-          const et = (endTime as string).slice(0, 5);
-          if (st < regionOpen || et > regionClose) {
-            return badRequest(res, `時段超出場館開放時間（${regionOpen}–${regionClose}）`);
-          }
-        }
-      }
-      const leaveType = isOffRequest ? (note?.trim() || null) : null;
-      const row = await availabilityRepository.create({
-        employeeId: Number(employeeId),
-        date,
-        entryType: isOffRequest ? "off_request" : "available",
-        startTime: isOffRequest ? null : startTime,
-        endTime: isOffRequest ? null : endTime,
-        note: isOffRequest ? leaveType : (note?.trim() || null),
-      });
-      created(res, row);
+      created(res, await submitAvailability(req.body, extractLineUserId(req)));
     } catch (err: any) {
-      fail(res, 500, err.message);
+      fail(res, err.status || 500, err.message, err.extra);
     }
   });
 
   app.delete("/api/portal/availability/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return badRequest(res, "無效的 ID");
-      const row = await availabilityRepository.getById(id);
-      if (!row) return notFound(res, "找不到此意願紀錄");
-      const windowErr = await checkWindowOpen(row.date);
-      if (windowErr) return fail(res, 403, windowErr);
-      const auth = await portalService.verifyCaller(row.employeeId, extractLineUserId(req));
-      if (!auth.ok) return fail(res, auth.status, auth.message ?? "未授權", { code: auth.code });
-      await availabilityRepository.delete(id);
-      ok(res, { success: true });
+      ok(res, await withdrawAvailability(req.params.id, extractLineUserId(req)));
     } catch (err: any) {
-      fail(res, 500, err.message);
+      fail(res, err.status || 500, err.message, err.extra);
     }
   });
 }
