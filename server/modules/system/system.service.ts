@@ -1,7 +1,7 @@
 import { storage } from "../../storage";
 import { calcShiftHours, sumScheduledHours, getAllPeriodsForMonth } from "@shared/schema";
 import { pushToLine } from "../line/linePush.service";
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import { isNotNull, and, gte, lte } from "drizzle-orm";
 import { dispatchShifts as dispatchShiftsTable } from "@shared/schema";
 import { sendAnomalyEmail } from "../../shared/email/sendAnomalyEmail";
@@ -9,6 +9,7 @@ import { TAIWAN_HOLIDAYS } from "../../core/calendar/taiwanHolidays";
 import ExcelJS from "exceljs";
 
 import { LEAVE_TYPES } from "@shared/leave";
+import { httpError } from "../../shared/http/response";
 const ATTENDANCE_GRACE_MINUTES = 10;
 
 function parseAttendanceIssueMinutes(reason: string | null | undefined, prefix: string): number | null {
@@ -36,19 +37,13 @@ function hasAttendanceIssueBeyondGrace(
   });
 }
 
-function err(status: number, message: string): Error {
-  const e: any = new Error(message);
-  e.status = status;
-  return e;
-}
-
 export const systemService = {
   async listSalaryRates() {
     return await storage.getSalaryRates();
   },
 
   async upsertSalaryRate(role: string, ratePerHour: number, label?: string) {
-    if (!role || ratePerHour === undefined || ratePerHour === null) throw err(400, "需提供 role 和 ratePerHour");
+    if (!role || ratePerHour === undefined || ratePerHour === null) throw httpError(400, "需提供 role 和 ratePerHour");
     return await storage.upsertSalaryRate(role, Number(ratePerHour), label);
   },
 
@@ -58,12 +53,12 @@ export const systemService = {
   },
 
   async upsertSystemConfig(key: string, value: any) {
-    if (value === undefined || value === null) throw err(400, "需提供 value");
+    if (value === undefined || value === null) throw httpError(400, "需提供 value");
     return await storage.upsertSystemConfig(key, String(value));
   },
 
   async fourWeekCompliance(year: number, month: number, regionCode?: string) {
-    if (!year || !month || month < 1 || month > 12) throw err(400, "需提供正確的 year 和 month");
+    if (!year || !month || month < 1 || month > 12) throw httpError(400, "需提供正確的 year 和 month");
     const refConfig = await storage.getSystemConfig("four_week_reference_date");
     const referenceDate = refConfig?.value || "2025-01-06";
 
@@ -120,7 +115,7 @@ export const systemService = {
   },
 
   async salaryReport(year: number, month: number, regionCode?: string) {
-    if (!year || !month || month < 1 || month > 12) throw err(400, "需提供正確的 year 和 month");
+    if (!year || !month || month < 1 || month > 12) throw httpError(400, "需提供正確的 year 和 month");
 
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
     const lastDay = new Date(year, month, 0).getDate();
@@ -307,7 +302,7 @@ export const systemService = {
   },
 
   async salaryReportExcel(year: number, month: number, regionCode?: string): Promise<Buffer> {
-    if (!year || !month || month < 1 || month > 12) throw err(400, "需提供正確的 year 和 month");
+    if (!year || !month || month < 1 || month > 12) throw httpError(400, "需提供正確的 year 和 month");
 
     const report = await this.salaryReport(year, month, regionCode);
 
@@ -422,7 +417,7 @@ export const systemService = {
 
   async weeklyAttendance(weekStart: string) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || isNaN(new Date(weekStart + "T00:00:00Z").getTime())) {
-      throw err(400, "weekStart 格式不正確 (YYYY-MM-DD)");
+      throw httpError(400, "weekStart 格式不正確 (YYYY-MM-DD)");
     }
     const { weekEnd, allShifts, clockRecords, allEmployees, allVenues } = await this._buildWeeklyData(weekStart);
     const empMap = new Map(allEmployees.map(e => [e.id, e]));
@@ -488,7 +483,7 @@ export const systemService = {
 
   async notifyWeeklyAttendance(weekStart: string) {
     if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || isNaN(new Date(weekStart + "T00:00:00Z").getTime())) {
-      throw err(400, "缺少或格式不正確的 weekStart (YYYY-MM-DD)");
+      throw httpError(400, "缺少或格式不正確的 weekStart (YYYY-MM-DD)");
     }
     const { weekEnd, allShifts, clockRecords, allEmployees, allVenues } = await this._buildWeeklyData(weekStart);
     const empMap = new Map(allEmployees.map(e => [e.id, e]));

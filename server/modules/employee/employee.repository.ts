@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import { eq, and, or, inArray } from "drizzle-orm";
 import {
   employees,

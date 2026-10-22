@@ -2,7 +2,6 @@
  * server/infra/db/index.ts  — CANONICAL database connection.
  *
  * All new code should import pool / db from this path.
- * server/db.ts is kept as a backward-compat re-export shim.
  */
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";

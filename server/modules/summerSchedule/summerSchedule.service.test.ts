@@ -5,7 +5,7 @@ const { mockDb, mockStorage } = vi.hoisted(() => ({
   mockStorage: {},
 }));
 
-vi.mock("../../db", () => ({
+vi.mock("../../infra/db", () => ({
   db: mockDb,
 }));
 

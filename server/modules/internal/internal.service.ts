@@ -12,7 +12,7 @@
  * uniformly.
  */
 import { storage } from "../../storage";
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import {
   REGIONS_DATA,
   dispatchShifts as dispatchShiftsTable,

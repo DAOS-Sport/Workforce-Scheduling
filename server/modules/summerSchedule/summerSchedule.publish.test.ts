@@ -6,7 +6,7 @@ const { mockDb, mockStorage } = vi.hoisted(() => ({
   mockStorage: { getAllEmployees: vi.fn(), getAllVenues: vi.fn(), deleteShift: vi.fn(), createShift: vi.fn() },
 }));
 
-vi.mock("../../db", () => ({ db: mockDb }));
+vi.mock("../../infra/db", () => ({ db: mockDb }));
 vi.mock("../../storage", () => ({ storage: mockStorage }));
 vi.mock("../line/lineSignature", () => ({ isValidLineUserId: vi.fn(() => true) }));
 

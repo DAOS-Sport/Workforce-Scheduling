@@ -1,4 +1,5 @@
 import { storage } from "../../storage";
+import { httpError } from "../../shared/http/response";
 
 const LEAVE_ROLES = ["休假", "特休", "病假", "事假", "公假", "喪假", "育嬰", "留職停薪"];
 
@@ -13,12 +14,6 @@ function isAttendanceRequired(shift: { role?: string | null; notes?: string | nu
   if (role.toLowerCase().includes("coach")) return false;
   if (notes.includes("暑假課程") || notes.includes("手動課程")) return false;
   return true;
-}
-
-function err(status: number, message: string): Error {
-  const e: any = new Error(message);
-  e.status = status;
-  return e;
 }
 
 const toTaiwanDate = (iso: string | Date | null): string => {
@@ -37,7 +32,7 @@ const toTaiwanHHMM = (iso: string | Date | null): string | null => {
 export const clockService = {
   async listRecords(opts: { startDate?: string; endDate?: string; employeeId?: number }) {
     const { startDate, endDate, employeeId } = opts;
-    if (!startDate || !endDate) throw err(400, "startDate and endDate required");
+    if (!startDate || !endDate) throw httpError(400, "startDate and endDate required");
     const records = employeeId
       ? await storage.getClockRecordsByEmployee(Number(employeeId), startDate, endDate)
       : await storage.getClockRecordsByDateRange(startDate, endDate);
@@ -60,8 +55,8 @@ export const clockService = {
     status?: string; clockType?: string; venueId?: string;
   }) {
     const { startDate, endDate, employeeName, employeeCode, status, clockType, venueId } = opts;
-    if (!startDate || !endDate) throw err(400, "請提供 startDate 和 endDate");
-    if (String(startDate) > String(endDate)) throw err(400, "startDate 不可晚於 endDate");
+    if (!startDate || !endDate) throw httpError(400, "請提供 startDate 和 endDate");
+    if (String(startDate) > String(endDate)) throw httpError(400, "startDate 不可晚於 endDate");
 
     const [allRecords, allEmployees, allVenues] = await Promise.all([
       storage.getClockRecordsByDateRange(String(startDate), String(endDate)),
@@ -97,7 +92,7 @@ export const clockService = {
   },
 
   async listAnomaliesReport(yearMonth: string) {
-    if (!/^\d{4}-\d{2}$/.test(yearMonth)) throw err(400, "yearMonth 格式應為 YYYY-MM");
+    if (!/^\d{4}-\d{2}$/.test(yearMonth)) throw httpError(400, "yearMonth 格式應為 YYYY-MM");
     const [yr, mo] = yearMonth.split("-").map(Number);
     const monthStart = `${yearMonth}-01`;
     const lastDay = new Date(yr, mo, 0).getDate();
@@ -231,9 +226,9 @@ export const clockService = {
 
   async createAmendment(payload: any) {
     const { employeeId, clockType, requestedTime, reason, venueId, shiftId, isSystemIssue, evidenceImageUrl, originalClockRecordId } = payload || {};
-    if (!employeeId || !clockType || !requestedTime || !reason) throw err(400, "缺少必要欄位");
+    if (!employeeId || !clockType || !requestedTime || !reason) throw httpError(400, "缺少必要欄位");
     const emp = await storage.getEmployee(employeeId);
-    if (!emp) throw err(404, "找不到員工");
+    if (!emp) throw httpError(404, "找不到員工");
 
     if (!isSystemIssue) {
       const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
@@ -247,7 +242,7 @@ export const clockService = {
         return created && created >= monthStart && created <= monthEnd
           && a.status !== "rejected" && !a.isSystemIssue;
       }).length;
-      if (monthlyCount >= 3) throw err(400, "本月補打卡申請已達上限（3次），如有特殊情況請標記「系統問題」或聯繫主管。");
+      if (monthlyCount >= 3) throw httpError(400, "本月補打卡申請已達上限（3次），如有特殊情況請標記「系統問題」或聯繫主管。");
     }
 
     const toTaipeiDate = (d: Date) => {
@@ -265,7 +260,7 @@ export const clockService = {
       }
       return false;
     });
-    if (hasDuplicate) throw err(400, "該日期同類型已有待審核或已批准的補卡申請，無法重複送出。");
+    if (hasDuplicate) throw httpError(400, "該日期同類型已有待審核或已批准的補卡申請，無法重複送出。");
 
     return await storage.createClockAmendment({
       employeeId, clockType, requestedTime: new Date(requestedTime), reason,
@@ -281,7 +276,7 @@ export const clockService = {
   },
 
   async listEligibleDates(employeeId: number, yearMonth: string) {
-    if (!employeeId || !/^\d{4}-\d{2}$/.test(yearMonth)) throw err(400, "參數格式錯誤");
+    if (!employeeId || !/^\d{4}-\d{2}$/.test(yearMonth)) throw httpError(400, "參數格式錯誤");
     const [yr, mo] = yearMonth.split("-").map(Number);
     const monthStart = `${yearMonth}-01`;
     const lastDay = new Date(yr, mo, 0).getDate();
@@ -448,11 +443,11 @@ export const clockService = {
 
   async approveAmendment(id: number, status: string, reviewNote: string | undefined, adminId: number, adminName: string) {
     if (!status || !["approved", "rejected"].includes(status)) {
-      throw err(400, "status 必須為 approved 或 rejected");
+      throw httpError(400, "status 必須為 approved 或 rejected");
     }
     const amendment = await storage.getClockAmendment(id);
-    if (!amendment) throw err(404, "找不到補打卡申請");
-    if (amendment.status !== "pending") throw err(400, "此申請已審核完畢");
+    if (!amendment) throw httpError(404, "找不到補打卡申請");
+    if (amendment.status !== "pending") throw httpError(400, "此申請已審核完畢");
 
     const updated = await storage.updateClockAmendmentStatus(id, status, adminId, adminName, reviewNote);
     if (status === "approved" && updated) {
@@ -505,16 +500,16 @@ export const clockService = {
         }
       } catch (recordErr: any) {
         await storage.updateClockAmendmentStatus(id, "pending", 0, "系統", "系統錯誤：打卡紀錄建立失敗，請重新審核");
-        throw err(500, "打卡紀錄建立失敗: " + recordErr.message);
+        throw httpError(500, "打卡紀錄建立失敗: " + recordErr.message);
       }
     }
     return updated;
   },
 
   async updateRecordReason(id: number, earlyArrivalReason: string | undefined, lateDepartureReason: string | undefined) {
-    if (!earlyArrivalReason && !lateDepartureReason) throw err(400, "請提供原因");
+    if (!earlyArrivalReason && !lateDepartureReason) throw httpError(400, "請提供原因");
     const updated = await storage.updateClockRecordReason(id, earlyArrivalReason, lateDepartureReason);
-    if (!updated) throw err(404, "找不到打卡紀錄");
+    if (!updated) throw httpError(404, "找不到打卡紀錄");
 
     let overtimeRequest = null;
     if (lateDepartureReason === "加班") {

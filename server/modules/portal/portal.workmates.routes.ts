@@ -39,7 +39,8 @@ export function mountPortalWorkmatesRoutes(_httpServer: Server, app: Express): v
       try {
         ok(res, await portalService.getWorkmates(employeeId, date));
       } catch (err: any) {
-        if (err.code) return fail(res, err.status || 400, err.message, { code: err.code });
+        const code = err.extra?.code ?? err.code;
+        if (code) return fail(res, err.status || 400, err.message, { code });
         throw err;
       }
     } catch (err: any) {

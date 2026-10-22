@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import { eq, inArray } from "drizzle-orm";
 import {
   venues,
@@ -7,7 +7,6 @@ import {
   type Venue,
   type InsertVenue,
   type VenueRequirement,
-  type InsertVenueRequirement,
   type VenueShiftTemplate,
   type InsertVenueShiftTemplate,
 } from "@shared/schema";
@@ -44,11 +43,6 @@ export const venueRepository = {
     return db.select().from(venueRequirements).where(
       inArray(venueRequirements.venueId, venueIds)
     );
-  },
-
-  async createVenueRequirement(data: InsertVenueRequirement): Promise<VenueRequirement> {
-    const [req] = await db.insert(venueRequirements).values(data).returning();
-    return req;
   },
 
   async getVenueShiftTemplates(venueId: number): Promise<VenueShiftTemplate[]> {

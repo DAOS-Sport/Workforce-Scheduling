@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import { eq, desc } from "drizzle-orm";
 import {
   guidelines,

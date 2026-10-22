@@ -3861,7 +3861,6 @@ async function publishToEmployeePortal(){
   }
 }
 
-const LINE_PUSH_BACKEND_API='/api/admin/schedule-assignments/push-line';
 function rawEntryHasScheduleValue(entry){
   const key=String(entry?.key||'');
   const value=String(entry?.value||'').trim();
@@ -3903,7 +3902,6 @@ function collectSchedulePayload(){
     shifts,
     publishShiftsApi:API_ENDPOINTS.publishShifts,
     linePushPreview:collectAssignedEmployeeStats(),
-    linePushBackendApi:LINE_PUSH_BACKEND_API,
     apiEndpoints:API_ENDPOINTS
   };
 }

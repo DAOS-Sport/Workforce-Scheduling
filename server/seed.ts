@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from "./infra/db";
 import { regions, venues, employees } from "@shared/schema";
 import { REGIONS_DATA } from "@shared/schema";
 import { eq } from "drizzle-orm";

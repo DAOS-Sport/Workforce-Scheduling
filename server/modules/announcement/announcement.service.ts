@@ -6,7 +6,7 @@
  * the four aggregations here is faster than asking each domain service
  * for its pending count over a separate round trip.
  */
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import { eq, count } from "drizzle-orm";
 import {
   announcements,

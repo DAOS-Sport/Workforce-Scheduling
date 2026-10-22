@@ -4,7 +4,7 @@
  */
 import { sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import { featureFlags } from "../../config/featureFlags";
 import { IS_PRODUCTION } from "../../config/env";
 import { LEAVE_TYPES } from "../shift/shift.types";

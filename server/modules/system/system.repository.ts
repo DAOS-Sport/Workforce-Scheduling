@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import { eq, and, lte } from "drizzle-orm";
 import {
   salaryRateConfigs,
@@ -50,18 +50,6 @@ export const systemRepository = {
         .returning();
       return created;
     }
-  },
-
-  async hasMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<boolean> {
-    const [row] = await db.select({ id: missingClockNotifications.id })
-      .from(missingClockNotifications)
-      .where(and(
-        eq(missingClockNotifications.date, date),
-        eq(missingClockNotifications.employeeId, employeeId),
-        eq(missingClockNotifications.shiftId, shiftId),
-      ))
-      .limit(1);
-    return !!row;
   },
 
   async createMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<void> {

@@ -1,7 +1,6 @@
-import { pool } from "./db";
+import { pool } from "./infra/db";
 import {
   type Region,
-  type InsertRegion,
   type Venue,
   type InsertVenue,
   type Employee,
@@ -9,7 +8,6 @@ import {
   type Shift,
   type InsertShift,
   type VenueRequirement,
-  type InsertVenueRequirement,
   type ScheduleSlot,
   type InsertScheduleSlot,
   type VenueShiftTemplate,
@@ -40,7 +38,6 @@ import {
   type LeaveRequest,
   type InsertLeaveRequest,
   type EmployeeLeaveBalance,
-  type LeaveBalanceLog,
   type ShiftAuditLog,
 } from "@shared/schema";
 
@@ -62,7 +59,6 @@ import { leaveRepository } from "./modules/leave/leave.repository";
 export interface IStorage {
   getRegions(): Promise<Region[]>;
   getRegionByCode(code: string): Promise<Region | undefined>;
-  createRegion(data: InsertRegion): Promise<Region>;
 
   getVenuesByRegion(regionId: number): Promise<Venue[]>;
   getAllVenues(): Promise<Venue[]>;
@@ -90,7 +86,6 @@ export interface IStorage {
   deleteShift(id: number): Promise<boolean>;
 
   getVenueRequirementsByRegion(regionId: number): Promise<VenueRequirement[]>;
-  createVenueRequirement(data: InsertVenueRequirement): Promise<VenueRequirement>;
 
   getScheduleSlotsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<ScheduleSlot[]>;
   getScheduleSlotsByVenueAndDate(venueId: number, date: string): Promise<ScheduleSlot[]>;
@@ -183,7 +178,6 @@ export interface IStorage {
   upsertSystemConfig(key: string, value: string): Promise<SystemConfig>;
 
   // Missing clock-in notification tracking (persisted in DB so restarts don't cause re-sends)
-  hasMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<boolean>;
   createMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<void>;
   clearOldMissingClockNotifications(beforeDate: string): Promise<void>;
   getMissingClockNotificationsForDate(date: string): Promise<MissingClockNotification[]>;
@@ -199,7 +193,6 @@ export interface IStorage {
   getLeaveRequestsByEmployee(employeeId: number): Promise<LeaveRequest[]>;
   getLeaveRequest(id: number): Promise<LeaveRequest | undefined>;
   updateLeaveRequestStatus(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string): Promise<LeaveRequest | undefined>;
-  getLeaveRequestsByDateRange(employeeId: number, startDate: string, endDate: string): Promise<LeaveRequest[]>;
 
   // Leave balances
   getLeaveBalance(employeeId: number, year: number): Promise<EmployeeLeaveBalance | undefined>;
@@ -209,7 +202,6 @@ export interface IStorage {
   adjustLeaveBalanceOnReject(employeeId: number, year: number, hours: number): Promise<void>;
   getAllLeaveBalances(year: number): Promise<(EmployeeLeaveBalance & { employeeName: string; employeeCode: string })[]>;
   appendLeaveBalanceLog(employeeId: number, year: number, delta: number, reason: string, leaveRequestId?: number, operatedBy?: number, operatedByName?: string): Promise<void>;
-  getLeaveBalanceLogs(employeeId: number, year: number): Promise<LeaveBalanceLog[]>;
 }
 
 /**
@@ -224,10 +216,6 @@ export class DatabaseStorage implements IStorage {
 
   async getRegionByCode(code: string): Promise<Region | undefined> {
     return regionRepository.getRegionByCode(code);
-  }
-
-  async createRegion(data: InsertRegion): Promise<Region> {
-    return regionRepository.createRegion(data);
   }
 
   async getVenuesByRegion(regionId: number): Promise<Venue[]> {
@@ -324,10 +312,6 @@ export class DatabaseStorage implements IStorage {
 
   async getVenueRequirementsByRegion(regionId: number): Promise<VenueRequirement[]> {
     return venueRepository.getVenueRequirementsByRegion(regionId);
-  }
-
-  async createVenueRequirement(data: InsertVenueRequirement): Promise<VenueRequirement> {
-    return venueRepository.createVenueRequirement(data);
   }
 
   async getScheduleSlotsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<ScheduleSlot[]> {
@@ -630,10 +614,6 @@ export class DatabaseStorage implements IStorage {
     return systemRepository.upsertSystemConfig(key, value);
   }
 
-  async hasMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<boolean> {
-    return systemRepository.hasMissingClockNotification(date, employeeId, shiftId);
-  }
-
   async createMissingClockNotification(date: string, employeeId: number, shiftId: number): Promise<void> {
     return systemRepository.createMissingClockNotification(date, employeeId, shiftId);
   }
@@ -678,10 +658,6 @@ export class DatabaseStorage implements IStorage {
     return leaveRepository.updateLeaveRequestStatus(id, status, reviewedBy, reviewedByName, reviewNote);
   }
 
-  async getLeaveRequestsByDateRange(employeeId: number, startDate: string, endDate: string): Promise<LeaveRequest[]> {
-    return leaveRepository.getLeaveRequestsByDateRange(employeeId, startDate, endDate);
-  }
-
   async getLeaveBalance(employeeId: number, year: number): Promise<EmployeeLeaveBalance | undefined> {
     return leaveRepository.getLeaveBalance(employeeId, year);
   }
@@ -708,10 +684,6 @@ export class DatabaseStorage implements IStorage {
 
   async appendLeaveBalanceLog(employeeId: number, year: number, delta: number, reason: string, leaveRequestId?: number, operatedBy?: number, operatedByName?: string): Promise<void> {
     return leaveRepository.appendLeaveBalanceLog(employeeId, year, delta, reason, leaveRequestId, operatedBy, operatedByName);
-  }
-
-  async getLeaveBalanceLogs(employeeId: number, year: number): Promise<LeaveBalanceLog[]> {
-    return leaveRepository.getLeaveBalanceLogs(employeeId, year);
   }
 
 }

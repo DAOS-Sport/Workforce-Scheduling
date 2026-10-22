@@ -23,7 +23,3 @@ import { LEAVE_TYPES } from "@shared/leave";
  * blocks.
  */
 export { LEAVE_TYPES };
-
-export function isLeaveRole(role: string | null | undefined): boolean {
-  return !!role && (LEAVE_TYPES as readonly string[]).includes(role);
-}

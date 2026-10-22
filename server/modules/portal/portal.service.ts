@@ -4,13 +4,7 @@ import { isValidLineUserId } from "../line/lineSignature";
 import { isReviewableWorkShift } from "../shift/shiftReview.service";
 import { OFF_DUTY_ROLES } from "@shared/leave";
 import { maskId } from "../../shared/log";
-
-function err(status: number, message: string, code?: string): Error {
-  const e: any = new Error(message);
-  e.status = status;
-  if (code) e.code = code;
-  return e;
-}
+import { httpError } from "../../shared/http/response";
 
 const isDevMode = process.env.NODE_ENV !== "production";
 
@@ -205,7 +199,7 @@ export const portalService = {
   },
 
   async devLogin(employeeId: number) {
-    if (!employeeId) throw err(400, "缺少員工 ID");
+    if (!employeeId) throw httpError(400, "缺少員工 ID");
     const regionIds = [1, 2, 3];
     let found: any = null;
     for (const rid of regionIds) {
@@ -213,37 +207,37 @@ export const portalService = {
       found = emps.find((e) => e.id === employeeId);
       if (found) break;
     }
-    if (!found) throw err(404, "找不到員工");
-    if (found.status !== "active") throw err(403, "此帳號已停用");
+    if (!found) throw httpError(404, "找不到員工");
+    if (found.status !== "active") throw httpError(403, "此帳號已停用");
     return { id: found.id, name: found.name, employeeCode: found.employeeCode, role: found.role, employmentType: found.employmentType, regionId: found.regionId };
   },
 
   async lineCallback(code: string, redirectUri: string) {
-    if (!code) throw err(400, "缺少授權碼");
+    if (!code) throw httpError(400, "缺少授權碼");
     const channelId = process.env.LINE_CHANNEL_ID;
     const channelSecret = process.env.LINE_LOGIN_CHANNEL_SECRET || process.env.LINE_CHANNEL_SECRET;
-    if (!channelId || !channelSecret) throw err(500, "LINE Login 尚未設定");
+    if (!channelId || !channelSecret) throw httpError(500, "LINE Login 尚未設定");
 
     const tokenRes = await exchangeLoginCode({ code, redirectUri, clientId: channelId, clientSecret: channelSecret });
     if (!tokenRes.ok) {
       console.error("LINE token error:", await tokenRes.text());
-      throw err(401, "LINE 授權失敗");
+      throw httpError(401, "LINE 授權失敗");
     }
     const tokenData = await tokenRes.json();
     const accessToken = tokenData.access_token;
     const profileRes = await fetchLoginProfile(accessToken);
-    if (!profileRes.ok) throw err(401, "無法取得 LINE 個人資料");
+    if (!profileRes.ok) throw httpError(401, "無法取得 LINE 個人資料");
 
     const profile = await profileRes.json();
     const lineUserId = profile.userId;
 
     const employee = await storage.getEmployeeByLineId(lineUserId);
     if (!employee) {
-      const e: any = err(404, "您的帳號尚未綁定。\n\n請回到 LINE 官方帳號，傳送您的「員工編號」即可自動綁定。\n綁定完成後再重新登入此頁面。");
+      const e: any = httpError(404, "您的帳號尚未綁定。\n\n請回到 LINE 官方帳號，傳送您的「員工編號」即可自動綁定。\n綁定完成後再重新登入此頁面。");
       e.payload = { lineUserId, displayName: profile.displayName, notBound: true };
       throw e;
     }
-    if (employee.status !== "active") throw err(403, "此帳號已停用");
+    if (employee.status !== "active") throw httpError(403, "此帳號已停用");
     if (!employee.lineId || !isValidLineUserId(employee.lineId)) {
       await storage.updateEmployee(employee.id, { lineId: lineUserId });
       console.log(`[Portal] 自動回寫 LINE ID: 員工 ID=${employee.id} → ${maskId(lineUserId)}`);
@@ -255,10 +249,10 @@ export const portalService = {
   },
 
   async verify(lineId: string) {
-    if (!lineId) throw err(400, "缺少 LINE ID");
+    if (!lineId) throw httpError(400, "缺少 LINE ID");
     const employee = await storage.getEmployeeByLineId(lineId);
-    if (!employee) throw err(404, "找不到此 LINE 帳號對應的員工資料");
-    if (employee.status !== "active") throw err(403, "此帳號已停用");
+    if (!employee) throw httpError(404, "找不到此 LINE 帳號對應的員工資料");
+    if (employee.status !== "active") throw httpError(403, "此帳號已停用");
     return {
       id: employee.id, name: employee.name, employeeCode: employee.employeeCode,
       role: employee.role, employmentType: employee.employmentType, regionId: employee.regionId, lineUserId: lineId,
@@ -323,10 +317,10 @@ export const portalService = {
   },
 
   async updateShiftCertificate(shiftId: number, employeeId: number, certificateImageUrl: string | null, actor: string) {
-    if (!employeeId || !shiftId) throw err(400, "缺少必要欄位");
+    if (!employeeId || !shiftId) throw httpError(400, "缺少必要欄位");
     const shift = await storage.getShift(shiftId);
-    if (!shift) throw err(404, "班次不存在");
-    if (shift.employeeId !== employeeId) throw err(403, "無權限");
+    if (!shift) throw httpError(404, "班次不存在");
+    if (shift.employeeId !== employeeId) throw httpError(403, "無權限");
     return await storage.updateShift(shiftId, { certificateImageUrl: certificateImageUrl || null }, actor, true);
   },
 
@@ -379,31 +373,16 @@ export const portalService = {
 
   async getWorkmates(employeeId: number, date: string) {
     if (!employeeId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      throw err(400, "employeeId 與 date (YYYY-MM-DD) 為必填");
+      throw httpError(400, "employeeId 與 date (YYYY-MM-DD) 為必填");
     }
     const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
     const today = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
     const dDate = new Date(date + "T00:00:00Z").getTime();
     const dToday = new Date(today + "T00:00:00Z").getTime();
     const diffDays = Math.round((dDate - dToday) / 86400000);
-    if (diffDays < 0) throw err(403, "不可查詢過去日期", "PAST_FORBIDDEN");
-    if (diffDays > 7) throw err(403, "僅可查詢今日起 7 天內", "OUT_OF_WINDOW");
+    if (diffDays < 0) throw httpError(403, "不可查詢過去日期", { code: "PAST_FORBIDDEN" });
+    if (diffDays > 7) throw httpError(403, "僅可查詢今日起 7 天內", { code: "OUT_OF_WINDOW" });
     return await computeWorkmatesInternal(employeeId, date);
-  },
-
-  async getTodayCoworkers(employeeId: number) {
-    if (!employeeId) return [];
-    const taiwanNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-    const today = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
-    const result = await computeWorkmatesInternal(employeeId, today);
-    if (!result.myShift || result.coworkers.length === 0) return [];
-    const venue = result.myShift.venueId ? await storage.getVenue(result.myShift.venueId) : null;
-    const coworkers = result.coworkers.map((c) => ({
-      id: c.employeeId, name: c.name, phone: c.phone, role: c.role,
-      shiftRole: empRoleMap[c.role] || c.role,
-      shiftTime: c.shiftTime, isDispatch: c.isDispatch,
-    }));
-    return [{ venue: venue ? { id: venue.id, shortName: venue.shortName } : null, coworkers }];
   },
 
   async guidelinesCheck(employeeId: number) {
@@ -453,9 +432,9 @@ export const portalService = {
   },
 
   async getGuideline(id: number, employeeId: number) {
-    if (!employeeId || isNaN(employeeId)) throw err(400, "employeeId 為必填");
+    if (!employeeId || isNaN(employeeId)) throw httpError(400, "employeeId 為必填");
     const item = await storage.getGuideline(id);
-    if (!item || !item.isActive) throw err(404, "守則未找到");
+    if (!item || !item.isActive) throw httpError(404, "守則未找到");
 
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
     const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -469,12 +448,12 @@ export const portalService = {
       (item.category === "fixed" && (!item.venueId || myVenueIds.includes(item.venueId))) ||
       (item.category === "monthly" && item.yearMonth === yearMonth) ||
       item.category === "confidentiality";
-    if (!isRelevant) throw err(403, "無權存取此守則");
+    if (!isRelevant) throw httpError(403, "無權存取此守則");
     return item;
   },
 
   async acknowledgeAll(employeeId: number, guidelineIds: number[]) {
-    if (!employeeId || !Array.isArray(guidelineIds)) throw err(400, "缺少必要參數");
+    if (!employeeId || !Array.isArray(guidelineIds)) throw httpError(400, "缺少必要參數");
     const existingAcks = await storage.getGuidelineAcksByEmployee(employeeId);
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
     const allGuidelines = await storage.getGuidelines();
@@ -496,7 +475,7 @@ export const portalService = {
 
   async getMyAttendance(employeeId: number) {
     const employee = await storage.getEmployee(employeeId);
-    if (!employee) throw err(404, "找不到員工");
+    if (!employee) throw httpError(404, "找不到員工");
 
     // 補打卡審核通過後，clockRecords 會寫入 amendedTime（補正後的真實時間）。出勤一律
     // 以「補正後時間」為準（時間壓上去算出勤）；未補正則沿用原打卡時間。amendmentId 或

@@ -1,10 +1,11 @@
 import { storage } from "../../storage";
 import { fetchEnrollmentCounts } from "../../adapters/enrollment";
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import { eq, and, like, gte, lte, ne } from "drizzle-orm";
 import { shifts, summerScheduleAssignments, manualScheduleCourses, dispatchShifts, venues as venuesTable, systemConfigs, type InsertSummerScheduleAssignment, type InsertManualScheduleCourse } from "@shared/schema";
 import { isValidLineUserId } from "../line/lineSignature";
 import { describeProblems, planSummerPublish } from "../../core/schedule/summerPublish";
+import { httpError } from "../../shared/http/response";
 
 const SUMMER_WEEKS = [
   { no: 1, label: "第1週｜07/01（三）－07/05（日）", startDate: "2026-07-01", endDate: "2026-07-05" },
@@ -18,17 +19,10 @@ const SUMMER_WEEKS = [
   { no: 9, label: "第9週｜08/24（一）－08/30（日）", startDate: "2026-08-24", endDate: "2026-08-30" },
 ];
 
-function err(status: number, message: string, extra?: Record<string, unknown>): Error {
-  const e: any = new Error(message);
-  e.status = status;
-  e.extra = extra;
-  return e;
-}
-
 function normalizeWeekNo(value: any): number {
   const weekNo = Number(value);
   if (!Number.isInteger(weekNo) || weekNo < 1 || weekNo > 9) {
-    throw err(400, "weekNo 只允許 1-9");
+    throw httpError(400, "weekNo 只允許 1-9");
   }
   return weekNo;
 }
@@ -85,7 +79,7 @@ function normalizeOptionalText(value: any): string | null {
 
 function normalizeRequiredText(value: any, message: string): string {
   const text = String(value ?? "").trim();
-  if (!text) throw err(400, message);
+  if (!text) throw httpError(400, message);
   return text;
 }
 
@@ -103,7 +97,7 @@ function normalizeOptionalInt(value: any): number | null {
 function normalizeDate(value: any): string {
   const date = normalizeRequiredText(value, "date 為必填");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    throw err(400, "date 格式須為 YYYY-MM-DD");
+    throw httpError(400, "date 格式須為 YYYY-MM-DD");
   }
   return date;
 }
@@ -111,7 +105,7 @@ function normalizeDate(value: any): string {
 function normalizeTime(value: any, fieldName: string): string {
   const time = normalizeRequiredText(value, `${fieldName} 為必填`);
   if (!/^\d{2}:\d{2}$/.test(time)) {
-    throw err(400, `${fieldName} 格式須為 HH:MM`);
+    throw httpError(400, `${fieldName} 格式須為 HH:MM`);
   }
   return time;
 }
@@ -119,7 +113,7 @@ function normalizeTime(value: any, fieldName: string): string {
 function normalizeManualCourseVenueId(value: any): number {
   const venueId = Number(value);
   if (!Number.isInteger(venueId) || venueId <= 0) {
-    throw err(400, "venueId 為必填");
+    throw httpError(400, "venueId 為必填");
   }
   return venueId;
 }
@@ -128,7 +122,7 @@ export function normalizeManualCourseCreateInput(item: any): InsertManualSchedul
   const startTime = normalizeTime(item.startTime, "startTime");
   const endTime = normalizeTime(item.endTime, "endTime");
   if (startTime >= endTime) {
-    throw err(400, "endTime 必須晚於 startTime");
+    throw httpError(400, "endTime 必須晚於 startTime");
   }
 
   return {
@@ -168,7 +162,7 @@ export function normalizeManualCoursePatchInput(item: any): Partial<InsertManual
   const startTime = patch.startTime ?? item.startTime;
   const endTime = patch.endTime ?? item.endTime;
   if (startTime !== undefined && endTime !== undefined && String(startTime) >= String(endTime)) {
-    throw err(400, "endTime 必須晚於 startTime");
+    throw httpError(400, "endTime 必須晚於 startTime");
   }
 
   return patch;
@@ -399,7 +393,7 @@ async function applyPublish(week: { startDate: string; endDate: string }, weekNo
     venueIds: new Set(venueRows.map((v) => v.id)),
   });
   if (!plan.ok) {
-    throw err(
+    throw httpError(
       422,
       `第 ${weekNo} 週有 ${plan.problems.length} 筆班次資料有誤（${describeProblems(plan.problems)}），已取消發布，員工現有班表沒有變動`,
       { errorCode: "SUMMER_PUBLISH_INVALID_ROWS", problems: plan.problems },
@@ -619,13 +613,13 @@ export const summerScheduleService = {
         shiftEntries: existing.shiftEntries as any[],
       } : null;
       if (existingData && hasShiftRows(existingData) && !incomingHasShiftRows) {
-        throw err(409, "保護：空白班表不覆蓋既有排班資料");
+        throw httpError(409, "保護：空白班表不覆蓋既有排班資料");
       }
       if (existingData && hasWorkRows(existingData) && !incomingHasWorkRows) {
-        throw err(409, "保護：空白班表不覆蓋既有排班資料");
+        throw httpError(409, "保護：空白班表不覆蓋既有排班資料");
       }
       if (existingData && hasMeaningfulScheduleData(existingData) && !incomingHasScheduleData) {
-        throw err(409, "保護：空白班表不覆蓋既有排班資料");
+        throw httpError(409, "保護：空白班表不覆蓋既有排班資料");
       }
     }
     // 原子 upsert（避免並發兩個請求同時 select 到「無列」各自 insert 而撞 unique key）
@@ -642,11 +636,6 @@ export const summerScheduleService = {
     return getActiveManualCoursesForWeek(weekNo);
   },
 
-  async createManualCourse(data: InsertManualScheduleCourse) {
-    const [row] = await db.insert(manualScheduleCourses).values(normalizeManualCourseCreateInput(data)).returning();
-    return row;
-  },
-
   async createManualCourses(items: any[]) {
     if (!items.length) return [];
     const sanitized = items.map((item: any) => normalizeManualCourseCreateInput(item));
@@ -654,15 +643,15 @@ export const summerScheduleService = {
   },
 
   async updateManualCourse(id: number, data: Partial<InsertManualScheduleCourse>) {
-    if (!Number.isInteger(id) || id <= 0) throw err(400, "id 格式錯誤");
+    if (!Number.isInteger(id) || id <= 0) throw httpError(400, "id 格式錯誤");
     const patch = normalizeManualCoursePatchInput(data);
     const [row] = await db.update(manualScheduleCourses).set({ ...patch, updatedAt: new Date() }).where(eq(manualScheduleCourses.id, id)).returning();
-    if (!row) throw err(404, "找不到手動課程");
+    if (!row) throw httpError(404, "找不到手動課程");
     return row;
   },
 
   async deleteManualCourse(id: number) {
-    if (!Number.isInteger(id) || id <= 0) throw err(400, "id 格式錯誤");
+    if (!Number.isInteger(id) || id <= 0) throw httpError(400, "id 格式錯誤");
     await db.update(manualScheduleCourses).set({ status: "deleted", updatedAt: new Date() }).where(eq(manualScheduleCourses.id, id));
     return { success: true };
   },
@@ -694,8 +683,8 @@ export const summerScheduleService = {
   async importCramCourses(payload: any) {
     const rows: any[] = Array.isArray(payload?.rows) ? payload.rows : [];
     const dryRun = payload?.dryRun === true;
-    if (!rows.length) throw err(400, "rows 為必填且不可為空");
-    if (rows.length > 500) throw err(400, "單次最多 500 筆");
+    if (!rows.length) throw httpError(400, "rows 為必填且不可為空");
+    if (rows.length > 500) throw httpError(400, "單次最多 500 筆");
 
     // 員工名冊只撈一次，用來把「排班人員」的姓名對回 employeeId。
     // 對不到不擋整批 —— 名冊外的臨時教練是常態（CLAUDE.md 第八條記載 19 個）。
@@ -835,7 +824,7 @@ export const summerScheduleService = {
   async publishShifts(payload: any) {
     const weekNo = normalizeWeekNo(payload?.weekNo);
     const week = SUMMER_WEEKS.find((w) => w.no === weekNo);
-    if (!week) throw err(400, "weekNo 只允許 1-9");
+    if (!week) throw httpError(400, "weekNo 只允許 1-9");
 
     // 決定發布來源：
     //  1) payload 帶 shifts 陣列（舊版相容）→ 用 payload
@@ -853,20 +842,6 @@ export const summerScheduleService = {
     incoming = mergeShiftEntries(incoming, buildManualCourseShiftEntries(manualCourses, rawEntries, weekNo));
 
     return applyPublish(week, weekNo, incoming);
-  },
-
-  // DB 驅動發布：忽略前端 payload，直接以母資料表已儲存的 shiftEntries 發布
-  async publishShiftsFromSaved(weekNo: number) {
-    const wk = normalizeWeekNo(weekNo);
-    const week = SUMMER_WEEKS.find((w) => w.no === wk);
-    if (!week) throw err(400, "weekNo 只允許 1-9");
-    const [row] = await db.select().from(summerScheduleAssignments).where(
-      and(eq(summerScheduleAssignments.version, "v40"), eq(summerScheduleAssignments.weekNo, wk))
-    );
-    const incoming = Array.isArray(row?.shiftEntries) ? (row!.shiftEntries as any[]) : [];
-    const rawEntries = Array.isArray(row?.rawEntries) ? (row!.rawEntries as any[]) : [];
-    const manualCourses = await getActiveManualCoursesForWeek(wk);
-    return applyPublish(week, wk, mergeShiftEntries(incoming, buildManualCourseShiftEntries(manualCourses, rawEntries, wk)));
   },
 
   async getPublishedDutyShifts(weekNo: number) {
@@ -965,10 +940,10 @@ export const summerScheduleService = {
 
   async getMySummerShifts(weekNo: number, lineId: string) {
     const week = SUMMER_WEEKS.find((w) => w.no === weekNo);
-    if (!week) throw err(400, "weekNo 只允許 1-9");
+    if (!week) throw httpError(400, "weekNo 只允許 1-9");
 
     const employee = await storage.getEmployeeByLineId(lineId);
-    if (!employee) throw err(404, "找不到此 LINE 帳號對應的員工資料");
+    if (!employee) throw httpError(404, "找不到此 LINE 帳號對應的員工資料");
 
     const empShifts = await storage.getShiftsByEmployeeAndDateRange(employee.id, week.startDate, week.endDate);
     const summerShifts = empShifts.filter(

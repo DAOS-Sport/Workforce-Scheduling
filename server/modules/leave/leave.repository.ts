@@ -1,5 +1,5 @@
-import { db, pool } from "../../db";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { db, pool } from "../../infra/db";
+import { eq, and, desc } from "drizzle-orm";
 import {
   leaveRequests,
   employeeLeaveBalances,
@@ -7,7 +7,6 @@ import {
   type LeaveRequest,
   type InsertLeaveRequest,
   type EmployeeLeaveBalance,
-  type LeaveBalanceLog,
 } from "@shared/schema";
 
 export const leaveRepository = {
@@ -38,16 +37,6 @@ export const leaveRepository = {
       .where(eq(leaveRequests.id, id))
       .returning();
     return row;
-  },
-
-  async getLeaveRequestsByDateRange(employeeId: number, startDate: string, endDate: string): Promise<LeaveRequest[]> {
-    return db.select().from(leaveRequests).where(
-      and(
-        eq(leaveRequests.employeeId, employeeId),
-        lte(leaveRequests.startDate, endDate),
-        gte(leaveRequests.endDate, startDate),
-      )
-    );
   },
 
   async getLeaveBalance(employeeId: number, year: number): Promise<EmployeeLeaveBalance | undefined> {
@@ -136,11 +125,5 @@ export const leaveRepository = {
       operatedBy: operatedBy ?? null,
       operatedByName: operatedByName ?? null,
     });
-  },
-
-  async getLeaveBalanceLogs(employeeId: number, year: number): Promise<LeaveBalanceLog[]> {
-    return db.select().from(leaveBalanceLogs)
-      .where(and(eq(leaveBalanceLogs.employeeId, employeeId), eq(leaveBalanceLogs.year, year)))
-      .orderBy(desc(leaveBalanceLogs.createdAt));
   },
 };

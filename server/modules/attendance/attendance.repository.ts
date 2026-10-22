@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import { eq, and, gte, lte, inArray, desc } from "drizzle-orm";
 import {
   attendanceUploads,
