@@ -1,6 +1,6 @@
 import express from "express";
 import type { AddressInfo } from "net";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockBuild } = vi.hoisted(() => ({ mockBuild: vi.fn() }));
 vi.mock("./health.service", () => ({ buildHealthReport: mockBuild }));
@@ -21,6 +21,11 @@ async function withApp(run: (baseUrl: string) => Promise<void>): Promise<void> {
 }
 
 describe("GET /api/health/pipelines", () => {
+  // 開發區與正式站的環境本來就有 HEALTH_TOKEN，每個測試都要從沒設定的狀態開始。
+  beforeEach(() => {
+    delete process.env.HEALTH_TOKEN;
+  });
+
   afterEach(() => {
     delete process.env.HEALTH_TOKEN;
     vi.clearAllMocks();
