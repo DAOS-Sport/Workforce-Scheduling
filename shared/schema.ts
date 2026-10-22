@@ -442,7 +442,7 @@ export function sumScheduledHours(
   employeeId: number,
   periodStart: string,
   periodEnd: string,
-  leaveTypes: string[]
+  leaveTypes: readonly string[]
 ): number {
   let total = 0;
   for (const s of shifts) {

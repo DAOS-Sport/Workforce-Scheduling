@@ -22,7 +22,9 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
  * OPEN_API_PREFIXES behind the admin cookie.
  */
 export function gateAdminApi(req: Request, res: Response, next: NextFunction) {
-  if (!req.path.startsWith("/api/")) return next();
-  if (OPEN_API_PREFIXES.some((p) => req.path.startsWith(p))) return next();
+  // Express 的路由比對不分大小寫，閘門也必須不分，否則 /API/... 會繞過登入（安全問題 S2）。
+  const path = req.path.toLowerCase();
+  if (!path.startsWith("/api/")) return next();
+  if (OPEN_API_PREFIXES.some((p) => path.startsWith(p))) return next();
   return requireAdmin(req, res, next);
 }

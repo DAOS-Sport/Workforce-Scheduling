@@ -1,6 +1,5 @@
 /**
- * Shift validation service. Thin wrapper around the labor-law validator
- * that adds:
+ * Shift validation service. Wraps the labor-law validator with:
  *   - load four_week_reference_date from system_configs
  *   - load approved overtime requests for the relevant date range
  *   - bucket the resulting errors into "blocking" vs "warning"
@@ -9,7 +8,6 @@
  * this service only owns the orchestration, not the rules themselves.
  */
 import { storage } from "../../storage";
-import { validateAllRules } from "../../core/labor/laborValidation";
 import { getFourWeekPeriod, type ShiftValidationError } from "./shift.types";
 
 export type ValidationOTRecord = {
@@ -21,7 +19,7 @@ export type ValidationOTRecord = {
 
 /**
  * Pre-load the data that validateAllRules needs for a single (employee, date)
- * check. Used by single-create / single-update endpoints.
+ * check. Used by single create / update and the four-week precheck.
  */
 export async function loadValidationContext(
   employeeId: number,
@@ -33,13 +31,9 @@ export async function loadValidationContext(
 }> {
   const refConfig = await storage.getSystemConfig("four_week_reference_date");
   const fourWeekRef = refConfig?.value || "2025-01-06";
-  const [existingShifts, approvedOT] = await Promise.all([
-    storage.getShiftsByEmployee(employeeId),
-    (async () => {
-      const period = getFourWeekPeriod(date, fourWeekRef);
-      return storage.getApprovedOvertimeByDateRange(period.start, period.end);
-    })(),
-  ]);
+  const existingShifts = await storage.getShiftsByEmployee(employeeId);
+  const period = getFourWeekPeriod(date, fourWeekRef);
+  const approvedOT = await storage.getApprovedOvertimeByDateRange(period.start, period.end);
   const otRecords: ValidationOTRecord[] = approvedOT.map((ot) => ({
     employeeId: ot.employeeId,
     date: ot.date,
@@ -67,10 +61,3 @@ export function pickBlockingErrors(errors: ShiftValidationError[]): ShiftValidat
 export function pickWarningErrors(errors: ShiftValidationError[]): ShiftValidationError[] {
   return errors.filter((e) => e.type === "rest_11h" || e.type === "four_week_160h");
 }
-
-export const shiftValidationService = {
-  loadValidationContext,
-  pickBlockingErrors,
-  pickWarningErrors,
-  validateAllRules,
-};

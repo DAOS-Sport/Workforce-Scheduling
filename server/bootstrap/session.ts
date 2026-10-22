@@ -40,7 +40,8 @@ export async function ensureSessionTable(): Promise<void> {
  * Install express-session middleware on the given app, backed by Postgres.
  *
  * Cookie config:
- *   - 30-day sliding expiry
+ *   - 30-day expiry counted from the last time the session was saved;
+ *     not sliding (rolling is off, ordinary requests don't extend it)
  *   - secure flag in production
  *   - sameSite=lax
  */

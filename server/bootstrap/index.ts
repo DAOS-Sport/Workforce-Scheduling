@@ -8,9 +8,9 @@ import { registerRoutes } from "../routes";
 /**
  * The single entry point used by server/index.ts.
  *
- * Boot sequence (preserves the old monolithic index.ts ordering exactly):
- *   1. Seed database
- *   2. Run idempotent startup migrations
+ * Boot sequence:
+ *   1. Run idempotent startup migrations
+ *   2. Seed database
  *   3. Build the Express app (session, body parsers, request logger)
  *   4. Register every route via routes.ts (which fans out to modules)
  *   5. Install the JSON error handler

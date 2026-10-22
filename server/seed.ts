@@ -132,6 +132,6 @@ export async function seedDatabase() {
   const [adminEmp] = await db.select().from(employees).where(eq(employees.lineId, INITIAL_ADMIN_LINE_ID));
   if (adminEmp && !adminEmp.isAdmin) {
     await db.update(employees).set({ isAdmin: true }).where(eq(employees.id, adminEmp.id));
-    console.log(`  Set ${adminEmp.name} as initial admin`);
+    console.log(`  Set employee ID=${adminEmp.id} as initial admin`);
   }
 }

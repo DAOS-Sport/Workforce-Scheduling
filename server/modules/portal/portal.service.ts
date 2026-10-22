@@ -2,6 +2,8 @@ import { storage } from "../../storage";
 import { exchangeLoginCode, fetchLoginProfile } from "../../adapters/line";
 import { isValidLineUserId } from "../line/lineSignature";
 import { isReviewableWorkShift } from "../shift/shiftReview.service";
+import { OFF_DUTY_ROLES } from "@shared/leave";
+import { maskId } from "../../shared/log";
 
 function err(status: number, message: string, code?: string): Error {
   const e: any = new Error(message);
@@ -21,12 +23,9 @@ const empRoleMap: Record<string, string> = {
   資訊班: "資訊", 在校實習: "無職",
 };
 
-// A shift row whose role is one of these means the person is OFF (leave), not
+// A shift row whose role is in OFF_DUTY_ROLES means the person is OFF (leave), not
 // working. The leave type must be surfaced verbatim, never replaced by a working
 // role or a venue slot role.
-const LEAVE_ROLES = new Set<string>([
-  "休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假", "育嬰", "留職停薪", "補休",
-]);
 
 // Operationally 守望 (watch) and 救生 (lifeguard) are NOT distinguished — the
 // cloud DB may register 守望, but the EMPLOYEE-facing portal shows both as 救生.
@@ -44,7 +43,7 @@ function resolveRegularRole(
   employeeRole: string | null | undefined,
 ): string | null {
   const raw = (shiftRole || "").trim();
-  if (raw && LEAVE_ROLES.has(raw)) return raw;
+  if (raw && OFF_DUTY_ROLES.has(raw)) return raw;
   const base = raw
     ? (empRoleMap[raw] || raw)
     : (matchedSlotRole || (employeeRole ? empRoleMap[employeeRole] : null) || null);
@@ -247,7 +246,7 @@ export const portalService = {
     if (employee.status !== "active") throw err(403, "此帳號已停用");
     if (!employee.lineId || !isValidLineUserId(employee.lineId)) {
       await storage.updateEmployee(employee.id, { lineId: lineUserId });
-      console.log(`[Portal] 自動回寫 LINE ID: ${employee.name}(${employee.employeeCode}) → ${lineUserId}`);
+      console.log(`[Portal] 自動回寫 LINE ID: 員工 ID=${employee.id} → ${maskId(lineUserId)}`);
     }
     return {
       id: employee.id, name: employee.name, employeeCode: employee.employeeCode, role: employee.role,
@@ -304,7 +303,7 @@ export const portalService = {
         sl.startTime.slice(0, 5) <= shiftStart && shiftStart < sl.endTime.slice(0, 5)
       );
       const rawRole = (s.role || "").trim();
-      const isLeave = LEAVE_ROLES.has(rawRole);
+      const isLeave = OFF_DUTY_ROLES.has(rawRole);
       // Show the role the admin actually assigned (shifts.role) first — so the
       // employee, the admin grid, and coworkers all agree on the same row, and a
       // leave day shows the real leave type instead of a working role.

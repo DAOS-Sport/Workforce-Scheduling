@@ -64,6 +64,7 @@ import { buildScheduleExportRows } from "@/lib/schedule-export";
 import type { Venue, Shift, ScheduleSlot, Employee, VenueShiftTemplate, Region, DispatchShift } from "@shared/schema";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { LEAVE_TYPES } from "@shared/leave";
 
 interface ShiftClipboard {
   venueId: number;
@@ -122,7 +123,6 @@ const ROLE_LABELS: Record<string, string> = {
   "守望": "守望",
 };
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
 
 const LEAVE_COLORS: Record<string, string> = {
   "休假": "bg-slate-100 dark:bg-slate-800/40 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400",
@@ -756,7 +756,6 @@ export default function SchedulePage() {
 
   const precheckParams = useMemo(() => {
     if (!shiftDialogOpen || !shiftDate || !shiftStartTime || !shiftEndTime || !shiftEmployeeId) return null;
-    const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
     if (LEAVE_TYPES.includes(shiftRole)) return null;
     return { employeeId: shiftEmployeeId, date: shiftDate, startTime: shiftStartTime, endTime: shiftEndTime, shiftIdToExclude: editingShift?.id || null };
   }, [shiftDialogOpen, shiftDate, shiftStartTime, shiftEndTime, shiftEmployeeId, shiftRole, editingShift]);

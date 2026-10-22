@@ -8,7 +8,7 @@ import { sendAnomalyEmail } from "../../shared/email/sendAnomalyEmail";
 import { TAIWAN_HOLIDAYS } from "../../core/calendar/taiwanHolidays";
 import ExcelJS from "exceljs";
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"];
+import { LEAVE_TYPES } from "@shared/leave";
 const ATTENDANCE_GRACE_MINUTES = 10;
 
 function parseAttendanceIssueMinutes(reason: string | null | undefined, prefix: string): number | null {

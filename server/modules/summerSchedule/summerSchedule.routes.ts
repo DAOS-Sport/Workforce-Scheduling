@@ -1,11 +1,15 @@
 import { type Express } from "express";
 import { type Server } from "http";
 import { summerScheduleService } from "./summerSchedule.service";
-import { summerAvailabilityRepository } from "./summerAvailability.repository";
+import {
+  getMySummerAvailability,
+  saveMySummerAvailability,
+  listSummerAvailability,
+  deleteSummerAvailability,
+} from "./summerAvailability.service";
 import { ok, fail } from "../../shared/http/response";
 import { requireAdmin } from "../../shared/middleware/requireAdmin";
 import { requireInternalToken } from "../internal/internal.auth";
-import { storage } from "../../storage";
 
 export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): void {
   // 員工選擇：後台暑假排班頁使用，必須登入管理後台
@@ -136,7 +140,7 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
     try {
       ok(res, await summerScheduleService.publishShifts(req.body));
     } catch (err: any) {
-      fail(res, err.status || 500, err.message);
+      fail(res, err.status || 500, err.message, err.extra);
     }
   });
 
@@ -146,16 +150,9 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
   app.get("/api/portal/summer-availability/:weekNo", async (req, res) => {
     try {
       const lineId = req.header("x-line-user-id") ?? (req.query.lineUserId as string) ?? "";
-      if (!lineId) return fail(res, 401, "需要 LINE 身份");
-      const employee = await storage.getEmployeeByLineId(lineId);
-      if (!employee) return fail(res, 404, "找不到員工資料");
-      const weekNo = parseInt(req.params.weekNo, 10);
-      if (!weekNo || weekNo < 1 || weekNo > 9) return fail(res, 400, "weekNo 只允許 1-9");
-      const record = await summerAvailabilityRepository.getByEmployeeAndWeek(employee.id, weekNo);
-      if (!record) return res.status(404).json({ message: "尚無填報資料" });
-      ok(res, record);
+      ok(res, await getMySummerAvailability(lineId, req.params.weekNo));
     } catch (err: any) {
-      fail(res, 500, err.message);
+      fail(res, err.status || 500, err.message);
     }
   });
 
@@ -163,24 +160,9 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
   app.post("/api/portal/summer-availability", async (req, res) => {
     try {
       const lineId = req.header("x-line-user-id") ?? (req.query.lineUserId as string) ?? "";
-      if (!lineId) return fail(res, 401, "需要 LINE 身份");
-      const employee = await storage.getEmployeeByLineId(lineId);
-      if (!employee) return fail(res, 404, "找不到員工資料");
-      const { weekNo, venueNames = [], weekdayDays = [], weekdaySlots = [], satSlots = [], sunSlots = [], notes } = req.body;
-      if (!weekNo || weekNo < 1 || weekNo > 9) return fail(res, 400, "weekNo 只允許 1-9");
-      const record = await summerAvailabilityRepository.upsert({
-        employeeId: employee.id,
-        weekNo,
-        venueNames,
-        weekdayDays,
-        weekdaySlots,
-        satSlots,
-        sunSlots,
-        notes: notes || null,
-      });
-      ok(res, record);
+      ok(res, await saveMySummerAvailability(lineId, req.body));
     } catch (err: any) {
-      fail(res, 500, err.message);
+      fail(res, err.status || 500, err.message);
     }
   });
 
@@ -188,41 +170,7 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
   app.get("/api/admin/summer-availability", requireAdmin, async (req, res) => {
     try {
       const weekNo = parseInt(req.query.weekNo as string, 10) || 1;
-      // 1. 取得暑假排班員工清單（與前台同一份資料）；回傳值為 { items: [] }
-      const summerEmpsResult = await summerScheduleService.getEmployeesForSchedule();
-      const summerEmps: { id: number; name: string }[] = Array.isArray(summerEmpsResult)
-        ? summerEmpsResult
-        : (summerEmpsResult as any)?.items ?? [];
-      // 2. 取得本週已填報紀錄
-      const rows = await summerAvailabilityRepository.getAllByWeek(weekNo);
-      const submittedMap = new Map(rows.map((r) => [r.employeeId, r]));
-      // 3. 組合：已填報員工展開欄位，未填報員工補 null + submitted:false
-      const items = summerEmps.map((emp: { id: number; name: string }) => {
-        const record = submittedMap.get(emp.id);
-        if (record) {
-          return {
-            ...record,
-            employeeName: emp.name,
-            submitted: true,
-          };
-        }
-        return {
-          id: null,
-          employeeId: emp.id,
-          employeeName: emp.name,
-          weekNo,
-          venueNames: [],
-          weekdayDays: [],
-          weekdaySlots: [],
-          satSlots: [],
-          sunSlots: [],
-          notes: null,
-          submitted: false,
-          submittedAt: null,
-          updatedAt: null,
-        };
-      });
-      ok(res, { items });
+      ok(res, await listSummerAvailability(weekNo));
     } catch (err: any) {
       fail(res, 500, err.message);
     }
@@ -231,14 +179,9 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
   // Admin: 刪除某位員工某週的暑假可排班填報；員工仍會在列表中以「未填報」呈現
   app.delete("/api/admin/summer-availability/:employeeId/:weekNo", requireAdmin, async (req, res) => {
     try {
-      const employeeId = parseInt(String(req.params.employeeId), 10);
-      const weekNo = parseInt(String(req.params.weekNo), 10);
-      if (!Number.isInteger(employeeId) || employeeId <= 0) return fail(res, 400, "employeeId 格式錯誤");
-      if (!Number.isInteger(weekNo) || weekNo < 1 || weekNo > 9) return fail(res, 400, "weekNo 只允許 1-9");
-      const deleted = await summerAvailabilityRepository.deleteByEmployeeAndWeek(employeeId, weekNo);
-      ok(res, { success: true, deleted });
+      ok(res, await deleteSummerAvailability(String(req.params.employeeId), String(req.params.weekNo)));
     } catch (err: any) {
-      fail(res, 500, err.message);
+      fail(res, err.status || 500, err.message);
     }
   });
 }

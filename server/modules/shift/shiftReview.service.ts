@@ -1,19 +1,6 @@
 import { storage } from "../../storage";
 import type { ClockRecord, DispatchShift, Shift } from "@shared/schema";
-
-const REVIEW_LEAVE_ROLES = new Set([
-  "休假",
-  "特休",
-  "病假",
-  "事假",
-  "喪假",
-  "公假",
-  "生理假",
-  "國定假",
-  "育嬰",
-  "留職停薪",
-  "補休",
-]);
+import { OFF_DUTY_ROLES } from "@shared/leave";
 
 function hm(value: string | null | undefined): string {
   return String(value || "").slice(0, 5);
@@ -36,7 +23,7 @@ export function isReviewableWorkShift(
   shift: { role?: string | null; notes?: string | null; startTime: string; endTime: string },
 ): boolean {
   const role = String(shift.role || "").trim();
-  if (REVIEW_LEAVE_ROLES.has(role)) return false;
+  if (OFF_DUTY_ROLES.has(role)) return false;
   if (!isAttendanceRequiredShift(shift)) return false;
   if (isDayOffWindow(shift.startTime, shift.endTime)) return false;
   return hm(shift.startTime) !== hm(shift.endTime);

@@ -10,10 +10,8 @@
  */
 import { type Express } from "express";
 import { type Server } from "http";
-import { db } from "../../db";
-import { outingRecords } from "../../../shared/schema";
-import { eq, desc } from "drizzle-orm";
 import { portalService } from "./portal.service";
+import { createOutingRecord, listEmployeeOutingRecords, listAllOutingRecords } from "./portal.outing.service";
 import { ok, created, fail, badRequest } from "../../shared/http/response";
 
 function extractLineUserId(req: import("express").Request): string | undefined {
@@ -24,7 +22,7 @@ function extractLineUserId(req: import("express").Request): string | undefined {
 export function mountPortalOutingRoutes(_httpServer: Server, app: Express): void {
   app.post("/api/portal/outing-record", async (req, res) => {
     try {
-      const { employeeId, outType, destination, note, latitude, longitude, accuracy, imageUrl } = req.body;
+      const { employeeId, outType, destination, latitude, longitude } = req.body;
 
       if (!employeeId || !outType || latitude == null || longitude == null) {
         return badRequest(res, "缺少必要欄位");
@@ -39,22 +37,7 @@ export function mountPortalOutingRoutes(_httpServer: Server, app: Express): void
       const auth = await portalService.verifyCaller(Number(employeeId), extractLineUserId(req));
       if (!auth.ok) return fail(res, auth.status, auth.message ?? "未授權", { code: auth.code });
 
-      const [record] = await db
-        .insert(outingRecords)
-        .values({
-          employeeId: Number(employeeId),
-          outType,
-          destination: destination?.trim() || null,
-          note: note?.trim() || null,
-          latitude: Number(latitude),
-          longitude: Number(longitude),
-          accuracy: accuracy != null ? Number(accuracy) : null,
-          imageUrl: imageUrl || null,
-          status: "submitted",
-        })
-        .returning();
-
-      created(res, record);
+      created(res, await createOutingRecord(req.body));
     } catch (err: any) {
       console.error("Outing record create error:", err);
       fail(res, 500, err.message);
@@ -69,11 +52,7 @@ export function mountPortalOutingRoutes(_httpServer: Server, app: Express): void
       const auth = await portalService.verifyCaller(employeeId, extractLineUserId(req));
       if (!auth.ok) return fail(res, auth.status, auth.message ?? "未授權", { code: auth.code });
 
-      ok(res, await db
-        .select()
-        .from(outingRecords)
-        .where(eq(outingRecords.employeeId, employeeId))
-        .orderBy(desc(outingRecords.createdAt)));
+      ok(res, await listEmployeeOutingRecords(employeeId));
     } catch (err: any) {
       fail(res, 500, err.message);
     }
@@ -81,7 +60,7 @@ export function mountPortalOutingRoutes(_httpServer: Server, app: Express): void
 
   app.get("/api/outing-records", async (_req, res) => {
     try {
-      ok(res, await db.select().from(outingRecords).orderBy(desc(outingRecords.createdAt)));
+      ok(res, await listAllOutingRecords());
     } catch (err: any) {
       fail(res, 500, err.message);
     }

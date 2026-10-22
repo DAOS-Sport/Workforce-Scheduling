@@ -26,21 +26,12 @@ import {
   type ShiftAuditLog,
 } from "@shared/schema";
 import { and, gte, lte, inArray, asc } from "drizzle-orm";
+import { OFF_DUTY_ROLES } from "@shared/leave";
 
 const VALID_REGION_CODES = REGIONS_DATA.map((r) => r.code) as readonly string[];
 const TPE_OFFSET = "+08:00";
 const DEFAULT_LIMIT = 5000;
 
-/**
- * Roles that actually mean "not working" (leave) when stored on a shift row.
- * Mirrors LEAVE_TYPES/LEAVE_ROLES used elsewhere (core/labor/laborValidation, clock,
- * system report). A shift whose role is one of these must never be surfaced
- * as a working shift to the CMS — otherwise it would falsely mark the employee
- * "on shift" and pollute on-shift gating.
- */
-const LEAVE_ROLES = new Set<string>([
-  "休假", "特休", "病假", "事假", "公假", "喪假", "生理假", "國定假", "育嬰", "留職停薪", "補休",
-]);
 
 const PERIOD_LABEL: Record<string, string> = { early: "早班", mid: "中班", late: "晚班" };
 
@@ -265,7 +256,7 @@ export function mapRegularShift(s: Shift, b: EnrichmentBundle) {
   // CMS groups by the SHIFT's functional role (櫃台 / 救生 / 守望), not the
   // employee's default title.
   const role = s.role ?? employee?.role ?? null;
-  const leaveType = role && LEAVE_ROLES.has(role) ? role : null;
+  const leaveType = role && OFF_DUTY_ROLES.has(role) ? role : null;
   // Invalid-time rows must not be classified into early/late (防呆).
   const period = hasValidTime ? periodFromTimes(startTime, endTime) : "custom";
   const label = deriveShiftLabel(period, startTime, endTime, leaveType);
@@ -330,7 +321,7 @@ function mapDispatchShift(d: DispatchShift, b: EnrichmentBundle) {
   const endTime = normTime(d.endTime);
   const { startAt, endAt, hasValidTime } = buildShiftTime(d.date, startTime, endTime);
   const role = d.role ?? null;
-  const leaveType = role && LEAVE_ROLES.has(role) ? role : null;
+  const leaveType = role && OFF_DUTY_ROLES.has(role) ? role : null;
   const period = hasValidTime ? periodFromTimes(startTime, endTime) : "custom";
   const label = deriveShiftLabel(period, startTime, endTime, leaveType);
 
@@ -477,7 +468,7 @@ export const internalService = {
         const v = venueById.get(s.venueId);
         const { startAt, endAt, hasValidTime } = buildShiftTime(s.date, s.startTime, s.endTime);
         const role = s.role ?? emp?.role ?? null;
-        const leaveType = role && LEAVE_ROLES.has(role) ? role : null;
+        const leaveType = role && OFF_DUTY_ROLES.has(role) ? role : null;
         return {
           kind: "regular" as const,
           shiftId: s.id,
@@ -514,7 +505,7 @@ export const internalService = {
         const linked = d.linkedEmployeeId != null ? employeeById.get(d.linkedEmployeeId) : undefined;
         const { startAt, endAt, hasValidTime } = buildShiftTime(d.date, d.startTime, d.endTime);
         const role = d.role ?? null;
-        const leaveType = role && LEAVE_ROLES.has(role) ? role : null;
+        const leaveType = role && OFF_DUTY_ROLES.has(role) ? role : null;
         return {
           kind: "dispatch" as const,
           shiftId: d.id,

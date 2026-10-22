@@ -10,6 +10,7 @@
  * signature, they're authenticated by lineUserId / employeeId in the body.
  */
 import { storage } from "../../storage";
+import { maskId } from "../../shared/log";
 import { processClockIn, formatClockInMessage } from "../line/lineClock.service";
 import { pushToLine, pushPendingGuidelinesIfAny } from "../line/linePush.service";
 import { isValidLineUserId } from "../line/lineSignature";
@@ -33,7 +34,7 @@ export const liffService = {
       throw err;
     }
     console.log(
-      `[Clock-in] User: ${lineUserId || `emp#${employeeId}`}, Lat: ${latitude}, Lng: ${longitude}, Accuracy: ${accuracy}m, Type: ${clockType || "auto"}`,
+      `[Clock-in] User: ${employeeId ? `emp#${employeeId}` : `line ${maskId(lineUserId)}`}, Accuracy: ${accuracy}m, Type: ${clockType || "auto"}`,
     );
 
     const params = employeeId ? { employeeId: Number(employeeId) } : { lineUserId: lineUserId! };

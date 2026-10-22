@@ -64,15 +64,22 @@ export function nearbyVenueList(ranked: RankedVenue[], limit = 5): NearbyVenue[]
   }));
 }
 
+const validRadius = (r: number) => Number.isFinite(r) && r > 0;
+
 /**
- * 選場館：目前只看最近的一家，超出它的半徑就算不在範圍內（GitHub #3 的現況，刻意保留）。
- * 要改成「範圍內任一家都可以」，改這個函式就好。
+ * 選場館（GitHub #3）：每家用自己的半徑判斷，在範圍內的場館裡選最近的；距離剛好等於半徑算在範圍內，
+ * 距離相同時 id 小的優先。半徑不是正數的場館不參與。
+ * 一家都不在範圍內時，回傳最近的那家並標成不在範圍內（失敗紀錄會寫它的名稱）。
  */
 export function pickVenue<V extends VenuePoint>(ranked: RankedVenue<V>[]): { venue: V; distance: number; radius: number; inRange: boolean } | null {
-  const closest = ranked[0];
-  if (!closest) return null;
-  const radius = venueRadius(closest.venue);
-  return { venue: closest.venue, distance: closest.distance, radius, inRange: closest.distance <= radius };
+  const usable = ranked.filter((r) => validRadius(venueRadius(r.venue)));
+  if (usable.length === 0) return null;
+  const legal = usable
+    .filter((r) => r.distance <= venueRadius(r.venue))
+    .sort((a, b) => a.distance - b.distance || a.venue.id - b.venue.id);
+  const chosen = legal[0] ?? usable[0];
+  const radius = venueRadius(chosen.venue);
+  return { venue: chosen.venue, distance: chosen.distance, radius, inRange: chosen.distance <= radius };
 }
 
 export interface ClockEvent {
@@ -98,16 +105,17 @@ export function nextClockType(records: ClockEvent[]): ClockType {
 
 /**
  * 重複打卡：距上次成功打卡不足 5 分鐘、而且是同一個方向就擋下。換方向一律放行。
+ * 上次紀錄比現在晚超過 5 分鐘是異常資料，不拿來擋人，否則員工要等到那個未來時間（GitHub #6）。
  * 回傳 null 表示不擋。
  */
 export function duplicateClock(lastSuccess: ClockEvent | null, nowMs: number, forced?: ClockType): { clockType: string; failReason: string } | null {
   if (!lastSuccess?.clockTime) return null;
   const diffMinutes = (nowMs - new Date(lastSuccess.clockTime).getTime()) / 60000;
-  if (diffMinutes >= DEDUP_WINDOW_MIN) return null;
+  if (diffMinutes >= DEDUP_WINDOW_MIN || diffMinutes < -DEDUP_WINDOW_MIN) return null;
   const expectedNext: ClockType = lastSuccess.clockType === "in" ? "out" : "in";
   const intended = forced ?? expectedNext;
   if (intended !== lastSuccess.clockType) return null;
-  const remaining = Math.ceil(DEDUP_WINDOW_MIN - diffMinutes);
+  const remaining = Math.min(DEDUP_WINDOW_MIN, Math.ceil(DEDUP_WINDOW_MIN - diffMinutes));
   const lastType = lastSuccess.clockType === "in" ? "上班" : "下班";
   return {
     clockType: forced || lastSuccess.clockType,

@@ -16,7 +16,8 @@ function tokenMatches(received: string, expected: string): boolean {
 export function mountHealthRoutes(app: Express): void {
   app.get("/api/health/pipelines", async (req, res) => {
     res.set("Cache-Control", "no-store");
-    const expected = process.env.HEALTH_TOKEN;
+    // 在 Secrets 貼值時容易多帶空白或換行，只修剪設定值；送來的 token 照原樣比對。
+    const expected = process.env.HEALTH_TOKEN?.trim();
     if (!expected) return res.status(503).json({ message: "HEALTH_TOKEN not configured" });
     const header = req.header("authorization") ?? "";
     const received = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";

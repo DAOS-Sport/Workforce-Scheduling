@@ -22,6 +22,7 @@ import {
   Sun,
 } from "lucide-react";
 import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
+import { LEAVE_TYPES, OFF_DUTY_ROLES } from "@shared/leave";
 
 interface PortalEmployee {
   id: number;
@@ -169,7 +170,6 @@ const ROLE_DISPLAY: Record<string, { label: string; taskLabel: string; color: st
 
 // Leave types stored on a shift row mean the person is OFF — render them with a
 // distinct gray treatment and their own label, never a working-role style.
-const LEAVE_ROLE_SET = new Set(["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假", "育嬰", "留職停薪", "補休"]);
 const LEAVE_DISPLAY = {
   label: "休假", taskLabel: "休假", color: "#94A3B8",
   bgClass: "bg-slate-100", borderClass: "border-l-slate-300",
@@ -178,7 +178,7 @@ const LEAVE_DISPLAY = {
 
 function getRoleDisplay(role: string | null | undefined) {
   if (!role) return ROLE_DISPLAY["救生"];
-  if (LEAVE_ROLE_SET.has(role)) return { ...LEAVE_DISPLAY, label: role };
+  if (OFF_DUTY_ROLES.has(role)) return { ...LEAVE_DISPLAY, label: role };
   return ROLE_DISPLAY[role] || ROLE_DISPLAY["救生"];
 }
 
@@ -186,7 +186,7 @@ function getRoleDisplay(role: string | null | undefined) {
  *  role / 00:00–00:00 sentinel for older cached payloads. */
 function isLeaveShift(s: { isLeave?: boolean; assignedRole?: string | null; startTime: string; endTime: string }): boolean {
   return s.isLeave ?? (
-    LEAVE_ROLE_SET.has(s.assignedRole || "") ||
+    OFF_DUTY_ROLES.has(s.assignedRole || "") ||
     (s.startTime.slice(0, 5) === "00:00" && s.endTime.slice(0, 5) === "00:00")
   );
 }
@@ -2466,7 +2466,6 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
   );
 }
 
-const LEAVE_TYPES = ["休假", "特休", "病假", "事假", "喪假", "公假", "生理假", "國定假"] as const;
 const CERTIFICATE_REQUIRED = ["病假", "生理假"];
 
 const STATUS_LABEL: Record<string, string> = {
