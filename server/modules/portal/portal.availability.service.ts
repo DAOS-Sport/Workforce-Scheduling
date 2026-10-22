@@ -126,7 +126,8 @@ export async function submitAvailability(body: any, lineUserId: string | undefin
   if (holidays.includes(date)) {
     throw httpError(400, "該日為休館日，無法填寫排班意願");
   }
-  if (!isOffRequest && emp.regionId) {
+  // 「都可以」沒有起訖時間，沒有時段可以跟營業時間比。
+  if (!isOffRequest && emp.regionId && startTime && endTime) {
     const regionVenues = await storage.getVenuesByRegion(emp.regionId);
     const operated = regionVenues.filter((v) => v.openTime && v.closeTime);
     if (operated.length > 0) {
