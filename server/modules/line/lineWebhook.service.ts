@@ -1,9 +1,9 @@
-import { storage } from "../../storage";
 import { replyMessages } from "../../adapters/line";
 import { isValidLineUserId } from "./lineSignature";
 import { pushToLine, pushPendingGuidelinesIfAny } from "./linePush.service";
 import { processClockIn, formatClockInMessage } from "./lineClock.service";
 import { maskId } from "../../shared/log";
+import { employeeService } from "../employee/employee.service";
 
 /** 先用 reply token 回覆；LINE 拒絕或連線失敗時，有 fallbackUserId 就改用推播。 */
 async function replyToLine(replyToken: string, text: string, fallbackUserId?: string, extraMessages?: object[]): Promise<void> {
@@ -20,7 +20,7 @@ async function handleFollowEvent(event: any): Promise<void> {
   const replyToken = event.replyToken;
   if (!lineUserId) return;
 
-  const existingEmp = await storage.getEmployeeByLineId(lineUserId);
+  const existingEmp = await employeeService.getEmployeeByLineId(lineUserId);
   if (existingEmp) {
     await replyToLine(replyToken, `👋 歡迎回來，${existingEmp.name}！\n\n您的帳號已綁定，可直接傳送「位置訊息」進行 GPS 打卡。`, lineUserId);
     return;
@@ -45,7 +45,7 @@ async function handleTextMessage(event: any): Promise<void> {
   const text = (event.message?.text || "").trim();
   if (!lineUserId || !text) return;
 
-  const alreadyBound = await storage.getEmployeeByLineId(lineUserId);
+  const alreadyBound = await employeeService.getEmployeeByLineId(lineUserId);
   if (alreadyBound) {
     await replyToLine(replyToken,
       `ℹ️ 您的帳號已綁定為：${alreadyBound.name}（${alreadyBound.employeeCode}）\n\n` +
@@ -65,7 +65,7 @@ async function handleTextMessage(event: any): Promise<void> {
     return;
   }
 
-  const employee = await storage.getEmployeeByCode(text);
+  const employee = await employeeService.getEmployeeByCode(text);
   if (!employee) {
     await replyToLine(replyToken,
       `❌ 查無員工編號「${text}」，請確認後重新輸入。\n\n如有疑問請洽詢主管或 HR。`,
@@ -90,7 +90,7 @@ async function handleTextMessage(event: any): Promise<void> {
     return;
   }
 
-  await storage.updateEmployee(employee.id, { lineId: lineUserId });
+  await employeeService.updateEmployee(employee.id, { lineId: lineUserId });
   console.log(`[LINE Bind] 員工 ID=${employee.id} 綁定 LINE ID: ${maskId(lineUserId)}`);
 
   await replyToLine(replyToken,
@@ -131,7 +131,7 @@ export async function handleLineWebhook(body: any): Promise<void> {
           continue;
         }
 
-        const emp = await storage.getEmployeeByLineId(lineUserId);
+        const emp = await employeeService.getEmployeeByLineId(lineUserId);
         if (!emp) {
           await replyToLine(replyToken,
             `❌ 您的 LINE 帳號尚未綁定員工資料。\n\n` +

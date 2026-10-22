@@ -1,4 +1,5 @@
 import { db } from "../../infra/db";
+import type { Executor } from "../../infra/db/tx";
 import { eq, and, gte, lte, inArray, desc, not, like, or, isNull } from "drizzle-orm";
 import {
   shifts,
@@ -11,12 +12,12 @@ import { employeeRepository } from "../employee/employee.repository";
 import { venueRepository } from "../venue/venue.repository";
 
 export const shiftRepository = {
-  async getShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<Shift[]> {
-    const regionEmployees = await employeeRepository.getEmployeesByRegion(regionId);
+  async getShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string, tx: Executor = db): Promise<Shift[]> {
+    const regionEmployees = await employeeRepository.getEmployeesByRegion(regionId, tx);
     const empIds = regionEmployees.map((e) => e.id);
     if (empIds.length === 0) return [];
 
-    return db.select().from(shifts).where(
+    return tx.select().from(shifts).where(
       and(
         inArray(shifts.employeeId, empIds),
         gte(shifts.date, startDate),
@@ -32,12 +33,12 @@ export const shiftRepository = {
     );
   },
 
-  async getDispatchedShiftsToRegion(regionId: number, startDate: string, endDate: string): Promise<Shift[]> {
-    const regionVenues = await venueRepository.getVenuesByRegion(regionId);
+  async getDispatchedShiftsToRegion(regionId: number, startDate: string, endDate: string, tx: Executor = db): Promise<Shift[]> {
+    const regionVenues = await venueRepository.getVenuesByRegion(regionId, tx);
     const venueIds = regionVenues.map(v => v.id);
     if (venueIds.length === 0) return [];
 
-    return db.select().from(shifts).where(
+    return tx.select().from(shifts).where(
       and(
         inArray(shifts.venueId, venueIds),
         eq(shifts.isDispatch, true),
@@ -54,14 +55,14 @@ export const shiftRepository = {
     );
   },
 
-  async getShiftsByDate(date: string): Promise<Shift[]> {
-    return db.select().from(shifts).where(
+  async getShiftsByDate(date: string, tx: Executor = db): Promise<Shift[]> {
+    return tx.select().from(shifts).where(
       and(eq(shifts.date, date), eq(shifts.status, "active"))
     );
   },
 
-  async getAllShiftsByDateRange(startDate: string, endDate: string): Promise<Shift[]> {
-    return db.select().from(shifts).where(
+  async getAllShiftsByDateRange(startDate: string, endDate: string, tx: Executor = db): Promise<Shift[]> {
+    return tx.select().from(shifts).where(
       and(
         gte(shifts.date, startDate),
         lte(shifts.date, endDate),
@@ -70,22 +71,22 @@ export const shiftRepository = {
     );
   },
 
-  async getShiftsByEmployee(employeeId: number): Promise<Shift[]> {
-    return db.select().from(shifts).where(
+  async getShiftsByEmployee(employeeId: number, tx: Executor = db): Promise<Shift[]> {
+    return tx.select().from(shifts).where(
       and(eq(shifts.employeeId, employeeId), eq(shifts.status, "active"))
     );
   },
 
-  async getShift(id: number): Promise<Shift | undefined> {
-    const [shift] = await db.select().from(shifts).where(eq(shifts.id, id));
+  async getShift(id: number, tx: Executor = db): Promise<Shift | undefined> {
+    const [shift] = await tx.select().from(shifts).where(eq(shifts.id, id));
     return shift;
   },
 
-  async createShift(data: InsertShift, actor: string = "system"): Promise<Shift> {
-    const [shift] = await db.insert(shifts).values(data).returning();
+  async createShift(data: InsertShift, actor: string = "system", tx: Executor = db): Promise<Shift> {
+    const [shift] = await tx.insert(shifts).values(data).returning();
     if (shift) {
       try {
-        await db.insert(shiftAuditLog).values({
+        await tx.insert(shiftAuditLog).values({
           shiftId: shift.id,
           action: "create",
           actor,
@@ -98,8 +99,8 @@ export const shiftRepository = {
     return shift;
   },
 
-  async updateShift(id: number, data: Partial<InsertShift>, actor: string = "system", force: boolean = false): Promise<Shift | undefined> {
-    const before = await shiftRepository.getShift(id);
+  async updateShift(id: number, data: Partial<InsertShift>, actor: string = "system", force: boolean = false, tx: Executor = db): Promise<Shift | undefined> {
+    const before = await shiftRepository.getShift(id, tx);
     // Task #50 protection: any caller mutating an active shift MUST explicitly
     // opt in with force=true. Admin UI routes set force=true (admin chose to
     // edit). Automation paths (ragic-sync etc.) default to force=false so they
@@ -107,10 +108,10 @@ export const shiftRepository = {
     if (before?.status === "active" && !force) {
       throw new Error(`actor '${actor}' refused to mutate active shift ${id} without force=true (Task #50 protection)`);
     }
-    const [shift] = await db.update(shifts).set(data).where(eq(shifts.id, id)).returning();
+    const [shift] = await tx.update(shifts).set(data).where(eq(shifts.id, id)).returning();
     if (shift) {
       try {
-        await db.insert(shiftAuditLog).values({
+        await tx.insert(shiftAuditLog).values({
           shiftId: id,
           action: "update",
           actor,
@@ -123,14 +124,14 @@ export const shiftRepository = {
     return shift;
   },
 
-  async deleteShift(id: number, actor: string = "system", reason?: string, force: boolean = false): Promise<boolean> {
-    const before = await shiftRepository.getShift(id);
+  async deleteShift(id: number, actor: string = "system", reason?: string, force: boolean = false, tx: Executor = db): Promise<boolean> {
+    const before = await shiftRepository.getShift(id, tx);
     if (!before || before.status === "cancelled") return false;
     // Task #50 protection: explicit force=true required to cancel any active shift.
     if (!force) {
       throw new Error(`actor '${actor}' refused to cancel active shift ${id} without force=true (Task #50 protection)`);
     }
-    const [shift] = await db.update(shifts).set({
+    const [shift] = await tx.update(shifts).set({
       status: "cancelled",
       cancelledAt: new Date(),
       cancelledBy: actor,
@@ -138,7 +139,7 @@ export const shiftRepository = {
     }).where(and(eq(shifts.id, id), eq(shifts.status, "active"))).returning();
     if (!shift) return false;
     try {
-      await db.insert(shiftAuditLog).values({
+      await tx.insert(shiftAuditLog).values({
         shiftId: id,
         action: "cancel",
         actor,
@@ -158,13 +159,12 @@ export const shiftRepository = {
    * shift back to active is non-destructive: the original row is recreated
    * verbatim from its own pre-cancel state and a `restore` audit row is written.
    * Requiring `force=true` here would block legitimate "undo" UX without
-   * adding any safety, so the gate is omitted by design.  Behavior is
-   * byte-identical to the pre-refactor implementation in storage.ts.
+   * adding any safety, so the gate is omitted by design.
    */
-  async restoreShift(id: number, actor: string = "system"): Promise<Shift | undefined> {
-    const before = await shiftRepository.getShift(id);
+  async restoreShift(id: number, actor: string = "system", tx: Executor = db): Promise<Shift | undefined> {
+    const before = await shiftRepository.getShift(id, tx);
     if (!before || before.status !== "cancelled") return undefined;
-    const [shift] = await db.update(shifts).set({
+    const [shift] = await tx.update(shifts).set({
       status: "active",
       cancelledAt: null,
       cancelledBy: null,
@@ -172,7 +172,7 @@ export const shiftRepository = {
     }).where(eq(shifts.id, id)).returning();
     if (shift) {
       try {
-        await db.insert(shiftAuditLog).values({
+        await tx.insert(shiftAuditLog).values({
           shiftId: id,
           action: "restore",
           actor,
@@ -185,17 +185,17 @@ export const shiftRepository = {
     return shift;
   },
 
-  async getShiftAuditLog(shiftId: number): Promise<ShiftAuditLog[]> {
-    return db.select().from(shiftAuditLog)
+  async getShiftAuditLog(shiftId: number, tx: Executor = db): Promise<ShiftAuditLog[]> {
+    return tx.select().from(shiftAuditLog)
       .where(eq(shiftAuditLog.shiftId, shiftId))
       .orderBy(desc(shiftAuditLog.createdAt));
   },
 
-  async getCancelledShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string): Promise<Shift[]> {
-    const regionEmployees = await employeeRepository.getEmployeesByRegion(regionId);
+  async getCancelledShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string, tx: Executor = db): Promise<Shift[]> {
+    const regionEmployees = await employeeRepository.getEmployeesByRegion(regionId, tx);
     const empIds = regionEmployees.map((e) => e.id);
     if (empIds.length === 0) return [];
-    return db.select().from(shifts).where(
+    return tx.select().from(shifts).where(
       and(
         inArray(shifts.employeeId, empIds),
         gte(shifts.date, startDate),
@@ -205,8 +205,8 @@ export const shiftRepository = {
     );
   },
 
-  async getShiftsByEmployeeAndDateRange(employeeId: number, startDate: string, endDate: string): Promise<Shift[]> {
-    return db.select().from(shifts).where(
+  async getShiftsByEmployeeAndDateRange(employeeId: number, startDate: string, endDate: string, tx: Executor = db): Promise<Shift[]> {
+    return tx.select().from(shifts).where(
       and(
         eq(shifts.employeeId, employeeId),
         gte(shifts.date, startDate),
@@ -216,9 +216,9 @@ export const shiftRepository = {
     );
   },
 
-  async getShiftsByEmployeesAndDateRange(employeeIds: number[], startDate: string, endDate: string): Promise<Shift[]> {
+  async getShiftsByEmployeesAndDateRange(employeeIds: number[], startDate: string, endDate: string, tx: Executor = db): Promise<Shift[]> {
     if (employeeIds.length === 0) return [];
-    return db.select().from(shifts).where(
+    return tx.select().from(shifts).where(
       and(
         inArray(shifts.employeeId, employeeIds),
         gte(shifts.date, startDate),
@@ -228,8 +228,8 @@ export const shiftRepository = {
     );
   },
 
-  async getShiftsByVenueAndDate(venueId: number, date: string): Promise<Shift[]> {
-    return db.select().from(shifts).where(
+  async getShiftsByVenueAndDate(venueId: number, date: string, tx: Executor = db): Promise<Shift[]> {
+    return tx.select().from(shifts).where(
       and(
         eq(shifts.venueId, venueId),
         eq(shifts.date, date),

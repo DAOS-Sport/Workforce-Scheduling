@@ -1,13 +1,13 @@
 /**
  * Region service — business operations for region listing.
  *
- * Currently a thin façade over `storage`; lives here so route handlers
- * never reach into the storage layer directly. As region rules grow
+ * Currently a thin layer over the region repository; lives here so route
+ * handlers never reach into the repository directly. As region rules grow
  * (region-scoped permissions, lookup caches, etc.) they belong here.
  */
-import { storage } from "../../storage";
+import { regionRepository } from "./region.repository";
 
 export const regionService = {
-  findAll: () => storage.getRegions(),
-  findByCode: (code: string) => storage.getRegionByCode(code),
+  findAll: () => regionRepository.getRegions(),
+  findByCode: (code: string) => regionRepository.getRegionByCode(code),
 };

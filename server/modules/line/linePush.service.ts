@@ -1,12 +1,19 @@
-import { storage } from "../../storage";
 import { pushMessages } from "../../adapters/line";
 import { MAIL_SENDER, sendMail } from "../../adapters/mail";
 import { wrapNotificationHtml } from "../../shared/email/notificationLayout";
 import type { Venue, Shift, Employee, DispatchShift } from "@shared/schema";
 import { getTaiwanNow, formatTaiwanDate } from "./lineHelpers";
 import { isValidLineUserId } from "./lineSignature";
-import { availabilityRepository } from "../availability/availability.repository";
 import { isReviewableWorkShift, shiftReviewService } from "../shift/shiftReview.service";
+import { guidelineService } from "../guideline/guideline.service";
+import { shiftService } from "../shift/shift.service";
+import { venueService } from "../venue/venue.service";
+import { dispatchService } from "../dispatch/dispatch.service";
+import { employeeService } from "../employee/employee.service";
+import { systemService } from "../system/system.service";
+import { clockService } from "../clock/clock.service";
+import { notificationService } from "../notification/notification.service";
+import { availabilityService } from "../availability/availability.service";
 
 const LINE_FLEX_TEXT_LIMIT = 5000;
 
@@ -162,9 +169,9 @@ export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: str
     const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
 
     const [allGuidelines, acks, empShifts] = await Promise.all([
-      storage.getGuidelines(),
-      storage.getGuidelineAcksByEmployee(employeeId),
-      storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd),
+      guidelineService.getGuidelines(),
+      guidelineService.getGuidelineAcksByEmployee(employeeId),
+      shiftService.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd),
     ]);
 
     const myVenueIds = Array.from(new Set(empShifts.map(s => s.venueId)));
@@ -227,10 +234,10 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
   const tomorrowDay = dayNames[tomorrow.getDay()];
   const displayDate = `${tomorrow.getMonth() + 1}/${tomorrow.getDate()}（${tomorrowDay}）`;
 
-  const allShifts = await storage.getShiftsByDate(tomorrowStr);
+  const allShifts = await shiftService.getShiftsByDate(tomorrowStr);
   const workShifts = allShifts.filter(isReviewableWorkShift);
 
-  const allVenues = await storage.getAllVenues();
+  const allVenues = await venueService.findAll();
   const venueMap = new Map<number, Venue>();
   for (const v of allVenues) venueMap.set(v.id, v);
 
@@ -241,7 +248,7 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
     shiftsByEmployee.set(s.employeeId, arr);
   }
 
-  const dispatchTomorrow = await storage.getDispatchShiftsByDate(tomorrowStr);
+  const dispatchTomorrow = await dispatchService.getDispatchShiftsByDate(tomorrowStr);
   const linkedDispatchByEmployee = new Map<number, DispatchShift[]>();
   for (const d of dispatchTomorrow) {
     if (!d.linkedEmployeeId) continue;
@@ -263,7 +270,7 @@ export async function sendShiftReminders(force = false): Promise<{ sent: number;
   let noLineId = 0;
 
   for (const empId of allEmpIds) {
-    const emp = await storage.getEmployee(empId);
+    const emp = await employeeService.getEmployee(empId);
     if (!emp) { skipped++; continue; }
     if (!emp.lineId) { noLineId++; continue; }
 
@@ -358,19 +365,19 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   const currentHour = taipeiNow.getHours();
 
   // Load today's already-sent notifications from DB (survives server restarts)
-  const alreadySentRows = await storage.getMissingClockNotificationsForDate(todayStr);
+  const alreadySentRows = await systemService.getMissingClockNotificationsForDate(todayStr);
   const alreadySentKeys = new Set(alreadySentRows.map(r => `${r.employeeId}-${r.shiftId}`));
 
   // Clean up old notification records (older than yesterday) to keep the table lean
   const yesterday = new Date(taipeiNow);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,"0")}-${String(yesterday.getDate()).padStart(2,"0")}`;
-  await storage.clearOldMissingClockNotifications(yesterdayStr).catch(() => {}); // non-critical
+  await systemService.clearOldMissingClockNotifications(yesterdayStr).catch(() => {}); // non-critical
 
   const currentMinute = taipeiNow.getMinutes();
   const currentTimeStr = `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
 
-  const allShifts = await storage.getShiftsByDate(todayStr);
+  const allShifts = await shiftService.getShiftsByDate(todayStr);
   const workShifts = allShifts.filter(isReviewableWorkShift);
 
   if (workShifts.length === 0) {
@@ -378,7 +385,7 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
     return { notified: 0, skipped: 0 };
   }
 
-  const clockRecords = await storage.getClockRecordsByDateRange(todayStr, todayStr);
+  const clockRecords = await clockService.getClockRecordsByDateRange(todayStr, todayStr);
   const clockedInEmployees = new Set<number>();
   for (const cr of clockRecords) {
     if (cr.clockType === "in" && (cr.status === "success" || cr.status === "warning")) {
@@ -388,7 +395,7 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   console.log(`[未打卡提醒] 今日有效上班打卡人數: ${clockedInEmployees.size}，員工ID列表: [${Array.from(clockedInEmployees).join(", ")}]`);
   console.log(`[未打卡提醒] 今日班次總數: ${workShifts.length}，當前時間: ${currentTimeStr}`);
 
-  const allVenues = await storage.getAllVenues();
+  const allVenues = await venueService.findAll();
   const venueMap = new Map<number, Venue>();
   for (const v of allVenues) venueMap.set(v.id, v);
 
@@ -424,7 +431,7 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
       continue;
     }
 
-    const emp = await storage.getEmployee(shift.employeeId);
+    const emp = await employeeService.getEmployee(shift.employeeId);
     if (!emp || emp.status !== "active") continue;
 
     const venue = venueMap.get(shift.venueId);
@@ -467,14 +474,14 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
     }
 
     // Persist to DB so server restarts don't cause re-notification for this shift
-    await storage.createMissingClockNotification(todayStr, emp.id, shift.id).catch((e) =>
+    await systemService.createMissingClockNotification(todayStr, emp.id, shift.id).catch((e) =>
       console.error(`[未打卡提醒] DB 寫入失敗 empId=${emp.id} shiftId=${shift.id}:`, e)
     );
     notified++;
   }
 
   try {
-    const recipients = await storage.getNotificationRecipients();
+    const recipients = await notificationService.findAll();
     const targets = recipients.filter(r => r.enabled && r.notifyNewReport);
     if (targets.length > 0) {
       const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
@@ -545,9 +552,9 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
   // Prune old dedup records (keep last 4 weeks)
   const fourWeeksAgo = new Date(taipeiNow);
   fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
-  await storage.clearOldWeeklyPushNotifications(formatTaiwanDate(fourWeeksAgo)).catch(() => {});
+  await systemService.clearOldWeeklyPushNotifications(formatTaiwanDate(fourWeeksAgo)).catch(() => {});
 
-  const weekShifts = await storage.getAllShiftsByDateRange(weekStartStr, weekEndStr);
+  const weekShifts = await shiftService.getAllShiftsByDateRange(weekStartStr, weekEndStr);
   const workShifts = weekShifts.filter(isReviewableWorkShift);
 
   if (workShifts.length === 0) {
@@ -555,7 +562,7 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
     return { sent: 0, skipped: 0, noLineId: 0 };
   }
 
-  const allVenues = await storage.getAllVenues();
+  const allVenues = await venueService.findAll();
   const venueMap = new Map<number, Venue>();
   for (const v of allVenues) venueMap.set(v.id, v);
 
@@ -571,11 +578,11 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
 
   for (const [empId, empShifts] of shiftsByEmployee) {
     if (!force) {
-      const alreadySent = await storage.hasWeeklyPushNotification(weekStartStr, empId, "schedule");
+      const alreadySent = await systemService.hasWeeklyPushNotification(weekStartStr, empId, "schedule");
       if (alreadySent) { skipped++; continue; }
     }
 
-    const emp = await storage.getEmployee(empId);
+    const emp = await employeeService.getEmployee(empId);
     if (!emp) { skipped++; continue; }
     if (!emp.lineId) { noLineId++; continue; }
 
@@ -634,7 +641,7 @@ export async function sendWeeklySchedulePush(force = false): Promise<{ sent: num
     const message = lines.join("\n").trim();
     const ok = await pushToLine(emp.lineId, message);
     if (ok) {
-      await storage.createWeeklyPushNotification(weekStartStr, empId, "schedule").catch(e =>
+      await systemService.createWeeklyPushNotification(weekStartStr, empId, "schedule").catch(e =>
         console.error(`[週班表推播] 去重寫入失敗 empId=${empId}:`, e)
       );
       sent++;
@@ -665,10 +672,10 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
   const weekStartStr = formatTaiwanDate(lastMonday);
   const weekEndStr   = formatTaiwanDate(lastSunday);
 
-  const weekShifts = await storage.getAllShiftsByDateRange(weekStartStr, weekEndStr);
+  const weekShifts = await shiftService.getAllShiftsByDateRange(weekStartStr, weekEndStr);
   const workShifts = weekShifts.filter(isReviewableWorkShift);
 
-  const clockRecs = await storage.getClockRecordsByDateRange(weekStartStr, weekEndStr);
+  const clockRecs = await clockService.getClockRecordsByDateRange(weekStartStr, weekEndStr);
 
   // Group clock records by employee + date
   type ClockKey = string; // `${empId}:${dateStr}`
@@ -705,7 +712,7 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
 
   for (const [empId, empShifts] of shiftsByEmployee) {
     if (!force) {
-      const alreadySent = await storage.hasWeeklyPushNotification(weekStartStr, empId, "late_report");
+      const alreadySent = await systemService.hasWeeklyPushNotification(weekStartStr, empId, "late_report");
       if (alreadySent) { skipped++; continue; }
     }
 
@@ -758,7 +765,7 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
 
     if (anomalies.length === 0) continue; // no anomalies → don't send
 
-    const emp = await storage.getEmployee(empId);
+    const emp = await employeeService.getEmployee(empId);
     if (!emp) { skipped++; continue; }
     if (!emp.lineId) { noLineId++; continue; }
 
@@ -778,7 +785,7 @@ export async function sendWeeklyLateReport(force = false): Promise<{ sent: numbe
     const message = lines.join("\n").trim();
     const ok = await pushToLine(emp.lineId, message);
     if (ok) {
-      await storage.createWeeklyPushNotification(weekStartStr, empId, "late_report").catch(e =>
+      await systemService.createWeeklyPushNotification(weekStartStr, empId, "late_report").catch(e =>
         console.error(`[週遲到報告] 去重寫入失敗 empId=${empId}:`, e)
       );
       sent++;
@@ -813,7 +820,7 @@ export async function sendAvailabilityReminders(
   const taipeiNow = getTaiwanNow();
   const todayStr = formatTaiwanDate(taipeiNow);
 
-  const cfg = await storage.getSystemConfig("availability_window");
+  const cfg = await systemService.findSystemConfig("availability_window");
   if (!cfg?.value) {
     console.log("[意願提醒] 尚未設定意願填寫視窗，略過");
     return { sent: 0, skipped: 0, noLineId: 0, windowClosed: true };
@@ -853,8 +860,8 @@ export async function sendAvailabilityReminders(
   console.log(`[意願提醒] 視窗 ${activeWindow.openFrom}~${activeWindow.openUntil}，目標月份 ${targetYearMonth}，開始檢查未填員工`);
 
   const [allEmployees, submittedEntries] = await Promise.all([
-    storage.getAllEmployees(),
-    availabilityRepository.getByYearMonth(targetYearMonth),
+    employeeService.getAllEmployees(),
+    availabilityService.getByYearMonth(targetYearMonth),
   ]);
 
   const submittedEmployeeIds = new Set(submittedEntries.map(e => e.employeeId));

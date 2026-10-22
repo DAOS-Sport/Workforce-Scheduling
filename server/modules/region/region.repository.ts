@@ -1,4 +1,5 @@
 import { db } from "../../infra/db";
+import type { Executor } from "../../infra/db/tx";
 import { eq } from "drizzle-orm";
 import {
   regions,
@@ -6,12 +7,12 @@ import {
 } from "@shared/schema";
 
 export const regionRepository = {
-  async getRegions(): Promise<Region[]> {
-    return db.select().from(regions);
+  async getRegions(tx: Executor = db): Promise<Region[]> {
+    return tx.select().from(regions);
   },
 
-  async getRegionByCode(code: string): Promise<Region | undefined> {
-    const [region] = await db.select().from(regions).where(eq(regions.code, code));
+  async getRegionByCode(code: string, tx: Executor = db): Promise<Region | undefined> {
+    const [region] = await tx.select().from(regions).where(eq(regions.code, code));
     return region;
   },
 

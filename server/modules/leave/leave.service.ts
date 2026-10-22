@@ -4,7 +4,8 @@
  * 特休 / 特別休假 / annual_leave deduct from the employee's annual leave balance.
  * Other leave types have no balance effect.
  */
-import { storage } from "../../storage";
+import { employeeService } from "../employee/employee.service";
+import { leaveRepository } from "./leave.repository";
 
 const CERTIFICATE_REQUIRED = new Set(["病假", "生理假"]);
 export const ANNUAL_LEAVE_TYPES = new Set(["特休", "特別休假", "annual_leave"]);
@@ -49,7 +50,7 @@ export const leaveService = {
       err.status = 400;
       throw err;
     }
-    const emp = await storage.getEmployee(employeeId);
+    const emp = await employeeService.getEmployee(employeeId);
     if (!emp) {
       const err: any = new Error("找不到員工");
       err.status = 404;
@@ -65,7 +66,7 @@ export const leaveService = {
     const year = new Date(startDate).getFullYear();
 
     if (ANNUAL_LEAVE_TYPES.has(leaveType)) {
-      const balance = await storage.getLeaveBalance(employeeId, year);
+      const balance = await leaveRepository.getLeaveBalance(employeeId, year);
       const total = balance?.totalHours ?? 0;
       const used = balance?.usedHours ?? 0;
       const pending = balance?.pendingHours ?? 0;
@@ -77,7 +78,7 @@ export const leaveService = {
       }
     }
 
-    const request = await storage.createLeaveRequest({
+    const request = await leaveRepository.createLeaveRequest({
       employeeId,
       leaveType,
       startDate,
@@ -94,18 +95,18 @@ export const leaveService = {
     });
 
     if (ANNUAL_LEAVE_TYPES.has(leaveType)) {
-      await storage.adjustLeaveBalancePending(employeeId, year, hours);
-      await storage.appendLeaveBalanceLog(employeeId, year, 0, `申請特休 ${hours}h（待審）`, request.id);
+      await leaveRepository.adjustLeaveBalancePending(employeeId, year, hours);
+      await leaveRepository.appendLeaveBalanceLog(employeeId, year, 0, `申請特休 ${hours}h（待審）`, request.id);
     }
 
     return request;
   },
 
-  byEmployee: (employeeId: number) => storage.getLeaveRequestsByEmployee(employeeId),
+  byEmployee: (employeeId: number) => leaveRepository.getLeaveRequestsByEmployee(employeeId),
 
   async listForAdmin(status?: string) {
-    const records = await storage.getLeaveRequests(status);
-    const employees = await storage.getAllEmployees();
+    const records = await leaveRepository.getLeaveRequests(status);
+    const employees = await employeeService.getAllEmployees();
     const empMap = new Map(employees.map((e) => [e.id, e]));
     return records.map((r) => ({
       ...r,
@@ -120,7 +121,7 @@ export const leaveService = {
       err.status = 400;
       throw err;
     }
-    const request = await storage.getLeaveRequest(id);
+    const request = await leaveRepository.getLeaveRequest(id);
     if (!request) {
       const err: any = new Error("找不到請假申請");
       err.status = 404;
@@ -132,17 +133,17 @@ export const leaveService = {
       throw err;
     }
 
-    const result = await storage.updateLeaveRequestStatus(id, status, adminId, adminName, reviewNote);
+    const result = await leaveRepository.updateLeaveRequestStatus(id, status, adminId, adminName, reviewNote);
 
     if (ANNUAL_LEAVE_TYPES.has(request.leaveType)) {
       const hours = request.hours ?? calcLeaveHours(request.startDate, request.endDate, request.startTime, request.endTime);
       const year = new Date(request.startDate).getFullYear();
       if (status === "approved") {
-        await storage.adjustLeaveBalanceOnApprove(request.employeeId, year, hours);
-        await storage.appendLeaveBalanceLog(request.employeeId, year, -hours, `特休核准 ${hours}h`, id, adminId, adminName);
+        await leaveRepository.adjustLeaveBalanceOnApprove(request.employeeId, year, hours);
+        await leaveRepository.appendLeaveBalanceLog(request.employeeId, year, -hours, `特休核准 ${hours}h`, id, adminId, adminName);
       } else {
-        await storage.adjustLeaveBalanceOnReject(request.employeeId, year, hours);
-        await storage.appendLeaveBalanceLog(request.employeeId, year, 0, `特休申請拒絕，還原 ${hours}h`, id, adminId, adminName);
+        await leaveRepository.adjustLeaveBalanceOnReject(request.employeeId, year, hours);
+        await leaveRepository.appendLeaveBalanceLog(request.employeeId, year, 0, `特休申請拒絕，還原 ${hours}h`, id, adminId, adminName);
       }
     }
 
@@ -151,7 +152,7 @@ export const leaveService = {
 
   async getEmployeeSummary(employeeId: number) {
     const year = getTaipeiYear();
-    const balance = await storage.getLeaveBalance(employeeId, year);
+    const balance = await leaveRepository.getLeaveBalance(employeeId, year);
     const total = balance?.totalHours ?? 0;
     const used = balance?.usedHours ?? 0;
     const pending = balance?.pendingHours ?? 0;
@@ -165,11 +166,11 @@ export const leaveService = {
   },
 
   async getBalanceOverview(year: number) {
-    return storage.getAllLeaveBalances(year);
+    return leaveRepository.getAllLeaveBalances(year);
   },
 
   async adjustBalance(employeeId: number, year: number, totalHours: number, adminId: number, adminName: string) {
-    const emp = await storage.getEmployee(employeeId);
+    const emp = await employeeService.getEmployee(employeeId);
     if (!emp) {
       const err: any = new Error("找不到員工");
       err.status = 404;
@@ -180,12 +181,15 @@ export const leaveService = {
       err.status = 400;
       throw err;
     }
-    const balance = await storage.upsertLeaveBalance(employeeId, year, totalHours);
-    await storage.appendLeaveBalanceLog(
+    const balance = await leaveRepository.upsertLeaveBalance(employeeId, year, totalHours);
+    await leaveRepository.appendLeaveBalanceLog(
       employeeId, year, totalHours,
       `管理員設定年度特休總時數為 ${totalHours}h`,
       undefined, adminId, adminName,
     );
     return balance;
   },
+
+  getLeaveRequests: leaveRepository.getLeaveRequests,
+  countPendingRequests: leaveRepository.countPendingRequests,
 };

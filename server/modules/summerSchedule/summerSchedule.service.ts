@@ -1,4 +1,3 @@
-import { storage } from "../../storage";
 import { fetchEnrollmentCounts } from "../../adapters/enrollment";
 import { db } from "../../infra/db";
 import { eq, and, like, gte, lte, ne } from "drizzle-orm";
@@ -6,6 +5,9 @@ import { shifts, summerScheduleAssignments, manualScheduleCourses, dispatchShift
 import { isValidLineUserId } from "../line/lineSignature";
 import { describeProblems, planSummerPublish } from "../../core/schedule/summerPublish";
 import { httpError } from "../../shared/http/response";
+import { employeeService } from "../employee/employee.service";
+import { venueService } from "../venue/venue.service";
+import { shiftService } from "../shift/shift.service";
 
 const SUMMER_WEEKS = [
   { no: 1, label: "第1週｜07/01（三）－07/05（日）", startDate: "2026-07-01", endDate: "2026-07-05" },
@@ -387,7 +389,7 @@ async function applyPublish(week: { startDate: string; endDate: string }, weekNo
     return { success: false, inserted: 0, skipped: 0, message: "此週無可發布班次，已取消發布以保留員工現有班表" };
   }
   // 1. 先整批檢查；有任何一筆不合格就不動舊班（GitHub #8）。
-  const [employees, venueRows] = await Promise.all([storage.getAllEmployees(), storage.getAllVenues()]);
+  const [employees, venueRows] = await Promise.all([employeeService.getAllEmployees(), venueService.findAll()]);
   const plan = planSummerPublish(incoming, week, weekNo, {
     employeeIds: new Set(employees.map((e) => e.id)),
     venueIds: new Set(venueRows.map((v) => v.id)),
@@ -410,12 +412,12 @@ async function applyPublish(week: { startDate: string; endDate: string }, weekNo
     )
   );
   for (const s of existing) {
-    await storage.deleteShift(s.id, "summer-schedule-publish", "重新發布暑假排班", true);
+    await shiftService.deleteShift(s.id, "summer-schedule-publish", "重新發布暑假排班", true);
   }
 
   // 3. 寫入新班次
   for (const shift of plan.shifts) {
-    await storage.createShift(shift, "summer-schedule-publish");
+    await shiftService.createShiftRecord(shift, "summer-schedule-publish");
   }
 
   return { success: true, message: "已發布到員工前台", inserted: plan.shifts.length, skipped: 0 };
@@ -423,9 +425,9 @@ async function applyPublish(week: { startDate: string; endDate: string }, weekNo
 
 export const summerScheduleService = {
   async getEmployeesForSchedule() {
-    const all = await storage.getAllEmployees();
+    const all = await employeeService.getAllEmployees();
     const active = all.filter((e) => e.status === "active");
-    const venues = await storage.getAllVenues();
+    const venues = await venueService.findAll();
     const venueMap = new Map(venues.map((v) => [v.id, v]));
     const items = active.map((e) => {
       const venue = e.regionId ? venueMap.get(e.regionId) : undefined;
@@ -688,14 +690,13 @@ export const summerScheduleService = {
 
     // 員工名冊只撈一次，用來把「排班人員」的姓名對回 employeeId。
     // 對不到不擋整批 —— 名冊外的臨時教練是常態（CLAUDE.md 第八條記載 19 個）。
-    const employees = await storage.getAllEmployees();
+    const employees = await employeeService.getAllEmployees();
     const empByName = new Map<string, any>();
     for (const e of employees) {
       const n = String(e.name || "").trim();
       if (n && !empByName.has(n)) empByName.set(n, e);
     }
 
-    // storage 只有 getVenuesByRegion，這裡要全部場館，直接查表
     // 補習班名單：薪資頁的分類器用「課名開頭是不是補習班」來決定 1 小時還是 1.5 小時。
     // 名單外的補習班，球類的課會被判成「球類課程 1.5h」而不是「補習班課程 1h」——
     // CLAUDE.md 記載這個坑踩過，45 筆每堂多算 0.5 小時。
@@ -857,10 +858,10 @@ export const summerScheduleService = {
       )
     );
 
-    const employees = await storage.getAllEmployees();
+    const employees = await employeeService.getAllEmployees();
     const empMap = new Map(employees.map((e) => [e.id, e.name]));
 
-    const venues = await storage.getAllVenues();
+    const venues = await venueService.findAll();
     const venueMap = new Map(venues.map((v) => [v.id, v]));
 
     function resolveDutyRoleKind(role?: string | null, notes?: string | null) {
@@ -942,10 +943,10 @@ export const summerScheduleService = {
     const week = SUMMER_WEEKS.find((w) => w.no === weekNo);
     if (!week) throw httpError(400, "weekNo 只允許 1-9");
 
-    const employee = await storage.getEmployeeByLineId(lineId);
+    const employee = await employeeService.getEmployeeByLineId(lineId);
     if (!employee) throw httpError(404, "找不到此 LINE 帳號對應的員工資料");
 
-    const empShifts = await storage.getShiftsByEmployeeAndDateRange(employee.id, week.startDate, week.endDate);
+    const empShifts = await shiftService.getShiftsByEmployeeAndDateRange(employee.id, week.startDate, week.endDate);
     const summerShifts = empShifts.filter(
       (s) =>
         s.notes?.includes("暑假排班v40") &&
@@ -954,7 +955,7 @@ export const summerScheduleService = {
         !s.notes.includes("暑假櫃台排班")
     );
 
-    const venues = await storage.getAllVenues();
+    const venues = await venueService.findAll();
     const venueMap = new Map(venues.map((v) => [v.id, v]));
 
     return {

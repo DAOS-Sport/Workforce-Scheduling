@@ -1,7 +1,7 @@
 /**
  * Shift orchestration: the logic behind every /api/shifts* and
  * /api/shifts-cancelled* route. Each function returns the response payload
- * or throws httpError(status, message). Errors without a status (storage,
+ * or throws httpError(status, message). Errors without a status (repository,
  * labor-rule date parsing) are mapped by shift.routes.ts to that route's
  * own default status.
  *
@@ -11,7 +11,7 @@
  *   - /batch and /batch-update pass force only when the body has force === true;
  *     /import-batch always passes force=true on update.
  *   - createShift never needs force (no row exists yet).
- *   - Audit rows are written by storage.createShift/updateShift/deleteShift.
+ *   - Audit rows are written by shiftRepository.createShift/updateShift/deleteShift.
  *   - LEAVE_TYPES skip labor-law validation.
  *
  * Labor-law variants: create, update and the four-week precheck load their
@@ -20,7 +20,6 @@
  * default and overtime range. Those differences are open owner decisions,
  * so they are kept as they are rather than unified.
  */
-import { storage } from "../../storage";
 import { validateAllRules } from "../../core/labor/laborValidation";
 import { httpError } from "../../shared/http/response";
 import {
@@ -31,6 +30,12 @@ import {
   type ShiftValidationError,
 } from "./shift.types";
 import { loadValidationContext, pickBlockingErrors, pickWarningErrors } from "./shiftValidation.service";
+import { regionService } from "../region/region.service";
+import { shiftRepository } from "./shift.repository";
+import { employeeService } from "../employee/employee.service";
+import { systemService } from "../system/system.service";
+import { overtimeService } from "../overtime/overtime.service";
+import { dispatchService } from "../dispatch/dispatch.service";
 
 // ── Reads ────────────────────────────────────────────────────────────
 
@@ -39,10 +44,10 @@ export async function listShifts(regionCodes: string, startDate: string, endDate
   const seenIds = new Set<number>();
   const merged: Shift[] = [];
   for (const code of codes) {
-    const region = await storage.getRegionByCode(code);
+    const region = await regionService.findByCode(code);
     if (!region) continue;
-    const regionShifts = await storage.getShiftsByRegionAndDateRange(region.id, startDate, endDate);
-    const dispatchedInShifts = await storage.getDispatchedShiftsToRegion(region.id, startDate, endDate);
+    const regionShifts = await shiftRepository.getShiftsByRegionAndDateRange(region.id, startDate, endDate);
+    const dispatchedInShifts = await shiftRepository.getDispatchedShiftsToRegion(region.id, startDate, endDate);
     for (const s of regionShifts) {
       if (seenIds.has(s.id)) continue;
       seenIds.add(s.id);
@@ -58,9 +63,9 @@ export async function listShifts(regionCodes: string, startDate: string, endDate
 }
 
 export async function listCancelledShifts(regionCode: string, startDate: string, endDate: string) {
-  const region = await storage.getRegionByCode(regionCode);
+  const region = await regionService.findByCode(regionCode);
   if (!region) return [];
-  return storage.getCancelledShiftsByRegionAndDateRange(region.id, startDate, endDate);
+  return shiftRepository.getCancelledShiftsByRegionAndDateRange(region.id, startDate, endDate);
 }
 
 export async function listRegionShifts(
@@ -69,16 +74,16 @@ export async function listRegionShifts(
   endDate: string,
   includeCancelled: boolean,
 ) {
-  const region = await storage.getRegionByCode(regionCode);
+  const region = await regionService.findByCode(regionCode);
   if (!region) return [];
-  const active = await storage.getShiftsByRegionAndDateRange(region.id, startDate, endDate);
+  const active = await shiftRepository.getShiftsByRegionAndDateRange(region.id, startDate, endDate);
   if (!includeCancelled) return active;
-  const cancelled = await storage.getCancelledShiftsByRegionAndDateRange(region.id, startDate, endDate);
+  const cancelled = await shiftRepository.getCancelledShiftsByRegionAndDateRange(region.id, startDate, endDate);
   return [...active, ...cancelled];
 }
 
 export function getShiftAuditLog(id: number) {
-  return storage.getShiftAuditLog(id);
+  return shiftRepository.getShiftAuditLog(id);
 }
 
 // ── Validation precheck ──────────────────────────────────────────────
@@ -112,7 +117,7 @@ export async function fourWeekPrecheck(body: any): Promise<{ warnings: ShiftVali
 export async function createShift(body: unknown, actor: string) {
   const parsed = insertShiftSchema.parse(body);
 
-  const employee = await storage.getEmployee(parsed.employeeId);
+  const employee = await employeeService.getEmployee(parsed.employeeId);
   if (!employee || employee.status !== "active") {
     throw httpError(400, "該員工非在職狀態，無法排班");
   }
@@ -140,12 +145,12 @@ export async function createShift(body: unknown, actor: string) {
     warnings = pickWarningErrors(errors);
   }
 
-  const shift = await storage.createShift(parsed, actor);
+  const shift = await shiftRepository.createShift(parsed, actor);
   return { ...shift, warnings };
 }
 
 export async function updateShift(id: number, body: unknown, actor: string) {
-  const existing = await storage.getShift(id);
+  const existing = await shiftRepository.getShift(id);
   if (!existing) throw httpError(404, "Shift not found");
 
   const partial = insertShiftSchema.partial().parse(body);
@@ -154,7 +159,7 @@ export async function updateShift(id: number, body: unknown, actor: string) {
   const startTime = partial.startTime || existing.startTime;
   const endTime = partial.endTime || existing.endTime;
 
-  const employee = await storage.getEmployee(employeeId);
+  const employee = await employeeService.getEmployee(employeeId);
   if (!employee || employee.status !== "active") {
     throw httpError(400, "該員工非在職狀態，無法排班");
   }
@@ -185,17 +190,17 @@ export async function updateShift(id: number, body: unknown, actor: string) {
   }
 
   // Admin direct edit through the UI is an explicit, authorized action.
-  const shift = await storage.updateShift(id, partial, actor, true);
+  const shift = await shiftRepository.updateShift(id, partial, actor, true);
   return { ...shift, warnings };
 }
 
 /** Admin direct delete through the UI is an explicit, authorized action. */
 export function cancelShift(id: number, actor: string, reason: string | undefined) {
-  return storage.deleteShift(id, actor, reason, true);
+  return shiftRepository.deleteShift(id, actor, reason, true);
 }
 
 export function restoreShift(id: number, actor: string) {
-  return storage.restoreShift(id, actor);
+  return shiftRepository.restoreShift(id, actor);
 }
 
 // ── Batch operations ────────────────────────────────────────────────
@@ -208,7 +213,7 @@ export async function batchDeleteShifts(body: any, actor: string) {
   }
   let deletedCount = 0;
   for (const date of targetDates) {
-    const shifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
+    const shifts = await shiftRepository.getShiftsByEmployeeAndDateRange(empId, date, date);
     const matching = shifts.filter(
       (s) =>
         (!venueId || s.venueId === Number(venueId)) &&
@@ -217,7 +222,7 @@ export async function batchDeleteShifts(body: any, actor: string) {
         (!role || s.role === role),
     );
     for (const s of matching) {
-      await storage.deleteShift(s.id, actor, reason, true);
+      await shiftRepository.deleteShift(s.id, actor, reason, true);
       deletedCount++;
     }
   }
@@ -232,7 +237,7 @@ export async function batchDeleteShiftIds(body: any, actor: string) {
   const uniqueIds = [...new Set(shiftIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
   let deletedCount = 0;
   for (const numId of uniqueIds) {
-    const ok = await storage.deleteShift(numId, actor, reason, true);
+    const ok = await shiftRepository.deleteShift(numId, actor, reason, true);
     if (ok) deletedCount++;
   }
   return { success: true, deletedCount };
@@ -243,27 +248,27 @@ export async function batchUpsertShifts(body: any, actor: string) {
   // Task #50 protection: safe-by-default. Active shifts are NEVER
   // overwritten unless caller explicitly sets force=true. Admin UI sends
   // force:true on bulk-replace buttons; automation (ragic sync etc.)
-  // omits force and will be blocked at storage layer with a clear error.
+  // omits force and will be blocked at the repository layer with a clear error.
   const forceFlag = force === true;
   if (!employeeId || !venueId || !startTime || !endTime || !role || !Array.isArray(targetDates) || targetDates.length === 0) {
     throw httpError(400, "缺少必要欄位");
   }
 
-  const employee = await storage.getEmployee(employeeId);
+  const employee = await employeeService.getEmployee(employeeId);
   if (!employee || employee.status !== "active") {
     throw httpError(400, "該員工非在職狀態，無法排班");
   }
 
   const isLeave = LEAVE_TYPES.includes(role);
-  const existingShifts = isLeave ? [] : await storage.getShiftsByEmployee(employeeId);
-  const refConfig = isLeave ? null : await storage.getSystemConfig("four_week_reference_date");
+  const existingShifts = isLeave ? [] : await shiftRepository.getShiftsByEmployee(employeeId);
+  const refConfig = isLeave ? null : await systemService.findSystemConfig("four_week_reference_date");
   const fourWeekRef = refConfig?.value || "2025-01-06";
   let otRecords: { employeeId: number; date: string; startTime: string; endTime: string }[] = [];
   if (!isLeave) {
     const allDates = [...targetDates].sort();
     const pStart = getFourWeekPeriod(allDates[0], fourWeekRef);
     const pEnd = getFourWeekPeriod(allDates[allDates.length - 1], fourWeekRef);
-    const approvedOT = await storage.getApprovedOvertimeByDateRange(pStart.start, pEnd.end);
+    const approvedOT = await overtimeService.getApprovedOvertimeByDateRange(pStart.start, pEnd.end);
     otRecords = approvedOT.map((ot) => ({
       employeeId: ot.employeeId,
       date: ot.date,
@@ -276,7 +281,7 @@ export async function batchUpsertShifts(body: any, actor: string) {
   const warnings: string[] = [];
 
   for (const date of targetDates) {
-    const dayShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, date, date);
+    const dayShifts = await shiftRepository.getShiftsByEmployeeAndDateRange(employeeId, date, date);
     const existingOnDate = dayShifts[0] || null;
 
     if (!isLeave && !(isDispatch || false)) {
@@ -310,7 +315,7 @@ export async function batchUpsertShifts(body: any, actor: string) {
       if (skipExisting) {
         continue;
       }
-      const updated = await storage.updateShift(
+      const updated = await shiftRepository.updateShift(
         existingOnDate.id,
         {
           venueId: parseInt(venueId),
@@ -328,7 +333,7 @@ export async function batchUpsertShifts(body: any, actor: string) {
         if (idx >= 0) Object.assign(existingShifts[idx], updated);
       }
     } else {
-      shift = await storage.createShift(
+      shift = await shiftRepository.createShift(
         {
           employeeId,
           venueId: parseInt(venueId),
@@ -368,7 +373,7 @@ export async function importShifts(body: any, actor: string) {
   const monthStart = allDates[0];
   const monthEnd = allDates[allDates.length - 1];
 
-  const refConfig = await storage.getSystemConfig("four_week_reference_date");
+  const refConfig = await systemService.findSystemConfig("four_week_reference_date");
   const referenceDate = refConfig?.value || "2025-01-06";
 
   // Extend preload range 6 days before monthStart for seven-day-rest boundary checks
@@ -385,11 +390,11 @@ export async function importShifts(body: any, actor: string) {
   const otRangeEnd = periodOfEnd.end > monthEnd ? periodOfEnd.end : monthEnd;
 
   const [employeeList, existingShiftsForMonth, approvedOT] = await Promise.all([
-    Promise.all(uniqueEmployeeIds.map((id) => storage.getEmployee(id))),
+    Promise.all(uniqueEmployeeIds.map((id) => employeeService.getEmployee(id))),
     uniqueEmployeeIds.length > 0
-      ? storage.getShiftsByEmployeesAndDateRange(uniqueEmployeeIds, preloadStart, monthEnd)
+      ? shiftRepository.getShiftsByEmployeesAndDateRange(uniqueEmployeeIds, preloadStart, monthEnd)
       : Promise.resolve([]),
-    storage.getApprovedOvertimeByDateRange(otRangeStart, otRangeEnd),
+    overtimeService.getApprovedOvertimeByDateRange(otRangeStart, otRangeEnd),
   ]);
 
   const otRecords = approvedOT.map((ot) => ({
@@ -469,7 +474,7 @@ export async function importShifts(body: any, actor: string) {
             })
             .join("、");
           try {
-            await storage.createDispatchShift({
+            await dispatchService.createDispatchShift({
               regionId: employee.regionId,
               venueId,
               date,
@@ -493,7 +498,7 @@ export async function importShifts(body: any, actor: string) {
             .map((e) => (e.type === "rest_11h" ? "輪班間隔不足11h" : "四週工時超160h"))
             .join("、");
           try {
-            await storage.createDispatchShift({
+            await dispatchService.createDispatchShift({
               regionId: employee.regionId,
               venueId,
               date,
@@ -521,7 +526,7 @@ export async function importShifts(body: any, actor: string) {
         skipped.push({ date, employeeId });
         continue;
       } else {
-        const updated = await storage.updateShift(
+        const updated = await shiftRepository.updateShift(
           existingShift.id,
           { venueId, startTime, endTime, role },
           `system:import-batch|by:${actor}`,
@@ -537,7 +542,7 @@ export async function importShifts(body: any, actor: string) {
       }
     }
 
-    const shift = await storage.createShift(
+    const shift = await shiftRepository.createShift(
       { employeeId, venueId, date, startTime, endTime, role, isDispatch: false },
       `system:import-batch|by:${actor}`,
     );
@@ -572,7 +577,7 @@ export async function batchUpdateShifts(body: any, actor: string) {
   // Task #50 protection: safe-by-default. Active shifts are NEVER
   // overwritten unless caller explicitly sets force=true. Admin UI sends
   // force:true on the "apply to multiple dates" button; automation
-  // (ragic sync etc.) is blocked at storage layer with a clear error.
+  // (ragic sync etc.) is blocked at the repository layer with a clear error.
   const forceFlag = body.force === true;
 
   const empId = Number(employeeId);
@@ -585,8 +590,8 @@ export async function batchUpdateShifts(body: any, actor: string) {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const existingShifts = isLeave ? [] : await storage.getShiftsByEmployee(empId);
-  const refConfig = isLeave ? null : await storage.getSystemConfig("four_week_reference_date");
+  const existingShifts = isLeave ? [] : await shiftRepository.getShiftsByEmployee(empId);
+  const refConfig = isLeave ? null : await systemService.findSystemConfig("four_week_reference_date");
   const fourWeekRef = refConfig?.value || "2025-01-06";
   let otRecords: { employeeId: number; date: string; startTime: string; endTime: string }[] = [];
   if (!isLeave) {
@@ -595,7 +600,7 @@ export async function batchUpdateShifts(body: any, actor: string) {
     if (allDatesForOT.length > 0) {
       const pStart = getFourWeekPeriod(allDatesForOT[0], fourWeekRef);
       const pEnd = getFourWeekPeriod(allDatesForOT[allDatesForOT.length - 1], fourWeekRef);
-      const approvedOT = await storage.getApprovedOvertimeByDateRange(pStart.start, pEnd.end);
+      const approvedOT = await overtimeService.getApprovedOvertimeByDateRange(pStart.start, pEnd.end);
       otRecords = approvedOT.map((ot) => ({
         employeeId: ot.employeeId,
         date: ot.date,
@@ -624,7 +629,7 @@ export async function batchUpdateShifts(body: any, actor: string) {
     for (const w of warnItems) warnings.push(`${currentDate}: ${w.message}`);
   }
 
-  const currentUpdated = await storage.updateShift(
+  const currentUpdated = await shiftRepository.updateShift(
     Number(currentShiftId),
     {
       venueId: effectiveVenueId,
@@ -643,7 +648,7 @@ export async function batchUpdateShifts(body: any, actor: string) {
   }
 
   for (const date of targetDates) {
-    const dayShifts = await storage.getShiftsByEmployeeAndDateRange(empId, date, date);
+    const dayShifts = await shiftRepository.getShiftsByEmployeeAndDateRange(empId, date, date);
     const shiftToUpdate = matchVenueId && matchStartTime
       ? (dayShifts.find(
           (s) =>
@@ -688,7 +693,7 @@ export async function batchUpdateShifts(body: any, actor: string) {
     }
 
     if (!shiftToUpdate) {
-      const created = await storage.createShift(
+      const created = await shiftRepository.createShift(
         {
           employeeId: empId,
           venueId: effectiveVenueId,
@@ -703,7 +708,7 @@ export async function batchUpdateShifts(body: any, actor: string) {
       updated.push(created);
       existingShifts.push(created as any);
     } else {
-      const result = await storage.updateShift(
+      const result = await shiftRepository.updateShift(
         shiftToUpdate.id,
         {
           venueId: effectiveVenueId,
@@ -731,7 +736,7 @@ export async function copyShiftsFromPreviousMonth(body: any, actor: string) {
   if (!regionCode || !targetYear || !targetMonth) {
     throw httpError(400, "缺少必要欄位");
   }
-  const region = await storage.getRegionByCode(regionCode);
+  const region = await regionService.findByCode(regionCode);
   if (!region) throw httpError(404, "找不到區域");
 
   const prevDate = new Date(targetYear, targetMonth - 2, 1);
@@ -745,18 +750,18 @@ export async function copyShiftsFromPreviousMonth(body: any, actor: string) {
   const targetLastDay = new Date(targetYear, targetMonth, 0).getDate();
   const targetEnd = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(targetLastDay).padStart(2, "0")}`;
 
-  const existingTargetShifts = await storage.getShiftsByRegionAndDateRange(region.id, targetStart, targetEnd);
+  const existingTargetShifts = await shiftRepository.getShiftsByRegionAndDateRange(region.id, targetStart, targetEnd);
   if (existingTargetShifts.length > 0) {
     throw httpError(400, "目標月份已有排班資料，無法覆蓋");
   }
 
-  const prevShifts = await storage.getShiftsByRegionAndDateRange(region.id, prevStart, prevEnd);
+  const prevShifts = await shiftRepository.getShiftsByRegionAndDateRange(region.id, prevStart, prevEnd);
   if (prevShifts.length === 0) {
     throw httpError(400, "上個月無排班資料可複製");
   }
 
   // Resigned employees keep last month's shifts as a record but are not scheduled into the new month.
-  const regionEmployees = await storage.getEmployeesByRegion(region.id);
+  const regionEmployees = await employeeService.getEmployeesByRegion(region.id);
   const activeEmployeeIds = new Set(regionEmployees.filter((e) => e.status === "active").map((e) => e.id));
 
   const results: any[] = [];
@@ -776,7 +781,7 @@ export async function copyShiftsFromPreviousMonth(body: any, actor: string) {
     const newDate = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`;
 
     try {
-      const shift = await storage.createShift(
+      const shift = await shiftRepository.createShift(
         {
           employeeId: s.employeeId,
           venueId: s.venueId,
@@ -800,3 +805,16 @@ export async function copyShiftsFromPreviousMonth(body: any, actor: string) {
   const skippedNote = skippedInactive > 0 ? `，略過離職人員 ${skippedInactive} 筆` : "";
   return { created: results.length, skippedInactive, errors, message: `已從${prevMonth}月複製 ${results.length} 筆班表${skippedNote}` };
 }
+
+export const shiftService = {
+  createShiftRecord: shiftRepository.createShift,
+  deleteShift: shiftRepository.deleteShift,
+  getAllShiftsByDateRange: shiftRepository.getAllShiftsByDateRange,
+  getDispatchedShiftsToRegion: shiftRepository.getDispatchedShiftsToRegion,
+  getShift: shiftRepository.getShift,
+  getShiftsByDate: shiftRepository.getShiftsByDate,
+  getShiftsByEmployeeAndDateRange: shiftRepository.getShiftsByEmployeeAndDateRange,
+  getShiftsByRegionAndDateRange: shiftRepository.getShiftsByRegionAndDateRange,
+  getShiftsByVenueAndDate: shiftRepository.getShiftsByVenueAndDate,
+  updateShiftRecord: shiftRepository.updateShift,
+};

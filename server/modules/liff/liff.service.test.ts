@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../storage", () => ({
-  storage: {
+vi.mock("../employee/employee.service", () => ({
+  employeeService: {
     getEmployee: vi.fn(),
     getEmployeeByLineId: vi.fn(),
     updateEmployee: vi.fn(),
@@ -24,7 +24,7 @@ vi.mock("../shift/shiftReview.service", () => ({
   },
 }));
 
-import { storage } from "../../storage";
+import { employeeService } from "../employee/employee.service";
 import { processClockIn } from "../line/lineClock.service";
 import { pushToLine } from "../line/linePush.service";
 import { shiftReviewService } from "../shift/shiftReview.service";
@@ -58,8 +58,8 @@ const successResult = {
 describe("liffService.processLiffClockIn shift review", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(storage.getEmployeeByLineId).mockResolvedValue(employee as any);
-    vi.mocked(storage.getEmployee).mockResolvedValue(employee as any);
+    vi.mocked(employeeService.getEmployeeByLineId).mockResolvedValue(employee as any);
+    vi.mocked(employeeService.getEmployee).mockResolvedValue(employee as any);
     vi.mocked(processClockIn).mockResolvedValue(successResult as any);
   });
 

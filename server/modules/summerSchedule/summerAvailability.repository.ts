@@ -1,4 +1,5 @@
 import { db } from "../../infra/db";
+import type { Executor } from "../../infra/db/tx";
 import { eq, and } from "drizzle-orm";
 import {
   summerAvailabilities,
@@ -9,9 +10,10 @@ import {
 export const summerAvailabilityRepository = {
   async getByEmployeeAndWeek(
     employeeId: number,
-    weekNo: number
+    weekNo: number,
+    tx: Executor = db
   ): Promise<SummerAvailability | undefined> {
-    const [row] = await db
+    const [row] = await tx
       .select()
       .from(summerAvailabilities)
       .where(
@@ -23,15 +25,15 @@ export const summerAvailabilityRepository = {
     return row;
   },
 
-  async getAllByWeek(weekNo: number): Promise<SummerAvailability[]> {
-    return db
+  async getAllByWeek(weekNo: number, tx: Executor = db): Promise<SummerAvailability[]> {
+    return tx
       .select()
       .from(summerAvailabilities)
       .where(eq(summerAvailabilities.weekNo, weekNo));
   },
 
-  async deleteByEmployeeAndWeek(employeeId: number, weekNo: number): Promise<number> {
-    const rows = await db
+  async deleteByEmployeeAndWeek(employeeId: number, weekNo: number, tx: Executor = db): Promise<number> {
+    const rows = await tx
       .delete(summerAvailabilities)
       .where(
         and(
@@ -43,7 +45,7 @@ export const summerAvailabilityRepository = {
     return rows.length;
   },
 
-  async upsert(data: InsertSummerAvailability): Promise<SummerAvailability> {
+  async upsert(data: InsertSummerAvailability, tx: Executor = db): Promise<SummerAvailability> {
     // JSONB columns with $type<> require an explicit cast due to Drizzle ORM
     // type inference limitations with createInsertSchema and JSONB arrays.
     const insertValue = {
@@ -56,7 +58,7 @@ export const summerAvailabilityRepository = {
       sunSlots: (data.sunSlots ?? []) as unknown as { startTime: string; endTime: string }[],
       notes: data.notes ?? null,
     };
-    const [row] = await db
+    const [row] = await tx
       .insert(summerAvailabilities)
       .values(insertValue)
       .onConflictDoUpdate({

@@ -13,18 +13,18 @@
  *   4. The single fan-out call into the module registry.
  *
  * All domain HTTP routes live in server/modules/<name>/<name>.routes.ts.
- * Storage protections (Task #50 force=true), audit-log writes, and
- * soft-delete semantics remain inside server/storage.ts unchanged.
+ * Shift protections (Task #50 force=true), audit-log writes, and
+ * soft-delete semantics live in the shift and dispatch repositories.
  */
 import type { Express } from "express";
 import type { Server } from "http";
 
-import { storage } from "./storage";
 import { registerInternalApi } from "./modules/internal/internal.routes";
 import { gateAdminApi } from "./shared/middleware/requireAdmin";
 import { registerModuleRoutes } from "./modules/_registry";
 import { mountAdminAuthRoutes } from "./modules/admin/admin.routes";
 import { corsFor } from "./shared/middleware/cors";
+import { guidelineService } from "./modules/guideline/guideline.service";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -32,10 +32,10 @@ export async function registerRoutes(
 ): Promise<Server> {
   // ── 1. Seed: default guideline ─────────────────────────────────────────
   try {
-    const existingGuidelines = await storage.getGuidelines("工作規則");
+    const existingGuidelines = await guidelineService.getGuidelines("工作規則");
     const hasSickLeave = existingGuidelines.some((g) => g.title === "病假注意事項");
     if (!hasSickLeave) {
-      await storage.createGuideline({
+      await guidelineService.createGuideline({
         category: "工作規則",
         title: "病假注意事項",
         content: "請病假需於返回上班後三日內提交就診證明（醫院收據或診斷書），否則將視同曠職。如有疑問請洽詢主管或 HR 部門。",

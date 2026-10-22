@@ -11,7 +11,6 @@
  *    then deletes and inserts one by one; there is no transaction, so a
  *    database error midway can still leave a partial set).
  */
-import { storage } from "../../storage";
 import {
   insertScheduleSlotSchema,
   insertVenueShiftTemplateSchema,
@@ -20,6 +19,9 @@ import {
   type InsertScheduleSlot,
   type InsertVenueShiftTemplate,
 } from "@shared/schema";
+import { regionService } from "../region/region.service";
+import { scheduleSlotRepository } from "./scheduleSlot.repository";
+import { venueService } from "../venue/venue.service";
 
 export interface VirtualSlot {
   id: number;
@@ -41,15 +43,15 @@ export const scheduleSlotService = {
     const seenVenue = new Set<number>();
 
     for (const code of codes) {
-      const region = await storage.getRegionByCode(code);
+      const region = await regionService.findByCode(code);
       if (!region) continue;
-      const realSlots = await storage.getScheduleSlotsByRegionAndDateRange(region.id, startDate, endDate);
+      const realSlots = await scheduleSlotRepository.getScheduleSlotsByRegionAndDateRange(region.id, startDate, endDate);
       for (const s of realSlots) {
         if (seenSlot.has(s.id)) continue;
         seenSlot.add(s.id);
         allRealSlots.push(s);
       }
-      const regionVenues = await storage.getVenuesByRegion(region.id);
+      const regionVenues = await venueService.getVenuesByRegion(region.id);
       for (const v of regionVenues) {
         if (seenVenue.has(v.id)) continue;
         seenVenue.add(v.id);
@@ -59,7 +61,7 @@ export const scheduleSlotService = {
 
     const allTemplates: Record<number, any[]> = {};
     for (const v of allRegionVenues) {
-      const tpls = await storage.getVenueShiftTemplates(v.id);
+      const tpls = await venueService.getVenueShiftTemplates(v.id);
       if (tpls.length > 0) allTemplates[v.id] = tpls;
     }
 
@@ -116,17 +118,17 @@ export const scheduleSlotService = {
       err.status = 400;
       throw err;
     }
-    const venue = await storage.getVenue(venueId);
+    const venue = await venueService.getVenue(venueId);
     if (!venue) {
       const err: any = new Error("Venue not found");
       err.status = 404;
       throw err;
     }
-    const existingSlots = await storage.getScheduleSlotsByRegionAndDateRange(venue.regionId, date, date);
+    const existingSlots = await scheduleSlotRepository.getScheduleSlotsByRegionAndDateRange(venue.regionId, date, date);
     const hasReal = existingSlots.some((s) => s.venueId === venueId);
     if (hasReal) return { message: "Already has real slots", created: 0 };
 
-    const templates = await storage.getVenueShiftTemplates(venueId);
+    const templates = await venueService.getVenueShiftTemplates(venueId);
     const d = new Date(date + "T00:00:00");
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
     const matched = templates.filter((t) => {
@@ -141,7 +143,7 @@ export const scheduleSlotService = {
         (ex) => ex.startTime === t.startTime && ex.endTime === t.endTime && ex.role === t.role,
       );
       if (isExcluded) continue;
-      const slot = await storage.createScheduleSlot({
+      const slot = await scheduleSlotRepository.createScheduleSlot({
         venueId,
         date,
         startTime: t.startTime,
@@ -156,15 +158,15 @@ export const scheduleSlotService = {
 
   async create(payload: unknown): Promise<ScheduleSlot> {
     const parsed = insertScheduleSlotSchema.parse(payload);
-    return storage.createScheduleSlot(parsed);
+    return scheduleSlotRepository.createScheduleSlot(parsed);
   },
 
   async update(id: number, payload: unknown): Promise<ScheduleSlot | null> {
     const partial = insertScheduleSlotSchema.partial().parse(payload);
-    return (await storage.updateScheduleSlot(id, partial as Partial<InsertScheduleSlot>)) ?? null;
+    return (await scheduleSlotRepository.updateScheduleSlot(id, partial as Partial<InsertScheduleSlot>)) ?? null;
   },
 
-  remove: (id: number) => storage.deleteScheduleSlot(id),
+  remove: (id: number) => scheduleSlotRepository.deleteScheduleSlot(id),
 
   async batchCopy(payload: any) {
     const { venueId, venueIds, startTime, endTime, role, requiredCount, targetDates } = payload;
@@ -178,7 +180,7 @@ export const scheduleSlotService = {
     let skipped = 0;
     for (const vid of resolvedVenueIds) {
       for (const date of targetDates) {
-        const existing = await storage.getScheduleSlotsByVenueAndDate(vid, date);
+        const existing = await scheduleSlotRepository.getScheduleSlotsByVenueAndDate(vid, date);
         const duplicate = existing.find(
           (s) => s.startTime === startTime && s.endTime === endTime && s.role === role,
         );
@@ -186,7 +188,7 @@ export const scheduleSlotService = {
           skipped++;
           continue;
         }
-        const slot = await storage.createScheduleSlot({ venueId: vid, date, startTime, endTime, role, requiredCount });
+        const slot = await scheduleSlotRepository.createScheduleSlot({ venueId: vid, date, startTime, endTime, role, requiredCount });
         results.push(slot);
       }
     }
@@ -194,16 +196,16 @@ export const scheduleSlotService = {
   },
 
   async venueRequirementsByRegionCode(regionCode: string) {
-    const region = await storage.getRegionByCode(regionCode);
+    const region = await regionService.findByCode(regionCode);
     if (!region) return [];
-    return storage.getVenueRequirementsByRegion(region.id);
+    return venueService.getVenueRequirementsByRegion(region.id);
   },
 
-  templatesByVenue: (venueId: number) => storage.getVenueShiftTemplates(venueId),
+  templatesByVenue: (venueId: number) => venueService.getVenueShiftTemplates(venueId),
 
   async createTemplate(payload: unknown) {
     const parsed = insertVenueShiftTemplateSchema.parse(payload);
-    return storage.createVenueShiftTemplate(parsed);
+    return venueService.createVenueShiftTemplate(parsed);
   },
 
   async batchReplaceTemplates(venueId: number, templates: any[]) {
@@ -214,13 +216,15 @@ export const scheduleSlotService = {
     }
     // 先整批檢查，有一筆格式錯就不動場館現有的模板。
     const parsed = templates.map((t) => insertVenueShiftTemplateSchema.parse({ ...t, venueId } satisfies InsertVenueShiftTemplate));
-    await storage.deleteVenueShiftTemplatesByVenue(venueId);
+    await venueService.deleteVenueShiftTemplatesByVenue(venueId);
     const results = [];
     for (const row of parsed) {
-      results.push(await storage.createVenueShiftTemplate(row));
+      results.push(await venueService.createVenueShiftTemplate(row));
     }
     return results;
   },
 
-  removeTemplate: (id: number) => storage.deleteVenueShiftTemplate(id),
+  removeTemplate: (id: number) => venueService.deleteVenueShiftTemplate(id),
+
+  getScheduleSlotsByVenueAndDate: scheduleSlotRepository.getScheduleSlotsByVenueAndDate,
 };

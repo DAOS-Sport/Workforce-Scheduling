@@ -5,7 +5,7 @@
  * handler is left with HTTP / session concerns only. Session writes
  * remain in the route because they touch req.session and need a callback.
  */
-import { storage } from "../../storage";
+import { employeeService } from "../employee/employee.service";
 
 export interface AdminIdentity {
   id: number;
@@ -34,7 +34,7 @@ export const adminService = {
   },
 
   async resolveAdminIdentity(): Promise<AdminIdentity> {
-    const allEmployees = await storage.getAllEmployees();
+    const allEmployees = await employeeService.getAllEmployees();
     const admin = allEmployees.find((e) => e.isAdmin);
     return { id: admin?.id || 1, name: admin?.name || "管理員" };
   },

@@ -1,4 +1,3 @@
-import { storage } from "../../storage";
 import { calcShiftHours, sumScheduledHours, getAllPeriodsForMonth } from "@shared/schema";
 import { pushToLine } from "../line/linePush.service";
 import { db } from "../../infra/db";
@@ -10,6 +9,14 @@ import ExcelJS from "exceljs";
 
 import { LEAVE_TYPES } from "@shared/leave";
 import { httpError } from "../../shared/http/response";
+import { systemRepository } from "./system.repository";
+import { shiftService } from "../shift/shift.service";
+import { overtimeService } from "../overtime/overtime.service";
+import { employeeService } from "../employee/employee.service";
+import { regionService } from "../region/region.service";
+import { venueService } from "../venue/venue.service";
+import { clockService } from "../clock/clock.service";
+import { notificationService } from "../notification/notification.service";
 const ATTENDANCE_GRACE_MINUTES = 10;
 
 function parseAttendanceIssueMinutes(reason: string | null | undefined, prefix: string): number | null {
@@ -39,37 +46,37 @@ function hasAttendanceIssueBeyondGrace(
 
 export const systemService = {
   async listSalaryRates() {
-    return await storage.getSalaryRates();
+    return await systemRepository.getSalaryRates();
   },
 
   async upsertSalaryRate(role: string, ratePerHour: number, label?: string) {
     if (!role || ratePerHour === undefined || ratePerHour === null) throw httpError(400, "需提供 role 和 ratePerHour");
-    return await storage.upsertSalaryRate(role, Number(ratePerHour), label);
+    return await systemRepository.upsertSalaryRate(role, Number(ratePerHour), label);
   },
 
   async getSystemConfig(key: string) {
-    const config = await storage.getSystemConfig(key);
+    const config = await systemRepository.getSystemConfig(key);
     return config ?? { key, value: null };
   },
 
   async upsertSystemConfig(key: string, value: any) {
     if (value === undefined || value === null) throw httpError(400, "需提供 value");
-    return await storage.upsertSystemConfig(key, String(value));
+    return await systemRepository.upsertSystemConfig(key, String(value));
   },
 
   async fourWeekCompliance(year: number, month: number, regionCode?: string) {
     if (!year || !month || month < 1 || month > 12) throw httpError(400, "需提供正確的 year 和 month");
-    const refConfig = await storage.getSystemConfig("four_week_reference_date");
+    const refConfig = await systemRepository.getSystemConfig("four_week_reference_date");
     const referenceDate = refConfig?.value || "2025-01-06";
 
     const periods = getAllPeriodsForMonth(year, month, referenceDate);
     const allStart = periods.reduce((min, p) => p.start < min ? p.start : min, periods[0].start);
     const allEnd = periods.reduce((max, p) => p.end > max ? p.end : max, periods[0].end);
 
-    const allShifts = await storage.getAllShiftsByDateRange(allStart, allEnd);
-    const approvedOT = await storage.getApprovedOvertimeByDateRange(allStart, allEnd);
-    const allEmployees = await storage.getAllEmployees();
-    const allRegions = await storage.getRegions();
+    const allShifts = await shiftService.getAllShiftsByDateRange(allStart, allEnd);
+    const approvedOT = await overtimeService.getApprovedOvertimeByDateRange(allStart, allEnd);
+    const allEmployees = await employeeService.getAllEmployees();
+    const allRegions = await regionService.findAll();
     const regionMap = new Map(allRegions.map(r => [r.id, r]));
     const regionFilter = regionCode ? allRegions.find(r => r.code === regionCode) : null;
 
@@ -121,10 +128,10 @@ export const systemService = {
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-    const allShifts = await storage.getAllShiftsByDateRange(startDate, endDate);
-    const approvedOT = await storage.getApprovedOvertimeByDateRange(startDate, endDate);
-    const allEmployees = await storage.getAllEmployees();
-    const allRegions = await storage.getRegions();
+    const allShifts = await shiftService.getAllShiftsByDateRange(startDate, endDate);
+    const approvedOT = await overtimeService.getApprovedOvertimeByDateRange(startDate, endDate);
+    const allEmployees = await employeeService.getAllEmployees();
+    const allRegions = await regionService.findAll();
     const regionMap = new Map(allRegions.map(r => [r.id, r]));
     const regionFilter = regionCode ? allRegions.find(r => r.code === regionCode) : null;
 
@@ -310,8 +317,8 @@ export const systemService = {
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-    const allEmployees = await storage.getAllEmployees();
-    const allVenues = await storage.getAllVenues();
+    const allEmployees = await employeeService.getAllEmployees();
+    const allVenues = await venueService.findAll();
     const venueMap = new Map(allVenues.map(v => [v.id, v]));
     const empMap = new Map(allEmployees.map(e => [e.id, e]));
 
@@ -384,7 +391,7 @@ export const systemService = {
     for (const ds of sortedDispatch) {
       const emp = empMap.get(ds.linkedEmployeeId!);
       const venue = ds.venueId ? venueMap.get(ds.venueId) : null;
-      const allRegions = await storage.getRegions();
+      const allRegions = await regionService.findAll();
       const regionMap2 = new Map(allRegions.map(r => [r.id, r]));
       const region = emp ? regionMap2.get(emp.regionId) : null;
       const hrs = rawHoursLocal(ds.startTime, ds.endTime);
@@ -408,10 +415,10 @@ export const systemService = {
       d.setUTCDate(d.getUTCDate() + 6);
       return d.toISOString().split("T")[0];
     })();
-    const allShifts = await storage.getAllShiftsByDateRange(weekStart, weekEnd);
-    const clockRecords = await storage.getClockRecordsByDateRange(weekStart, weekEnd);
-    const allEmployees = await storage.getAllEmployees();
-    const allVenues = await storage.getAllVenues();
+    const allShifts = await shiftService.getAllShiftsByDateRange(weekStart, weekEnd);
+    const clockRecords = await clockService.getClockRecordsByDateRange(weekStart, weekEnd);
+    const allEmployees = await employeeService.getAllEmployees();
+    const allVenues = await venueService.findAll();
     return { weekEnd, allShifts, clockRecords, allEmployees, allVenues };
   },
 
@@ -560,7 +567,7 @@ export const systemService = {
 
     let emailSent = false;
     try {
-      const recipients = await storage.getNotificationRecipients();
+      const recipients = await notificationService.findAll();
       const targets = recipients.filter(r => r.enabled && r.notifyNewReport);
       if (targets.length > 0) {
         const tableRows = summaryRows.map(row => `<tr><td style="padding: 6px 12px; border: 1px solid #e5e7eb; font-size: 13px; white-space: nowrap;">${row}</td></tr>`).join("");
@@ -590,4 +597,12 @@ export const systemService = {
       message: `已發送 LINE 推播 ${lineSent} 位，${emailSent ? "管理員 Email 已發送" : "Email 未發送"}`,
     };
   },
+
+  clearOldMissingClockNotifications: systemRepository.clearOldMissingClockNotifications,
+  clearOldWeeklyPushNotifications: systemRepository.clearOldWeeklyPushNotifications,
+  createMissingClockNotification: systemRepository.createMissingClockNotification,
+  createWeeklyPushNotification: systemRepository.createWeeklyPushNotification,
+  findSystemConfig: systemRepository.getSystemConfig,
+  getMissingClockNotificationsForDate: systemRepository.getMissingClockNotificationsForDate,
+  hasWeeklyPushNotification: systemRepository.hasWeeklyPushNotification,
 };

@@ -1,22 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../storage", () => ({
-  storage: {
-    getShiftsByDate: vi.fn(),
-    getAllVenues: vi.fn(),
-    getDispatchShiftsByDate: vi.fn(),
-    getEmployee: vi.fn(),
-    getShift: vi.fn(),
-    getShiftsByEmployeeAndDateRange: vi.fn(),
-    getDispatchShift: vi.fn(),
-    getDispatchShiftsByLinkedEmployee: vi.fn(),
-    getAllShiftsByDateRange: vi.fn(),
-    getClockRecordsByDateRange: vi.fn(),
-    clearOldWeeklyPushNotifications: vi.fn(),
-    hasWeeklyPushNotification: vi.fn(),
-    createWeeklyPushNotification: vi.fn(),
-  },
+const mockData = vi.hoisted(() => ({
+  getShiftsByDate: vi.fn(),
+  getAllVenues: vi.fn(),
+  getDispatchShiftsByDate: vi.fn(),
+  getEmployee: vi.fn(),
+  getShift: vi.fn(),
+  getShiftsByEmployeeAndDateRange: vi.fn(),
+  getDispatchShift: vi.fn(),
+  getDispatchShiftsByLinkedEmployee: vi.fn(),
+  getAllShiftsByDateRange: vi.fn(),
+  getClockRecordsByDateRange: vi.fn(),
+  clearOldWeeklyPushNotifications: vi.fn(),
+  hasWeeklyPushNotification: vi.fn(),
+  createWeeklyPushNotification: vi.fn(),
 }));
+
+vi.mock("../shift/shift.repository", () => ({ shiftRepository: mockData }));
+vi.mock("../venue/venue.repository", () => ({ venueRepository: mockData }));
+vi.mock("../dispatch/dispatch.repository", () => ({ dispatchRepository: mockData }));
+vi.mock("../employee/employee.repository", () => ({ employeeRepository: mockData }));
+vi.mock("../clock/clock.repository", () => ({ clockRepository: mockData }));
+vi.mock("../system/system.repository", () => ({ systemRepository: mockData }));
 
 vi.mock("../availability/availability.repository", () => ({
   availabilityRepository: {},
@@ -30,7 +35,6 @@ vi.mock("./lineHelpers", async (importOriginal) => {
   };
 });
 
-import { storage } from "../../storage";
 import { pushToLine, sendShiftReminders, sendWeeklyLateReport, sendWeeklySchedulePush } from "./linePush.service";
 
 const shift = {
@@ -73,19 +77,19 @@ describe("sendShiftReminders shift review", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
-    vi.mocked(storage.getAllVenues).mockResolvedValue([
+    vi.mocked(mockData.getAllVenues).mockResolvedValue([
       { id: 2, name: "測試館", shortName: "測試", regionId: 1 } as any,
     ]);
-    vi.mocked(storage.getDispatchShiftsByDate).mockResolvedValue([]);
-    vi.mocked(storage.getEmployee).mockResolvedValue(employee as any);
-    vi.mocked(storage.getShiftsByEmployeeAndDateRange).mockResolvedValue([]);
-    vi.mocked(storage.getDispatchShift).mockResolvedValue(undefined as any);
-    vi.mocked(storage.getDispatchShiftsByLinkedEmployee).mockResolvedValue([]);
-    vi.mocked(storage.getAllShiftsByDateRange).mockResolvedValue([]);
-    vi.mocked(storage.getClockRecordsByDateRange).mockResolvedValue([]);
-    vi.mocked(storage.clearOldWeeklyPushNotifications).mockResolvedValue(undefined as any);
-    vi.mocked(storage.hasWeeklyPushNotification).mockResolvedValue(false);
-    vi.mocked(storage.createWeeklyPushNotification).mockResolvedValue(undefined as any);
+    vi.mocked(mockData.getDispatchShiftsByDate).mockResolvedValue([]);
+    vi.mocked(mockData.getEmployee).mockResolvedValue(employee as any);
+    vi.mocked(mockData.getShiftsByEmployeeAndDateRange).mockResolvedValue([]);
+    vi.mocked(mockData.getDispatchShift).mockResolvedValue(undefined as any);
+    vi.mocked(mockData.getDispatchShiftsByLinkedEmployee).mockResolvedValue([]);
+    vi.mocked(mockData.getAllShiftsByDateRange).mockResolvedValue([]);
+    vi.mocked(mockData.getClockRecordsByDateRange).mockResolvedValue([]);
+    vi.mocked(mockData.clearOldWeeklyPushNotifications).mockResolvedValue(undefined as any);
+    vi.mocked(mockData.hasWeeklyPushNotification).mockResolvedValue(false);
+    vi.mocked(mockData.createWeeklyPushNotification).mockResolvedValue(undefined as any);
   });
 
   it("sends LINE pushes as decorated Flex cards with an outer border", async () => {
@@ -116,8 +120,8 @@ describe("sendShiftReminders shift review", () => {
   });
 
   it("pushes when the candidate shift is still active at send time", async () => {
-    vi.mocked(storage.getShiftsByDate).mockResolvedValue([shift as any]);
-    vi.mocked(storage.getShift).mockResolvedValue(shift as any);
+    vi.mocked(mockData.getShiftsByDate).mockResolvedValue([shift as any]);
+    vi.mocked(mockData.getShift).mockResolvedValue(shift as any);
 
     const result = await sendShiftReminders(true);
 
@@ -132,8 +136,8 @@ describe("sendShiftReminders shift review", () => {
   });
 
   it("skips when the shift is cancelled before the LINE push", async () => {
-    vi.mocked(storage.getShiftsByDate).mockResolvedValue([shift as any]);
-    vi.mocked(storage.getShift).mockResolvedValue({ ...shift, status: "cancelled" } as any);
+    vi.mocked(mockData.getShiftsByDate).mockResolvedValue([shift as any]);
+    vi.mocked(mockData.getShift).mockResolvedValue({ ...shift, status: "cancelled" } as any);
 
     const result = await sendShiftReminders(true);
 
@@ -142,11 +146,11 @@ describe("sendShiftReminders shift review", () => {
   });
 
   it("skips weekly schedule push when the shift is cancelled before sending", async () => {
-    vi.mocked(storage.getAllShiftsByDateRange).mockResolvedValue([{
+    vi.mocked(mockData.getAllShiftsByDateRange).mockResolvedValue([{
       ...shift,
       date: "2026-07-06",
     } as any]);
-    vi.mocked(storage.getShift).mockResolvedValue({ ...shift, date: "2026-07-06", status: "cancelled" } as any);
+    vi.mocked(mockData.getShift).mockResolvedValue({ ...shift, date: "2026-07-06", status: "cancelled" } as any);
 
     const result = await sendWeeklySchedulePush(true);
 
@@ -155,13 +159,13 @@ describe("sendShiftReminders shift review", () => {
   });
 
   it("does not send weekly late report for exactly 10 minutes late", async () => {
-    vi.mocked(storage.getAllShiftsByDateRange).mockResolvedValue([{
+    vi.mocked(mockData.getAllShiftsByDateRange).mockResolvedValue([{
       ...shift,
       date: "2026-06-22",
       startTime: "09:00",
       endTime: "18:00",
     } as any]);
-    vi.mocked(storage.getClockRecordsByDateRange).mockResolvedValue([{
+    vi.mocked(mockData.getClockRecordsByDateRange).mockResolvedValue([{
       id: 1,
       employeeId: 1,
       shiftId: shift.id,
@@ -178,13 +182,13 @@ describe("sendShiftReminders shift review", () => {
   });
 
   it("sends weekly late report for more than 10 minutes late", async () => {
-    vi.mocked(storage.getAllShiftsByDateRange).mockResolvedValue([{
+    vi.mocked(mockData.getAllShiftsByDateRange).mockResolvedValue([{
       ...shift,
       date: "2026-06-22",
       startTime: "09:00",
       endTime: "18:00",
     } as any]);
-    vi.mocked(storage.getClockRecordsByDateRange).mockResolvedValue([{
+    vi.mocked(mockData.getClockRecordsByDateRange).mockResolvedValue([{
       id: 1,
       employeeId: 1,
       shiftId: shift.id,

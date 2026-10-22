@@ -1,10 +1,17 @@
-import { storage } from "../../storage";
 import { exchangeLoginCode, fetchLoginProfile } from "../../adapters/line";
 import { isValidLineUserId } from "../line/lineSignature";
 import { isReviewableWorkShift } from "../shift/shiftReview.service";
 import { OFF_DUTY_ROLES } from "@shared/leave";
 import { maskId } from "../../shared/log";
 import { httpError } from "../../shared/http/response";
+import { employeeService } from "../employee/employee.service";
+import { shiftService } from "../shift/shift.service";
+import { dispatchService } from "../dispatch/dispatch.service";
+import { venueService } from "../venue/venue.service";
+import { scheduleSlotService } from "../scheduleSlot/scheduleSlot.service";
+import { guidelineService } from "../guideline/guideline.service";
+import { attendanceService } from "../attendance/attendance.service";
+import { clockService } from "../clock/clock.service";
 
 const isDevMode = process.env.NODE_ENV !== "production";
 
@@ -63,7 +70,7 @@ async function verifyPortalCallerInternal(
   lineUserId: string | undefined,
 ): Promise<{ ok: boolean; status: number; code?: string; message?: string }> {
   if (!lineUserId) return { ok: false, status: 401, code: "UNAUTHENTICATED", message: "需要 LINE 身份識別" };
-  const me = await storage.getEmployeeByLineId(lineUserId);
+  const me = await employeeService.getEmployeeByLineId(lineUserId);
   if (!me) return { ok: false, status: 401, code: "UNKNOWN_LINE_ID", message: "LINE 帳號未綁定員工" };
   if (me.id !== requestedEmployeeId) return { ok: false, status: 403, code: "IDENTITY_MISMATCH", message: "不可查詢他人資料" };
   return { ok: true, status: 200 };
@@ -91,12 +98,12 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
   const overlaps = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[0] < a[1];
   const baseEmpty: WorkmatesResult = { date, timezone: "Asia/Taipei", myShift: null, coworkers: [], message: "當日無排班" };
 
-  const emp = await storage.getEmployee(employeeId);
+  const emp = await employeeService.getEmployee(employeeId);
   if (!emp) return baseEmpty;
 
-  const myRegularAll = await storage.getShiftsByEmployeeAndDateRange(employeeId, date, date);
+  const myRegularAll = await shiftService.getShiftsByEmployeeAndDateRange(employeeId, date, date);
   const myRegular = myRegularAll.filter(s => !isDayOff(s.startTime, s.endTime) && isReviewableWorkShift(s));
-  const myDispatchAll = await storage.getDispatchShiftsByLinkedEmployee(employeeId, date, date);
+  const myDispatchAll = await dispatchService.getDispatchShiftsByLinkedEmployee(employeeId, date, date);
   const myDispatch = myDispatchAll.filter(ds => ds.status !== "cancelled" && !isDayOff(ds.startTime, ds.endTime) && isReviewableWorkShift(ds));
 
   if (myRegular.length === 0 && myDispatch.length === 0) return baseEmpty;
@@ -106,7 +113,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
   let myInterval: [number, number];
   if (myRegular.length > 0) {
     const s = myRegular[0];
-    const venue = await storage.getVenue(s.venueId);
+    const venue = await venueService.getVenue(s.venueId);
     myVenueId = s.venueId;
     myInterval = toInterval(date, s.startTime, s.endTime);
     myShift = {
@@ -116,7 +123,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
     };
   } else {
     const ds = myDispatch[0];
-    const venue = ds.venueId ? await storage.getVenue(ds.venueId) : null;
+    const venue = ds.venueId ? await venueService.getVenue(ds.venueId) : null;
     myVenueId = ds.venueId;
     myInterval = toInterval(date, ds.startTime, ds.endTime);
     myShift = {
@@ -128,11 +135,11 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
   const myBand = myShift.shiftBand;
   if (!myVenueId) return { ...baseEmpty, myShift, message: "無法判定場館" };
 
-  const venueShifts = await storage.getShiftsByVenueAndDate(myVenueId, date);
-  const myVenue = await storage.getVenue(myVenueId);
+  const venueShifts = await shiftService.getShiftsByVenueAndDate(myVenueId, date);
+  const myVenue = await venueService.getVenue(myVenueId);
   const venueRegionId = myVenue?.regionId;
   const allDispatchAtRegion = venueRegionId
-    ? await storage.getDispatchShifts(venueRegionId, date, date)
+    ? await dispatchService.getDispatchShifts(venueRegionId, date, date)
     : [];
   const dispatchAtMyVenue = allDispatchAtRegion.filter(ds => ds.venueId === myVenueId);
 
@@ -141,7 +148,7 @@ async function computeWorkmatesInternal(employeeId: number, date: string): Promi
       .filter(s => s.employeeId !== employeeId && !isDayOff(s.startTime, s.endTime) && isReviewableWorkShift(s) && shiftBand(s.startTime) === myBand)
       .map(s => s.employeeId)
   ));
-  const coworkerEmps = await Promise.all(coworkerEmpIds.map(id => storage.getEmployee(id)));
+  const coworkerEmps = await Promise.all(coworkerEmpIds.map(id => employeeService.getEmployee(id)));
   const empById = new Map(coworkerEmps.filter(Boolean).map(e => [e!.id, e!]));
 
   const coworkers: WorkmateCoworker[] = [];
@@ -190,7 +197,7 @@ export const portalService = {
     const regionIds = [1, 2, 3];
     const allEmployees: any[] = [];
     for (const rid of regionIds) {
-      const emps = await storage.getEmployeesByRegion(rid);
+      const emps = await employeeService.getEmployeesByRegion(rid);
       for (const e of emps) {
         if (e.status === "active") allEmployees.push({ id: e.id, name: e.name, employeeCode: e.employeeCode, role: e.role });
       }
@@ -203,7 +210,7 @@ export const portalService = {
     const regionIds = [1, 2, 3];
     let found: any = null;
     for (const rid of regionIds) {
-      const emps = await storage.getEmployeesByRegion(rid);
+      const emps = await employeeService.getEmployeesByRegion(rid);
       found = emps.find((e) => e.id === employeeId);
       if (found) break;
     }
@@ -231,7 +238,7 @@ export const portalService = {
     const profile = await profileRes.json();
     const lineUserId = profile.userId;
 
-    const employee = await storage.getEmployeeByLineId(lineUserId);
+    const employee = await employeeService.getEmployeeByLineId(lineUserId);
     if (!employee) {
       const e: any = httpError(404, "您的帳號尚未綁定。\n\n請回到 LINE 官方帳號，傳送您的「員工編號」即可自動綁定。\n綁定完成後再重新登入此頁面。");
       e.payload = { lineUserId, displayName: profile.displayName, notBound: true };
@@ -239,7 +246,7 @@ export const portalService = {
     }
     if (employee.status !== "active") throw httpError(403, "此帳號已停用");
     if (!employee.lineId || !isValidLineUserId(employee.lineId)) {
-      await storage.updateEmployee(employee.id, { lineId: lineUserId });
+      await employeeService.updateEmployee(employee.id, { lineId: lineUserId });
       console.log(`[Portal] 自動回寫 LINE ID: 員工 ID=${employee.id} → ${maskId(lineUserId)}`);
     }
     return {
@@ -250,7 +257,7 @@ export const portalService = {
 
   async verify(lineId: string) {
     if (!lineId) throw httpError(400, "缺少 LINE ID");
-    const employee = await storage.getEmployeeByLineId(lineId);
+    const employee = await employeeService.getEmployeeByLineId(lineId);
     if (!employee) throw httpError(404, "找不到此 LINE 帳號對應的員工資料");
     if (employee.status !== "active") throw httpError(403, "此帳號已停用");
     return {
@@ -261,14 +268,14 @@ export const portalService = {
 
   async getMyShifts(employeeId: number, startDate: string, endDate: string) {
     const [rawShifts, myDispatchShifts] = await Promise.all([
-      storage.getShiftsByEmployeeAndDateRange(employeeId, startDate, endDate),
-      storage.getDispatchShiftsByLinkedEmployee(employeeId, startDate, endDate),
+      shiftService.getShiftsByEmployeeAndDateRange(employeeId, startDate, endDate),
+      dispatchService.getDispatchShiftsByLinkedEmployee(employeeId, startDate, endDate),
     ]);
     const isSummerCourse = (n: string | null | undefined) =>
       !!n?.includes("暑假排班v40") && !n.includes("暑假救生排班") && !n.includes("暑假櫃台排班");
     // 派遣班次不顯示在員工前台班表
     const myShifts = rawShifts.filter((s) => !isSummerCourse(s.notes) && !s.isDispatch);
-    const emp = await storage.getEmployee(employeeId);
+    const emp = await employeeService.getEmployee(employeeId);
 
     const allVenueIds = Array.from(new Set([
       ...myShifts.map((s) => s.venueId),
@@ -276,14 +283,14 @@ export const portalService = {
     ]));
     const venueMap: Record<number, any> = {};
     for (const vid of allVenueIds) {
-      const v = await storage.getVenue(vid);
+      const v = await venueService.getVenue(vid);
       if (v) venueMap[vid] = { id: v.id, name: v.name, shortName: v.shortName };
     }
 
     const slotsCache: Record<string, any[]> = {};
     const getSlotsForVenueDate = async (venueId: number, date: string) => {
       const key = `${venueId}-${date}`;
-      if (!slotsCache[key]) slotsCache[key] = await storage.getScheduleSlotsByVenueAndDate(venueId, date);
+      if (!slotsCache[key]) slotsCache[key] = await scheduleSlotService.getScheduleSlotsByVenueAndDate(venueId, date);
       return slotsCache[key];
     };
 
@@ -318,10 +325,10 @@ export const portalService = {
 
   async updateShiftCertificate(shiftId: number, employeeId: number, certificateImageUrl: string | null, actor: string) {
     if (!employeeId || !shiftId) throw httpError(400, "缺少必要欄位");
-    const shift = await storage.getShift(shiftId);
+    const shift = await shiftService.getShift(shiftId);
     if (!shift) throw httpError(404, "班次不存在");
     if (shift.employeeId !== employeeId) throw httpError(403, "無權限");
-    return await storage.updateShift(shiftId, { certificateImageUrl: certificateImageUrl || null }, actor, true);
+    return await shiftService.updateShiftRecord(shiftId, { certificateImageUrl: certificateImageUrl || null }, actor, true);
   },
 
   async getUpcomingCoworkers(employeeId: number) {
@@ -392,10 +399,10 @@ export const portalService = {
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
 
-    const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
+    const myShifts = await shiftService.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
     const myVenueIds = Array.from(new Set(myShifts.map((s) => s.venueId)));
 
-    const allGuidelines = await storage.getGuidelines();
+    const allGuidelines = await guidelineService.getGuidelines();
     const activeGuidelines = allGuidelines.filter((g) => g.isActive);
     const relevant = activeGuidelines.filter((g) => {
       if (g.category === "fixed") return g.venueId ? myVenueIds.includes(g.venueId) : true;
@@ -404,7 +411,7 @@ export const portalService = {
       return false;
     });
 
-    const acks = await storage.getGuidelineAcksByEmployee(employeeId);
+    const acks = await guidelineService.getGuidelineAcksByEmployee(employeeId);
     const guidelineMap = new Map(relevant.map((g) => [g.id, g]));
     const currentMonthAckedIds = new Set(
       acks.filter((a) => {
@@ -419,7 +426,7 @@ export const portalService = {
 
     const venueMap: Record<number, string> = {};
     for (const vid of myVenueIds) {
-      const v = await storage.getVenue(vid);
+      const v = await venueService.getVenue(vid);
       if (v) venueMap[vid] = v.shortName;
     }
     const items = relevant.map(({ imageUrl, imageUrls, ...g }) => ({
@@ -433,7 +440,7 @@ export const portalService = {
 
   async getGuideline(id: number, employeeId: number) {
     if (!employeeId || isNaN(employeeId)) throw httpError(400, "employeeId 為必填");
-    const item = await storage.getGuideline(id);
+    const item = await guidelineService.get(id);
     if (!item || !item.isActive) throw httpError(404, "守則未找到");
 
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
@@ -441,7 +448,7 @@ export const portalService = {
     const monthStart = `${yearMonth}-01`;
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
-    const myShifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
+    const myShifts = await shiftService.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
     const myVenueIds = Array.from(new Set(myShifts.map((s) => s.venueId)));
 
     const isRelevant =
@@ -454,9 +461,9 @@ export const portalService = {
 
   async acknowledgeAll(employeeId: number, guidelineIds: number[]) {
     if (!employeeId || !Array.isArray(guidelineIds)) throw httpError(400, "缺少必要參數");
-    const existingAcks = await storage.getGuidelineAcksByEmployee(employeeId);
+    const existingAcks = await guidelineService.getGuidelineAcksByEmployee(employeeId);
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-    const allGuidelines = await storage.getGuidelines();
+    const allGuidelines = await guidelineService.getGuidelines();
     const guidelineMapAck = new Map(allGuidelines.map((g) => [g.id, g]));
 
     const existingThisMonth = existingAcks.filter((a) => {
@@ -469,12 +476,12 @@ export const portalService = {
     });
     const alreadyAckedIds = new Set(existingThisMonth.map((a) => a.guidelineId));
     const toAck = guidelineIds.filter((id: number) => !alreadyAckedIds.has(id));
-    for (const gid of toAck) await storage.createGuidelineAck({ guidelineId: gid, employeeId });
+    for (const gid of toAck) await guidelineService.createGuidelineAck({ guidelineId: gid, employeeId });
     return { success: true, acknowledged: toAck.length };
   },
 
   async getMyAttendance(employeeId: number) {
-    const employee = await storage.getEmployee(employeeId);
+    const employee = await employeeService.getEmployee(employeeId);
     if (!employee) throw httpError(404, "找不到員工");
 
     // 補打卡審核通過後，clockRecords 會寫入 amendedTime（補正後的真實時間）。出勤一律
@@ -495,9 +502,9 @@ export const portalService = {
     const lastDay = new Date(taiwanNow.getFullYear(), taiwanNow.getMonth() + 1, 0).getDate();
     const monthEnd = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-    const records = await storage.getAttendanceRecordsByDateRange(monthStart, monthEnd, [employee.employeeCode]);
-    const clockRecords = await storage.getClockRecordsByEmployee(employeeId, monthStart, monthEnd);
-    const shifts = await storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
+    const records = await attendanceService.getAttendanceRecordsByDateRange(monthStart, monthEnd, [employee.employeeCode]);
+    const clockRecords = await clockService.getClockRecordsByEmployee(employeeId, monthStart, monthEnd);
+    const shifts = await shiftService.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd);
 
     const todayStr = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth() + 1).padStart(2, "0")}-${String(taiwanNow.getDate()).padStart(2, "0")}`;
     const todayClocks = clockRecords

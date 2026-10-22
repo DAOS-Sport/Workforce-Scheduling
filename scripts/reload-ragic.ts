@@ -4,14 +4,14 @@
  * Run: npx tsx scripts/reload-ragic.ts
  */
 import { syncFromRagic } from "../server/modules/ragic/ragic.service";
-import { storage } from "../server/storage";
+import { employeeService } from "../server/modules/employee/employee.service";
 
 async function main() {
   console.log("[reload-ragic] starting Ragic employee sync into the default DB…");
   const res = await syncFromRagic();
   console.log("[reload-ragic] RESULT:", JSON.stringify(res, null, 2));
 
-  const all = await storage.getAllEmployees();
+  const all = await employeeService.getAllEmployees();
   const matches = all.filter((e) => (e.name || "").includes("佳琪"));
   console.log(
     "[reload-ragic] 佳琪 matches:",

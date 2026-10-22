@@ -4,15 +4,15 @@
  * Owns CRUD on email-notification recipients plus the test-email
  * dispatcher used by the admin UI to validate SMTP configuration.
  */
-import { storage } from "../../storage";
 import { sendAnomalyEmail } from "../../shared/email/sendAnomalyEmail";
+import { notificationRepository } from "./notification.repository";
 
 export const notificationService = {
-  findAll: () => storage.getNotificationRecipients(),
+  findAll: () => notificationRepository.getNotificationRecipients(),
 
   create(payload: { email: string; label?: string | null; enabled?: boolean; notifyNewReport?: boolean; notifyResolution?: boolean }) {
     if (!payload.email) throw new Error("缺少 email");
-    return storage.createNotificationRecipient({
+    return notificationRepository.createNotificationRecipient({
       email: payload.email,
       label: payload.label || null,
       enabled: payload.enabled !== false,
@@ -22,11 +22,11 @@ export const notificationService = {
   },
 
   update(id: number, patch: Record<string, any>) {
-    return storage.updateNotificationRecipient(id, patch);
+    return notificationRepository.updateNotificationRecipient(id, patch);
   },
 
   remove(id: number) {
-    return storage.deleteNotificationRecipient(id);
+    return notificationRepository.deleteNotificationRecipient(id);
   },
 
   async sendTest(email: string) {

@@ -1,6 +1,8 @@
-import { storage } from "../../storage";
 import type { ClockRecord, DispatchShift, Shift } from "@shared/schema";
 import { OFF_DUTY_ROLES } from "@shared/leave";
+import { shiftRepository } from "./shift.repository";
+import { dispatchService } from "../dispatch/dispatch.service";
+import { clockService } from "../clock/clock.service";
 
 function hm(value: string | null | undefined): string {
   return String(value || "").slice(0, 5);
@@ -63,12 +65,12 @@ function sameDispatchExactShift(candidate: DispatchShift, current: DispatchShift
 
 export const shiftReviewService = {
   async reviewRegularShiftForPush(candidate: Shift): Promise<Shift | null> {
-    const currentById = await storage.getShift(candidate.id);
+    const currentById = await shiftRepository.getShift(candidate.id);
     if (isActiveShift(currentById) && sameRegularIdentity(candidate, currentById)) {
       return currentById;
     }
 
-    const currentShifts = await storage.getShiftsByEmployeeAndDateRange(
+    const currentShifts = await shiftRepository.getShiftsByEmployeeAndDateRange(
       candidate.employeeId,
       candidate.date,
       candidate.date,
@@ -79,12 +81,12 @@ export const shiftReviewService = {
   async reviewDispatchShiftForPush(candidate: DispatchShift): Promise<DispatchShift | null> {
     if (!candidate.linkedEmployeeId) return null;
 
-    const currentById = await storage.getDispatchShift(candidate.id);
+    const currentById = await dispatchService.getDispatchShift(candidate.id);
     if (isActiveDispatchShift(currentById) && sameDispatchIdentity(candidate, currentById)) {
       return currentById;
     }
 
-    const currentShifts = await storage.getDispatchShiftsByLinkedEmployee(
+    const currentShifts = await dispatchService.getDispatchShiftsByLinkedEmployee(
       candidate.linkedEmployeeId,
       candidate.date,
       candidate.date,
@@ -94,9 +96,9 @@ export const shiftReviewService = {
 
   async reviewClockRecordShiftForPush(recordId: number | undefined): Promise<Shift | null> {
     if (!recordId) return null;
-    const record = await storage.getClockRecord(recordId) as ClockRecord | undefined;
+    const record = await clockService.getClockRecord(recordId) as ClockRecord | undefined;
     if (!record?.shiftId) return null;
-    const shift = await storage.getShift(record.shiftId);
+    const shift = await shiftRepository.getShift(record.shiftId);
     if (!isActiveShift(shift)) return null;
     if (shift.employeeId !== record.employeeId) return null;
     return shift;

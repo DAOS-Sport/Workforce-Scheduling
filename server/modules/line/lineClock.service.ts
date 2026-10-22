@@ -1,4 +1,3 @@
-import { storage } from "../../storage";
 import type { Shift } from "@shared/schema";
 import { formatTaipeiTime, taipeiClock } from "../../core/time/taipei";
 import {
@@ -16,6 +15,11 @@ import {
   successfulNewestFirst,
   type NearbyVenue,
 } from "../../core/clock/clockRules";
+import { venueService } from "../venue/venue.service";
+import { employeeService } from "../employee/employee.service";
+import { clockService } from "../clock/clock.service";
+import { shiftService } from "../shift/shift.service";
+import { overtimeService } from "../overtime/overtime.service";
 
 let _venueCache: { venues: import("@shared/schema").Venue[]; cachedAt: number } | null = null;
 const VENUE_CACHE_TTL = 5 * 60 * 1000;
@@ -23,7 +27,7 @@ const VENUE_CACHE_TTL = 5 * 60 * 1000;
 async function getCachedVenues(): Promise<import("@shared/schema").Venue[]> {
   const now = Date.now();
   if (_venueCache && now - _venueCache.cachedAt < VENUE_CACHE_TTL) return _venueCache.venues;
-  const all = await storage.getAllVenues();
+  const all = await venueService.findAll();
   // Only active venues should participate in GPS clock-in matching.
   const venues = all.filter((v) => v.isActive !== false);
   _venueCache = { venues, cachedAt: now };
@@ -71,9 +75,9 @@ export async function processClockIn(
 
   let employee;
   if (params.employeeId) {
-    employee = await storage.getEmployee(params.employeeId);
+    employee = await employeeService.getEmployee(params.employeeId);
   } else if (params.lineUserId) {
-    employee = await storage.getEmployeeByLineId(params.lineUserId);
+    employee = await employeeService.getEmployeeByLineId(params.lineUserId);
   }
 
   if (!employee) {
@@ -112,7 +116,7 @@ export async function processClockIn(
     };
   }
 
-  const recentRecords = await storage.getClockRecordsByEmployee(employee.id, todayStr, todayStr);
+  const recentRecords = await clockService.getClockRecordsByEmployee(employee.id, todayStr, todayStr);
 
   // 今日所有「成功」打卡，依時間新→舊排序；最新一筆用來判斷方向與防呆。
   const successRecords = successfulNewestFirst(recentRecords);
@@ -123,7 +127,7 @@ export async function processClockIn(
   const duplicate = duplicateClock(lastSuccess, now.getTime(), forcedClockType);
   if (duplicate && lastSuccess) {
     try {
-      await storage.createClockRecord({
+      await clockService.createClockRecord({
         employeeId: employee.id,
         venueId: lastSuccess.venueId ?? null,
         shiftId: null,
@@ -206,7 +210,7 @@ export async function processClockIn(
 
   if (!picked.inRange) {
     const failClockType = forcedClockType || nextClockType(recentRecords);
-    await storage.createClockRecord({
+    await clockService.createClockRecord({
       employeeId: employee.id,
       venueId: null,
       shiftId: null,
@@ -237,13 +241,13 @@ export async function processClockIn(
     };
   }
 
-  const todayShifts = await storage.getShiftsByEmployeeAndDateRange(employee.id, todayStr, todayStr);
+  const todayShifts = await shiftService.getShiftsByEmployeeAndDateRange(employee.id, todayStr, todayStr);
   const venueShifts = todayShifts.filter((s) => s.venueId === closestVenue.id);
   const matchingShift = venueShifts.find((s) => isInShiftWindow(nowMinutes, s));
 
   if (venueShifts.length === 0) {
     const warnClockType = forcedClockType || nextClockType(recentRecords);
-    await storage.createClockRecord({
+    await clockService.createClockRecord({
       employeeId: employee.id,
       venueId: closestVenue.id,
       shiftId: null,
@@ -293,7 +297,7 @@ export async function processClockIn(
     earlyMinutes = timing.minutes;
     lateReason = timing.reason;
   } else if (timing.kind === "after_shift") {
-    const approvedOT = await storage.getOvertimeRequestsByEmployeeAndDate(employee.id, todayStr);
+    const approvedOT = await overtimeService.getOvertimeRequestsByEmployeeAndDate(employee.id, todayStr);
     if (coveredByApprovedOvertime(nowMinutes, approvedOT)) {
       lateReason = "加班打卡";
     } else {
@@ -303,7 +307,7 @@ export async function processClockIn(
     }
   }
 
-  const clockRecord = await storage.createClockRecord({
+  const clockRecord = await clockService.createClockRecord({
     employeeId: employee.id,
     venueId: closestVenue.id,
     shiftId: matchingShift?.id || venueShifts[0].id,

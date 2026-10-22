@@ -10,12 +10,12 @@
  * are imported from server/infra/excel/excelParser.ts — the canonical
  * infra location — so this service owns only attendance-domain logic.
  */
-import { storage } from "../../storage";
 import { type InsertAttendanceRecord } from "@shared/schema";
 import {
   loadWorkbook,
   resolveCellValue,
 } from "../../infra/excel/excelParser";
+import { attendanceService } from "../attendance/attendance.service";
 
 export const importExportService = {
   async importAttendanceXlsx(buffer: Buffer, originalFileName: string) {
@@ -83,7 +83,7 @@ export const importExportService = {
     };
 
     const records: InsertAttendanceRecord[] = [];
-    const uploadRecord = await storage.createAttendanceUpload({
+    const uploadRecord = await attendanceService.createAttendanceUpload({
       fileName: originalFileName,
       periodStart: periodStart || "2026-01-01",
       periodEnd: periodEnd || "2026-01-31",
@@ -141,8 +141,8 @@ export const importExportService = {
       });
     }
 
-    const savedRecords = await storage.createAttendanceRecords(records);
-    await storage.updateAttendanceUpload(uploadRecord.id, {
+    const savedRecords = await attendanceService.createAttendanceRecords(records);
+    await attendanceService.updateAttendanceUpload(uploadRecord.id, {
       totalRecords: savedRecords.length,
     });
 

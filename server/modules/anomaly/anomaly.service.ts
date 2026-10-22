@@ -9,8 +9,9 @@
  * Storage and email-fanout side effects always run AFTER the canonical
  * persistence write so a failed email never loses the report.
  */
-import { storage } from "../../storage";
 import { sendAnomalyEmail } from "../../shared/email/sendAnomalyEmail";
+import { notificationService } from "../notification/notification.service";
+import { anomalyRepository } from "./anomaly.repository";
 
 export interface AnomalyReportInput {
   employee?: { id?: number; name?: string; employeeCode?: string; role?: string; lineUserId?: string };
@@ -76,7 +77,7 @@ function formatReportText(input: AnomalyReportInput): string {
 
 async function notifyRecipients(filterFn: (r: any) => boolean, subject: string, html: string) {
   try {
-    const recipients = await storage.getNotificationRecipients();
+    const recipients = await notificationService.findAll();
     const targets = recipients.filter(filterFn);
     if (targets.length === 0) return;
     await sendAnomalyEmail(targets.map((r) => r.email), subject, html);
@@ -94,7 +95,7 @@ export const anomalyService = {
     }
     const reportText = formatReportText(input);
 
-    const record = await storage.createAnomalyReport({
+    const record = await anomalyRepository.createAnomalyReport({
       employeeId: input.employee?.id || null,
       employeeName: input.employee?.name || null,
       employeeCode: input.employee?.employeeCode || null,
@@ -135,8 +136,8 @@ export const anomalyService = {
     return { record, reportText };
   },
 
-  list: () => storage.getAnomalyReports(),
-  get: (id: number) => storage.getAnomalyReport(id),
+  list: () => anomalyRepository.getAnomalyReports(),
+  get: (id: number) => anomalyRepository.getAnomalyReport(id),
 
   async batchUpdateResolution(ids: number[], resolution: string, resolvedNote?: string) {
     if (!ids || !Array.isArray(ids) || !resolution) {
@@ -146,7 +147,7 @@ export const anomalyService = {
     }
     const results: any[] = [];
     for (const id of ids) {
-      const record = await storage.updateAnomalyResolution(Number(id), resolution, resolvedNote);
+      const record = await anomalyRepository.updateAnomalyResolution(Number(id), resolution, resolvedNote);
       if (record) results.push(record);
     }
     if (results.length > 0) {
@@ -170,7 +171,7 @@ export const anomalyService = {
       err.status = 400;
       throw err;
     }
-    const record = await storage.updateAnomalyResolution(id, resolution, resolvedNote);
+    const record = await anomalyRepository.updateAnomalyResolution(id, resolution, resolvedNote);
     if (!record) return null;
     await notifyRecipients(
       (r) => r.enabled && r.notifyResolution,
@@ -193,11 +194,12 @@ export const anomalyService = {
     }
     let deleted = 0;
     for (const id of ids) {
-      await storage.deleteAnomalyReport(Number(id));
+      await anomalyRepository.deleteAnomalyReport(Number(id));
       deleted++;
     }
     return { success: true, deleted };
   },
 
-  remove: (id: number) => storage.deleteAnomalyReport(id),
+  remove: (id: number) => anomalyRepository.deleteAnomalyReport(id),
+  countPendingReports: anomalyRepository.countPendingReports,
 };

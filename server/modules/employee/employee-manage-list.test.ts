@@ -10,11 +10,13 @@ const f = vi.hoisted(() => ({
     { id: 4, name: "NeiQin resigned", employeeCode: "D", role: "行政專員", employmentType: "full_time", regionId: 4, status: "inactive" },
   ],
 }));
-vi.mock("../../storage", () => ({ storage: {
+vi.mock("./employee.repository", () => ({ employeeRepository: {
   getAllEmployees: vi.fn(async () => f.employees),
-  getRegionByCode: vi.fn(async (c: string) => ({ A: { id: 1 }, B: { id: 2 }, D: { id: 4 } } as any)[c]),
   getEmployeesByRegion: vi.fn(async (id: number) => f.employees.filter((e) => e.regionId === id)),
   getEmployeesForNeiQin: vi.fn(async () => f.employees.filter((e) => e.regionId === 4)),
+} }));
+vi.mock("../region/region.service", () => ({ regionService: {
+  findByCode: vi.fn(async (c: string) => ({ A: { id: 1 }, B: { id: 2 }, D: { id: 4 } } as any)[c]),
 } }));
 import { mountEmployeeRoutes } from "./employee.routes";
 import { gateAdminApi } from "../../shared/middleware/requireAdmin";

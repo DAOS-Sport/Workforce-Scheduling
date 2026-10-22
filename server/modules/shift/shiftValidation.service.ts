@@ -7,8 +7,10 @@
  * The actual labor-law rules live in server/core/labor/laborValidation.ts;
  * this service only owns the orchestration, not the rules themselves.
  */
-import { storage } from "../../storage";
 import { getFourWeekPeriod, type ShiftValidationError } from "./shift.types";
+import { shiftRepository } from "./shift.repository";
+import { systemService } from "../system/system.service";
+import { overtimeService } from "../overtime/overtime.service";
 
 export type ValidationOTRecord = {
   employeeId: number;
@@ -26,14 +28,14 @@ export async function loadValidationContext(
   date: string,
 ): Promise<{
   fourWeekRef: string;
-  existingShifts: Awaited<ReturnType<typeof storage.getShiftsByEmployee>>;
+  existingShifts: Awaited<ReturnType<typeof shiftRepository.getShiftsByEmployee>>;
   otRecords: ValidationOTRecord[];
 }> {
-  const refConfig = await storage.getSystemConfig("four_week_reference_date");
+  const refConfig = await systemService.findSystemConfig("four_week_reference_date");
   const fourWeekRef = refConfig?.value || "2025-01-06";
-  const existingShifts = await storage.getShiftsByEmployee(employeeId);
+  const existingShifts = await shiftRepository.getShiftsByEmployee(employeeId);
   const period = getFourWeekPeriod(date, fourWeekRef);
-  const approvedOT = await storage.getApprovedOvertimeByDateRange(period.start, period.end);
+  const approvedOT = await overtimeService.getApprovedOvertimeByDateRange(period.start, period.end);
   const otRecords: ValidationOTRecord[] = approvedOT.map((ot) => ({
     employeeId: ot.employeeId,
     date: ot.date,

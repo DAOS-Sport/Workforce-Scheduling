@@ -1,4 +1,5 @@
 import { db } from "../../infra/db";
+import type { Executor } from "../../infra/db/tx";
 import { eq, inArray } from "drizzle-orm";
 import {
   venues,
@@ -12,55 +13,55 @@ import {
 } from "@shared/schema";
 
 export const venueRepository = {
-  async getVenuesByRegion(regionId: number): Promise<Venue[]> {
-    return db.select().from(venues).where(eq(venues.regionId, regionId));
+  async getVenuesByRegion(regionId: number, tx: Executor = db): Promise<Venue[]> {
+    return tx.select().from(venues).where(eq(venues.regionId, regionId));
   },
 
-  async getAllVenues(): Promise<Venue[]> {
-    return db.select().from(venues);
+  async getAllVenues(tx: Executor = db): Promise<Venue[]> {
+    return tx.select().from(venues);
   },
 
-  async getVenue(id: number): Promise<Venue | undefined> {
-    const [venue] = await db.select().from(venues).where(eq(venues.id, id));
+  async getVenue(id: number, tx: Executor = db): Promise<Venue | undefined> {
+    const [venue] = await tx.select().from(venues).where(eq(venues.id, id));
     return venue;
   },
 
-  async createVenue(data: InsertVenue): Promise<Venue> {
-    const [venue] = await db.insert(venues).values(data).returning();
+  async createVenue(data: InsertVenue, tx: Executor = db): Promise<Venue> {
+    const [venue] = await tx.insert(venues).values(data).returning();
     return venue;
   },
 
-  async updateVenue(id: number, data: Partial<InsertVenue>): Promise<Venue | undefined> {
-    const [venue] = await db.update(venues).set(data).where(eq(venues.id, id)).returning();
+  async updateVenue(id: number, data: Partial<InsertVenue>, tx: Executor = db): Promise<Venue | undefined> {
+    const [venue] = await tx.update(venues).set(data).where(eq(venues.id, id)).returning();
     return venue;
   },
 
-  async getVenueRequirementsByRegion(regionId: number): Promise<VenueRequirement[]> {
-    const regionVenues = await this.getVenuesByRegion(regionId);
+  async getVenueRequirementsByRegion(regionId: number, tx: Executor = db): Promise<VenueRequirement[]> {
+    const regionVenues = await venueRepository.getVenuesByRegion(regionId, tx);
     const venueIds = regionVenues.map((v) => v.id);
     if (venueIds.length === 0) return [];
 
-    return db.select().from(venueRequirements).where(
+    return tx.select().from(venueRequirements).where(
       inArray(venueRequirements.venueId, venueIds)
     );
   },
 
-  async getVenueShiftTemplates(venueId: number): Promise<VenueShiftTemplate[]> {
-    return db.select().from(venueShiftTemplates).where(eq(venueShiftTemplates.venueId, venueId));
+  async getVenueShiftTemplates(venueId: number, tx: Executor = db): Promise<VenueShiftTemplate[]> {
+    return tx.select().from(venueShiftTemplates).where(eq(venueShiftTemplates.venueId, venueId));
   },
 
-  async createVenueShiftTemplate(data: InsertVenueShiftTemplate): Promise<VenueShiftTemplate> {
-    const [t] = await db.insert(venueShiftTemplates).values(data).returning();
+  async createVenueShiftTemplate(data: InsertVenueShiftTemplate, tx: Executor = db): Promise<VenueShiftTemplate> {
+    const [t] = await tx.insert(venueShiftTemplates).values(data).returning();
     return t;
   },
 
-  async deleteVenueShiftTemplate(id: number): Promise<boolean> {
-    const result = await db.delete(venueShiftTemplates).where(eq(venueShiftTemplates.id, id)).returning();
+  async deleteVenueShiftTemplate(id: number, tx: Executor = db): Promise<boolean> {
+    const result = await tx.delete(venueShiftTemplates).where(eq(venueShiftTemplates.id, id)).returning();
     return result.length > 0;
   },
 
-  async deleteVenueShiftTemplatesByVenue(venueId: number): Promise<void> {
-    await db.delete(venueShiftTemplates).where(eq(venueShiftTemplates.venueId, venueId));
+  async deleteVenueShiftTemplatesByVenue(venueId: number, tx: Executor = db): Promise<void> {
+    await tx.delete(venueShiftTemplates).where(eq(venueShiftTemplates.venueId, venueId));
   },
 
 };

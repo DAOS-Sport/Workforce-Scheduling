@@ -10,11 +10,15 @@ const f=vi.hoisted(()=>({
  {id:4,name:"No history",employeeCode:"N",role:"教練",employmentType:"part_time",regionId:1,status:"inactive",phone:"PRIVATE"}],
  shifts:[{id:10,employeeId:2,date:"2026-09-01",status:"active"},{id:11,employeeId:3,date:"2026-09-02",status:"active"}]
 }));
-vi.mock("../../storage",()=>({storage:{
+vi.mock("./employee.repository",()=>({employeeRepository:{
  getAllEmployees:vi.fn(async()=>f.employees),
- getRegionByCode:vi.fn(async(c:string)=>c==="A"?{id:1}:undefined),
  getEmployeesByRegion:vi.fn(async()=>f.employees.filter(e=>e.regionId===1)),
- getEmployeesForNeiQin:vi.fn(async()=>f.employees),
+ getEmployeesForNeiQin:vi.fn(async()=>f.employees)
+}}));
+vi.mock("../region/region.service",()=>({regionService:{
+ findByCode:vi.fn(async(c:string)=>c==="A"?{id:1}:undefined)
+}}));
+vi.mock("../shift/shift.service",()=>({shiftService:{
  getShiftsByRegionAndDateRange:vi.fn(async()=>f.shifts.slice(0,1)),
  getDispatchedShiftsToRegion:vi.fn(async()=>f.shifts.slice(1))
 }}));

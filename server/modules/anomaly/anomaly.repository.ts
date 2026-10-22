@@ -1,5 +1,6 @@
 import { db } from "../../infra/db";
-import { eq, desc } from "drizzle-orm";
+import type { Executor } from "../../infra/db/tx";
+import { eq, desc, count } from "drizzle-orm";
 import {
   anomalyReports,
   type AnomalyReport,
@@ -7,30 +8,34 @@ import {
 } from "@shared/schema";
 
 export const anomalyRepository = {
-  async createAnomalyReport(data: InsertAnomalyReport): Promise<AnomalyReport> {
-    const [record] = await db.insert(anomalyReports).values(data).returning();
+  async createAnomalyReport(data: InsertAnomalyReport, tx: Executor = db): Promise<AnomalyReport> {
+    const [record] = await tx.insert(anomalyReports).values(data).returning();
     return record;
   },
 
-  async getAnomalyReports(): Promise<AnomalyReport[]> {
-    return db.select().from(anomalyReports).orderBy(desc(anomalyReports.createdAt));
+  async getAnomalyReports(tx: Executor = db): Promise<AnomalyReport[]> {
+    return tx.select().from(anomalyReports).orderBy(desc(anomalyReports.createdAt));
   },
 
-  async getAnomalyReport(id: number): Promise<AnomalyReport | undefined> {
-    const [record] = await db.select().from(anomalyReports).where(eq(anomalyReports.id, id));
+  async getAnomalyReport(id: number, tx: Executor = db): Promise<AnomalyReport | undefined> {
+    const [record] = await tx.select().from(anomalyReports).where(eq(anomalyReports.id, id));
     return record;
   },
 
-  async updateAnomalyResolution(id: number, resolution: string, resolvedNote?: string): Promise<AnomalyReport | undefined> {
-    const [record] = await db.update(anomalyReports).set({
+  async updateAnomalyResolution(id: number, resolution: string, resolvedNote?: string, tx: Executor = db): Promise<AnomalyReport | undefined> {
+    const [record] = await tx.update(anomalyReports).set({
       resolution,
       resolvedNote: resolvedNote || null,
     }).where(eq(anomalyReports.id, id)).returning();
     return record;
   },
 
-  async deleteAnomalyReport(id: number): Promise<void> {
-    await db.delete(anomalyReports).where(eq(anomalyReports.id, id));
+  async deleteAnomalyReport(id: number, tx: Executor = db): Promise<void> {
+    await tx.delete(anomalyReports).where(eq(anomalyReports.id, id));
   },
 
+  async countPendingReports(tx: Executor = db): Promise<number> {
+    const [row] = await tx.select({ cnt: count() }).from(anomalyReports).where(eq(anomalyReports.resolution, "pending"));
+    return Number(row?.cnt ?? 0);
+  },
 };

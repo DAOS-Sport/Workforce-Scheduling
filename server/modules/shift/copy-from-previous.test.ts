@@ -15,18 +15,20 @@ const f = vi.hoisted(() => ({
   created: [] as any[],
 }));
 
-vi.mock("../../storage", () => ({
-  storage: {
-    getRegionByCode: vi.fn(async (code: string) => (code === "A" ? { id: 1, code: "A" } : undefined)),
-    getEmployeesByRegion: vi.fn(async () => f.employees),
-    getShiftsByRegionAndDateRange: vi.fn(async (_regionId: number, start: string) => (start.startsWith("2026-10") ? f.previous : [])),
-    createShift: vi.fn(async (data: any, actor: string) => {
-      const row = { id: 1000 + f.created.length, ...data, actor };
-      f.created.push(row);
-      return row;
-    }),
-  },
+const mockData = vi.hoisted(() => ({
+  getRegionByCode: vi.fn(async (code: string) => (code === "A" ? { id: 1, code: "A" } : undefined)),
+  getEmployeesByRegion: vi.fn(async () => f.employees),
+  getShiftsByRegionAndDateRange: vi.fn(async (_regionId: number, start: string) => (start.startsWith("2026-10") ? f.previous : [])),
+  createShift: vi.fn(async (data: any, actor: string) => {
+    const row = { id: 1000 + f.created.length, ...data, actor };
+    f.created.push(row);
+    return row;
+  }),
 }));
+
+vi.mock("../employee/employee.repository", () => ({ employeeRepository: mockData }));
+vi.mock("../region/region.repository", () => ({ regionRepository: mockData }));
+vi.mock("./shift.repository", () => ({ shiftRepository: mockData }));
 
 import { mountShiftRoutes } from "./shift.routes";
 

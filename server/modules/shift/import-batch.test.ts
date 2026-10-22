@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockStorage } = vi.hoisted(() => ({
-  mockStorage: {
+const { mockData } = vi.hoisted(() => ({
+  mockData: {
     getSystemConfig: vi.fn(),
     getEmployee: vi.fn(),
     getShiftsByEmployeesAndDateRange: vi.fn(),
@@ -12,7 +12,11 @@ const { mockStorage } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("../../storage", () => ({ storage: mockStorage }));
+vi.mock("../dispatch/dispatch.repository", () => ({ dispatchRepository: mockData }));
+vi.mock("../employee/employee.repository", () => ({ employeeRepository: mockData }));
+vi.mock("../overtime/overtime.repository", () => ({ overtimeRepository: mockData }));
+vi.mock("./shift.repository", () => ({ shiftRepository: mockData }));
+vi.mock("../system/system.repository", () => ({ systemRepository: mockData }));
 
 import { importShifts } from "./shift.service";
 
@@ -20,21 +24,21 @@ const item = { employeeId: 1, venueId: 5, date: "2026-11-03", startTime: "09:00"
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockStorage.getEmployee.mockResolvedValue({ id: 1, status: "active" });
-  mockStorage.getShiftsByEmployeesAndDateRange.mockResolvedValue([]);
-  mockStorage.getApprovedOvertimeByDateRange.mockResolvedValue([]);
-  mockStorage.createShift.mockImplementation(async (data: object) => ({ id: 99, ...data }));
+  mockData.getEmployee.mockResolvedValue({ id: 1, status: "active" });
+  mockData.getShiftsByEmployeesAndDateRange.mockResolvedValue([]);
+  mockData.getApprovedOvertimeByDateRange.mockResolvedValue([]);
+  mockData.createShift.mockImplementation(async (data: object) => ({ id: 99, ...data }));
 });
 
 describe("importShifts four-week reference date", () => {
   it("an empty four_week_reference_date falls back to 2025-01-06 like the other shift paths", async () => {
-    mockStorage.getSystemConfig.mockResolvedValue({ key: "four_week_reference_date", value: "" });
+    mockData.getSystemConfig.mockResolvedValue({ key: "four_week_reference_date", value: "" });
     const result: any = await importShifts({ shifts: [item] }, "admin");
     expect(result.created).toBe(1);
   });
 
   it("a missing setting also uses the default", async () => {
-    mockStorage.getSystemConfig.mockResolvedValue(undefined);
+    mockData.getSystemConfig.mockResolvedValue(undefined);
     const result: any = await importShifts({ shifts: [item] }, "admin");
     expect(result.created).toBe(1);
   });

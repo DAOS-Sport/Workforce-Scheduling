@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Employee, Region } from "@shared/schema";
 
-const { mockStorage, mockFetchAllRagicRecords } = vi.hoisted(() => ({
-  mockStorage: {
+const { mockData, mockFetchAllRagicRecords } = vi.hoisted(() => ({
+  mockData: {
     getRegions: vi.fn(),
     getEmployeeByCode: vi.fn(),
     getAllEmployees: vi.fn(),
@@ -12,9 +12,8 @@ const { mockStorage, mockFetchAllRagicRecords } = vi.hoisted(() => ({
   mockFetchAllRagicRecords: vi.fn(),
 }));
 
-vi.mock("../../storage", () => ({
-  storage: mockStorage,
-}));
+vi.mock("../employee/employee.repository", () => ({ employeeRepository: mockData }));
+vi.mock("../region/region.repository", () => ({ regionRepository: mockData }));
 
 vi.mock("../../adapters/ragic", () => ({
   fetchAllRagicRecords: mockFetchAllRagicRecords,
@@ -69,12 +68,12 @@ describe("syncFromRagic", () => {
   beforeEach(() => {
     process.env.RAGIC_API_KEY = "test-ragic-key";
     vi.clearAllMocks();
-    mockStorage.getRegions.mockResolvedValue([region()]);
-    mockStorage.getAllEmployees.mockResolvedValue([]);
-    mockStorage.updateEmployee.mockImplementation(async (id: number, data: Partial<Employee>) =>
+    mockData.getRegions.mockResolvedValue([region()]);
+    mockData.getAllEmployees.mockResolvedValue([]);
+    mockData.updateEmployee.mockImplementation(async (id: number, data: Partial<Employee>) =>
       employee({ id, ...data }),
     );
-    mockStorage.createEmployee.mockImplementation(async (data: Partial<Employee>) =>
+    mockData.createEmployee.mockImplementation(async (data: Partial<Employee>) =>
       employee({ id: 100, ...data }),
     );
   });
@@ -83,13 +82,13 @@ describe("syncFromRagic", () => {
     mockFetchAllRagicRecords.mockResolvedValue({
       "1": ragicRecord({ 在職狀態: "離職" }),
     });
-    mockStorage.getEmployeeByCode.mockResolvedValue(employee({ status: "active" }));
+    mockData.getEmployeeByCode.mockResolvedValue(employee({ status: "active" }));
 
     const result = await syncFromRagic();
 
     expect(result.updated).toBe(1);
     expect(result.deactivated).toBe(1);
-    expect(mockStorage.updateEmployee).toHaveBeenCalledWith(
+    expect(mockData.updateEmployee).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ status: "inactive" }),
     );
@@ -104,8 +103,8 @@ describe("syncFromRagic", () => {
     mockFetchAllRagicRecords.mockResolvedValue({
       "1": ragicRecord({ 員工編號: "E001" }),
     });
-    mockStorage.getEmployeeByCode.mockResolvedValue(existingInH01);
-    mockStorage.getAllEmployees.mockResolvedValue([
+    mockData.getEmployeeByCode.mockResolvedValue(existingInH01);
+    mockData.getAllEmployees.mockResolvedValue([
       existingInH01,
       missingFromH01,
       inactiveMissing,
@@ -116,15 +115,15 @@ describe("syncFromRagic", () => {
 
     expect(result.updated).toBe(1);
     expect(result.deactivated).toBe(1);
-    expect(mockStorage.updateEmployee).toHaveBeenCalledWith(
+    expect(mockData.updateEmployee).toHaveBeenCalledWith(
       missingFromH01.id,
       { status: "inactive" },
     );
-    expect(mockStorage.updateEmployee).not.toHaveBeenCalledWith(
+    expect(mockData.updateEmployee).not.toHaveBeenCalledWith(
       inactiveMissing.id,
       expect.anything(),
     );
-    expect(mockStorage.updateEmployee).not.toHaveBeenCalledWith(
+    expect(mockData.updateEmployee).not.toHaveBeenCalledWith(
       outOfScopeMissing.id,
       expect.anything(),
     );
@@ -134,13 +133,13 @@ describe("syncFromRagic", () => {
     mockFetchAllRagicRecords.mockResolvedValue({
       "1": ragicRecord({ 應徵職務: ["教練"] }),
     });
-    mockStorage.getEmployeeByCode.mockResolvedValue(undefined);
+    mockData.getEmployeeByCode.mockResolvedValue(undefined);
 
     const result = await syncFromRagic();
 
     expect(result.created).toBe(1);
     expect(result.skipped).toBe(0);
-    expect(mockStorage.createEmployee).toHaveBeenCalledWith(
+    expect(mockData.createEmployee).toHaveBeenCalledWith(
       expect.objectContaining({
         employeeCode: "E001",
         role: "教練",
@@ -153,25 +152,25 @@ describe("syncFromRagic", () => {
     mockFetchAllRagicRecords.mockResolvedValue({
       "1": ragicRecord({ 應徵職務: ["清潔人員"] }),
     });
-    mockStorage.getEmployeeByCode.mockResolvedValue(employee({ id: 1, status: "active", role: "救生" }));
+    mockData.getEmployeeByCode.mockResolvedValue(employee({ id: 1, status: "active", role: "救生" }));
 
     const result = await syncFromRagic();
 
     expect(result.updated).toBe(1);
     expect(result.deactivated).toBe(1);
-    expect(mockStorage.updateEmployee).toHaveBeenCalledWith(1, { status: "inactive" });
+    expect(mockData.updateEmployee).toHaveBeenCalledWith(1, { status: "inactive" });
   });
 
   it("does not count an already inactive employee as updated when H01 is also not active", async () => {
     mockFetchAllRagicRecords.mockResolvedValue({
       "1": ragicRecord({ 在職狀態: "離職" }),
     });
-    mockStorage.getEmployeeByCode.mockResolvedValue(employee({ id: 1, status: "inactive" }));
+    mockData.getEmployeeByCode.mockResolvedValue(employee({ id: 1, status: "inactive" }));
 
     const result = await syncFromRagic();
 
     expect(result.updated).toBe(0);
     expect(result.deactivated).toBe(0);
-    expect(mockStorage.updateEmployee).not.toHaveBeenCalled();
+    expect(mockData.updateEmployee).not.toHaveBeenCalled();
   });
 });

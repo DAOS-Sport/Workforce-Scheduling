@@ -1,12 +1,14 @@
-import { storage } from "../../storage";
 import { fetchAllRagicRecords } from "../../adapters/ragic";
 import { isValidLineUserId } from "../line/lineSignature";
+import { employeeService } from "../employee/employee.service";
+import { regionService } from "../region/region.service";
+import { venueService } from "../venue/venue.service";
 
 // Task #50 NOTE: This module currently only syncs employees + venues.
 // If shift sync is ever added here, all writes MUST:
-//   1. Pass actor='system:ragic-sync' to storage.create/update/deleteShift
+//   1. Pass actor='system:ragic-sync' to the shift create/update/delete writes
 //   2. Pass force=false (or omit) so active shifts are never silently overwritten
-// The storage guard will throw on (non-admin actor + active shift + !force).
+// The shift repository guard will throw on (non-admin actor + active shift + !force).
 
 interface RagicEmployee {
   name: string;
@@ -197,7 +199,7 @@ async function deactivateLocalEmployeesMissingFromRagic(
 ): Promise<number> {
   if (ragicEmployeeCodes.size === 0) return 0;
 
-  const localEmployees = await storage.getAllEmployees();
+  const localEmployees = await employeeService.getAllEmployees();
   let deactivated = 0;
 
   for (const employee of localEmployees) {
@@ -205,7 +207,7 @@ async function deactivateLocalEmployeesMissingFromRagic(
     if (!SYNC_ROLES.includes(employee.role)) continue;
     if (ragicEmployeeCodes.has(employee.employeeCode)) continue;
 
-    if (!dryRun) await storage.updateEmployee(employee.id, { status: "inactive" });
+    if (!dryRun) await employeeService.updateEmployee(employee.id, { status: "inactive" });
     deactivated++;
   }
 
@@ -243,7 +245,7 @@ export async function syncFromRagic(dryRun = false): Promise<{
   result.totalFetched = Object.keys(data).length;
   console.log(`[ragic] 共拉取 ${result.totalFetched} 筆原始記錄，開始處理...`);
 
-  const regions = await storage.getRegions();
+  const regions = await regionService.findAll();
   const regionMap = new Map(regions.map((r) => [r.code, r.id]));
   const ragicEmployeeCodes = new Set<string>();
 
@@ -256,14 +258,14 @@ export async function syncFromRagic(dryRun = false): Promise<{
       }
       ragicEmployeeCodes.add(parsed.employeeCode);
 
-      const existing = await storage.getEmployeeByCode(parsed.employeeCode);
+      const existing = await employeeService.getEmployeeByCode(parsed.employeeCode);
       const isInSyncRole = SYNC_ROLES.includes(parsed.role);
       const isActiveInH01 = parsed.status === "active";
 
       if (!isInSyncRole || !isActiveInH01) {
         if (existing) {
           if (existing.status !== "inactive") {
-            if (!dryRun) await storage.updateEmployee(existing.id, { status: "inactive" });
+            if (!dryRun) await employeeService.updateEmployee(existing.id, { status: "inactive" });
             result.updated++;
             result.deactivated++;
           }
@@ -301,7 +303,7 @@ export async function syncFromRagic(dryRun = false): Promise<{
 
         updateData.status = "active";
 
-        if (!dryRun) await storage.updateEmployee(existing.id, updateData);
+        if (!dryRun) await employeeService.updateEmployee(existing.id, updateData);
         result.updated++;
       } else {
         if (!regionId) {
@@ -314,7 +316,7 @@ export async function syncFromRagic(dryRun = false): Promise<{
           addSkip(`聘雇類別未知(${parsed.rawEmploymentType || "空白"})`);
           continue;
         }
-        if (!dryRun) await storage.createEmployee({
+        if (!dryRun) await employeeService.createEmployee({
           name: parsed.name,
           employeeCode: parsed.employeeCode,
           phone: parsed.phone || null,
@@ -359,10 +361,10 @@ export async function syncVenuesFromRagic(): Promise<{
   const data = await fetchAllRagicRecords(apiKey);
   console.log(`[ragic-venue] 共拉取 ${Object.keys(data).length} 筆原始記錄`);
 
-  const regions = await storage.getRegions();
+  const regions = await regionService.findAll();
   const regionMap = new Map(regions.map((r) => [r.code, r.id]));
 
-  const allVenues = await Promise.all(regions.map((r) => storage.getVenuesByRegion(r.id)));
+  const allVenues = await Promise.all(regions.map((r) => venueService.getVenuesByRegion(r.id)));
   const existingVenueNames = new Set(allVenues.flat().map((v) => v.name.replace(/館$/, "")));
 
   const deptMap = new Map<string, string>();
@@ -402,7 +404,7 @@ export async function syncVenuesFromRagic(): Promise<{
 
     try {
       const opType = ragicOpType || venueInfo.operationType;
-      await storage.createVenue({
+      await venueService.createVenue({
         name: venueName,
         shortName: venueName,
         regionId,

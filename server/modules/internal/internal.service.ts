@@ -11,7 +11,6 @@
  * so the route layer can do `res.status(err.status || 500).json({...})`
  * uniformly.
  */
-import { storage } from "../../storage";
 import { db } from "../../infra/db";
 import {
   REGIONS_DATA,
@@ -27,6 +26,15 @@ import {
 } from "@shared/schema";
 import { and, gte, lte, inArray, asc } from "drizzle-orm";
 import { OFF_DUTY_ROLES } from "@shared/leave";
+import { regionService } from "../region/region.service";
+import { venueService } from "../venue/venue.service";
+import { employeeService } from "../employee/employee.service";
+import { shiftService } from "../shift/shift.service";
+import { dispatchService } from "../dispatch/dispatch.service";
+import { clockService } from "../clock/clock.service";
+import { leaveService } from "../leave/leave.service";
+import { overtimeService } from "../overtime/overtime.service";
+import { anomalyService } from "../anomaly/anomaly.service";
 
 const VALID_REGION_CODES = REGIONS_DATA.map((r) => r.code) as readonly string[];
 const TPE_OFFSET = "+08:00";
@@ -198,9 +206,9 @@ export interface EnrichmentBundle {
 
 async function loadEnrichment(): Promise<EnrichmentBundle> {
   const [regions, venues, employees] = await Promise.all([
-    storage.getRegions(),
-    storage.getAllVenues(),
-    storage.getAllEmployees(),
+    regionService.findAll(),
+    venueService.findAll(),
+    employeeService.getAllEmployees(),
   ]);
   return {
     regions,
@@ -396,14 +404,14 @@ export const internalService = {
     const today = todayInTaipei();
     const [allEmployees, regions, shiftsToday, dispatchToday, pendingAmend, pendingLeave, pendingOT, anomalies] =
       await Promise.all([
-        storage.getAllEmployees(),
-        storage.getRegions(),
-        storage.getShiftsByDate(today),
-        storage.getDispatchShiftsByDate(today),
-        storage.getClockAmendments("pending"),
-        storage.getLeaveRequests("pending"),
-        storage.getOvertimeRequests("pending"),
-        storage.getAnomalyReports(),
+        employeeService.getAllEmployees(),
+        regionService.findAll(),
+        shiftService.getShiftsByDate(today),
+        dispatchService.getDispatchShiftsByDate(today),
+        clockService.getClockAmendments("pending"),
+        leaveService.getLeaveRequests("pending"),
+        overtimeService.getOvertimeRequests("pending"),
+        anomalyService.list(),
       ]);
 
     const regionById = new Map(regions.map((r) => [r.id, r]));
@@ -441,15 +449,15 @@ export const internalService = {
   },
 
   async getTodaySchedules(facilityKey: string) {
-    const region = await storage.getRegionByCode(facilityKey);
+    const region = await regionService.findByCode(facilityKey);
     if (!region) throw httpErr(404, "REGION_NOT_FOUND", `Region ${facilityKey} not found`);
 
     const today = todayInTaipei();
     const [allEmployees, allVenues, shiftsToday, dispatchToday] = await Promise.all([
-      storage.getAllEmployees(),
-      storage.getVenuesByRegion(region.id),
-      storage.getShiftsByDate(today),
-      storage.getDispatchShiftsByDate(today),
+      employeeService.getAllEmployees(),
+      venueService.getVenuesByRegion(region.id),
+      shiftService.getShiftsByDate(today),
+      dispatchService.getDispatchShiftsByDate(today),
     ]);
 
     const employeeById = new Map<number, Employee>(allEmployees.map((e) => [e.id, e]));
@@ -561,7 +569,7 @@ export const internalService = {
     let regionFilter: Region | undefined;
     if (facilityKey) regionFilter = bundle.regionByCode.get(facilityKey);
 
-    const shifts = await storage.getAllShiftsByDateRange(from, to);
+    const shifts = await shiftService.getAllShiftsByDateRange(from, to);
     let dispatchRows: DispatchShift[] = [];
     if (includeDispatch) {
       dispatchRows = await db.select().from(dispatchShiftsTable)
@@ -692,7 +700,7 @@ export const internalService = {
     const bundle = await loadEnrichment();
     const allTemplates: Array<VenueShiftTemplate & { venueId: number }> = [];
     for (const v of bundle.venues) {
-      const ts = await storage.getVenueShiftTemplates(v.id);
+      const ts = await venueService.getVenueShiftTemplates(v.id);
       for (const t of ts) allTemplates.push(t);
     }
 
@@ -738,7 +746,7 @@ export const internalService = {
       regionId = r.id;
     }
 
-    const shifts = await storage.getAllShiftsByDateRange(from, to);
+    const shifts = await shiftService.getAllShiftsByDateRange(from, to);
     let inRangeShifts = shifts;
     if (regionId != null) {
       const venueIdsInRegion = new Set(bundle.venues.filter((v) => v.regionId === regionId).map((v) => v.id));
@@ -842,7 +850,7 @@ export const internalService = {
     const templateVenues = regionFilter ? bundle.venues.filter((v) => v.regionId === regionFilter!.id) : bundle.venues;
     const allTemplates: VenueShiftTemplate[] = [];
     for (const v of templateVenues) {
-      const ts = await storage.getVenueShiftTemplates(v.id);
+      const ts = await venueService.getVenueShiftTemplates(v.id);
       allTemplates.push(...ts);
     }
     const seen = new Map<string, any>();
@@ -870,7 +878,7 @@ export const internalService = {
     }
     const shiftDefs = Array.from(seen.values());
 
-    const allRegular = await storage.getAllShiftsByDateRange(from, to);
+    const allRegular = await shiftService.getAllShiftsByDateRange(from, to);
     const allDispatch = await db.select().from(dispatchShiftsTable)
       .where(and(gte(dispatchShiftsTable.date, from), lte(dispatchShiftsTable.date, to)));
 

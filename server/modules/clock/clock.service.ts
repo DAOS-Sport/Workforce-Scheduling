@@ -1,5 +1,10 @@
-import { storage } from "../../storage";
 import { httpError } from "../../shared/http/response";
+import { clockRepository } from "./clock.repository";
+import { employeeService } from "../employee/employee.service";
+import { venueService } from "../venue/venue.service";
+import { shiftService } from "../shift/shift.service";
+import { dispatchService } from "../dispatch/dispatch.service";
+import { overtimeService } from "../overtime/overtime.service";
 
 const LEAVE_ROLES = ["休假", "特休", "病假", "事假", "公假", "喪假", "育嬰", "留職停薪"];
 
@@ -34,13 +39,13 @@ export const clockService = {
     const { startDate, endDate, employeeId } = opts;
     if (!startDate || !endDate) throw httpError(400, "startDate and endDate required");
     const records = employeeId
-      ? await storage.getClockRecordsByEmployee(Number(employeeId), startDate, endDate)
-      : await storage.getClockRecordsByDateRange(startDate, endDate);
+      ? await clockRepository.getClockRecordsByEmployee(Number(employeeId), startDate, endDate)
+      : await clockRepository.getClockRecordsByDateRange(startDate, endDate);
 
     const employeeIds = [...new Set(records.map((r) => r.employeeId))];
     const employeeMap = new Map<number, any>();
     for (const id of employeeIds) {
-      const emp = await storage.getEmployee(id);
+      const emp = await employeeService.getEmployee(id);
       if (emp) employeeMap.set(id, emp);
     }
     return records.map((r) => ({
@@ -59,9 +64,9 @@ export const clockService = {
     if (String(startDate) > String(endDate)) throw httpError(400, "startDate 不可晚於 endDate");
 
     const [allRecords, allEmployees, allVenues] = await Promise.all([
-      storage.getClockRecordsByDateRange(String(startDate), String(endDate)),
-      storage.getAllEmployees(),
-      storage.getAllVenues(),
+      clockRepository.getClockRecordsByDateRange(String(startDate), String(endDate)),
+      employeeService.getAllEmployees(),
+      venueService.findAll(),
     ]);
     const employeeMap = new Map<number, { name: string; employeeCode: string }>();
     for (const emp of allEmployees) employeeMap.set(emp.id, { name: emp.name, employeeCode: emp.employeeCode });
@@ -99,11 +104,11 @@ export const clockService = {
     const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
 
     const [allShifts, clockRecords, allAmendments, allEmployees, allVenues] = await Promise.all([
-      storage.getAllShiftsByDateRange(monthStart, monthEnd),
-      storage.getClockRecordsByDateRange(monthStart, monthEnd),
-      storage.getClockAmendments(),
-      storage.getAllEmployees(),
-      storage.getAllVenues(),
+      shiftService.getAllShiftsByDateRange(monthStart, monthEnd),
+      clockRepository.getClockRecordsByDateRange(monthStart, monthEnd),
+      clockRepository.getClockAmendments(),
+      employeeService.getAllEmployees(),
+      venueService.findAll(),
     ]);
     const workShifts = allShifts.filter(s => !LEAVE_ROLES.includes(s.role) && isAttendanceRequired(s));
     const employeeMap = new Map(allEmployees.map(e => [e.id, e]));
@@ -227,7 +232,7 @@ export const clockService = {
   async createAmendment(payload: any) {
     const { employeeId, clockType, requestedTime, reason, venueId, shiftId, isSystemIssue, evidenceImageUrl, originalClockRecordId } = payload || {};
     if (!employeeId || !clockType || !requestedTime || !reason) throw httpError(400, "缺少必要欄位");
-    const emp = await storage.getEmployee(employeeId);
+    const emp = await employeeService.getEmployee(employeeId);
     if (!emp) throw httpError(404, "找不到員工");
 
     if (!isSystemIssue) {
@@ -236,7 +241,7 @@ export const clockService = {
       const monthStart = new Date(`${yearMonth}-01T00:00:00+08:00`);
       const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       const monthEnd = new Date(`${yearMonth}-${String(lastDay).padStart(2, "0")}T23:59:59+08:00`);
-      const allAmendments = await storage.getClockAmendmentsByEmployee(employeeId);
+      const allAmendments = await clockRepository.getClockAmendmentsByEmployee(employeeId);
       const monthlyCount = allAmendments.filter(a => {
         const created = a.createdAt ? new Date(a.createdAt) : null;
         return created && created >= monthStart && created <= monthEnd
@@ -249,7 +254,7 @@ export const clockService = {
       const tw = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
       return `${tw.getFullYear()}-${String(tw.getMonth() + 1).padStart(2, "0")}-${String(tw.getDate()).padStart(2, "0")}`;
     };
-    const allAmendmentsForDupe = await storage.getClockAmendmentsByEmployee(employeeId);
+    const allAmendmentsForDupe = await clockRepository.getClockAmendmentsByEmployee(employeeId);
     const requestedDate = toTaipeiDate(new Date(requestedTime));
     const hasDuplicate = allAmendmentsForDupe.some(a => {
       if (a.status === "rejected") return false;
@@ -262,7 +267,7 @@ export const clockService = {
     });
     if (hasDuplicate) throw httpError(400, "該日期同類型已有待審核或已批准的補卡申請，無法重複送出。");
 
-    return await storage.createClockAmendment({
+    return await clockRepository.createClockAmendment({
       employeeId, clockType, requestedTime: new Date(requestedTime), reason,
       isSystemIssue: !!isSystemIssue, evidenceImageUrl: evidenceImageUrl || null,
       venueId: venueId || null, shiftId: shiftId || null, status: "pending",
@@ -272,7 +277,7 @@ export const clockService = {
   },
 
   async listAmendmentsByEmployee(employeeId: number) {
-    return await storage.getClockAmendmentsByEmployee(employeeId);
+    return await clockRepository.getClockAmendmentsByEmployee(employeeId);
   },
 
   async listEligibleDates(employeeId: number, yearMonth: string) {
@@ -285,11 +290,11 @@ export const clockService = {
     const monthEndExt = monthEnd;
 
     const [empShifts, empDispatchShifts, empClockRecords, allAmendments, allVenues] = await Promise.all([
-      storage.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd),
-      storage.getDispatchShiftsByLinkedEmployee(employeeId, monthStartExt, monthEndExt),
-      storage.getClockRecordsByEmployee(employeeId, monthStart, monthEnd),
-      storage.getClockAmendmentsByEmployee(employeeId),
-      storage.getAllVenues(),
+      shiftService.getShiftsByEmployeeAndDateRange(employeeId, monthStart, monthEnd),
+      dispatchService.getDispatchShiftsByLinkedEmployee(employeeId, monthStartExt, monthEndExt),
+      clockRepository.getClockRecordsByEmployee(employeeId, monthStart, monthEnd),
+      clockRepository.getClockAmendmentsByEmployee(employeeId),
+      venueService.findAll(),
     ]);
 
     const workShifts = empShifts.filter(s => !LEAVE_ROLES.includes(s.role) && isAttendanceRequired(s));
@@ -427,11 +432,11 @@ export const clockService = {
   },
 
   async listAmendments(status: string | undefined) {
-    const records = await storage.getClockAmendments(status);
+    const records = await clockRepository.getClockAmendments(status);
     const employeeIds = [...new Set(records.map(r => r.employeeId))];
     const employeeMap = new Map<number, any>();
     for (const id of employeeIds) {
-      const emp = await storage.getEmployee(id);
+      const emp = await employeeService.getEmployee(id);
       if (emp) employeeMap.set(id, emp);
     }
     return records.map(r => ({
@@ -445,15 +450,15 @@ export const clockService = {
     if (!status || !["approved", "rejected"].includes(status)) {
       throw httpError(400, "status 必須為 approved 或 rejected");
     }
-    const amendment = await storage.getClockAmendment(id);
+    const amendment = await clockRepository.getClockAmendment(id);
     if (!amendment) throw httpError(404, "找不到補打卡申請");
     if (amendment.status !== "pending") throw httpError(400, "此申請已審核完畢");
 
-    const updated = await storage.updateClockAmendmentStatus(id, status, adminId, adminName, reviewNote);
+    const updated = await clockRepository.updateClockAmendmentStatus(id, status, adminId, adminName, reviewNote);
     if (status === "approved" && updated) {
       try {
         if (updated.originalClockRecordId) {
-          const original = await storage.getClockRecord(updated.originalClockRecordId);
+          const original = await clockRepository.getClockRecord(updated.originalClockRecordId);
           if (!original) throw new Error("找不到原始打卡紀錄");
           const amendedTime = updated.requestedTime instanceof Date
             ? updated.requestedTime
@@ -461,7 +466,7 @@ export const clockService = {
           let newFailReason: string | null = "已補正";
           try {
             if (original.shiftId) {
-              const shift = await storage.getShift(original.shiftId);
+              const shift = await shiftService.getShift(original.shiftId);
               if (shift) {
                 const tw = new Date(amendedTime.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
                 const minutes = tw.getHours() * 60 + tw.getMinutes();
@@ -487,9 +492,9 @@ export const clockService = {
               }
             }
           } catch {}
-          await storage.applyClockRecordAmendment(updated.originalClockRecordId, amendedTime, updated.id, newFailReason);
+          await clockRepository.applyClockRecordAmendment(updated.originalClockRecordId, amendedTime, updated.id, newFailReason);
         } else {
-          await storage.createClockRecord({
+          await clockRepository.createClockRecord({
             employeeId: updated.employeeId, venueId: updated.venueId, shiftId: updated.shiftId,
             clockType: updated.clockType, latitude: 0, longitude: 0, distance: 0,
             status: "success", failReason: "補打卡", matchedVenueName: null,
@@ -499,7 +504,7 @@ export const clockService = {
           });
         }
       } catch (recordErr: any) {
-        await storage.updateClockAmendmentStatus(id, "pending", 0, "系統", "系統錯誤：打卡紀錄建立失敗，請重新審核");
+        await clockRepository.updateClockAmendmentStatus(id, "pending", 0, "系統", "系統錯誤：打卡紀錄建立失敗，請重新審核");
         throw httpError(500, "打卡紀錄建立失敗: " + recordErr.message);
       }
     }
@@ -508,23 +513,23 @@ export const clockService = {
 
   async updateRecordReason(id: number, earlyArrivalReason: string | undefined, lateDepartureReason: string | undefined) {
     if (!earlyArrivalReason && !lateDepartureReason) throw httpError(400, "請提供原因");
-    const updated = await storage.updateClockRecordReason(id, earlyArrivalReason, lateDepartureReason);
+    const updated = await clockRepository.updateClockRecordReason(id, earlyArrivalReason, lateDepartureReason);
     if (!updated) throw httpError(404, "找不到打卡紀錄");
 
     let overtimeRequest = null;
     if (lateDepartureReason === "加班") {
-      const clockRecord = await storage.getClockRecord(id);
+      const clockRecord = await clockRepository.getClockRecord(id);
       if (clockRecord && clockRecord.shiftId && clockRecord.clockTime) {
         const twCheckDate = new Date(clockRecord.clockTime.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
         const twCheckDateStr = `${twCheckDate.getFullYear()}-${String(twCheckDate.getMonth() + 1).padStart(2, "0")}-${String(twCheckDate.getDate()).padStart(2, "0")}`;
-        const existingOT = await storage.getOvertimeRequestsByEmployeeAndDate(clockRecord.employeeId, twCheckDateStr);
+        const existingOT = await overtimeService.getOvertimeRequestsByEmployeeAndDate(clockRecord.employeeId, twCheckDateStr);
         const alreadyHasClockTriggered = existingOT.some(
           ot => ot.source === "clock_triggered" && ot.clockRecordId === clockRecord.id
         );
         if (!alreadyHasClockTriggered) {
           const twDate = new Date(clockRecord.clockTime.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
           const twDateStr = `${twDate.getFullYear()}-${String(twDate.getMonth() + 1).padStart(2, "0")}-${String(twDate.getDate()).padStart(2, "0")}`;
-          const allShifts = await storage.getAllShiftsByDateRange(twDateStr, twDateStr);
+          const allShifts = await shiftService.getAllShiftsByDateRange(twDateStr, twDateStr);
           const shift = allShifts.find(s => s.id === clockRecord.shiftId);
           if (shift) {
             const clockHH = String(twDate.getHours()).padStart(2, "0");
@@ -534,7 +539,7 @@ export const clockService = {
             const shiftEndMins = seH * 60 + seM;
             const clockOutMins = parseInt(clockHH) * 60 + parseInt(clockMM);
             if (clockOutMins > shiftEndMins) {
-              overtimeRequest = await storage.createOvertimeRequest({
+              overtimeRequest = await overtimeService.createOvertimeRequest({
                 employeeId: clockRecord.employeeId, date: shift.date,
                 startTime: shift.endTime, endTime: actualClockOut,
                 reason: "加班（打卡自動產生）", status: "pending",
@@ -548,4 +553,11 @@ export const clockService = {
     }
     return { ...updated, overtimeRequest };
   },
+
+  createClockRecord: clockRepository.createClockRecord,
+  getClockAmendments: clockRepository.getClockAmendments,
+  getClockRecord: clockRepository.getClockRecord,
+  getClockRecordsByDateRange: clockRepository.getClockRecordsByDateRange,
+  getClockRecordsByEmployee: clockRepository.getClockRecordsByEmployee,
+  countPendingAmendments: clockRepository.countPendingAmendments,
 };

@@ -4,7 +4,9 @@
  * Owns the cross-table enrichment (employee name/code + linked clock time)
  * so the admin route handler does not have to know about clock_records.
  */
-import { storage } from "../../storage";
+import { employeeService } from "../employee/employee.service";
+import { overtimeRepository } from "./overtime.repository";
+import { clockService } from "../clock/clock.service";
 
 export interface SubmitOvertimePayload {
   employeeId: number;
@@ -23,13 +25,13 @@ export const overtimeService = {
       err.status = 400;
       throw err;
     }
-    const emp = await storage.getEmployee(employeeId);
+    const emp = await employeeService.getEmployee(employeeId);
     if (!emp) {
       const err: any = new Error("找不到員工");
       err.status = 404;
       throw err;
     }
-    return storage.createOvertimeRequest({
+    return overtimeRepository.createOvertimeRequest({
       employeeId,
       date,
       startTime,
@@ -43,22 +45,22 @@ export const overtimeService = {
     });
   },
 
-  byEmployee: (employeeId: number) => storage.getOvertimeRequestsByEmployee(employeeId),
+  byEmployee: (employeeId: number) => overtimeRepository.getOvertimeRequestsByEmployee(employeeId),
 
   async listForAdmin(status?: string) {
-    const records = await storage.getOvertimeRequests(status);
+    const records = await overtimeRepository.getOvertimeRequests(status);
 
     const employeeIds = [...new Set(records.map((r) => r.employeeId))];
     const employeeMap = new Map<number, any>();
     for (const id of employeeIds) {
-      const emp = await storage.getEmployee(id);
+      const emp = await employeeService.getEmployee(id);
       if (emp) employeeMap.set(id, emp);
     }
 
     const clockRecordIds = records.filter((r) => r.clockRecordId).map((r) => r.clockRecordId!);
     const clockRecordMap = new Map<number, any>();
     for (const crId of clockRecordIds) {
-      const cr = await storage.getClockRecord(crId);
+      const cr = await clockService.getClockRecord(crId);
       if (cr) clockRecordMap.set(crId, cr);
     }
 
@@ -79,7 +81,7 @@ export const overtimeService = {
       err.status = 400;
       throw err;
     }
-    const request = await storage.getOvertimeRequest(id);
+    const request = await overtimeRepository.getOvertimeRequest(id);
     if (!request) {
       const err: any = new Error("找不到加班申請");
       err.status = 404;
@@ -90,6 +92,12 @@ export const overtimeService = {
       err.status = 400;
       throw err;
     }
-    return storage.updateOvertimeRequestStatus(id, status, adminId, adminName, reviewNote);
+    return overtimeRepository.updateOvertimeRequestStatus(id, status, adminId, adminName, reviewNote);
   },
+
+  createOvertimeRequest: overtimeRepository.createOvertimeRequest,
+  getApprovedOvertimeByDateRange: overtimeRepository.getApprovedOvertimeByDateRange,
+  getOvertimeRequests: overtimeRepository.getOvertimeRequests,
+  getOvertimeRequestsByEmployeeAndDate: overtimeRepository.getOvertimeRequestsByEmployeeAndDate,
+  countPendingRequests: overtimeRepository.countPendingRequests,
 };

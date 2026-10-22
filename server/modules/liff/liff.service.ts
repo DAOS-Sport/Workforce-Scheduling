@@ -9,12 +9,12 @@
  * it needs the raw HTTP request — LIFF requests don't carry a LINE
  * signature, they're authenticated by lineUserId / employeeId in the body.
  */
-import { storage } from "../../storage";
 import { maskId } from "../../shared/log";
 import { processClockIn, formatClockInMessage } from "../line/lineClock.service";
 import { pushToLine, pushPendingGuidelinesIfAny } from "../line/linePush.service";
 import { isValidLineUserId } from "../line/lineSignature";
 import { shiftReviewService } from "../shift/shiftReview.service";
+import { employeeService } from "../employee/employee.service";
 
 export interface LiffClockInPayload {
   lineUserId?: string;
@@ -45,9 +45,9 @@ export const liffService = {
       try {
         let empToNotify = null;
         if (lineUserId && isValidLineUserId(lineUserId)) {
-          empToNotify = await storage.getEmployeeByLineId(lineUserId);
+          empToNotify = await employeeService.getEmployeeByLineId(lineUserId);
         } else if (employeeId) {
-          empToNotify = await storage.getEmployee(Number(employeeId));
+          empToNotify = await employeeService.getEmployee(Number(employeeId));
         }
         if (empToNotify?.lineId && isValidLineUserId(empToNotify.lineId)) {
           const reviewedShift = await shiftReviewService.reviewClockRecordShiftForPush(result.recordId);
