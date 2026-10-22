@@ -369,7 +369,7 @@ export async function importShifts(body: any, actor: string) {
   const monthEnd = allDates[allDates.length - 1];
 
   const refConfig = await storage.getSystemConfig("four_week_reference_date");
-  const referenceDate = refConfig?.value ?? "2025-01-06";
+  const referenceDate = refConfig?.value || "2025-01-06";
 
   // Extend preload range 6 days before monthStart for seven-day-rest boundary checks
   const preloadStart = (() => {
