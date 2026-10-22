@@ -7,9 +7,9 @@
  *    when only templates exist).
  *  - Materialization (template → real slots) with explicit exclusion list.
  *  - Batch-copy across multiple venues with same-key dedupe.
- *  - Venue-shift-template CRUD + batch replace (deletes first, then inserts
- *    one by one without a transaction: a bad template midway leaves only the
- *    ones before it).
+ *  - Venue-shift-template CRUD + batch replace (validates the whole batch,
+ *    then deletes and inserts one by one; there is no transaction, so a
+ *    database error midway can still leave a partial set).
  */
 import { storage } from "../../storage";
 import {
@@ -212,11 +212,12 @@ export const scheduleSlotService = {
       err.status = 400;
       throw err;
     }
+    // 先整批檢查，有一筆格式錯就不動場館現有的模板。
+    const parsed = templates.map((t) => insertVenueShiftTemplateSchema.parse({ ...t, venueId } satisfies InsertVenueShiftTemplate));
     await storage.deleteVenueShiftTemplatesByVenue(venueId);
     const results = [];
-    for (const t of templates) {
-      const parsed = insertVenueShiftTemplateSchema.parse({ ...t, venueId } satisfies InsertVenueShiftTemplate);
-      results.push(await storage.createVenueShiftTemplate(parsed));
+    for (const row of parsed) {
+      results.push(await storage.createVenueShiftTemplate(row));
     }
     return results;
   },
