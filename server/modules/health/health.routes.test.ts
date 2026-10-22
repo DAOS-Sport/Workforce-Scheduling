@@ -54,4 +54,18 @@ describe("GET /api/health/pipelines", () => {
       expect((await res.json()).system).toBe("workforce-scheduling");
     });
   });
+
+  it("a configured value with stray spaces or a newline still matches; only spaces counts as not configured", async () => {
+    process.env.HEALTH_TOKEN = "  right-token\n";
+    mockBuild.mockResolvedValue({ system: "workforce-scheduling", build: "t", checkedAt: "2026-10-21T00:00:00.000Z", overall: "green", pipelines: [] });
+    await withApp(async (base) => {
+      const res = await fetch(`${base}/api/health/pipelines`, { headers: { Authorization: "Bearer right-token" } });
+      expect(res.status).toBe(200);
+    });
+    process.env.HEALTH_TOKEN = "   ";
+    await withApp(async (base) => {
+      const res = await fetch(`${base}/api/health/pipelines`, { headers: { Authorization: "Bearer right-token" } });
+      expect(res.status).toBe(503);
+    });
+  });
 });
