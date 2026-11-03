@@ -188,13 +188,13 @@ describe('payroll configuration (R138, R139, R146, R147, R164, R167, R168, R239,
   });
 
   it('type and alias edits (R144, R154, R156, V068, V069)', () => {
-    expect(addCourseType(EMPTY_PAYROLL_CONFIG, '球類課程')).toStrictEqual({ ok: false, message: '已經有這個課程類型了。' });
+    expect(addCourseType(EMPTY_PAYROLL_CONFIG, '球類課程')).toStrictEqual({ kind: 'rejected', message: '已經有這個課程類型了。' });
     const added = addCourseType(EMPTY_PAYROLL_CONFIG, '體適能');
-    expect(added.ok === true && [added.config.types?.at(-1), added.config.hours['體適能']]).toStrictEqual(['體適能', '1']);
-    const withOv = withTypeOverride(added.ok === true ? added.config : EMPTY_PAYROLL_CONFIG, '夏令營', '體適能');
+    expect(added.kind === 'changed' && [added.config.types?.at(-1), added.config.hours['體適能']]).toStrictEqual(['體適能', '1']);
+    const withOv = withTypeOverride(added.kind === 'changed' ? added.config : EMPTY_PAYROLL_CONFIG, '夏令營', '體適能');
     const removed = removeCourseType(withOv, '體適能');
-    expect(removed.ok === true && [removed.config.types?.includes('體適能'), removed.config.typeOverrides]).toStrictEqual([false, {}]);
-    expect(removeCourseType(EMPTY_PAYROLL_CONFIG, '球類課程')).toStrictEqual({ ok: false, message: '內建類型不可刪除。若不想用，把費率留 0 即可。' });
+    expect(removed.kind === 'changed' && [removed.config.types?.includes('體適能'), removed.config.typeOverrides]).toStrictEqual([false, {}]);
+    expect(removeCourseType(EMPTY_PAYROLL_CONFIG, '球類課程')).toStrictEqual({ kind: 'rejected', message: '內建類型不可刪除。若不想用，把費率留 0 即可。' });
     expect(withNameAlias(withNameAlias(EMPTY_PAYROLL_CONFIG, ' 王偉跟課 ', '王偉'), '王偉跟課', '').nameAliases).toStrictEqual({});
   });
 

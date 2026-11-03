@@ -228,7 +228,7 @@ export function expandPayrollRows(assignments: readonly NormalizedAssignment[], 
         typeLabel: roleTypeLabel(a),
         typeClass: roleTypeClass(a),
         workName: a.roleType === 'course' ? a.courseName || '課程' : roleTypeLabel(a),
-      } as PayrollRow);
+      });
     });
   });
   return rows.sort((x, y) => `${x.date}${x.startTime}${x.employeeName}`.localeCompare(`${y.date}${y.startTime}${y.employeeName}`));
@@ -574,19 +574,19 @@ export function withTypeOverride(config: PayrollConfig, name: string, type: stri
   return { ...config, typeOverrides };
 }
 
-export type TypeEdit = { ok: true; config: PayrollConfig } | { ok: false; message: string } | { ok: 'noop' };
+export type TypeEdit = { kind: 'changed'; config: PayrollConfig } | { kind: 'rejected'; message: string } | { kind: 'unchanged' };
 
 export function addCourseType(config: PayrollConfig, raw: string): TypeEdit {
   const name = String(raw || '').trim();
-  if (!name) return { ok: 'noop' };
-  if (courseTypes(config).includes(name)) return { ok: false, message: '已經有這個課程類型了。' };
-  return { ok: true, config: { ...config, types: [...courseTypes(config), name], hours: config.hours[name] == null ? { ...config.hours, [name]: '1' } : config.hours } };
+  if (!name) return { kind: 'unchanged' };
+  if (courseTypes(config).includes(name)) return { kind: 'rejected', message: '已經有這個課程類型了。' };
+  return { kind: 'changed', config: { ...config, types: [...courseTypes(config), name], hours: config.hours[name] == null ? { ...config.hours, [name]: '1' } : config.hours } };
 }
 
 export function removeCourseType(config: PayrollConfig, type: string): TypeEdit {
-  if ((COURSE_TYPES_DEFAULT as readonly string[]).includes(type)) return { ok: false, message: '內建類型不可刪除。若不想用，把費率留 0 即可。' };
+  if ((COURSE_TYPES_DEFAULT as readonly string[]).includes(type)) return { kind: 'rejected', message: '內建類型不可刪除。若不想用，把費率留 0 即可。' };
   const typeOverrides = Object.fromEntries(Object.entries(config.typeOverrides).filter(([, v]) => v !== type));
-  return { ok: true, config: { ...config, types: courseTypes(config).filter(x => x !== type), typeOverrides } };
+  return { kind: 'changed', config: { ...config, types: courseTypes(config).filter(x => x !== type), typeOverrides } };
 }
 
 export const removeCourseTypeConfirm = (t: string) => `確定刪除課程類型「${t}」？\n已指定為此類型的課名會回到系統自動判定。`;
@@ -596,9 +596,9 @@ export const CONFIG_NOT_LOADED = '尚未讀到後端設定，暫時不能修改�
 export const TYPE_BADGE_CLASS: Readonly<Record<string, string>> = { 游泳一般團班: 'swim', 游泳假日班: 'swim', 幼兒游泳班: 'kid', 補習班課程: 'cram', 球類課程: 'ball', '體育課(短)': 'pe', '體育課(長)': 'pe' };
 export const typeBadgeClass = (t: string) => TYPE_BADGE_CLASS[t] || 'cram';
 const ROLE_BADGE_CLASS: Record<CoachRole, string> = { 當班下: 'lead', 助教: 'assist', 教練: 'coach', 跟課: 'follow' };
-export function roleBadge(role: string): { text: CoachRole; className: string } {
-  const r = ((role || '教練') in ROLE_BADGE_CLASS ? role || '教練' : '教練') as CoachRole;
-  return { text: (role || '教練') as CoachRole, className: ROLE_BADGE_CLASS[r] };
+export function roleBadge(role: string): { text: string; className: string } {
+  const text = role || '教練';
+  return { text, className: ROLE_BADGE_CLASS[text as CoachRole] ?? 'coach' };
 }
 
 export interface DetailRow {

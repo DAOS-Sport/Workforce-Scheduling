@@ -93,7 +93,10 @@ const byStartThenName = (x: StageShift, y: StageShift) => x.a - y.a || String(x.
 
 export function stageShifts(model: WeekModel, venue: VenueConfig, role: DutyRole, dayNo: DayNo, published: readonly PublishedDutyShift[]): StageShift[] {
   const fromServer: StageShift[] = published
-    .filter(s => Number(s.venueId) === Number(venue.venueId) && s.roleKind === role && isIsoDate(String(s.date).slice(0, 10)) && dayNoOf(String(s.date).slice(0, 10) as never) === dayNo)
+    .filter(s => {
+      const iso = String(s.date).slice(0, 10);
+      return Number(s.venueId) === Number(venue.venueId) && s.roleKind === role && isIsoDate(iso) && dayNoOf(iso) === dayNo;
+    })
     .map(s => ({
       source: 'published',
       name: s.employeeName,

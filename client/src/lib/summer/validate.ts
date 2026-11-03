@@ -250,7 +250,7 @@ export function validateWeek(model: WeekModel, avails: readonly AvailabilityInte
       }
     });
     courseRows.forEach(row => {
-      const label = row.kind === 'manual' ? [formatDateLabel(row.dateLabelIso), row.courseName, row.timeLabel] : [row.courseName, row.slotCode, row.timeLabel];
+      const label = row.kind === 'manual' ? [formatDateLabel(row.course.date), row.courseName, row.timeLabel] : [row.courseName, row.slotCode, row.timeLabel];
       push(venue, label.map(firstLine), `${venue.name}|${row.rowId}`, row.coachCells.map(c => c.key));
     });
   });

@@ -41,7 +41,7 @@ export type EnrollDisplay =
   | { kind: 'loading'; text: '...' }
   | { kind: 'unavailable'; text: '' }
   | { kind: 'closed'; text: '0'; reason: string | null }
-  | { kind: 'override'; text: string; systemCount: number }
+  | { kind: 'override'; text: string; systemCount: number | null }
   | { kind: 'system'; text: string; systemCount: number };
 
 interface CourseRowBase {
@@ -70,7 +70,6 @@ export interface RegistrationCourseRow extends CourseRowBase {
 export interface ManualCourseRow extends CourseRowBase {
   kind: 'manual';
   course: ManualCourse;
-  dateLabelIso: string;
   noteText: string;
 }
 
@@ -142,12 +141,12 @@ function buildRegistrationRows(venue: VenueConfig, input: WeekInput, enrollment:
         const neededKey = courseCellKey(week.no, venue.name, r.id, 'needed');
         const noteKey = courseCellKey(week.no, venue.name, r.id, 'note');
         const ovKey = overrideKey(enrollKey);
-        const isOverride = read(ovKey) === '1' && (writes.get(ovKey) !== null);
+        const isOverride = read(ovKey) === '1';
         let enroll: EnrollDisplay;
         if (enrollment.kind === 'loading') {
-          enroll = isOverride ? { kind: 'override', text: read(enrollKey), systemCount: NaN } : { kind: 'loading', text: '...' };
+          enroll = isOverride ? { kind: 'override', text: read(enrollKey), systemCount: null } : { kind: 'loading', text: '...' };
         } else if (enrollment.kind === 'failed') {
-          enroll = isOverride ? { kind: 'override', text: read(enrollKey), systemCount: NaN } : { kind: 'unavailable', text: '' };
+          enroll = isOverride ? { kind: 'override', text: read(enrollKey), systemCount: null } : { kind: 'unavailable', text: '' };
         } else {
           const { count, closure } = rowEnrollment(enrollment.index, enrollmentLookupKeys(week.no, venueId, r.courseName, r.code, kind));
           enroll = enrollDisplayFor(count, closure, isOverride, draft.cells.has(enrollKey) ? read(enrollKey) : null);
@@ -224,7 +223,6 @@ function buildManualRows(venue: VenueConfig, input: WeekInput, read: (key: strin
       enrollText: String(course.registeredCount),
       neededText: String(course.requiredCoaches),
       noteText: normalizeCellText(course.note ?? ''),
-      dateLabelIso: course.date,
     };
   });
 }
