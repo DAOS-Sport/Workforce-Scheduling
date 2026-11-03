@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { availabilityIntervals, availabilityReport, availabilityRowsFromApi, type AvailabilityRow } from '../availability';
-import { WEEKS, weekByNo } from '../config';
-import { hourMinute } from '../dates';
+import { WEEKS, weekByNo, weekOptions } from '../config';
+import { weekPrefix } from '../cell-key';
+import { hasFollowMark, stripFollowMark } from '../parse';
+import { workEntries } from '../validate';
+import { addDays, dayNoOf, hourMinute, isIsoDate } from '../dates';
 import { enrollmentStatusText, externalCourses, EXTERNAL_EMPTY_TEXT, normalizeEnrollmentItems } from '../enrollment';
 import { dedupeManualCourses, manualCoachSelection, manualCourseSignature, normalizeManualCourse, otherWeeksNotice, applyManualField, validateManualCourseForm, canPatchManualCourse } from '../manual-course';
-import { blocksEmptySave, draftFromRawEntries } from '../payload';
+import { blocksEmptySave, collectAssignments, draftFromRawEntries } from '../payload';
 import {
   checklistProgress,
   coachOptionNames,
@@ -21,10 +24,11 @@ import {
   removeCourseType,
   withNameAlias,
   withTypeOverride,
+  parseCramSchools,
   type PayrollConfig,
   type StaffStats,
 } from '../payroll';
-import { createRoster, normalizeEmployee } from '../roster';
+import { createRoster, findEmployeeForLine, normalizeEmployee } from '../roster';
 import { rulerTicks, stageVenue, stageView, axisPct, fmtHours } from '../stage';
 import type { Employee, EnrollmentItem, IsoDate, ManualCourse } from '../types';
 import type { WorkEntry } from '../validate';
@@ -266,5 +270,61 @@ describe('week table (R001)', () => {
   it('week 1 is Wed-Sun with active weekdays 3-5 and the rest are Mon-Sun', () => {
     expect(WEEKS[0]).toMatchObject({ start: '2026-07-01' as IsoDate, end: '2026-07-05' as IsoDate, activeWeekdays: [3, 4, 5] });
     expect(WEEKS.slice(1).every(w => w.activeWeekdays.join() === '1,2,3,4,5')).toBe(true);
+  });
+});
+
+describe('keys, lookups and dates', () => {
+  it('week number is the option index plus one and keys start with w{n}- (R002)', () => {
+    expect(weekOptions()[1]).toStrictEqual({ value: '1', label: weekByNo(2).label });
+    expect(weekPrefix(2)).toBe('w2-');
+  });
+
+  it('a line resolves through the cell meta by name or id before the roster (R023)', () => {
+    const roster = createRoster([emp({ id: 9, name: '王偉', role: '教練' })]);
+    const meta = new Map([['k', [{ employeeId: 99, employeeName: '臨時王', lineBound: false, role: '代課', venueId: '', venueName: '' }, { employeeId: 9, employeeName: '別名', lineBound: false, role: '', venueId: '', venueName: '' }]]]);
+    expect(findEmployeeForLine({ roster, meta }, '臨時王', 'k')).toStrictEqual({ id: 99, name: '臨時王', role: '代課', lineBound: false });
+    expect(findEmployeeForLine({ roster, meta }, '別名', 'k')?.name).toBe('王偉');
+    expect(findEmployeeForLine({ roster, meta }, '王偉', 'other')?.id).toBe(9);
+    expect(findEmployeeForLine({ roster, meta }, '路人', 'k')).toBeUndefined();
+  });
+
+  it('while enrollment loads, plain rows show ... and overrides keep their value with no derived writes (R058)', () => {
+    const draft = draftFromRawEntries([
+      { key: 'w2-新北高中-course-一般游泳_6足歲以上-B-enroll', value: '7' },
+      { key: 'w2-新北高中-course-一般游泳_6足歲以上-B-enroll:override', value: '1' },
+    ]);
+    const m = buildWeekModel({ week: week2, draft, employees: [], aliases: {}, manualCourses: [], enrollment: { kind: 'loading' } });
+    const [a, b] = m.venues[0].courseRows;
+    expect([a.enrollText, b.enrollText]).toStrictEqual(['...', '7']);
+    expect(m.derivedCells.size).toBe(0);
+  });
+
+  it('missing cells read as empty text (R222)', () => {
+    const m = buildWeekModel({ week: week2, draft: draftFromRawEntries([]), employees: [], aliases: {}, manualCourses: [], enrollment: { kind: 'loading' } });
+    expect(m.venues[0].courseRows[0].coachCells[0].text).toBe('');
+    expect(m.venues[0].dutyCells.lifeguard.every(c => c.text === '')).toBe(true);
+  });
+
+  it('a manual course whose end is not after its start is left out of assignments and conflicts (R087)', () => {
+    const bad = normalizeManualCourse({ id: 30, date: '2026-07-06', weekNo: 2, venueName: '新北高中', courseName: '倒過來', startTime: '17:00', endTime: '16:00' }, 2);
+    const draft = draftFromRawEntries([{ key: 'w2-新北高中-manual-30-coach', value: '王偉' }]);
+    const m = buildWeekModel({ week: week2, draft, employees: [emp({ id: 9, name: '王偉' })], aliases: {}, manualCourses: [bad], enrollment: { kind: 'loading' } });
+    expect(m.venues[0].courseRows.find(r => r.rowId === 'manual-30')?.time).toBeNull();
+    expect(collectAssignments(m)).toStrictEqual([]);
+    expect(workEntries(m)).toStrictEqual([]);
+  });
+
+  it('follow marks are stripped from names and detected (R223)', () => {
+    expect([stripFollowMark('侯凱捷跟課45'), hasFollowMark('侯凱捷跟課45'), hasFollowMark('侯凱捷')]).toStrictEqual(['侯凱捷45', true, false]);
+  });
+
+  it('ISO dates are parsed as calendar days independent of the machine time zone (R230)', () => {
+    expect([isIsoDate('2026-07-06'), isIsoDate('2026-07-32'), isIsoDate('2026-7-6')]).toStrictEqual([true, false, false]);
+    expect(addDays('2026-07-31' as IsoDate, 1)).toBe('2026-08-01');
+    expect(dayNoOf('2026-07-05' as IsoDate)).toBe(7);
+  });
+
+  it('cram school input splits on spaces and punctuation (R144)', () => {
+    expect(parseCramSchools('樂獅 新學林，立得、 ')).toStrictEqual(['樂獅', '新學林', '立得']);
   });
 });

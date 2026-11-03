@@ -219,7 +219,7 @@ describe('payroll report (R136-R163)', () => {
     expect(JSON.parse(JSON.stringify(priced(p)))).toStrictEqual(v40);
   });
 
-  it.each(pipelines.map(p => [p.name, p] as const))('%s: KPIs, type summary and staff table (R157-R159, R242)', (_n, p) => {
+  it.each(pipelines.map(p => [p.name, p] as const))('%s: KPIs, type summary and staff table (R148, R157-R159)', (_n, p) => {
     const rows = priced(p);
     const config = configOf(p);
     const stats = staffStats(rows, config);
@@ -321,7 +321,7 @@ describe('payroll report (R136-R163)', () => {
 });
 
 describe('mobile view (R199-R203)', () => {
-  it.each(pipelines.map(p => [p.name, p] as const))('%s: summary, issues, day cards and employee cards', (_n, p) => {
+  it.each(pipelines.map(p => [p.name, p] as const))('%s: summary, issues, day cards and employee cards (R199-R203)', (_n, p) => {
     const model = modelFrom(p.fx);
     const rows = expandPayrollRows(collectAssignments(model), model.week);
     const issues = validateWeek(model, availabilityIntervals(availabilityRowsFromApi(p.fx.availability, model.ctx.roster), model.week)).issues;
@@ -335,7 +335,7 @@ describe('mobile view (R199-R203)', () => {
 });
 
 describe('availability page (R126-R128, R132-R135)', () => {
-  it.each(pipelines.map(p => [p.name, p] as const))('%s: rows read from the API and the open-time report', (_n, p) => {
+  it.each(pipelines.map(p => [p.name, p] as const))('%s: rows read from the API and the open-time report (R126-R128, R132-R135)', (_n, p) => {
     const model = modelFrom(p.fx);
     const rows = availabilityRowsFromApi(p.fx.availability, model.ctx.roster);
     expect(rows.filter(r => r.name.trim()).map(r => ({ employeeId: String(r.employeeId), name: r.name, venues: r.venues, weekday: r.weekday, sat: r.sat, sun: r.sun }))).toStrictEqual(p.availability.staff);

@@ -49,7 +49,7 @@ describe('picking and typing coaches into a cell (R020-R022)', () => {
     const r = applyPickedEmployee(s(a[0]), metaOf(a[1] as number[]), roster.byId(a[2] as number)!, target(a[3]), roster);
     return { value: r.value, meta: [...r.employees] };
   };
-  it.each(cases('pickEmployee', [2, 6]))('picked employee %s (R020, R021)', (_n, a, r) => expect(pick(a)).toStrictEqual(r));
+  it.each(cases('pickEmployee', [2, 6]))('picked employee and its cell meta %s (R018, R020, R021)', (_n, a, r) => expect(pick(a)).toStrictEqual(r));
   it('與 v40 不同：已排判斷只認完整姓名，「陳美玲」不會擋住排「陳美」（R020）', () => {
     const [, a, r] = cases('pickEmployee')[2];
     expect((r as { value: string }).value).toBe('陳美玲');
@@ -100,7 +100,7 @@ describe('stage day selection and gap assignment (R173, R174, R194)', () => {
     const day = selectedDayNo(week, s(a[0]) as StageDay);
     expect([day, selectedDayLabel(week, day)]).toStrictEqual(r);
   });
-  it.each(cases('gapAssign'))('gap assignment target cell %s (R042, R194)', (_n, a, r) => {
+  it.each(cases('gapAssign'))('gap assignment target cell %s (R042, R194, R224)', (_n, a, r) => {
     const cells = a[0] as Record<string, string>;
     const model = buildWeekModel({
       week: WEEKS[0],

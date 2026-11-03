@@ -17,7 +17,7 @@ describe('publish contract: shifts and assignments match v40 field by field (R10
     expect(collectShiftRows(collectAssignments(model), model.week)).toStrictEqual(p.core.shifts);
   });
 
-  it.each(sameAsV40.map(p => [p.name, p] as const))('%s: rawEntries after derived writes (R104, R014, R053, R056, R064)', (_n, p) => {
+  it.each(sameAsV40.map(p => [p.name, p] as const))('%s: rawEntries after derived writes (R104, R014, R053, R056, R064, R227)', (_n, p) => {
     const model = modelFrom(p.fx);
     expect(byKey(rawEntriesFromDraft(applyDerivedCells(model.draft, model.derivedCells)))).toStrictEqual(byKey(p.core.rawEntries));
   });

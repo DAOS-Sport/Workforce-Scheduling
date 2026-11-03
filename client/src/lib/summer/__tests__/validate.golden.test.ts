@@ -22,7 +22,7 @@ const asCaptured = (keys: string[], v: ReturnType<typeof statusesOf>) =>
   keys.map(key => ({ key, ...(v.statuses.get(key) ?? { tone: 'missing', text: '', conflict: false }) }));
 
 describe('cell validation and issue list match v40 (R080-R092)', () => {
-  it.each(sameAsV40.map(p => [p.name, p] as const))('%s: course coach cell statuses (R080, R081, R082, R085, R088)', (_n, p) => {
+  it.each(sameAsV40.map(p => [p.name, p] as const))('%s: course coach cell statuses (R023, R080, R081, R082, R085, R088, R094)', (_n, p) => {
     const v = statusesOf(p, false);
     expect(asCaptured(p.core.courseCells.map(c => c.key), v)).toStrictEqual(p.core.courseCells);
   });
@@ -38,7 +38,7 @@ describe('cell validation and issue list match v40 (R080-R092)', () => {
     expect(v.issueRows.size).toBe(p.core.issueRowsWithIssue);
   });
 
-  it.each(sameAsV40.map(p => [p.name, p] as const))('%s: availability conflicts appended after work conflicts (R089)', (_n, p) => {
+  it.each(sameAsV40.map(p => [p.name, p] as const))('%s: availability conflicts appended after work conflicts (R089, R094, R228)', (_n, p) => {
     const v = statusesOf(p, true);
     expect(asCaptured(p.withAvailability.courseCells.map(c => c.key), v)).toStrictEqual(p.withAvailability.courseCells);
     expect(asCaptured(p.withAvailability.dutyCells.map(c => c.key), v)).toStrictEqual(p.withAvailability.dutyCells);

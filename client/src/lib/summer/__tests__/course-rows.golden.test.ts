@@ -21,11 +21,11 @@ const pipelines = golden.pipelines as unknown as { name: string; fx: PipelineFix
 const sameAsV40 = pipelines.filter(p => p.name !== 'week3-enrollment-failed');
 
 describe('course rows as rendered by v40 (R048, R052-R056, R063, R064, R070)', () => {
-  it.each(pipelines.map(p => [p.name, p] as const))('%s: every rendered cell key is generated in the same order (R043, R070, R221, 4.2)', (_n, p) => {
+  it.each(pipelines.map(p => [p.name, p] as const))('%s: every rendered cell key is generated in the same order, manual rows filtered by week and venue (R043, R068, R070, R221, R222)', (_n, p) => {
     expect(renderedCellKeys(modelFrom(p.fx))).toStrictEqual(p.core.dataKeys);
   });
 
-  it.each(sameAsV40.map(p => [p.name, p] as const))('%s: row flags, enrollment cell and needed count (R052-R056, R063, R064, R090)', (_n, p) => {
+  it.each(sameAsV40.map(p => [p.name, p] as const))('%s: row flags, enrollment cell, placeholders and needed count (R048, R052-R056, R063, R064, R090)', (_n, p) => {
     const model = modelFrom(p.fx);
     const v = validateWeek(model);
     const mine = model.venues.flatMap(({ venue, courseRows }) =>
