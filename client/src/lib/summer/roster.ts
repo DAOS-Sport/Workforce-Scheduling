@@ -104,3 +104,11 @@ export function sortBoundFirst(employees: readonly Employee[]): Employee[] {
 export function metaFor(emp: Employee): EmployeeMeta {
   return { employeeId: emp.id, employeeName: emp.name, lineBound: isLineBound(emp), role: emp.role, venueId: emp.venueId || '', venueName: emp.venueName || '' };
 }
+
+export const EMPLOYEE_MESSAGES = {
+  notLoaded: '尚未取得員工資料',
+  unauthorized: '請先登入管理後台，再重新開啟暑假排班表',
+  failed: '員工資料讀取失敗，請確認 /api/admin/summer-employees 是否正常',
+  empty: '目前沒有可排班的啟用員工，或 API 回傳格式沒有 items',
+  noMatch: '查無員工',
+} as const;

@@ -1,0 +1,126 @@
+const roster = require('./scenarios.cjs').employees;
+const aliasConfig = { nameAliases: { 莊子宏: '莊子鋐', 陳美玲跟課: '陳美', 王小明: '王偉' } };
+
+module.exports = {
+  pickEmployee: {
+    employees: roster,
+    call: '(prev, metaIds, empId, gap) => { scheduleState.loaded = true; scheduleState.cells.set("kx", prev); scheduleState.meta.set("kx", metaIds.map(id => ({ employeeId: id, employeeName: "m" + id, lineBound: false, role: "", venueId: "", venueName: "" }))); employeePickerTargetKey = "kx"; svAssignTime = gap; selectEmployeeForTarget(empId); return { value: getSaved("kx"), meta: getEmployeeMeta("kx") }; }',
+    cases: [
+      ['', [], 9, null],
+      ['王偉123', [], 9, null],
+      ['陳美玲', [], 5, null],
+      ['*王偉', [], 9, null],
+      ['李四\n王偉 14:00-15:00', [9], 9, null],
+      ['莊子鋐（未綁定）', [], 12, null],
+      ['', [], 5, '救0800-1000'],
+      ['王偉 救0800-1000', [9], 9, '救0800-1000'],
+      ['王偉 櫃0800-1000', [], 16, '櫃1000-1200'],
+    ],
+  },
+  tempCoach: {
+    employees: roster,
+    call: '(prev, name, gap) => { scheduleState.loaded = true; scheduleState.cells.set("kt", prev); scheduleState.meta.delete("kt"); employeePickerTargetKey = "kt"; svAssignTime = gap; document.getElementById("tempCoachName").value = name; confirmTempCoach(); return { value: getSaved("kt"), meta: getEmployeeMeta("kt") }; }',
+    cases: [['', '陳小美', null], ['陳小美', '陳小美', null], ['王偉', ' 陳小美 ', null], ['王偉 救0800-1200', '陳小美', '救1200-1400'], ['', '陳小美', '櫃0530-0800']],
+  },
+  removeLine: {
+    call: '(prev, raw) => { scheduleState.loaded = true; scheduleState.cells.set("kr", prev); svRemoveLine("kr", encodeURIComponent(raw)); return getSaved("kr"); }',
+    cases: [['王 救0800-1000\n陳 救0800-1000\n王 救0800-1000', '王 救0800-1000'], [' 王 救0800-1000 \n陳', '王 救0800-1000'], ['王\n', '李'], ['王', '']],
+  },
+  removeCoach: {
+    employees: [{ id: 1, name: '陳美' }, { id: 2, name: '王偉' }, { id: 3, name: '莊柏彥' }, { id: 4, name: '劉承翰' }],
+    call: '(prev, name) => { scheduleState.loaded = true; scheduleState.cells.set("kc", prev); svRemoveCoach("kc", name); return getSaved("kc"); }',
+    cases: [
+      ['*莊柏彥*劉承翰 135', '莊柏彥'],
+      ['陳美玲\n陳美 24', '陳美'],
+      ['王偉 14:00-15:00 12\n王偉 3', '王偉'],
+      ['陳美王偉 2', '王偉'],
+      ['a陳美\n*王偉', '王偉'],
+      ['王偉', '李四'],
+    ],
+  },
+  normalizeCoachCells: {
+    employees: roster,
+    pvConfig: aliasConfig,
+    call: 't => { const box = document.createElement("div"); box.className = "editbox"; box.dataset.role = "course"; box.dataset.key = "kn"; box.innerHTML = escapeHtml(t).split(String.fromCharCode(10)).join("<br>"); document.body.appendChild(box); refreshInlineEmployeeStatusText(); const out = boxText(box); box.remove(); return out; }',
+    cases: [['a莊子鋐1234'], ['王偉（未綁定）'], ['莊子宏12'], ['跟課侯凱捷'], ['王偉 14:00-15:00'], ['*莊柏彥*劉承翰 123'], [' 陳美 \n\n李四 3 '], ['陳美'], ['侯凱捷跟課45'], ['路人甲 12'], ['Anna陳美']],
+  },
+  stageDay: {
+    call: '(d, i) => { svState.day = d; const r = [svSelectedDayNo(weeks[i]), svSelectedDayLabel(weeks[i])]; svState.day = "weekday"; return r; }',
+    cases: [['weekday', 0], ['weekday', 1], ['sat', 0], ['sun', 3], ['1', 0], ['1', 1], ['6', 1], ['9', 1]],
+  },
+  gapAssign: {
+    call: '(cells, venue, role, day, seg) => { [...scheduleState.cells.keys()].filter(k => k.startsWith("w1-")).forEach(k => scheduleState.cells.delete(k)); scheduleState.loaded = true; Object.entries(cells).forEach(([k, v]) => scheduleState.cells.set(k, v)); render = function () {}; svState.day = String(day); svAssignShift(venue, role, day, seg); const r = { key: employeePickerTargetKey, time: svAssignTime, title: document.getElementById("employeePickerTitle").textContent, rows: getSaved(dutyGridRowsKey(venue, role)) }; svState.day = "weekday"; return r; }',
+    cases: [
+      [{}, '新北高中', 'lifeguard', 3, '08:00-10:00'],
+      [{ 'w1-新北高中-lifeguard-dutygrid-r1-d3': '王 救0800-1000' }, '新北高中', 'lifeguard', 3, '05:30-08:00'],
+      [{ 'w1-三重商工-frontdesk-dutygrid-r1-d4': 'a', 'w1-三重商工-frontdesk-dutygrid-r2-d4': 'b', 'w1-三重商工-frontdesk-dutygrid-r3-d4': 'c' }, '三重商工', 'frontdesk', 4, '7:30-10:00'],
+      [{ 'w1-三民高中-lifeguard-dutygrid-rows': '1', 'w1-三民高中-lifeguard-dutygrid-r1-d6': 'x' }, '三民高中', 'lifeguard', 6, '20:00-22:00'],
+    ],
+  },
+  pickerList: {
+    employees: roster,
+    call: 'q => { document.getElementById("employeeSearch").value = q; renderEmployeePickerList(); return Array.from(document.querySelectorAll("#employeePickerList .employee-option, #employeePickerList .result-empty")).map(el => el.classList.contains("result-empty") ? { empty: el.textContent } : { main: el.querySelector(".employee-option-main").textContent, sub: el.querySelector(".employee-option-sub").textContent }); }',
+    cases: [[''], ['教練'], ['WEI'], ['zzz'], ['三重']],
+  },
+  pickerListEmpty: { employees: [], call: '() => { renderEmployeePickerList(); return document.getElementById("employeePickerList").textContent.trim(); }', cases: [[]] },
+  subtractIntervals: {
+    call: '(b, busy) => subtractIntervals(b, busy)',
+    cases: [[{ start: 450, end: 720 }, [{ start: 480, end: 600 }]], [{ start: 450, end: 720 }, [{ start: 400, end: 800 }]], [{ start: 450, end: 720 }, [{ start: 450, end: 500 }, { start: 600, end: 720 }]], [{ start: 0, end: 10 }, []]],
+  },
+  classifyCourseType: {
+    pvConfig: { typeOverrides: { 夏令營: '球類課程', 錯的: '不存在類型' }, cramSchools: null, types: null },
+    call: 'r => classifyCourseType(r)',
+    cases: [
+      [{ courseName: '夏令營-羽球', dateType: 'sat' }],
+      [{ courseName: '夏令營-羽球', dateType: 'weekday' }],
+      [{ courseName: '樂獅桌球', dateType: 'weekday' }],
+      [{ courseName: '立得補習班' }],
+      [{ courseName: '空中美語' }],
+      [{ courseName: '幼幼班游泳', day: 2 }],
+      [{ courseName: '一般游泳(6足歲以上)' }],
+      [{ courseName: '高階游泳班' }],
+      [{ courseName: '玩水班(假日班)' }],
+      [{ courseName: '新學林' }],
+      [{ courseName: '某某游泳' }],
+      [{ courseName: '街舞舞蹈' }],
+      [{ courseName: '體育課(早)', startTime: '08:00', endTime: '09:30' }],
+      [{ courseName: '體育課(早)', startTime: '08:00', endTime: '10:00' }],
+      [{ courseName: '夏令營', startTime: '10:00', endTime: '10:00' }],
+      [{ courseName: '錯的' }],
+      [{ workName: '其他課', day: 7 }],
+      [{ courseName: '' }],
+    ],
+  },
+  classifyWithCram: {
+    pvConfig: { cramSchools: ['新補'], types: ['游泳一般團班', '補習班課程', '體適能'], typeOverrides: { 夏令營: '體適能' } },
+    call: 'r => classifyCourseType(r)',
+    cases: [[{ courseName: '新補羽球' }], [{ courseName: '樂獅桌球' }], [{ courseName: '夏令營' }]],
+  },
+  hoursOf: {
+    pvConfig: { hours: { 球類課程: '-1', 補習班課程: '0', 游泳假日班: '', 幼兒游泳班: 'abc', 體適能: '2.5' } },
+    call: 't => pvHoursOf(t)',
+    cases: [['球類課程'], ['補習班課程'], ['游泳假日班'], ['幼兒游泳班'], ['體適能'], ['未知'], ['體育課(長)']],
+  },
+  courseTypes: { pvConfig: { types: [] }, call: '() => pvTypes()', cases: [[]] },
+  courseTypesCustom: { pvConfig: { types: ['A', 'B'] }, call: '() => pvTypes()', cases: [[]] },
+  cramSchools: { pvConfig: { cramSchools: [] }, call: 'n => [pvCramSchools(), pvIsCramCourse(n)]', cases: [['樂獅桌球'], ['  '], ['小樂獅']] },
+  courseDur: { call: '(a, b) => pvCourseDur(a, b)', cases: [['10:00', '10:00'], ['22:00', '01:00'], ['', '10:00'], ['08:00', '09:45']] },
+  migrateRates: { call: 'o => pvMigrateRates(o)', cases: [[{ 0: '500', 3: '', 4: 600 }], [{ v: 2, rates: { 'a|教練': '1' }, hours: { a: '2' } }], [null]] },
+  durationHours: { call: '(a, b) => durationHours(a, b)', cases: [['09:00', '17:30'], ['22:00', '00:00'], ['', ''], ['8:00', '9:00']] },
+  roleTypeLabel: { call: '(t, s) => [roleTypeLabel(t, s), roleTypeClass(t, s)]', cases: [['course', 'manual'], ['course', 'registration'], ['lifeguard', 'schedule'], ['frontdesk', 'schedule']] },
+  moneyText: { call: 'v => moneyText(v)', cases: [[1349.6], [0], [-3.4], [1234567.5], ['12']] },
+  employeeKeyForPayroll: { call: 'r => employeeKeyForPayroll(r)', cases: [[{ employeeId: 12 }], [{ employeeId: '', employeeName: '路人甲' }], [{}]] },
+  salaryRateTarget: {
+    call: 'i => backendPayrollRateTarget(i)',
+    cases: [[{ role: 'lifeguard', label: '' }], [{ role: '', label: '行政' }], [{ role: 'Manual' }], [{ label: '教練時薪' }], [{ role: 'x' }], [{ role: 'Front Desk' }]],
+  },
+  workLabel: {
+    call: 'x => courseLabel(x)',
+    cases: [
+      [{ roleType: 'course', venue: '新北高中', courseName: '補習班游泳', slotCode: 'MANUAL', time: { label: '16:00-17:00' } }],
+      [{ roleType: 'lifeguard', venue: '三重商工', time: { label: '08:00-12:00' } }],
+      [{ roleType: 'frontdesk', venue: '', time: { label: '08:00-12:00' } }],
+    ],
+  },
+  venueTextMatches: { call: '(a, v) => venueTextMatches(a, v)', cases: [['全部', '新北高中'], ['新北高中、三民高中', '三民高中'], ['', '三重商工'], ['新北高中', '三重商工']] },
+};

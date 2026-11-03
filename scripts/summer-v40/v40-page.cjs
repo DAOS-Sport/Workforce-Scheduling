@@ -42,6 +42,7 @@ function installPolyfills(win) {
   win.alert = msg => { win.__alerts.push(String(msg)); };
   win.confirm = () => true;
   win.scrollTo = () => {};
+  Object.defineProperty(win.navigator, 'clipboard', { configurable: true, value: { writeText: s => { win.__csv = s; return Promise.resolve(); } } });
   if (!win.CSS) win.CSS = {};
   win.CSS.escape = s => String(s).replace(/[^\w-]/g, c => '\\' + c);
 }

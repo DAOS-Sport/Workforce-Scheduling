@@ -147,7 +147,7 @@ export function workTypeLabel(x: Pick<WorkEntry, 'roleType' | 'courseName' | 'sl
   return x.roleType === 'lifeguard' ? '救生' : '櫃台';
 }
 
-function workLabel(w: WorkEntry): string {
+export function workLabel(w: Pick<WorkEntry, 'roleType' | 'courseName' | 'slotCode' | 'venue' | 'time'>): string {
   return [w.venue, workTypeLabel(w), w.time.label].filter(Boolean).join(' ') || w.time.label || '工作';
 }
 

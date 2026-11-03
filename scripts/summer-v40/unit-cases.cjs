@@ -1,4 +1,5 @@
 const { employees } = require('./scenarios.cjs');
+const EDIT_CASES = require('./unit-cases-edits.cjs');
 
 const roster = employees;
 const aliasConfig = { nameAliases: { 莊子宏: '莊子鋐', 陳美玲跟課: '陳美', 王小明: '王偉' } };
@@ -34,6 +35,7 @@ const coachLines = [
 ];
 
 const UNIT_CASES = {
+  ...EDIT_CASES,
   weeks: { call: '() => weeks.map((w, i) => ({ ...w, optionValue: String(i) }))', cases: [[]] },
   venues: { call: '() => venues', cases: [[]] },
   parseTimeRange: {

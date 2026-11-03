@@ -6,12 +6,14 @@ const crypto = require('crypto');
 const { openV40, HTML_PATH } = require('./v40-page.cjs');
 const { pipelines } = require('./scenarios.cjs');
 const { CAPTURE_CORE } = require('./capture.cjs');
+const { CAPTURE_STAGE, CAPTURE_PAYROLL, CAPTURE_MOBILE, CAPTURE_AVAILABILITY } = require('./capture-views.cjs');
 const { UNIT_CASES } = require('./unit-cases.cjs');
 
 const OUT = path.resolve(__dirname, '../../client/src/lib/summer/__fixtures__/v40-golden.json');
 
 async function runUnits() {
   const page = await openV40({ weekNo: 1, employees: [] });
+  page.win.eval('validateAll = function () {}; scheduleAutoSave = function () {}; renderAvailabilityReport = function () {}; refreshEmployeeChips = function () {};');
   const out = {};
   for (const [group, spec] of Object.entries(UNIT_CASES)) {
     page.win.eval(`employees = ${JSON.stringify(spec.employees || [])}.map(normalizeEmployeeFromApi).filter(e => e && e.id);`);
@@ -27,13 +29,27 @@ async function runPipelines() {
   for (const p of pipelines) {
     const page = await openV40(p.fx);
     const core = page.run(CAPTURE_CORE);
+    const stage = page.run(CAPTURE_STAGE);
+    const payroll = page.run(CAPTURE_PAYROLL);
+    if (p.fx.payrollConfig && !payroll.configLoaded) throw new Error(`${p.name}: payroll config not loaded`);
     if (p.fx.weekNo === 2 && !core.shifts.some(s => s.roleType === 'course')) throw new Error(`${p.name}: no course shifts captured`);
     if (core.shifts.some(s => /報名 \.\.\. 人|載入中/.test(s.notes))) throw new Error(`${p.name}: captured before enrollment settled`);
     page.win.eval('loadAvailabilityFromDB()');
     await page.settle();
     page.win.eval('validateAll()');
     const withAvailability = page.run(CAPTURE_CORE);
-    out.push({ name: p.name, fx: p.fx, core, withAvailability: { courseCells: withAvailability.courseCells, dutyCells: withAvailability.dutyCells, issues: withAvailability.issues } });
+    const availability = page.run(CAPTURE_AVAILABILITY);
+    const mobile = page.run(CAPTURE_MOBILE);
+    out.push({
+      name: p.name,
+      fx: p.fx,
+      core,
+      stage,
+      payroll,
+      withAvailability: { courseCells: withAvailability.courseCells, dutyCells: withAvailability.dutyCells, issues: withAvailability.issues },
+      availability,
+      mobile,
+    });
     page.close();
   }
   return out;
