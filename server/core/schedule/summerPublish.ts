@@ -85,3 +85,52 @@ export function describeProblems(problems: PublishProblem[]): string {
   for (const p of problems) counts.set(p.code, (counts.get(p.code) ?? 0) + 1);
   return Array.from(counts, ([code, n]) => `${PUBLISH_PROBLEMS[code]} ${n} 筆`).join("、");
 }
+
+/** A shift already published for the week, as far as the diff needs it. */
+export interface PublishedShift {
+  id: number;
+  employeeId: number;
+  venueId: number;
+  date: string;
+  startTime: string;
+  endTime: string;
+  role: string;
+  notes: string | null;
+}
+
+export interface WeekDiff<S extends PublishedShift> {
+  /** Published shifts that match a planned one exactly; they stay as they are, same id. */
+  unchanged: S[];
+  /** Published shifts no planned one matches; they are cancelled. */
+  cancel: S[];
+  /** Planned shifts no published one matches; they are added. */
+  create: PlannedShift[];
+}
+
+/** `09:00` and `09:00:00` are the same time. */
+const fullTime = (t: string) => (t.length === 5 ? `${t}:00` : t);
+
+const shiftKey = (s: Omit<PlannedShift, "notes"> & { notes: string | null }) =>
+  [s.employeeId, s.venueId, s.date, fullTime(s.startTime), fullTime(s.endTime), s.role, s.notes ?? ""].join("|");
+
+/**
+ * Compare the week as published with the plan, so republishing touches only what changed: an exact
+ * match keeps its shift (and id), everything else published is cancelled, everything else planned
+ * is added. Two identical planned rows need two published rows to both count as unchanged.
+ */
+export function diffSummerWeek<S extends PublishedShift>(published: S[], planned: PlannedShift[]): WeekDiff<S> {
+  const waiting = new Map<string, S[]>();
+  for (const s of [...published].sort((a, b) => a.id - b.id)) {
+    const key = shiftKey(s);
+    waiting.set(key, [...(waiting.get(key) ?? []), s]);
+  }
+  const unchanged: S[] = [];
+  const create: PlannedShift[] = [];
+  for (const p of planned) {
+    const match = waiting.get(shiftKey(p))?.shift();
+    if (match) unchanged.push(match);
+    else create.push(p);
+  }
+  const cancel = Array.from(waiting.values()).flat();
+  return { unchanged, cancel, create };
+}

@@ -2255,8 +2255,16 @@ interface OvertimeRequestRecord {
   createdAt: string;
 }
 
+const newOvertimeRequestId = (): string =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
 function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
   const [expanded, setExpanded] = useState(false);
+  // 送出後沒拿到結果（斷線、逾時）再按一次時沿用同一個 id，伺服器已收過就回第一次那張，不會多一張加班單。
+  // 表單內容一改就換新的 id；成功送出後也換新的。
+  const requestRef = useRef<{ id: string; content: string } | null>(null);
   const [date, setDate] = useState(() => {
     const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -2316,14 +2324,18 @@ function OvertimeRequestSection({ employee }: { employee: PortalEmployee }) {
     }
     setSubmitting(true);
     try {
-      await apiRequest("POST", "/api/portal/overtime-request", {
+      const form = {
         employeeId: employee.id,
         date,
         startTime,
         endTime,
         reason: reason.trim(),
         evidenceImageUrl: evidencePreview || null,
-      });
+      };
+      const content = JSON.stringify(form);
+      if (requestRef.current?.content !== content) requestRef.current = { id: newOvertimeRequestId(), content };
+      await apiRequest("POST", "/api/portal/overtime-request", { ...form, requestId: requestRef.current.id });
+      requestRef.current = null;
       toast({ title: "加班申請已送出" });
       setReason("");
       setEvidencePreview(null);

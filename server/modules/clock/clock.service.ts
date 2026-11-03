@@ -1,3 +1,6 @@
+import type { ClockRecord } from "@shared/schema";
+import { overtimeAfterShift } from "../../core/clock/clockOutOvertime";
+import { LOCK_NS, lockXact, withTx, type Tx } from "../../infra/db/tx";
 import { httpError } from "../../shared/http/response";
 import { clockRepository } from "./clock.repository";
 import { employeeService } from "../employee/employee.service";
@@ -19,6 +22,24 @@ function isAttendanceRequired(shift: { role?: string | null; notes?: string | nu
   if (role.toLowerCase().includes("coach")) return false;
   if (notes.includes("暑假課程") || notes.includes("手動課程")) return false;
   return true;
+}
+
+/** The clock-triggered overtime request for a late clock-out, unless this clock-out already has one. Dated by the shift. */
+async function overtimeFromClockOut(tx: Tx, record: ClockRecord) {
+  if (!record.shiftId || !record.clockTime) return null;
+  const shift = await shiftService.getShift(record.shiftId, tx);
+  if (!shift || shift.status !== "active") return null;
+  const existing = await overtimeService.getOvertimeRequestsByEmployeeAndDate(record.employeeId, shift.date, tx);
+  if (existing.some((ot) => ot.source === "clock_triggered" && ot.clockRecordId === record.id)) return null;
+  const span = overtimeAfterShift(shift, record.clockTime);
+  if (!span) return null;
+  return overtimeService.createOvertimeRequest({
+    employeeId: record.employeeId, date: shift.date,
+    startTime: span.startTime, endTime: span.endTime,
+    reason: "加班（打卡自動產生）", status: "pending",
+    source: "clock_triggered", clockRecordId: record.id,
+    reviewedBy: null, reviewedByName: null, reviewNote: null,
+  }, tx);
 }
 
 const toTaiwanDate = (iso: string | Date | null): string => {
@@ -511,47 +532,23 @@ export const clockService = {
     return updated;
   },
 
+  /**
+   * Save an early-arrival or late-departure reason. 加班 as the late-departure reason also files a
+   * pending overtime request for the time past the shift end, once per clock-out: under the
+   * employee's clock lock, so two submits of the same form cannot both find "none yet".
+   */
   async updateRecordReason(id: number, earlyArrivalReason: string | undefined, lateDepartureReason: string | undefined) {
     if (!earlyArrivalReason && !lateDepartureReason) throw httpError(400, "請提供原因");
-    const updated = await clockRepository.updateClockRecordReason(id, earlyArrivalReason, lateDepartureReason);
-    if (!updated) throw httpError(404, "找不到打卡紀錄");
+    const found = await clockRepository.getClockRecord(id);
+    if (!found) throw httpError(404, "找不到打卡紀錄");
 
-    let overtimeRequest = null;
-    if (lateDepartureReason === "加班") {
-      const clockRecord = await clockRepository.getClockRecord(id);
-      if (clockRecord && clockRecord.shiftId && clockRecord.clockTime) {
-        const twCheckDate = new Date(clockRecord.clockTime.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-        const twCheckDateStr = `${twCheckDate.getFullYear()}-${String(twCheckDate.getMonth() + 1).padStart(2, "0")}-${String(twCheckDate.getDate()).padStart(2, "0")}`;
-        const existingOT = await overtimeService.getOvertimeRequestsByEmployeeAndDate(clockRecord.employeeId, twCheckDateStr);
-        const alreadyHasClockTriggered = existingOT.some(
-          ot => ot.source === "clock_triggered" && ot.clockRecordId === clockRecord.id
-        );
-        if (!alreadyHasClockTriggered) {
-          const twDate = new Date(clockRecord.clockTime.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
-          const twDateStr = `${twDate.getFullYear()}-${String(twDate.getMonth() + 1).padStart(2, "0")}-${String(twDate.getDate()).padStart(2, "0")}`;
-          const allShifts = await shiftService.getAllShiftsByDateRange(twDateStr, twDateStr);
-          const shift = allShifts.find(s => s.id === clockRecord.shiftId);
-          if (shift) {
-            const clockHH = String(twDate.getHours()).padStart(2, "0");
-            const clockMM = String(twDate.getMinutes()).padStart(2, "0");
-            const actualClockOut = `${clockHH}:${clockMM}`;
-            const [seH, seM] = shift.endTime.split(":").map(Number);
-            const shiftEndMins = seH * 60 + seM;
-            const clockOutMins = parseInt(clockHH) * 60 + parseInt(clockMM);
-            if (clockOutMins > shiftEndMins) {
-              overtimeRequest = await overtimeService.createOvertimeRequest({
-                employeeId: clockRecord.employeeId, date: shift.date,
-                startTime: shift.endTime, endTime: actualClockOut,
-                reason: "加班（打卡自動產生）", status: "pending",
-                source: "clock_triggered", clockRecordId: clockRecord.id,
-                reviewedBy: null, reviewedByName: null, reviewNote: null,
-              });
-            }
-          }
-        }
-      }
-    }
-    return { ...updated, overtimeRequest };
+    return withTx(async (tx) => {
+      await lockXact(tx, LOCK_NS.clock, found.employeeId);
+      const updated = await clockRepository.updateClockRecordReason(id, earlyArrivalReason, lateDepartureReason, tx);
+      if (!updated) throw httpError(404, "找不到打卡紀錄");
+      const overtimeRequest = lateDepartureReason === "加班" ? await overtimeFromClockOut(tx, updated) : null;
+      return { ...updated, overtimeRequest };
+    });
   },
 
   createClockRecord: clockRepository.createClockRecord,

@@ -10,14 +10,38 @@
  * are imported from server/infra/excel/excelParser.ts — the canonical
  * infra location — so this service owns only attendance-domain logic.
  */
+import { createHash } from "node:crypto";
 import { type InsertAttendanceRecord } from "@shared/schema";
 import {
   loadWorkbook,
   resolveCellValue,
 } from "../../infra/excel/excelParser";
+import { claimRequestKey, storedRequestResult, storeRequestResult } from "../../infra/db/idempotency";
+import { withTx } from "../../infra/db/tx";
+import { httpError } from "../../shared/http/response";
 import { attendanceService } from "../attendance/attendance.service";
 
+/** idempotency_keys scope for a whole attendance file; the key is a hash of what the file holds. */
+const UPLOAD_SCOPE = "attendance-upload";
+
+/** `2026/7/6`, `2026-07-06` → `2026-07-06`; anything that is not a real calendar day → null. */
+function sheetDate(raw: string): string | null {
+  const m = raw.trim().match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (!m) return null;
+  const date = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  const day = new Date(`${date}T00:00:00Z`);
+  return !Number.isNaN(day.getTime()) && day.toISOString().startsWith(date) ? date : null;
+}
+
+type ParsedRecord = Omit<InsertAttendanceRecord, "uploadId">;
+
 export const importExportService = {
+  /**
+   * Import one punch-record workbook. Every row is read and checked first; only a file with no bad
+   * rows is written, as one transaction (upload row, records in batches of 100, record count), so a
+   * failure anywhere leaves nothing behind. A file whose content was already imported is refused
+   * while that upload still exists.
+   */
   async importAttendanceXlsx(buffer: Buffer, originalFileName: string) {
     const workbook = await loadWorkbook(buffer);
 
@@ -26,11 +50,7 @@ export const importExportService = {
     );
     const punchSheetName = punchWorksheet?.name;
     if (!punchSheetName || !punchWorksheet) {
-      const err: any = new Error(
-        "找不到「打卡紀錄」工作表，請確認檔案格式",
-      );
-      err.status = 400;
-      throw err;
+      throw httpError(400, "找不到「打卡紀錄」工作表，請確認檔案格式");
     }
 
     const punchData: unknown[][] = [];
@@ -44,19 +64,7 @@ export const importExportService = {
     });
 
     if (punchData.length < 2) {
-      const err: any = new Error("打卡紀錄表無數據");
-      err.status = 400;
-      throw err;
-    }
-
-    const periodMatch = punchSheetName.match(
-      /(\d{4}\.\d{2}\.\d{2})-(\d{4}\.\d{2}\.\d{2})/,
-    );
-    let periodStart = "";
-    let periodEnd = "";
-    if (periodMatch) {
-      periodStart = periodMatch[1].replace(/\./g, "-");
-      periodEnd = periodMatch[2].replace(/\./g, "-");
+      throw httpError(400, "打卡紀錄表無數據");
     }
 
     const headers = punchData[0].map((h) => String(h).trim());
@@ -65,11 +73,7 @@ export const importExportService = {
       (h) => !headers.includes(h),
     );
     if (missingHeaders.length > 0) {
-      const err: any = new Error(
-        `打卡紀錄表缺少必要欄位：${missingHeaders.join(", ")}`,
-      );
-      err.status = 400;
-      throw err;
+      throw httpError(400, `打卡紀錄表缺少必要欄位：${missingHeaders.join(", ")}`);
     }
 
     const colIdx = (name: string) => headers.indexOf(name);
@@ -82,17 +86,11 @@ export const importExportService = {
       return String(val).trim();
     };
 
-    const records: InsertAttendanceRecord[] = [];
-    const uploadRecord = await attendanceService.createAttendanceUpload({
-      fileName: originalFileName,
-      periodStart: periodStart || "2026-01-01",
-      periodEnd: periodEnd || "2026-01-31",
-      totalRecords: 0,
-    });
-
     const clean = (val: string) =>
       val === "--" || val === "" ? null : val;
 
+    const records: ParsedRecord[] = [];
+    const badDates: string[] = [];
     for (let i = 1; i < punchData.length; i++) {
       const row = punchData[i] as unknown[];
       const empCode = safeGet(row, "員工編號");
@@ -101,14 +99,17 @@ export const importExportService = {
 
       const rawDate = safeGet(row, "打卡日期");
       if (!rawDate) continue;
-      const dateStr = rawDate.replace(/\//g, "-");
+      const dateStr = sheetDate(rawDate);
+      if (!dateStr) {
+        badDates.push(`第 ${i + 1} 列「${rawDate}」`);
+        continue;
+      }
 
       const lateVal = safeGet(row, "遲到");
       const earlyVal = safeGet(row, "早退");
       const anomalyVal = clean(safeGet(row, "出勤異常"));
 
       records.push({
-        uploadId: uploadRecord.id,
         employeeCode: empCode,
         employeeName: empName,
         department: clean(safeGet(row, "部門")),
@@ -141,18 +142,54 @@ export const importExportService = {
       });
     }
 
-    const savedRecords = await attendanceService.createAttendanceRecords(records);
-    await attendanceService.updateAttendanceUpload(uploadRecord.id, {
-      totalRecords: savedRecords.length,
-    });
+    if (badDates.length > 0) {
+      const shown = badDates.slice(0, 10).join("、");
+      throw httpError(400, `打卡日期無法辨識，整份檔案沒有匯入：${shown}${badDates.length > 10 ? ` 等 ${badDates.length} 列` : ""}`);
+    }
+    if (records.length === 0) {
+      throw httpError(400, "打卡紀錄表沒有可匯入的資料列");
+    }
 
-    return {
-      uploadId: uploadRecord.id,
-      fileName: originalFileName,
-      periodStart,
-      periodEnd,
-      totalRecords: savedRecords.length,
-      message: `成功匯入 ${savedRecords.length} 筆打卡紀錄`,
-    };
+    // The period named in the sheet ("打卡紀錄2026.07.01-2026.07.31"), else the span of the rows' dates.
+    const periodMatch = punchSheetName.match(/(\d{4}\.\d{2}\.\d{2})-(\d{4}\.\d{2}\.\d{2})/);
+    const named = periodMatch ? [sheetDate(periodMatch[1].replace(/\./g, "-")), sheetDate(periodMatch[2].replace(/\./g, "-"))] : [null, null];
+    const dates = records.map((r) => r.date).sort();
+    const periodStart = named[0] && named[1] ? named[0] : dates[0];
+    const periodEnd = named[0] && named[1] ? named[1] : dates[dates.length - 1];
+
+    const contentKey = createHash("sha256").update(JSON.stringify({ periodStart, periodEnd, records })).digest("hex");
+
+    return withTx(async (tx) => {
+      if (!(await claimRequestKey(tx, UPLOAD_SCOPE, contentKey))) {
+        // Imported before. Refuse while that upload exists; once it was deleted, import again under the same key.
+        const stored = (await storedRequestResult(tx, UPLOAD_SCOPE, contentKey, { lock: true })) as { uploadId?: number } | undefined;
+        const earlier = stored?.uploadId ? await attendanceService.getAttendanceUpload(stored.uploadId, tx) : undefined;
+        if (earlier) {
+          throw httpError(409, `這份打卡紀錄已經匯入過（上傳批次 #${earlier.id}「${earlier.fileName}」），沒有重複匯入。要重新匯入請先刪除該批次。`, { uploadId: earlier.id });
+        }
+      }
+
+      const uploadRecord = await attendanceService.createAttendanceUpload({
+        fileName: originalFileName,
+        periodStart,
+        periodEnd,
+        totalRecords: 0,
+      }, tx);
+      const savedRecords = await attendanceService.createAttendanceRecords(
+        records.map((r) => ({ ...r, uploadId: uploadRecord.id })),
+        tx,
+      );
+      await attendanceService.updateAttendanceUpload(uploadRecord.id, { totalRecords: savedRecords.length }, tx);
+      await storeRequestResult(tx, UPLOAD_SCOPE, contentKey, { uploadId: uploadRecord.id });
+
+      return {
+        uploadId: uploadRecord.id,
+        fileName: originalFileName,
+        periodStart,
+        periodEnd,
+        totalRecords: savedRecords.length,
+        message: `成功匯入 ${savedRecords.length} 筆打卡紀錄`,
+      };
+    });
   },
 };

@@ -7,6 +7,8 @@
 import { employeeService } from "../employee/employee.service";
 import { overtimeRepository } from "./overtime.repository";
 import { clockService } from "../clock/clock.service";
+import { oncePerRequestKey, requestKeyOf } from "../../infra/db/idempotency";
+import { withTx } from "../../infra/db/tx";
 
 export interface SubmitOvertimePayload {
   employeeId: number;
@@ -15,6 +17,22 @@ export interface SubmitOvertimePayload {
   endTime: string;
   reason: string;
   evidenceImageUrl?: string | null;
+  /** The form's id for this submission; sending it again returns the first request instead of filing a second. */
+  requestId?: string;
+}
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const badRequest = (message: string) => Object.assign(new Error(message), { status: 400 });
+
+/** Same rule as the employee form: HH:MM, and the end later than the start on the same day. */
+function checkTimes(date: string, startTime: string, endTime: string): void {
+  const day = new Date(`${date}T00:00:00Z`);
+  const isCalendarDate = DATE.test(date) && !Number.isNaN(day.getTime()) && day.toISOString().startsWith(date);
+  if (!isCalendarDate) throw badRequest("日期格式須為 YYYY-MM-DD");
+  if (!HHMM.test(startTime) || !HHMM.test(endTime)) throw badRequest("時間格式須為 HH:MM");
+  if (endTime <= startTime) throw badRequest("結束時間必須晚於開始時間");
 }
 
 export const overtimeService = {
@@ -25,23 +43,30 @@ export const overtimeService = {
       err.status = 400;
       throw err;
     }
+    checkTimes(String(date), String(startTime), String(endTime));
     const emp = await employeeService.getEmployee(employeeId);
     if (!emp) {
       const err: any = new Error("找不到員工");
       err.status = 404;
       throw err;
     }
-    return overtimeRepository.createOvertimeRequest({
-      employeeId,
-      date,
-      startTime,
-      endTime,
-      reason,
-      evidenceImageUrl: evidenceImageUrl || null,
-      status: "pending",
-      reviewedBy: null,
-      reviewedByName: null,
-      reviewNote: null,
+    const requestKey = requestKeyOf(payload.requestId);
+    return withTx(async (tx) => {
+      const { value } = await oncePerRequestKey(tx, `overtime-request:${employeeId}`, requestKey, () =>
+        overtimeRepository.createOvertimeRequest({
+          employeeId,
+          date,
+          startTime,
+          endTime,
+          reason,
+          evidenceImageUrl: evidenceImageUrl || null,
+          status: "pending",
+          reviewedBy: null,
+          reviewedByName: null,
+          reviewNote: null,
+        }, tx),
+      );
+      return value;
     });
   },
 

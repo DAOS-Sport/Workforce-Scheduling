@@ -1,13 +1,17 @@
 import { fetchEnrollmentCounts } from "../../adapters/enrollment";
 import { db } from "../../infra/db";
-import { eq, and, like, gte, lte, ne } from "drizzle-orm";
-import { shifts, summerScheduleAssignments, manualScheduleCourses, dispatchShifts, venues as venuesTable, systemConfigs, type InsertSummerScheduleAssignment, type InsertManualScheduleCourse } from "@shared/schema";
+import { eq, and, gte, lte, ne } from "drizzle-orm";
+import { shifts, dispatchShifts, type InsertManualScheduleCourse, type ManualScheduleCourse } from "@shared/schema";
 import { isValidLineUserId } from "../line/lineSignature";
-import { describeProblems, planSummerPublish } from "../../core/schedule/summerPublish";
+import { describeProblems, diffSummerWeek, planSummerPublish, type PublishRefs } from "../../core/schedule/summerPublish";
+import { oncePerRequestKey, requestKeyOf } from "../../infra/db/idempotency";
+import { LOCK_NS, lockXact, withTx, type Tx } from "../../infra/db/tx";
 import { httpError } from "../../shared/http/response";
 import { employeeService } from "../employee/employee.service";
 import { venueService } from "../venue/venue.service";
 import { shiftService } from "../shift/shift.service";
+import { systemService } from "../system/system.service";
+import { DRAFT_VERSION, summerScheduleRepository } from "./summerSchedule.repository";
 
 const SUMMER_WEEKS = [
   { no: 1, label: "第1週｜07/01（三）－07/05（日）", startDate: "2026-07-01", endDate: "2026-07-05" },
@@ -253,11 +257,23 @@ export function mergeShiftEntries(primary: any[], supplemental: any[]): any[] {
   return merged;
 }
 
-async function getActiveManualCoursesForWeek(weekNo: number) {
-  return db.select().from(manualScheduleCourses).where(
-    and(eq(manualScheduleCourses.weekNo, weekNo), eq(manualScheduleCourses.status, "active"))
-  );
+/**
+ * The version a draft save says it started from: undefined when the page did not say (older pages,
+ * saved as before), null for "no draft yet", otherwise the `updatedAt` it last read or saved.
+ */
+function expectedDraftVersion(value: unknown): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const at = new Date(typeof value === "number" ? value : String(value));
+  if (Number.isNaN(at.getTime())) throw httpError(400, "expectedUpdatedAt 格式錯誤");
+  return at;
 }
+
+const draftConflict = (current: Date | null | undefined) =>
+  httpError(409, "這週的班表已被其他人或其他分頁更新，請重新載入後再修改", {
+    errorCode: "SUMMER_DRAFT_CONFLICT",
+    updatedAt: current ? current.toISOString() : null,
+  });
 
 // 外部報名系統回傳全部梯次資料，每筆有 termStartDate。
 // 用日期範圍比對 SUMMER_WEEKS 來篩出正確週次，不傳 termId 給外部 API。
@@ -381,19 +397,24 @@ export function enrollmentRowOverlapsWeek(row: any, week: { startDate: string; e
   return termStart <= week.endDate && termEnd >= week.startDate;
 }
 
-// 共用發布邏輯：先整批檢查新班次，全部合格才軟取消該週已發布的 v40 班次（寫 audit）並插入新班次。
-// publishShifts（payload 版，相容舊版）與「DB 驅動」路徑共用。
-async function applyPublish(week: { startDate: string; endDate: string }, weekNo: number, incoming: any[]) {
-  // 0. 空陣列保護：絕不在「無可發布班次」時執行刪除，否則會把員工該週已發布班表整週清空。
+const PUBLISH_ACTOR = "summer-schedule-publish";
+
+/**
+ * Publish one week inside the caller's transaction, which holds the week's lock. The whole batch is
+ * checked first; then only the difference is written: shifts that match the plan exactly stay (same
+ * id), the rest of the week's published shifts are cancelled, and the missing ones are added. A
+ * failure anywhere rolls all of it back, so employees keep the week they had (GitHub #8).
+ */
+async function applyPublish(tx: Tx, week: { startDate: string; endDate: string }, weekNo: number, incoming: any[], refs: PublishRefs) {
+  // 空的發布不動舊班，也不回成功：把員工該週已發布班表整週清空的事不能靜默發生。
   if (!Array.isArray(incoming) || incoming.length === 0) {
-    return { success: false, inserted: 0, skipped: 0, message: "此週無可發布班次，已取消發布以保留員工現有班表" };
+    throw httpError(422, "此週無可發布班次，已取消發布以保留員工現有班表", {
+      errorCode: "SUMMER_PUBLISH_EMPTY",
+      success: false,
+      inserted: 0,
+    });
   }
-  // 1. 先整批檢查；有任何一筆不合格就不動舊班（GitHub #8）。
-  const [employees, venueRows] = await Promise.all([employeeService.getAllEmployees(), venueService.findAll()]);
-  const plan = planSummerPublish(incoming, week, weekNo, {
-    employeeIds: new Set(employees.map((e) => e.id)),
-    venueIds: new Set(venueRows.map((v) => v.id)),
-  });
+  const plan = planSummerPublish(incoming, week, weekNo, refs);
   if (!plan.ok) {
     throw httpError(
       422,
@@ -402,25 +423,26 @@ async function applyPublish(week: { startDate: string; endDate: string }, weekNo
     );
   }
 
-  // 2. 找出這週已有的 summer-schedule-v40 班次（透過 notes 標記），軟取消並寫 audit
-  const existing = await db.select().from(shifts).where(
-    and(
-      gte(shifts.date, week.startDate),
-      lte(shifts.date, week.endDate),
-      like(shifts.notes, "%暑假排班v40%"),
-      eq(shifts.status, "active")
-    )
-  );
-  for (const s of existing) {
-    await shiftService.deleteShift(s.id, "summer-schedule-publish", "重新發布暑假排班", true);
+  // 這週已發布的暑假班（notes 帶「暑假排班v40」標記、仍有效）
+  const published = (await shiftService.getAllShiftsByDateRange(week.startDate, week.endDate, tx)).filter((s) => s.notes?.includes("暑假排班v40"));
+  const diff = diffSummerWeek(published, plan.shifts);
+  for (const s of diff.cancel) {
+    await shiftService.deleteShift(s.id, PUBLISH_ACTOR, "重新發布暑假排班", true, tx);
+  }
+  for (const shift of diff.create) {
+    await shiftService.createShiftRecord(shift, PUBLISH_ACTOR, tx);
   }
 
-  // 3. 寫入新班次
-  for (const shift of plan.shifts) {
-    await shiftService.createShiftRecord(shift, "summer-schedule-publish");
-  }
-
-  return { success: true, message: "已發布到員工前台", inserted: plan.shifts.length, skipped: 0 };
+  return {
+    success: true,
+    message: "已發布到員工前台",
+    // `inserted` stays "shifts the week now has" because the page shows it as the published count.
+    inserted: plan.shifts.length,
+    created: diff.create.length,
+    unchanged: diff.unchanged.length,
+    cancelled: diff.cancel.length,
+    skipped: 0,
+  };
 }
 
 export const summerScheduleService = {
@@ -572,9 +594,7 @@ export const summerScheduleService = {
   },
 
   async getScheduleAssignments(weekNo: number) {
-    const [row] = await db.select().from(summerScheduleAssignments).where(
-      and(eq(summerScheduleAssignments.version, "v40"), eq(summerScheduleAssignments.weekNo, weekNo))
-    );
+    const row = await summerScheduleRepository.getDraft(weekNo);
     if (!row) return null;
     return {
       version: row.version,
@@ -586,75 +606,93 @@ export const summerScheduleService = {
     };
   },
 
+  /**
+   * Save the week's whole draft. Saves of one week run one at a time under the week's lock (the
+   * same lock publish takes). A save that says which version it started from (`expectedUpdatedAt`)
+   * is stored only if the draft is still that version, else 409 with the current version; a page
+   * that does not say is saved as before. The stored version name is always v40, whatever the page sends.
+   */
   async saveScheduleAssignments(payload: any) {
-    const { version = "v40", rawEntries, assignments, shifts: shiftEntries } = payload;
+    const { rawEntries, assignments, shifts: shiftEntries } = payload;
     const weekNo = normalizeWeekNo(payload.weekNo);
-    const updatedAt = new Date();
-    const data: InsertSummerScheduleAssignment = {
-      version,
-      weekNo,
+    const expected = expectedDraftVersion(payload.expectedUpdatedAt);
+    const content = {
       rawEntries: Array.isArray(rawEntries) ? rawEntries : [],
       assignments: Array.isArray(assignments) ? assignments : [],
       shiftEntries: Array.isArray(shiftEntries) ? shiftEntries : [],
     };
     const guardData = {
-      rawEntries: data.rawEntries as any[],
-      assignments: data.assignments as any[],
-      shiftEntries: data.shiftEntries as any[],
+      rawEntries: content.rawEntries as any[],
+      assignments: content.assignments as any[],
+      shiftEntries: content.shiftEntries as any[],
     };
     const incomingHasShiftRows = hasShiftRows(guardData);
     const incomingHasWorkRows = hasWorkRows(guardData);
     const incomingHasScheduleData = hasMeaningfulScheduleData(guardData);
-    if (!incomingHasShiftRows || !incomingHasWorkRows || !incomingHasScheduleData) {
-      const [existing] = await db.select().from(summerScheduleAssignments).where(
-        and(eq(summerScheduleAssignments.version, version), eq(summerScheduleAssignments.weekNo, weekNo))
-      );
-      const existingData = existing ? {
-        rawEntries: existing.rawEntries as any[],
-        assignments: existing.assignments as any[],
-        shiftEntries: existing.shiftEntries as any[],
-      } : null;
-      if (existingData && hasShiftRows(existingData) && !incomingHasShiftRows) {
-        throw httpError(409, "保護：空白班表不覆蓋既有排班資料");
+
+    return withTx(async (tx) => {
+      await lockXact(tx, LOCK_NS.summerWeek, weekNo);
+      const existing = await summerScheduleRepository.getDraft(weekNo, tx);
+      if (existing && (!incomingHasShiftRows || !incomingHasWorkRows || !incomingHasScheduleData)) {
+        const existingData = {
+          rawEntries: existing.rawEntries as any[],
+          assignments: existing.assignments as any[],
+          shiftEntries: existing.shiftEntries as any[],
+        };
+        if (hasShiftRows(existingData) && !incomingHasShiftRows) {
+          throw httpError(409, "保護：空白班表不覆蓋既有排班資料");
+        }
+        if (hasWorkRows(existingData) && !incomingHasWorkRows) {
+          throw httpError(409, "保護：空白班表不覆蓋既有排班資料");
+        }
+        if (hasMeaningfulScheduleData(existingData) && !incomingHasScheduleData) {
+          throw httpError(409, "保護：空白班表不覆蓋既有排班資料");
+        }
       }
-      if (existingData && hasWorkRows(existingData) && !incomingHasWorkRows) {
-        throw httpError(409, "保護：空白班表不覆蓋既有排班資料");
+
+      // Always later than the stored version, so two saves within one millisecond still differ.
+      const updatedAt = new Date(Math.max(Date.now(), (existing?.updatedAt?.getTime() ?? 0) + 1));
+      if (expected === undefined) {
+        await summerScheduleRepository.upsertDraft(weekNo, content, updatedAt, tx);
+      } else if (expected === null) {
+        if (!(await summerScheduleRepository.insertDraftIfAbsent(weekNo, content, updatedAt, tx))) throw draftConflict(existing?.updatedAt);
+      } else if (!(await summerScheduleRepository.updateDraftIfUnchanged(weekNo, expected, content, updatedAt, tx))) {
+        throw draftConflict(existing?.updatedAt);
       }
-      if (existingData && hasMeaningfulScheduleData(existingData) && !incomingHasScheduleData) {
-        throw httpError(409, "保護：空白班表不覆蓋既有排班資料");
-      }
-    }
-    // 原子 upsert（避免並發兩個請求同時 select 到「無列」各自 insert 而撞 unique key）
-    await db.insert(summerScheduleAssignments)
-      .values({ ...data, updatedAt })
-      .onConflictDoUpdate({
-        target: [summerScheduleAssignments.version, summerScheduleAssignments.weekNo],
-        set: { ...data, updatedAt },
-      });
-    return { success: true, updatedAt: updatedAt.toISOString() };
+      return { success: true, version: DRAFT_VERSION, updatedAt: updatedAt.toISOString() };
+    });
   },
 
   async getManualCourses(weekNo: number) {
-    return getActiveManualCoursesForWeek(weekNo);
+    return summerScheduleRepository.getActiveManualCourses(weekNo);
   },
 
-  async createManualCourses(items: any[]) {
+  /**
+   * Add manual courses. With a request id, sending the same request again returns the courses
+   * created the first time instead of adding copies (each copy would publish as its own coach shift).
+   */
+  async createManualCourses(items: any[], requestId?: unknown): Promise<ManualScheduleCourse[]> {
     if (!items.length) return [];
     const sanitized = items.map((item: any) => normalizeManualCourseCreateInput(item));
-    return db.insert(manualScheduleCourses).values(sanitized).returning();
+    return withTx(async (tx) => {
+      const { value } = await oncePerRequestKey(tx, "summer-manual-course", requestKeyOf(requestId), () =>
+        summerScheduleRepository.createManualCourses(sanitized, tx),
+      );
+      return value;
+    });
   },
 
   async updateManualCourse(id: number, data: Partial<InsertManualScheduleCourse>) {
     if (!Number.isInteger(id) || id <= 0) throw httpError(400, "id 格式錯誤");
     const patch = normalizeManualCoursePatchInput(data);
-    const [row] = await db.update(manualScheduleCourses).set({ ...patch, updatedAt: new Date() }).where(eq(manualScheduleCourses.id, id)).returning();
+    const row = await summerScheduleRepository.updateManualCourse(id, patch);
     if (!row) throw httpError(404, "找不到手動課程");
     return row;
   },
 
   async deleteManualCourse(id: number) {
     if (!Number.isInteger(id) || id <= 0) throw httpError(400, "id 格式錯誤");
-    await db.update(manualScheduleCourses).set({ status: "deleted", updatedAt: new Date() }).where(eq(manualScheduleCourses.id, id));
+    await summerScheduleRepository.updateManualCourse(id, { status: "deleted" });
     return { success: true };
   },
 
@@ -677,6 +715,13 @@ export const summerScheduleService = {
    * ── 冪等 ───────────────────────────────────────────────────────────
    * 以 (date, courseName, startTime, endTime) 當鍵：已存在就更新，不存在才新增。
    * 巨集按兩次不會變成兩倍堂數 —— 那會直接變成兩倍薪水。
+   * 「查有沒有、再新增」在全域匯入鎖（LOCK_NS.cramImport）裡做，整批一個交易：
+   * 兩次同時跑會排隊，第二次只會更新；任何一筆寫入失敗整批不留。
+   * 鍵要不要含場館（venue_id）待業務確認，目前維持不含。
+   *
+   * ── 教練歸後台 ─────────────────────────────────────────────────────
+   * 已存在的課若已經有教練（後台可能改過），更新時不覆寫教練，只回報在 coachKept。
+   * 沒有教練的課才由匯入補上。
    *
    * ── 不自動刪除 ─────────────────────────────────────────────────────
    * 試算表刪掉的課，這裡只會列進 stale 回報，不會自動把資料庫的刪掉。
@@ -704,8 +749,7 @@ export const summerScheduleService = {
     const PV_CRAM_DEFAULT = ["加洲森林","欣蓓","樂獅","新學林","皇家達","曼斯特","空中美語","立得","立德","斯塔","小丑魚"];
     let cramList: string[] = PV_CRAM_DEFAULT;
     try {
-      const [cfg] = await db.select().from(systemConfigs)
-        .where(eq(systemConfigs.key, "summer-payroll-config-v1"));
+      const cfg = await systemService.findSystemConfig("summer-payroll-config-v1");
       const parsed = cfg ? (typeof cfg.value === "string" ? JSON.parse(cfg.value) : cfg.value) : null;
       if (Array.isArray(parsed?.cramSchools) && parsed.cramSchools.length) cramList = parsed.cramSchools;
     } catch {
@@ -713,7 +757,7 @@ export const summerScheduleService = {
     }
     const unknownCramNames = new Set<string>();
 
-    const venues = await db.select().from(venuesTable);
+    const venues = await venueService.findAll();
     const venueByName = new Map<string, any>();
     for (const v of venues) {
       for (const n of [v.name, v.shortName]) {
@@ -724,9 +768,12 @@ export const summerScheduleService = {
 
     const inserted: any[] = [];
     const updated: any[] = [];
+    const coachKept: any[] = [];
     const skipped: { row: any; reason: string }[] = [];
     const unmatchedCoaches = new Set<string>();
 
+    // 第一段：逐列檢查、組好要寫的值。格式有問題的列記進 skipped，不擋其他列。
+    const planned: InsertManualScheduleCourse[] = [];
     for (const raw of rows) {
       try {
         const cram = String(raw?.cramName ?? "").trim();
@@ -763,7 +810,7 @@ export const summerScheduleService = {
         if (coachNames.length > 1) noteParts.push(`排班人員：${coachNames.join("、")}`);
         if (raw?.note) noteParts.push(String(raw.note).trim());
 
-        const values: any = {
+        planned.push({
           weekNo: week.no,
           date,
           venueId: venue ? venue.id : normalizeManualCourseVenueId(raw?.venueId),
@@ -777,34 +824,32 @@ export const summerScheduleService = {
           employeeName: firstMatched ? firstMatched.name : (coachNames[0] || null),
           note: noteParts.join("｜") || null,
           status: "active",
-        };
-
-        // 冪等鍵：同一天、同一課名、同一時段視為同一堂
-        const existing = await db.select().from(manualScheduleCourses).where(and(
-          eq(manualScheduleCourses.status, "active"),
-          eq(manualScheduleCourses.date, date),
-          eq(manualScheduleCourses.courseName, courseName),
-          eq(manualScheduleCourses.startTime, startTime),
-          eq(manualScheduleCourses.endTime, endTime),
-        ));
-
-        if (existing.length) {
-          if (!dryRun) {
-            await db.update(manualScheduleCourses)
-              .set({ ...values, updatedAt: new Date() })
-              .where(eq(manualScheduleCourses.id, existing[0].id));
-          }
-          updated.push({ id: existing[0].id, date, courseName, startTime, endTime });
-        } else {
-          if (!dryRun) {
-            await db.insert(manualScheduleCourses).values(values);
-          }
-          inserted.push({ date, courseName, startTime, endTime });
-        }
+        });
       } catch (e: any) {
         skipped.push({ row: raw, reason: e?.message || String(e) });
       }
     }
+
+    // 第二段：在全域匯入鎖裡查與寫，整批一個交易。寫入失敗就整批回滾、往外丟，不當成單列略過。
+    await withTx(async (tx) => {
+      await lockXact(tx, LOCK_NS.cramImport, 0);
+      for (const values of planned) {
+        const { date, courseName, startTime, endTime } = values;
+        const existing = await summerScheduleRepository.findActiveCourseInSlot({ date, courseName, startTime, endTime }, tx);
+        if (existing) {
+          const hasCoach = existing.employeeId != null || String(existing.employeeName ?? "").trim() !== "";
+          const { employeeId, employeeName, ...rest } = values;
+          if (hasCoach && ((employeeId ?? null) !== existing.employeeId || (employeeName ?? null) !== existing.employeeName)) {
+            coachKept.push({ id: existing.id, date, courseName, startTime, endTime });
+          }
+          if (!dryRun) await summerScheduleRepository.updateManualCourse(existing.id, hasCoach ? rest : values, tx);
+          updated.push({ id: existing.id, date, courseName, startTime, endTime });
+        } else {
+          if (!dryRun) await summerScheduleRepository.createManualCourses([values], tx);
+          inserted.push({ date, courseName, startTime, endTime });
+        }
+      }
+    });
 
     return {
       dryRun,
@@ -814,6 +859,8 @@ export const summerScheduleService = {
       inserted,
       updated,
       skipped,
+      // 已有教練、匯入沒有覆寫的課（教練以後台為準）。試算表的教練跟後台不同時要人看一下。
+      coachKept,
       // 對不到名冊的教練姓名。不是錯誤，但要讓人看得見 —— 靜默忽略就會有人領不到錢。
       unmatchedCoaches: Array.from(unmatchedCoaches),
       // 不在薪資頁「補習班名單」裡的補習班。球類的課會被算成 1.5h 而不是 1h，
@@ -822,27 +869,32 @@ export const summerScheduleService = {
     };
   },
 
+  /**
+   * Publish the week's stored draft (plus its manual courses) to the employees' shifts. Only the
+   * stored draft is published; shifts sent in the request are ignored, so what employees see is
+   * always what was saved. Runs under the week's lock, so two clicks publish one copy.
+   */
   async publishShifts(payload: any) {
     const weekNo = normalizeWeekNo(payload?.weekNo);
     const week = SUMMER_WEEKS.find((w) => w.no === weekNo);
     if (!week) throw httpError(400, "weekNo 只允許 1-9");
-
-    // 決定發布來源：
-    //  1) payload 帶 shifts 陣列（舊版相容）→ 用 payload
-    //  2) 否則（新版只送 weekNo）→ 讀母資料表已儲存的 shiftEntries（DB 驅動，republish 與已存內容一致）
-    let incoming: any[] = Array.isArray(payload?.shifts) ? payload.shifts : [];
-    let rawEntries: any[] = Array.isArray(payload?.rawEntries) ? payload.rawEntries : [];
-    if (!incoming.length) {
-      const [row] = await db.select().from(summerScheduleAssignments).where(
-        and(eq(summerScheduleAssignments.version, "v40"), eq(summerScheduleAssignments.weekNo, weekNo))
-      );
-      incoming = Array.isArray(row?.shiftEntries) ? (row!.shiftEntries as any[]) : [];
-      rawEntries = Array.isArray(row?.rawEntries) ? (row!.rawEntries as any[]) : rawEntries;
+    if (Array.isArray(payload?.shifts) && payload.shifts.length > 0) {
+      console.warn(`[summer publish] 第 ${weekNo} 週請求帶了 shifts，已忽略；發布以伺服器已儲存的草稿為準`);
     }
-    const manualCourses = await getActiveManualCoursesForWeek(weekNo);
-    incoming = mergeShiftEntries(incoming, buildManualCourseShiftEntries(manualCourses, rawEntries, weekNo));
 
-    return applyPublish(week, weekNo, incoming);
+    // 已離職的員工不擋（見 PublishRefs），所以名冊與場館在交易外讀一次即可。
+    const [employees, venueRows] = await Promise.all([employeeService.getAllEmployees(), venueService.findAll()]);
+    const refs: PublishRefs = { employeeIds: new Set(employees.map((e) => e.id)), venueIds: new Set(venueRows.map((v) => v.id)) };
+
+    return withTx(async (tx) => {
+      await lockXact(tx, LOCK_NS.summerWeek, weekNo);
+      const draft = await summerScheduleRepository.getDraft(weekNo, tx);
+      const stored = Array.isArray(draft?.shiftEntries) ? (draft!.shiftEntries as any[]) : [];
+      const rawEntries = Array.isArray(draft?.rawEntries) ? (draft!.rawEntries as any[]) : [];
+      const manualCourses = await summerScheduleRepository.getActiveManualCourses(weekNo, tx);
+      const incoming = mergeShiftEntries(stored, buildManualCourseShiftEntries(manualCourses, rawEntries, weekNo));
+      return applyPublish(tx, week, weekNo, incoming, refs);
+    });
   },
 
   async getPublishedDutyShifts(weekNo: number) {

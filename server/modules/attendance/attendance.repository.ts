@@ -15,6 +15,11 @@ export const attendanceRepository = {
     return tx.select().from(attendanceUploads).orderBy(desc(attendanceUploads.uploadedAt));
   },
 
+  async getAttendanceUpload(id: number, tx: Executor = db): Promise<AttendanceUpload | undefined> {
+    const [upload] = await tx.select().from(attendanceUploads).where(eq(attendanceUploads.id, id));
+    return upload;
+  },
+
   async createAttendanceUpload(data: InsertAttendanceUpload, tx: Executor = db): Promise<AttendanceUpload> {
     const [upload] = await tx.insert(attendanceUploads).values(data).returning();
     return upload;
