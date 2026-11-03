@@ -8,9 +8,10 @@ import { EMPTY_MANUAL_FORM, formAfterAdd, MANUAL_COURSE_MESSAGES, validateManual
 import { createRoster, findEmployeeForLine } from '../roster';
 import type { Draft, Employee, EmployeeMeta, EnrollmentItem, WeekNo } from '../types';
 import { groupIssues, venueRule, type Issue } from '../validate';
-import { modelFrom, type PipelineFixture } from './golden';
+import { employeesFrom, modelFrom, type PipelineFixture } from './golden';
 
 const pipelines = golden.pipelines as unknown as { name: string; fx: PipelineFixture }[];
+const scenarioEmployees = pipelines[0].fx.employees;
 
 describe('week lookup (R001)', () => {
   it('returns the configured week by number with its active weekdays and dropdown label (R001)', () => {
@@ -32,6 +33,14 @@ describe('employee lookup for a coach line (R018, R023)', () => {
   const meta = (employeeId: number, employeeName: string, over: Partial<EmployeeMeta> = {}): EmployeeMeta => ({ employeeId, employeeName, lineBound: false, role: '', venueId: '', venueName: '', ...over });
   const roster = createRoster([emp(7, '王偉', { role: '救生', lineBound: true }), emp(8, '陳美')]);
   const key = 'w2-新北高中-course-一般游泳_6足歲以上-A-weekday';
+
+  const v40Cases = (golden.units as unknown as Record<string, { args: unknown[]; result: unknown }[]>).findEmployeeForLine;
+  it.each(v40Cases.map((c, i) => [`#${i} ${JSON.stringify(c.args).slice(0, 50)}`, c.args, c.result] as const))('resolves the same employee as v40 %s (R018, R023)', (_n, args, v40) => {
+    const [name, key, rows] = args as [string, string, Partial<EmployeeMeta>[] | null];
+    const filled = (rows ?? []).map(r => meta(Number(r.employeeId), String(r.employeeName), r));
+    const found = findEmployeeForLine({ roster: createRoster(employeesFrom(scenarioEmployees)), meta: new Map(rows ? [[key, filled]] : []) }, name, key);
+    expect(found ? { id: found.id, name: found.name, role: found.role, lineBound: !!found.lineBound } : null).toStrictEqual(v40);
+  });
 
   it('prefers the cell meta: a match by name or by id string resolves to the roster employee with that id (R018, R023)', () => {
     const ctx = { roster, meta: new Map([[key, [meta(7, '舊名字')]]]) };

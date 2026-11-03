@@ -195,6 +195,20 @@ const UNIT_CASES = {
     call: 'p => ({ shift: payloadHasShiftRows(p), work: payloadHasWorkRows(p), value: payloadHasScheduleValue(p) })',
     cases: [[{ shifts: [], shiftEntries: [1] }], [{ assignments: [1] }], [{ rawEntries: [{ key: 'w1-a', value: '王' }] }], [{}]],
   },
+  findEmployeeForLine: {
+    employees: roster,
+    call: '(name, key, meta) => { scheduleState.meta.delete(key); if (meta) scheduleState.meta.set(key, meta); const e = findEmployeeForLine(name, key); return e ? { id: e.id, name: e.name, role: e.role, lineBound: !!e.lineBound } : null; }',
+    cases: [
+      ['舊名字', 'w2-meta-a', [{ employeeId: 9, employeeName: '舊名字' }]],
+      ['9', 'w2-meta-a', [{ employeeId: 9, employeeName: '舊名字' }]],
+      ['外聘', 'w2-meta-b', [{ employeeId: 99, employeeName: '外聘', role: '教練', lineBound: true }]],
+      ['陳美', 'w2-meta-c', [{ employeeId: 99, employeeName: '外聘' }]],
+      ['陳', 'w2-meta-c', [{ employeeId: 99, employeeName: '外聘' }]],
+      ['王偉', 'w2-meta-d', null],
+      ['王偉', 'w2-meta-d', []],
+      ['沒人', 'w2-meta-d', null],
+    ],
+  },
 };
 
 module.exports = { UNIT_CASES };

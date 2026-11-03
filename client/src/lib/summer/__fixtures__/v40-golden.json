@@ -6089,6 +6089,129 @@
      "value": false
     }
    }
+  ],
+  "findEmployeeForLine": [
+   {
+    "args": [
+     "舊名字",
+     "w2-meta-a",
+     [
+      {
+       "employeeId": 9,
+       "employeeName": "舊名字"
+      }
+     ]
+    ],
+    "result": {
+     "id": 9,
+     "name": "王偉",
+     "role": "教練",
+     "lineBound": true
+    }
+   },
+   {
+    "args": [
+     "9",
+     "w2-meta-a",
+     [
+      {
+       "employeeId": 9,
+       "employeeName": "舊名字"
+      }
+     ]
+    ],
+    "result": {
+     "id": 9,
+     "name": "王偉",
+     "role": "教練",
+     "lineBound": true
+    }
+   },
+   {
+    "args": [
+     "外聘",
+     "w2-meta-b",
+     [
+      {
+       "employeeId": 99,
+       "employeeName": "外聘",
+       "role": "教練",
+       "lineBound": true
+      }
+     ]
+    ],
+    "result": {
+     "id": 99,
+     "name": "外聘",
+     "role": "教練",
+     "lineBound": true
+    }
+   },
+   {
+    "args": [
+     "陳美",
+     "w2-meta-c",
+     [
+      {
+       "employeeId": 99,
+       "employeeName": "外聘"
+      }
+     ]
+    ],
+    "result": {
+     "id": 5,
+     "name": "陳美",
+     "role": "救生",
+     "lineBound": false
+    }
+   },
+   {
+    "args": [
+     "陳",
+     "w2-meta-c",
+     [
+      {
+       "employeeId": 99,
+       "employeeName": "外聘"
+      }
+     ]
+    ],
+    "result": null
+   },
+   {
+    "args": [
+     "王偉",
+     "w2-meta-d",
+     null
+    ],
+    "result": {
+     "id": 9,
+     "name": "王偉",
+     "role": "教練",
+     "lineBound": true
+    }
+   },
+   {
+    "args": [
+     "王偉",
+     "w2-meta-d",
+     []
+    ],
+    "result": {
+     "id": 9,
+     "name": "王偉",
+     "role": "教練",
+     "lineBound": true
+    }
+   },
+   {
+    "args": [
+     "沒人",
+     "w2-meta-d",
+     null
+    ],
+    "result": null
+   }
   ]
  },
  "pipelines": [
