@@ -131,4 +131,4 @@ async function openV40(fx) {
   return { dom, win, settle: () => settle(win), run: src => JSON.parse(JSON.stringify(win.eval(src)) ?? 'null'), close: () => dom.window.close() };
 }
 
-module.exports = { openV40, HTML_PATH };
+module.exports = { openV40, HTML_PATH, installPolyfills };
