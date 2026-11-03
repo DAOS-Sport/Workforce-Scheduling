@@ -3,6 +3,7 @@ import { isoDateForWeekDay } from './dates';
 import { dutyPeriodForDay, minutesToTime, parseAssignments, parseDutyGridLines, venueIdByName } from './parse';
 import type { ResolvedEmployee } from './roster';
 import type {
+  CellKey,
   CourseAssignment,
   Draft,
   DutyAssignment,
@@ -53,8 +54,13 @@ function base(model: WeekModel, venueName: string, venueId: string, time: TimeRa
   };
 }
 
-function courseAssignments(model: WeekModel): CourseAssignment[] {
-  const out: CourseAssignment[] = [];
+export interface KeyedAssignment {
+  cellKey: CellKey;
+  assignment: NormalizedAssignment;
+}
+
+function courseAssignments(model: WeekModel): KeyedAssignment[] {
+  const out: KeyedAssignment[] = [];
   model.venues.forEach(({ venue, courseRows }) =>
     courseRows.forEach(row => {
       if (!row.time) return;
@@ -63,7 +69,7 @@ function courseAssignments(model: WeekModel): CourseAssignment[] {
       row.coachCells.forEach(cell =>
         parseAssignments(model.ctx, cell.text, cell.period, model.week, cell.key).forEach(a => {
           const b = base(model, venue.name, venueId, time, a);
-          out.push({
+          const assignment: CourseAssignment = {
             weekNo: b.weekNo,
             venueId: b.venueId,
             venueName: b.venueName,
@@ -88,7 +94,8 @@ function courseAssignments(model: WeekModel): CourseAssignment[] {
             registeredCount: row.enrollText.trim(),
             manualCourseId: row.kind === 'manual' ? String(row.course.id) : '',
             date: row.kind === 'manual' ? row.course.date : '',
-          });
+          };
+          out.push({ cellKey: cell.key, assignment });
         }),
       );
     }),
@@ -96,14 +103,14 @@ function courseAssignments(model: WeekModel): CourseAssignment[] {
   return out;
 }
 
-function dutyAssignments(model: WeekModel, role: DutyRole): DutyAssignment[] {
-  const out: DutyAssignment[] = [];
+function dutyAssignments(model: WeekModel, role: DutyRole): KeyedAssignment[] {
+  const out: KeyedAssignment[] = [];
   model.venues.forEach(({ venue, dutyCells }) => {
     const venueId = String(venue.venueId || venueIdByName(venue.name) || '');
     dutyCells[role].forEach(cell =>
       parseDutyGridLines(model.ctx, cell.text, role, cell.date.dayNo, cell.key).forEach(a => {
         const b = base(model, venue.name, venueId, a.time, a);
-        out.push({
+        const assignment: DutyAssignment = {
           weekNo: b.weekNo,
           venueId: b.venueId,
           venueName: b.venueName,
@@ -124,15 +131,20 @@ function dutyAssignments(model: WeekModel, role: DutyRole): DutyAssignment[] {
           coachRole: '',
           rawName: b.rawName,
           follow: false,
-        });
+        };
+        out.push({ cellKey: cell.key, assignment });
       }),
     );
   });
   return out;
 }
 
-export function collectAssignments(model: WeekModel): NormalizedAssignment[] {
+export function collectKeyedAssignments(model: WeekModel): KeyedAssignment[] {
   return [...courseAssignments(model), ...dutyAssignments(model, 'frontdesk'), ...dutyAssignments(model, 'lifeguard')];
+}
+
+export function collectAssignments(model: WeekModel): NormalizedAssignment[] {
+  return collectKeyedAssignments(model).map(k => k.assignment);
 }
 
 const SHIFT_ROLE = { lifeguard: '救生', frontdesk: '櫃台', course: '教練' } as const;
