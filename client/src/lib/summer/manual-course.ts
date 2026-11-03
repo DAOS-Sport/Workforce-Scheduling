@@ -77,6 +77,20 @@ export interface ManualCourseForm {
   note: string;
 }
 
+export const EMPTY_MANUAL_FORM: ManualCourseForm = {
+  dates: '',
+  courseName: '',
+  startTime: '16:00',
+  endTime: '17:00',
+  registeredCount: '4',
+  requiredCoaches: '1',
+  note: '',
+};
+
+export function formAfterAdd(form: ManualCourseForm): ManualCourseForm {
+  return { ...form, dates: '', courseName: '', note: '' };
+}
+
 export interface NewManualCourse {
   source: 'manual';
   date: IsoDate;

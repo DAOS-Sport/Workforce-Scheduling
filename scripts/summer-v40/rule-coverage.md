@@ -27,7 +27,7 @@
 
 | 規則 | 狀態 | 函式／理由 | 測試檔 |
 |---|---|---|---|
-| R001 | 已實作 | `WEEKS`、`weekByNo` | units.golden.test.ts |
+| R001 | 已實作 | `WEEKS`、`weekByNo` | b1-gaps.test.ts、units.golden.test.ts |
 | R002 | 已實作 | `weekOptions`、`weekPrefix` | rules.test.ts |
 | R003 | 已實作 | `hourMinute` | rules.test.ts |
 | R004 | 待後續批 B2 | 寫格與 dirty 屬儲存佇列；localStorage 鏡像依 S13 刪除 | |
@@ -44,12 +44,12 @@
 | R015 | 已實作 | `EMPLOYEE_MESSAGES` | edits.golden.test.ts |
 | R016 | 待後續批 B3 | 由既有 AdminGuard 取代（合約 5.4） | |
 | R017 | 已實作 | `employeeLabel`、`lineBadgeText` | units.golden.test.ts |
-| R018 | 已實作 | `metaFor`、`findEmployeeForLine` | edits.golden.test.ts |
+| R018 | 已實作 | `metaFor`、`findEmployeeForLine` | b1-gaps.test.ts、edits.golden.test.ts |
 | R019 | 已實作 | `pickerList`、`sortBoundFirst` | edits.golden.test.ts |
 | R020 | 已實作 | `applyPickedEmployee` | edits.golden.test.ts |
 | R021 | 已實作 | `applyPickedEmployee` | edits.golden.test.ts |
 | R022 | 已實作 | `applyTempCoach` | edits.golden.test.ts |
-| R023 | 已實作 | `findEmployeeForLine` | rules.test.ts、validate.golden.test.ts |
+| R023 | 已實作 | `findEmployeeForLine` | b1-gaps.test.ts、rules.test.ts、validate.golden.test.ts |
 | R024 | 刪除 | employeeVenue 在 v40 永遠是空字串，沒有任何輸出用到；改寫不帶這個欄位 | |
 | R025 | 已實作 | `parseTimeRange` | units.golden.test.ts |
 | R026 | 已實作 | `parseLooseTimeRange` | units.golden.test.ts |
@@ -77,7 +77,7 @@
 | R048 | 已實作 | `coachPlaceholder`、`enrollCellView` | course-rows.golden.test.ts |
 | R049 | 已實作 | `normalizeCourseNameForEnrollment` | units.golden.test.ts |
 | R050 | 已實作 | `enrollmentKey`、`enrollmentLookupKeys` | units.golden.test.ts |
-| R051 | 已實作 | `normalizeEnrollmentItems`、`indexEnrollment` | units.golden.test.ts |
+| R051 | 已實作 | `normalizeEnrollmentItems`、`indexEnrollment` | b1-gaps.test.ts、units.golden.test.ts |
 | R052 | 已實作 | `buildWeekModel`、`rowEnrollment` | course-rows.golden.test.ts |
 | R053 | 已實作 | `buildWeekModel`、`enrollCellView` | course-rows.golden.test.ts、payload.golden.test.ts |
 | R054 | 已實作 | `buildWeekModel`、`enrollCellView` | course-rows.golden.test.ts |
@@ -95,14 +95,14 @@
 | R066 | 已實作 | `parseManualDates`、`addDays` | units.golden.test.ts |
 | R067 | 已實作 | `weekNoForDate`、`dayNoOf`、`formatManualDate` | units.golden.test.ts |
 | R068 | 已實作 | `manualCoursesForVenue` | course-rows.golden.test.ts |
-| R069 | 待後續批 B4 | 手動課程表單的固定文字與預設值屬畫面 | |
-| R070 | 已實作 | `manualCellKey`、`buildWeekModel` | course-rows.golden.test.ts |
+| R069 | 待後續批 B4 | 固定文字屬畫面；表單預設值與新增後清空欄位已在 EMPTY_MANUAL_FORM、formAfterAdd 並有測試（b1-gaps.test.ts） | |
+| R070 | 已實作 | `manualCellKey`、`buildWeekModel` | b1-gaps.test.ts、course-rows.golden.test.ts |
 | R071 | 已實作 | `validateManualCourseForm` | rules.test.ts |
-| R072 | 已實作 | `otherWeeksNotice`、`MANUAL_COURSE_MESSAGES` | rules.test.ts |
+| R072 | 已實作 | `otherWeeksNotice`、`MANUAL_COURSE_MESSAGES` | b1-gaps.test.ts、rules.test.ts |
 | R073 | 已實作 | `applyManualField` | rules.test.ts |
 | R074 | 已實作 | `normalizeManualCourse`、`canPatchManualCourse` | rules.test.ts、units.golden.test.ts |
 | R075 | 已實作 | `manualCoachSelection` | rules.test.ts |
-| R076 | 待後續批 B4 | 刪除流程與確認框屬手動課程 CRUD | |
+| R076 | 待後續批 B4 | 刪除流程與確認框屬手動課程 CRUD；確認與失敗文字已在 MANUAL_COURSE_MESSAGES 並有測試（b1-gaps.test.ts） | |
 | R077 | 已實作 | `normalizeManualCourse`、`manualCourseSignature` | rules.test.ts、units.golden.test.ts |
 | R078 | 已實作 | `dedupeManualCourses` | rules.test.ts |
 | R079 | 待後續批 B3 | 首次顯示時機屬畫面；週模型每次由資料重算，B3 驗證 | |
@@ -110,7 +110,7 @@
 | R081 | 已實作 | `validateWeek` | enrollment-failure.test.ts、validate.golden.test.ts |
 | R082 | 已實作 | `validateWeek` | validate.golden.test.ts |
 | R083 | 已實作 | `validateWeek` | validate.golden.test.ts |
-| R084 | 已實作 | `venueRule`、`FRONTDESK_RULE` | units.golden.test.ts |
+| R084 | 已實作 | `venueRule`、`FRONTDESK_RULE` | b1-gaps.test.ts、units.golden.test.ts |
 | R085 | 已實作 | `validateWeek`、`workEntries` | validate.golden.test.ts |
 | R086 | 已實作 | `workTypeLabel`、`workLabel` | edits.golden.test.ts |
 | R087 | 已實作 | `buildWeekModel`、`workEntries` | rules.test.ts |
@@ -118,7 +118,7 @@
 | R089 | 已實作 | `validateWeek`、`venueTextMatches` | edits.golden.test.ts、validate.golden.test.ts |
 | R090 | 已實作 | `validateWeek` | course-rows.golden.test.ts、validate.golden.test.ts |
 | R091 | 已實作 | `classifyIssue`、`ISSUE_GROUPS` | units.golden.test.ts、validate.golden.test.ts |
-| R092 | 已實作 | `validateWeek`、`groupIssues` | validate.golden.test.ts |
+| R092 | 已實作 | `validateWeek`、`groupIssues` | b1-gaps.test.ts、validate.golden.test.ts |
 | R093 | 刪除 | S03：LINE 推播檢查刪除 | |
 | R094 | 已實作 | `validateWeek` | validate.golden.test.ts |
 | R095 | 刪除 | S02：模式切換與「只看問題」刪除，遞迴不存在 | |
@@ -130,7 +130,7 @@
 | R101 | 待後續批 B2 | 自動存檔 debounce | |
 | R102 | 待後續批 B2 | 輪詢 | |
 | R103 | 待後續批 B2 | 輸入綁定改由 React 受控元件處理 | |
-| R104 | 已實作 | `rawEntriesFromDraft`、`buildSavePayload` | payload.golden.test.ts |
+| R104 | 已實作 | `rawEntriesFromDraft`、`buildSavePayload` | b1-gaps.test.ts、payload.golden.test.ts |
 | R105 | 已實作 | `collectAssignments` | payload.golden.test.ts |
 | R106 | 已實作 | `collectAssignments` | payload.golden.test.ts |
 | R107 | 已實作 | `collectShiftRows` | payload.golden.test.ts |
@@ -139,7 +139,7 @@
 | R110 | 待後續批 B2 | 發布前等佇列清空 | |
 | R111 | 待後續批 B5 | 發布預檢與確認框屬頂列 | |
 | R112 | 刪除 | S04：檢查 API 刪除 | |
-| R113 | 已實作 | `draftFromRawEntries` | rules.test.ts |
+| R113 | 已實作 | `draftFromRawEntries` | b1-gaps.test.ts、rules.test.ts |
 | R114 | 刪除 | S13：本機遷移刪除 | |
 | R115 | 刪除 | S14：清空按鈕刪除 | |
 | R116 | 待後續批 B2 | 切週 | |
@@ -247,7 +247,7 @@
 | R218 | 待後續批 B3 | 隱藏區塊依 S01-S05 處理 | |
 | R219 | 待後續批 B2 | 焦點判斷屬輪詢 | |
 | R220 | 已實作 | `weekOptions` | units.golden.test.ts |
-| R221 | 已實作 | `courseCellKey`、`manualCellKey`、`dutyGridCellKey`、`dutyGridRowsKey`、`availabilityKey`、`overrideKey`、`renderedCellKeys` | course-rows.golden.test.ts |
+| R221 | 已實作 | `courseCellKey`、`manualCellKey`、`dutyGridCellKey`、`dutyGridRowsKey`、`availabilityKey`、`overrideKey`、`renderedCellKeys` | b1-gaps.test.ts、course-rows.golden.test.ts |
 | R222 | 已實作 | `buildWeekModel` | course-rows.golden.test.ts、rules.test.ts |
 | R223 | 已實作 | `stripFollowMark`、`hasFollowMark` | rules.test.ts |
 | R224 | 已實作 | `gapAssignment` | edits.golden.test.ts |
