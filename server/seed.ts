@@ -93,9 +93,7 @@ export async function seedDatabase() {
       if (!existing.taxId && v.taxId) updates.taxId = v.taxId;
       if (!existing.operationType) updates.operationType = v.operationType;
       if (!existing.address && v.address) updates.address = v.address;
-      if (v.lat && existing.latitude !== v.lat) updates.latitude = v.lat;
-      if (v.lng && existing.longitude !== v.lng) updates.longitude = v.lng;
-      updates.radius = 200;
+      // 座標與半徑只在新增場館時寫入；已存在的場館以後台設定為準，開機不還原（T98）。
       if (v.regionCode === "D" && existing.regionId !== regionId) {
         updates.regionId = regionId;
         updates.isInternal = true;

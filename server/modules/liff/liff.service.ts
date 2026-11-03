@@ -10,7 +10,8 @@
  * signature, they're authenticated by lineUserId / employeeId in the body.
  */
 import { maskId } from "../../shared/log";
-import { processClockIn, formatClockInMessage } from "../line/lineClock.service";
+import { processClockIn } from "../clock/clockIn.service";
+import { formatClockInMessage } from "../clock/clockInMessage";
 import { pushToLine, pushPendingGuidelinesIfAny } from "../line/linePush.service";
 import { isValidLineUserId } from "../line/lineSignature";
 import { shiftReviewService } from "../shift/shiftReview.service";
@@ -23,6 +24,8 @@ export interface LiffClockInPayload {
   longitude: number;
   accuracy?: number;
   clockType?: string;
+  /** One id per press of the clock-in button; the page sends the same id again when it retries. */
+  requestId?: string;
 }
 
 export const liffService = {
@@ -38,17 +41,15 @@ export const liffService = {
     );
 
     const params = employeeId ? { employeeId: Number(employeeId) } : { lineUserId: lineUserId! };
-    const forcedType = clockType === "in" || clockType === "out" ? (clockType as "in" | "out") : undefined;
-    const result = await processClockIn(params, latitude, longitude, forcedType, accuracy);
+    const forcedClockType = clockType === "in" || clockType === "out" ? (clockType as "in" | "out") : undefined;
+    const requestId = typeof payload.requestId === "string" && payload.requestId.length > 0 && payload.requestId.length <= 128 ? payload.requestId : undefined;
+    if (!requestId) console.log("[Clock-in] 請求沒帶 requestId（舊版頁面），這次不做重送去重");
+    const { result, employeeId: clockedEmployeeId, replayed } = await processClockIn(params, latitude, longitude, { forcedClockType, accuracy, requestId });
 
-    if (result.status === "success") {
+    // The clock-in has committed. Pushing to LINE is a courtesy and never changes the answer.
+    if (result.status === "success" && clockedEmployeeId !== null && !replayed) {
       try {
-        let empToNotify = null;
-        if (lineUserId && isValidLineUserId(lineUserId)) {
-          empToNotify = await employeeService.getEmployeeByLineId(lineUserId);
-        } else if (employeeId) {
-          empToNotify = await employeeService.getEmployee(Number(employeeId));
-        }
+        const empToNotify = await employeeService.getEmployee(clockedEmployeeId);
         if (empToNotify?.lineId && isValidLineUserId(empToNotify.lineId)) {
           const reviewedShift = await shiftReviewService.reviewClockRecordShiftForPush(result.recordId);
           if (!reviewedShift) {

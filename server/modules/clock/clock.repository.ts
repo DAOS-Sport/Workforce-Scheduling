@@ -4,6 +4,7 @@ import { eq, and, gte, lte, desc, count } from "drizzle-orm";
 import {
   clockRecords,
   clockAmendments,
+  idempotencyKeys,
   type ClockRecord,
   type InsertClockRecord,
   type ClockAmendment,
@@ -11,6 +12,24 @@ import {
 } from "@shared/schema";
 
 export const clockRepository = {
+  /** Reserve (scope, key). False means it was reserved before, and its stored answer should be returned instead of acting again. */
+  async claimIdempotencyKey(scope: string, key: string, tx: Executor = db): Promise<boolean> {
+    const claimed = await tx.insert(idempotencyKeys).values({ scope, key }).onConflictDoNothing().returning({ key: idempotencyKeys.key });
+    return claimed.length > 0;
+  },
+
+  async getIdempotencyResult(scope: string, key: string, tx: Executor = db): Promise<unknown> {
+    const [row] = await tx
+      .select({ result: idempotencyKeys.result })
+      .from(idempotencyKeys)
+      .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+    return row?.result ?? undefined;
+  },
+
+  async storeIdempotencyResult(scope: string, key: string, result: unknown, tx: Executor = db): Promise<void> {
+    await tx.update(idempotencyKeys).set({ result }).where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+  },
+
   async createClockRecord(data: InsertClockRecord, tx: Executor = db): Promise<ClockRecord> {
     const [record] = await tx.insert(clockRecords).values(data).returning();
     return record;

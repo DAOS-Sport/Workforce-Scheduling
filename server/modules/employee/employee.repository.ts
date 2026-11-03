@@ -1,6 +1,6 @@
 import { db } from "../../infra/db";
 import type { Executor } from "../../infra/db/tx";
-import { eq, and, or, inArray } from "drizzle-orm";
+import { eq, and, or, inArray, isNull, sql } from "drizzle-orm";
 import {
   employees,
   shifts,
@@ -52,9 +52,40 @@ export const employeeRepository = {
     return emp;
   },
 
+  /** The record a LINE account stands for: an active one first, then the lowest id (decision D1). */
   async getEmployeeByLineId(lineId: string, tx: Executor = db): Promise<Employee | undefined> {
-    const [emp] = await tx.select().from(employees).where(eq(employees.lineId, lineId));
+    const [emp] = await tx
+      .select()
+      .from(employees)
+      .where(eq(employees.lineId, lineId))
+      .orderBy(sql`(${employees.status} = 'active') desc`, employees.id)
+      .limit(1);
     return emp;
+  },
+
+  /**
+   * Bind a LINE account to an active employee, only if no other LINE account holds the record. The
+   * condition is evaluated on the row after any concurrent binder has committed, so of two accounts
+   * racing for one record exactly one gets a row back.
+   */
+  async bindLineIdIfFree(id: number, lineId: string, tx: Executor = db): Promise<Employee | undefined> {
+    const [emp] = await tx
+      .update(employees)
+      .set({ lineId })
+      .where(
+        and(
+          eq(employees.id, id),
+          eq(employees.status, "active"),
+          or(isNull(employees.lineId), sql`${employees.lineId} !~ '^U[0-9a-f]{32}$'`, eq(employees.lineId, lineId)),
+        ),
+      )
+      .returning();
+    return emp;
+  },
+
+  /** Every record bound to this LINE account, lowest id first. One person can have an old inactive record and a new one. */
+  async getEmployeesByLineId(lineId: string, tx: Executor = db): Promise<Employee[]> {
+    return tx.select().from(employees).where(eq(employees.lineId, lineId)).orderBy(employees.id);
   },
 
   async getCoworkersByVenueAndDate(venueId: number, date: string, excludeEmployeeId: number, tx: Executor = db): Promise<Employee[]> {

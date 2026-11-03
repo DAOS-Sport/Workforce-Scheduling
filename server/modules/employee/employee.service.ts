@@ -10,6 +10,17 @@ import { employeeRepository } from "./employee.repository";
 import { regionService } from "../region/region.service";
 import { shiftService } from "../shift/shift.service";
 import { dispatchService } from "../dispatch/dispatch.service";
+import { LOCK_NS, lockXact, withTx } from "../../infra/db/tx";
+import { isValidLineUserId } from "../line/lineSignature";
+
+export type LineBindResult =
+  | { kind: "bound"; employee: Employee }
+  /** This LINE account already stands for an employee; nothing was changed. */
+  | { kind: "already_bound"; employee: Employee }
+  | { kind: "not_found" }
+  /** The employee code is held by another LINE account. */
+  | { kind: "taken"; employee: Employee }
+  | { kind: "inactive"; employee: Employee };
 
 export const employeeService = {
   async findAllActive(): Promise<Employee[]> {
@@ -90,6 +101,29 @@ export const employeeService = {
     return emp;
   },
 
+  /**
+   * Bind a LINE account to the employee with this code. One account per employee and one employee per
+   * account, even when two bindings race: the account's lock serializes one account's attempts, and the
+   * conditional update lets exactly one account win a record.
+   */
+  bindLineAccount(lineUserId: string, employeeCode: string): Promise<LineBindResult> {
+    return withTx(async (tx): Promise<LineBindResult> => {
+      await lockXact(tx, LOCK_NS.lineBinding, lineUserId);
+      const mine = await employeeRepository.getEmployeeByLineId(lineUserId, tx);
+      if (mine) return { kind: "already_bound", employee: mine };
+
+      const employee = await employeeRepository.getEmployeeByCode(employeeCode, tx);
+      if (!employee) return { kind: "not_found" };
+      if (employee.lineId && isValidLineUserId(employee.lineId) && employee.lineId !== lineUserId) return { kind: "taken", employee };
+      if (employee.status !== "active") return { kind: "inactive", employee };
+
+      const bound = await employeeRepository.bindLineIdIfFree(employee.id, lineUserId, tx);
+      if (bound) return { kind: "bound", employee: bound };
+      // Another account took the record between our read and our update.
+      return { kind: "taken", employee: (await employeeRepository.getEmployee(employee.id, tx)) ?? employee };
+    });
+  },
+
   remove: (id: number) => employeeRepository.deleteEmployee(id),
 
   createEmployee: employeeRepository.createEmployee,
@@ -97,6 +131,7 @@ export const employeeService = {
   getEmployee: employeeRepository.getEmployee,
   getEmployeeByCode: employeeRepository.getEmployeeByCode,
   getEmployeeByLineId: employeeRepository.getEmployeeByLineId,
+  getEmployeesByLineId: employeeRepository.getEmployeesByLineId,
   getEmployeesByRegion: employeeRepository.getEmployeesByRegion,
   updateEmployee: employeeRepository.updateEmployee,
 };

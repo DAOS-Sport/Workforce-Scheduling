@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, date, time, serial, timestamp, real, unique, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, date, time, serial, timestamp, real, unique, jsonb, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -252,6 +252,28 @@ export const clockRecords = pgTable("clock_records", {
 export const insertClockRecordSchema = createInsertSchema(clockRecords).omit({ id: true });
 export type InsertClockRecord = z.infer<typeof insertClockRecordSchema>;
 export type ClockRecord = typeof clockRecords.$inferSelect;
+
+/**
+ * A request that must take effect once however often it is sent. `scope` names who may reuse a key
+ * (for clock-in, the employee), `key` is the sender's request id, `result` the answer given the first time.
+ */
+export const idempotencyKeys = pgTable("idempotency_keys", {
+  scope: text("scope").notNull(),
+  key: text("key").notNull(),
+  result: jsonb("result"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.scope, t.key] }),
+}));
+
+/** One row per LINE webhook event ever received, so a redelivered event is recognised and skipped. */
+export const lineWebhookEvents = pgTable("line_webhook_events", {
+  eventId: text("event_id").primaryKey(),
+  receivedAt: timestamp("received_at").notNull().defaultNow(),
+  status: text("status").notNull().default("processing"), // processing | done | failed
+  processedAt: timestamp("processed_at"),
+  error: text("error"),
+});
 
 export const clockAmendments = pgTable("clock_amendments", {
   id: serial("id").primaryKey(),

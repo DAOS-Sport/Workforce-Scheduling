@@ -1,5 +1,5 @@
 /**
- * lineClock.service unit tests
+ * clockIn.service unit tests (services and the transaction are mocked; the real-database behavior is in the itests)
  *
  * Covers every branch of processClockIn:
  *  - 員工不存在 / 非在職
@@ -13,10 +13,22 @@
  */
 
 import { vi, describe, it, expect, afterEach, beforeEach } from "vitest";
-import { processClockIn, invalidateVenueCache } from "./lineClock.service";
+import { processClockIn as processClockInOutcome } from "./clockIn.service";
+import { invalidateVenueCache } from "./venueCache";
+import type { ClockType } from "../../core/clock/clockRules";
 
+const tx = vi.hoisted(() => {
+  const fake: Record<string, unknown> = { fake: true };
+  fake.transaction = (fn: (inner: unknown) => unknown) => fn(fake);
+  return fake;
+});
+vi.mock("../../infra/db/tx", () => ({
+  LOCK_NS: { clock: 101 },
+  lockXact: vi.fn(async () => undefined),
+  withTx: (fn: (inner: unknown) => unknown) => fn(tx),
+}));
 vi.mock("../employee/employee.service", () => ({
-  employeeService: { getEmployeeByLineId: vi.fn(), getEmployee: vi.fn() },
+  employeeService: { getEmployeesByLineId: vi.fn(), getEmployee: vi.fn() },
 }));
 vi.mock("../clock/clock.service", () => ({
   clockService: { getClockRecordsByEmployee: vi.fn(), createClockRecord: vi.fn() },
@@ -30,10 +42,14 @@ vi.mock("../overtime/overtime.service", () => ({ overtimeService: { getOvertimeR
 const tp = (hour: number, minute: number, second = 0, ms = 0) => new Date(Date.UTC(2026, 4, 27, hour - 8, minute, second, ms));
 
 import { employeeService } from "../employee/employee.service";
+import { lockXact } from "../../infra/db/tx";
 import { clockService } from "../clock/clock.service";
 import { venueService } from "../venue/venue.service";
 import { shiftService } from "../shift/shift.service";
 import { overtimeService } from "../overtime/overtime.service";
+
+const processClockIn = async (params: { lineUserId?: string; employeeId?: number }, lat: number, lng: number, forcedClockType?: ClockType) =>
+  (await processClockInOutcome(params, lat, lng, { forcedClockType })).result;
 
 // ── 測試資料 ──────────────────────────────────────────────────────────────────
 
@@ -125,7 +141,8 @@ beforeEach(() => {
   invalidateVenueCache(); // 清除場館快取，確保每個測試都讀到最新 mock
 
   // 預設值：有員工、有場館、今天沒有打卡紀錄、有排班
-  vi.mocked(employeeService.getEmployeeByLineId).mockResolvedValue(mockEmployee as any);
+  vi.mocked(employeeService.getEmployeesByLineId).mockResolvedValue([mockEmployee] as any);
+  vi.mocked(employeeService.getEmployee).mockResolvedValue(mockEmployee as any);
   vi.mocked(clockService.getClockRecordsByEmployee).mockResolvedValue([]);
   vi.mocked(venueService.findAll).mockResolvedValue([mockVenue as any]);
   vi.mocked(shiftService.getShiftsByEmployeeAndDateRange).mockResolvedValue([mockShift as any]);
@@ -137,7 +154,7 @@ beforeEach(() => {
 
 describe("processClockIn — 員工查找", () => {
   it("LINE ID 未綁定員工 → error", async () => {
-    vi.mocked(employeeService.getEmployeeByLineId).mockResolvedValue(undefined as any);
+    vi.mocked(employeeService.getEmployeesByLineId).mockResolvedValue([]);
 
     const result = await processClockIn({ lineUserId: "U_UNKNOWN" }, IN_RANGE_LAT, IN_RANGE_LNG);
 
@@ -146,10 +163,7 @@ describe("processClockIn — 員工查找", () => {
   });
 
   it("員工狀態非 active → error", async () => {
-    vi.mocked(employeeService.getEmployeeByLineId).mockResolvedValue({
-      ...mockEmployee,
-      status: "inactive",
-    } as any);
+    vi.mocked(employeeService.getEmployeesByLineId).mockResolvedValue([{ ...mockEmployee, status: "inactive" }] as any);
 
     const result = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
 
@@ -170,9 +184,7 @@ describe("processClockIn — 重複打卡防呆", () => {
 
     expect(result.status).toBe("fail");
     expect(result.failReason).toContain("重複打卡");
-    expect(clockService.createClockRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "fail", failReason: expect.stringContaining("重複打卡") })
-    );
+    expect(clockService.createClockRecord).toHaveBeenCalledWith(expect.objectContaining({ status: "fail", failReason: expect.stringContaining("重複打卡") }), tx);
   });
 
   it("超過 5 分鐘的舊紀錄不觸發防呆", async () => {
@@ -208,9 +220,7 @@ describe("processClockIn — 重複打卡防呆", () => {
 
     expect(result.status).toBe("success");
     expect(result.clockType).toBe("out");
-    expect(clockService.createClockRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "success", clockType: "out" })
-    );
+    expect(clockService.createClockRecord).toHaveBeenCalledWith(expect.objectContaining({ status: "success", clockType: "out" }), tx);
   });
 
   it("上班打卡後 2 分鐘內再次點 → 防呆，不翻成下班、不重複建檔", async () => {
@@ -244,9 +254,7 @@ describe("processClockIn — 場館距離判斷", () => {
     expect(result.status).toBe("fail");
     expect(result.failReason).toBe("不在任何場館範圍內");
     expect(result.distance).toBeGreaterThan(300);
-    expect(clockService.createClockRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "fail", failReason: "不在任何場館範圍內" })
-    );
+    expect(clockService.createClockRecord).toHaveBeenCalledWith(expect.objectContaining({ status: "fail", failReason: "不在任何場館範圍內" }), tx);
   });
 
   it("GPS 在範圍內 → 不回傳 fail", async () => {
@@ -265,9 +273,7 @@ describe("processClockIn — 排班比對", () => {
 
     expect(result.status).toBe("warning");
     expect(result.failReason).toContain("無排班");
-    expect(clockService.createClockRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "warning" })
-    );
+    expect(clockService.createClockRecord).toHaveBeenCalledWith(expect.objectContaining({ status: "warning" }), tx);
   });
 
   it("在範圍內且有排班 → success + 寫入紀錄", async () => {
@@ -275,9 +281,7 @@ describe("processClockIn — 排班比對", () => {
 
     expect(result.status).toBe("success");
     expect(result.venueName).toBe("測試");
-    expect(clockService.createClockRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "success", employeeId: 1, venueId: 1 })
-    );
+    expect(clockService.createClockRecord).toHaveBeenCalledWith(expect.objectContaining({ status: "success", employeeId: 1, venueId: 1 }), tx);
   });
 
   it("success 時回傳 employeeName", async () => {
@@ -325,6 +329,7 @@ describe("processClockIn — 遲到 / 打卡類型", () => {
 
     expect(result.status).toBe("success");
     expect(employeeService.getEmployee).toHaveBeenCalledWith(1);
+    expect(employeeService.getEmployee).toHaveBeenCalledWith(1, tx);
   });
 });
 
@@ -361,6 +366,80 @@ describe("processClockIn — 用各館自己的半徑選館（GitHub #3，AC-3.1
     const r = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
 
     expect([r.status, r.clockType, r.venueName, r.distance, r.radius, r.shiftInfo]).toEqual(["success", "in", "遠館", 150, 300, "08:00-17:00"]);
-    expect(clockService.createClockRecord).toHaveBeenCalledWith(expect.objectContaining({ venueId: 2, shiftId: 2, distance: 150, matchedVenueName: "遠館", status: "success" }));
+    expect(clockService.createClockRecord).toHaveBeenCalledWith(expect.objectContaining({ venueId: 2, shiftId: 2, distance: 150, matchedVenueName: "遠館", status: "success" }), tx);
+  });
+});
+
+describe("processClockIn — 序列化與時間", () => {
+  it("打卡判斷在員工鎖內進行，鎖的鍵是員工 id", async () => {
+    await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
+
+    expect(lockXact).toHaveBeenCalledWith(tx, 101, 1);
+  });
+
+  it("找不到或非在職的員工不開交易、不拿鎖", async () => {
+    vi.mocked(employeeService.getEmployeesByLineId).mockResolvedValue([]);
+    await processClockIn({ lineUserId: "U_UNKNOWN" }, IN_RANGE_LAT, IN_RANGE_LNG);
+
+    expect(lockXact).not.toHaveBeenCalled();
+  });
+
+  it("鎖內重讀員工：排隊期間被停用就擋下", async () => {
+    vi.mocked(employeeService.getEmployee).mockResolvedValue({ ...mockEmployee, status: "inactive" } as any);
+
+    const r = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
+
+    expect([r.status, r.failReason]).toEqual(["error", "帳號目前為非在職狀態"]);
+    expect(clockService.createClockRecord).not.toHaveBeenCalled();
+  });
+
+  it("紀錄時間寫的是打卡當下（或 LINE 事件時間），不是資料庫交易開始的時間", async () => {
+    const eventTime = tp(8, 9);
+    await processClockInOutcome({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG, { at: eventTime });
+
+    expect(clockService.createClockRecord).toHaveBeenCalledWith(expect.objectContaining({ clockTime: eventTime }), tx);
+  });
+
+  it("LINE 事件時間略早於剛提交的上班紀錄（兩邊同時打卡）仍視為同一次上班，不翻成下班", async () => {
+    const justCommitted = { ...mockClockRecord, id: 100, clockType: "in" as const, clockTime: tp(8, 10, 3) };
+    vi.mocked(clockService.getClockRecordsByEmployee).mockResolvedValue([justCommitted] as any);
+
+    const outcome = await processClockInOutcome({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG, { at: tp(8, 10, 1) });
+
+    expect([outcome.result.status, outcome.result.clockType]).toEqual(["success", "in"]);
+    expect(clockService.createClockRecord).not.toHaveBeenCalled();
+  });
+
+  it("重複打卡的稽核紀錄寫失敗，仍回重複打卡的結果（稽核放在 savepoint 裡）", async () => {
+    vi.mocked(clockService.getClockRecordsByEmployee).mockResolvedValue([{ ...mockClockRecord, clockTime: tp(8, 7) }] as any);
+    vi.mocked(clockService.createClockRecord).mockRejectedValue(new Error("audit insert failed"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const r = await processClockIn({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG, "in");
+
+    expect([r.status, r.failReason]).toEqual(["fail", expect.stringContaining("重複打卡")]);
+  });
+});
+
+describe("processClockIn — 一個 LINE 帳號對到多筆員工資料（D1）", () => {
+  const record = (id: number, regionId: number, status = "active") => ({ ...mockEmployee, id, regionId, status });
+
+  it("停用的舊紀錄與在職的新紀錄並存 → 記在在職那筆", async () => {
+    vi.mocked(employeeService.getEmployeesByLineId).mockResolvedValue([record(3, 1, "inactive"), record(9, 1)] as any);
+    vi.mocked(employeeService.getEmployee).mockImplementation((async (id: number) => (id === 9 ? record(9, 1) : record(3, 1, "inactive"))) as any);
+
+    const outcome = await processClockInOutcome({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
+
+    expect([outcome.result.status, outcome.employeeId]).toEqual(["success", 9]);
+  });
+
+  it("兩筆都在職、地區不同 → 依打卡場館所屬地區", async () => {
+    vi.mocked(employeeService.getEmployeesByLineId).mockResolvedValue([record(3, 1), record(9, 2)] as any);
+    vi.mocked(employeeService.getEmployee).mockImplementation((async (id: number) => record(id, id === 9 ? 2 : 1)) as any);
+    vi.mocked(venueService.findAll).mockResolvedValue([{ ...mockVenue, regionId: 2 }] as any);
+
+    const outcome = await processClockInOutcome({ lineUserId: "U123" }, IN_RANGE_LAT, IN_RANGE_LNG);
+
+    expect(outcome.employeeId).toBe(9);
   });
 });

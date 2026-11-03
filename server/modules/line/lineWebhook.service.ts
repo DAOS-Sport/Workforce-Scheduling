@@ -1,9 +1,10 @@
 import { replyMessages } from "../../adapters/line";
-import { isValidLineUserId } from "./lineSignature";
 import { pushToLine, pushPendingGuidelinesIfAny } from "./linePush.service";
-import { processClockIn, formatClockInMessage } from "./lineClock.service";
+import { processClockIn } from "../clock/clockIn.service";
+import { formatClockInMessage } from "../clock/clockInMessage";
 import { maskId } from "../../shared/log";
 import { employeeService } from "../employee/employee.service";
+import { lineWebhookEventRepository } from "./lineWebhookEvent.repository";
 
 /** 先用 reply token 回覆；LINE 拒絕或連線失敗時，有 fallbackUserId 就改用推播。 */
 async function replyToLine(replyToken: string, text: string, fallbackUserId?: string, extraMessages?: object[]): Promise<void> {
@@ -45,13 +46,16 @@ async function handleTextMessage(event: any): Promise<void> {
   const text = (event.message?.text || "").trim();
   if (!lineUserId || !text) return;
 
-  const alreadyBound = await employeeService.getEmployeeByLineId(lineUserId);
-  if (alreadyBound) {
-    await replyToLine(replyToken,
-      `ℹ️ 您的帳號已綁定為：${alreadyBound.name}（${alreadyBound.employeeCode}）\n\n` +
+  const replyAlreadyBound = (bound: { name: string; employeeCode: string }) =>
+    replyToLine(replyToken,
+      `ℹ️ 您的帳號已綁定為：${bound.name}（${bound.employeeCode}）\n\n` +
       `如需打卡，請傳送「位置訊息」。`,
       lineUserId
     );
+
+  const alreadyBound = await employeeService.getEmployeeByLineId(lineUserId);
+  if (alreadyBound) {
+    await replyAlreadyBound(alreadyBound);
     return;
   }
 
@@ -65,8 +69,15 @@ async function handleTextMessage(event: any): Promise<void> {
     return;
   }
 
-  const employee = await employeeService.getEmployeeByCode(text);
-  if (!employee) {
+  // The checks and the write happen together under the binding lock; the replies below come after it commits.
+  const outcome = await employeeService.bindLineAccount(lineUserId, text);
+
+  if (outcome.kind === "already_bound") {
+    await replyAlreadyBound(outcome.employee);
+    return;
+  }
+
+  if (outcome.kind === "not_found") {
     await replyToLine(replyToken,
       `❌ 查無員工編號「${text}」，請確認後重新輸入。\n\n如有疑問請洽詢主管或 HR。`,
       lineUserId
@@ -74,15 +85,15 @@ async function handleTextMessage(event: any): Promise<void> {
     return;
   }
 
-  if (employee.lineId && isValidLineUserId(employee.lineId) && employee.lineId !== lineUserId) {
+  if (outcome.kind === "taken") {
     await replyToLine(replyToken,
-      `⚠️ 員工編號「${text}」（${employee.name}）已綁定其他 LINE 帳號。\n\n如需更換綁定，請聯繫 HR 處理。`,
+      `⚠️ 員工編號「${text}」（${outcome.employee.name}）已綁定其他 LINE 帳號。\n\n如需更換綁定，請聯繫 HR 處理。`,
       lineUserId
     );
     return;
   }
 
-  if (employee.status !== "active") {
+  if (outcome.kind === "inactive") {
     await replyToLine(replyToken,
       `⚠️ 員工編號「${text}」目前為非在職狀態，無法綁定。\n\n如有疑問請洽詢 HR。`,
       lineUserId
@@ -90,7 +101,7 @@ async function handleTextMessage(event: any): Promise<void> {
     return;
   }
 
-  await employeeService.updateEmployee(employee.id, { lineId: lineUserId });
+  const { employee } = outcome;
   console.log(`[LINE Bind] 員工 ID=${employee.id} 綁定 LINE ID: ${maskId(lineUserId)}`);
 
   await replyToLine(replyToken,
@@ -105,53 +116,70 @@ async function handleTextMessage(event: any): Promise<void> {
   );
 }
 
+/** Reply to and act on one event. Replies and pushes happen here, after any database work has committed. */
+async function handleEvent(event: any): Promise<void> {
+  if (event.type === "follow") {
+    await handleFollowEvent(event);
+    return;
+  }
+
+  if (event.type === "message" && event.message.type === "text") {
+    await handleTextMessage(event);
+    return;
+  }
+
+  if (event.type === "message" && event.message.type === "location") {
+    const replyToken = event.replyToken;
+    const lineUserId = event.source?.userId;
+    const userLat = event.message.latitude;
+    const userLng = event.message.longitude;
+
+    if (!lineUserId) {
+      await replyToLine(replyToken, "❌ 無法識別您的 LINE 帳號，請聯繫管理員。");
+      return;
+    }
+
+    const emp = await employeeService.getEmployeeByLineId(lineUserId);
+    if (!emp) {
+      await replyToLine(replyToken,
+        `❌ 您的 LINE 帳號尚未綁定員工資料。\n\n` +
+        `📌 請先回覆您的「員工編號」完成綁定，再傳送位置打卡。\n` +
+        `（例如：1305374）`,
+        lineUserId
+      );
+      return;
+    }
+
+    const at = Number.isFinite(event.timestamp) ? new Date(event.timestamp) : undefined;
+    const { result, employeeId } = await processClockIn({ lineUserId }, userLat, userLng, { at });
+    const message = formatClockInMessage(result);
+    await replyToLine(replyToken, message, lineUserId);
+    if ((result.status === "success" || result.status === "warning") && result.clockType === "in" && employeeId !== null) {
+      pushPendingGuidelinesIfAny(employeeId, lineUserId).catch(() => {});
+    }
+  }
+}
+
 export async function handleLineWebhook(body: any): Promise<void> {
   const events = body.events || [];
 
   for (const event of events) {
+    const eventId: string | undefined = event.webhookEventId;
     try {
-      if (event.type === "follow") {
-        await handleFollowEvent(event);
-        continue;
-      }
-
-      if (event.type === "message" && event.message.type === "text") {
-        await handleTextMessage(event);
-        continue;
-      }
-
-      if (event.type === "message" && event.message.type === "location") {
-        const replyToken = event.replyToken;
-        const lineUserId = event.source?.userId;
-        const userLat = event.message.latitude;
-        const userLng = event.message.longitude;
-
-        if (!lineUserId) {
-          await replyToLine(replyToken, "❌ 無法識別您的 LINE 帳號，請聯繫管理員。");
+      // LINE redelivers an event it thinks was lost, possibly minutes later. Handle each event id once.
+      if (eventId) {
+        if (!(await lineWebhookEventRepository.claim(eventId))) {
+          console.log(`[LINE Webhook] 事件 ${eventId} 已處理過，略過重送`);
           continue;
         }
-
-        const emp = await employeeService.getEmployeeByLineId(lineUserId);
-        if (!emp) {
-          await replyToLine(replyToken,
-            `❌ 您的 LINE 帳號尚未綁定員工資料。\n\n` +
-            `📌 請先回覆您的「員工編號」完成綁定，再傳送位置打卡。\n` +
-            `（例如：1305374）`,
-            lineUserId
-          );
-          continue;
-        }
-
-        const result = await processClockIn({ lineUserId }, userLat, userLng);
-        const message = formatClockInMessage(result);
-        await replyToLine(replyToken, message, lineUserId);
-        if ((result.status === "success" || result.status === "warning") && result.clockType === "in" && emp?.id && emp?.lineId) {
-          pushPendingGuidelinesIfAny(emp.id, emp.lineId).catch(() => {});
-        }
-        continue;
+      } else {
+        console.log("[LINE Webhook] 事件沒有 webhookEventId，無法去重");
       }
+      await handleEvent(event);
+      if (eventId) await lineWebhookEventRepository.finish(eventId, {});
     } catch (err) {
       console.error("[LINE Webhook] Error processing event:", err);
+      if (eventId) await lineWebhookEventRepository.finish(eventId, { error: String(err) }).catch(() => {});
       const lineUserId = event.source?.userId;
       if (lineUserId) {
         await pushToLine(lineUserId, "❌ 系統處理時發生錯誤，請稍後再試或聯繫管理員。");

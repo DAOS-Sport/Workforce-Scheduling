@@ -61,6 +61,31 @@ describe("withTx", () => {
   });
 });
 
+describe("withTx and a swallowed failure", () => {
+  it("rejects, and keeps nothing, when a statement failed inside fn and fn caught the error", async () => {
+    await expect(
+      withTx(async (tx) => {
+        await tx.insert(regions).values({ name: "甲區", code: "TX1" });
+        await tx.execute(sql`select 1 / 0`).catch(() => undefined);
+        return "looked fine";
+      }),
+    ).rejects.toThrow();
+
+    expect(await db.select().from(regions)).toEqual([]);
+  });
+
+  it("still commits when the failing statement was isolated in a savepoint", async () => {
+    const value = await withTx(async (tx) => {
+      await tx.insert(regions).values({ name: "甲區", code: "TX1" });
+      await tx.transaction((inner) => inner.execute(sql`select 1 / 0`)).catch(() => undefined);
+      return "isolated";
+    });
+
+    expect(value).toBe("isolated");
+    expect((await db.select().from(regions)).map((r) => r.code)).toEqual(["TX1"]);
+  });
+});
+
 describe("lockXact", () => {
   it("lets two transactions on different backends hold different keys at the same time", async () => {
     expect(await holdersAtOnce([42, 43])).toEqual({ peak: 2, backends: 2 });

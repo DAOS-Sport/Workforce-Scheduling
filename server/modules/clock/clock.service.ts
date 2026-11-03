@@ -555,6 +555,9 @@ export const clockService = {
   },
 
   createClockRecord: clockRepository.createClockRecord,
+  claimIdempotencyKey: clockRepository.claimIdempotencyKey,
+  getIdempotencyResult: clockRepository.getIdempotencyResult,
+  storeIdempotencyResult: clockRepository.storeIdempotencyResult,
   getClockAmendments: clockRepository.getClockAmendments,
   getClockRecord: clockRepository.getClockRecord,
   getClockRecordsByDateRange: clockRepository.getClockRecordsByDateRange,

@@ -5,7 +5,7 @@
  * service so any future caller (LINE, internal-api) cannot forget to call it.
  */
 import { insertVenueSchema, type Venue, type InsertVenue } from "@shared/schema";
-import { invalidateVenueCache } from "../line/lineClock.service";
+import { invalidateVenueCache } from "../clock/venueCache";
 import { venueRepository } from "./venue.repository";
 import { regionService } from "../region/region.service";
 

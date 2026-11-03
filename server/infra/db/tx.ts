@@ -9,8 +9,17 @@ export type Executor = PgDatabase<NodePgQueryResultHKT, typeof schema>;
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+/**
+ * Runs fn in one transaction. A statement that failed inside fn and was caught there leaves the
+ * transaction aborted, and COMMIT on an aborted transaction silently rolls back. The probe after fn
+ * turns that into a rejection; isolate an expected failure in `tx.transaction` (a savepoint) instead.
+ */
 export function withTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return db.transaction(fn);
+  return db.transaction(async (tx) => {
+    const value = await fn(tx);
+    await tx.execute(sql`select 1`);
+    return value;
+  });
 }
 
 /** First key of every advisory lock, so employee 42 and venue 42 never share a lock. */
