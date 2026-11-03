@@ -372,7 +372,10 @@ export function createDraftStore(options: DraftStoreOptions): DraftStore {
     if (disposed) return;
     const d = week(w);
     if (!d.loaded || d.inFlight) return;
-    if (reason !== 'manual' && (d.blocked === 'server-409' || !hasUnsaved(d))) return;
+    // A retry finishes a failed save even when it carried no new edits (a 立即儲存 on a clean week); otherwise
+    // the status would stay 儲存失敗，重試中… with no retry coming.
+    const explicit = reason === 'manual' || reason === 'retry';
+    if (!explicit && (d.blocked === 'server-409' || !hasUnsaved(d))) return;
     clearTimer(autoSaveTimers, w);
     clearTimer(retryTimers, w);
     const generatedAt = new Date(timers.now());
@@ -419,6 +422,8 @@ export function createDraftStore(options: DraftStoreOptions): DraftStore {
     const d = week(w);
     if (mode === 'keep-local' || mode === 'discard-local') {
       if (d.inFlight) return;
+      clearTimer(autoSaveTimers, w);
+      clearTimer(retryTimers, w);
       let next = applyRemote(d, remote, timers.now());
       if (mode === 'discard-local') next = { ...next, local: new Map(), savedVersion: next.headVersion };
       next = { ...next, phase: hasUnsaved(next) ? 'pending' : 'idle', blocked: null, error: null, retryDelayMs: 0 };

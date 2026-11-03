@@ -335,6 +335,33 @@ describe('auto-save (R101, R103)', () => {
     store.dispose();
   });
 
+  it('a failed 立即儲存 with nothing unsaved is retried too, so 重試中 never sticks (R100)', async () => {
+    const { server, store, at } = await setup();
+    server.postStatus = n => (n === 1 ? 500 : 200);
+    store.saveNow();
+    await at(300);
+    expect(saveStatus(store.week()).text).toBe('儲存失敗，重試中…');
+    await at(2600);
+    expect(server.posts.map(p => p.sentAt)).toEqual([0, 2300]);
+    expect(saveStatus(store.week())).toEqual({ tone: 'saved', text: '已儲存 09:00' });
+    store.dispose();
+  });
+
+  it('reloading cancels a pending retry (R100, E05)', async () => {
+    const { server, store, at } = await setup();
+    server.postStatus = () => 500;
+    store.edit(1, Y, 'A');
+    await at(1200);
+    expect(store.week().phase).toBe('retrying');
+    const reloading = store.reload(1, 'discard-local');
+    await at(1300);
+    await reloading;
+    await at(30_000);
+    expect(server.posts.map(p => p.sentAt)).toEqual([900]);
+    expect(saveStatus(store.week()).tone).toBe('saved');
+    store.dispose();
+  });
+
   it('與 v40 不同：伺服器回 409 後不自動重試，重新載入時把本機修改疊上遠端再送（E05, R100）', async () => {
     const { server, store, at } = await setup();
     server.postStatus = n => (n === 1 ? 409 : 200);
