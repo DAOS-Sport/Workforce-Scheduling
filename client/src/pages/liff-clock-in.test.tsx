@@ -185,6 +185,29 @@ describe("定位失敗錯誤處理", () => {
     );
   });
 
+  it("權限被拒（code 1）→ 引導卡片內附上定位權限說明", async () => {
+    await renderAndWaitReady();
+    setGeoError(1);
+
+    fireEvent.click(screen.getByTestId("button-clock-in"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("card-permission-guide").querySelector('[data-testid="location-permission-help"]')).not.toBeNull()
+    );
+  });
+
+  it("逾時（code 3）→ 不顯示定位權限說明", async () => {
+    await renderAndWaitReady();
+    setGeoError(3);
+
+    fireEvent.click(screen.getByTestId("button-clock-in"));
+
+    await waitFor(() =>
+      expect(screen.getByText(/定位逾時/)).toBeTruthy()
+    );
+    expect(screen.queryByTestId("location-permission-help")).toBeNull();
+  });
+
   it("GPS 不可用（code 2）→ 顯示錯誤訊息 + 照片回報", async () => {
     await renderAndWaitReady();
     setGeoError(2);

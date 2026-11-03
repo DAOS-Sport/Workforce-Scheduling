@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, CheckCircle2, AlertTriangle, XCircle, Loader2, Navigation, Smartphone, Settings, Camera, ImagePlus, X, Send } from "lucide-react";
+import { MapPin, CheckCircle2, AlertTriangle, XCircle, Loader2, Navigation, Camera, ImagePlus, X, Send } from "lucide-react";
+import { LocationPermissionHelp } from "@/components/portal/location-permission-help";
 
 const LIFF_ID = import.meta.env.VITE_LIFF_ID || "";
 
@@ -224,51 +225,7 @@ export default function LiffClockInPage() {
             </div>
 
             <div className="p-5 space-y-4">
-              <div className="bg-slate-700/50 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
-                    <Smartphone className="h-3.5 w-3.5 text-white" />
-                  </div>
-                  <p className="text-blue-300 font-semibold text-sm">iPhone 設定步驟</p>
-                </div>
-                <ol className="space-y-2">
-                  {[
-                    "關閉這個視窗，回到手機桌面",
-                    "開啟手機「設定」App",
-                    "往下滑找到「LINE」→ 點進去",
-                    "點「位置」→ 選「使用 App 時」",
-                    "回到 LINE，重新點打卡連結",
-                  ].map((step, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-xs text-white/70">
-                      <span className="w-5 h-5 rounded-full bg-slate-600 text-white/80 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                      <span className="leading-relaxed">{step}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              <div className="bg-slate-700/50 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-6 h-6 rounded-full bg-green-600 flex items-center justify-center shrink-0">
-                    <Settings className="h-3.5 w-3.5 text-white" />
-                  </div>
-                  <p className="text-green-300 font-semibold text-sm">Android 設定步驟</p>
-                </div>
-                <ol className="space-y-2">
-                  {[
-                    "關閉這個視窗，回到手機桌面",
-                    "長按 LINE 圖示 → 點「App 資訊」",
-                    "點「權限」→「位置」",
-                    "選「只在使用中允許」",
-                    "回到 LINE，重新點打卡連結",
-                  ].map((step, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-xs text-white/70">
-                      <span className="w-5 h-5 rounded-full bg-slate-600 text-white/80 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                      <span className="leading-relaxed">{step}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
+              <LocationPermissionHelp />
 
               <p className="text-center text-white/30 text-[11px]">
                 開啟後若還是有問題，請聯絡主管

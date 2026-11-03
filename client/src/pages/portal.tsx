@@ -21,8 +21,8 @@ import {
   type LucideIcon,
   Sun,
 } from "lucide-react";
-import junsLogo from "@assets/logo_(1)_1771907823260.jpg";
 import { LEAVE_TYPES, OFF_DUTY_ROLES } from "@shared/leave";
+import { LocationPermissionHelp } from "@/components/portal/location-permission-help";
 
 interface PortalEmployee {
   id: number;
@@ -588,12 +588,9 @@ function LineLoginScreen({ onLogin }: { onLogin: (emp: PortalEmployee) => void }
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
-    const lineId = params.get("lineId");
 
     if (code) {
       handleLineCallback(code);
-    } else if (lineId) {
-      verifyLineId(lineId);
     } else {
       tryLiffAutoLogin();
     }
@@ -1322,7 +1319,7 @@ const LATE_DEPARTURE_REASONS = [
 
 const CLOCK_LOCK_MS = 60 * 60 * 1000;
 
-function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, todayClockIn, todayClockOut, hideCard }: {
+export function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, todayClockIn, todayClockOut, hideCard }: {
   employee: PortalEmployee;
   onPositionUpdate?: (lat: number, lng: number) => void;
   onResult?: (r: ClockInResult) => void;
@@ -1739,6 +1736,7 @@ function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatestClock, 
               <XCircle className="h-5 w-5 text-red-500 shrink-0" />
               <span className="font-medium text-sm text-red-500">{errorMsg}</span>
             </div>
+            {errorCode === 1 && <LocationPermissionHelp />}
             <AnomalyReportButton employee={employee} errorMsg={errorMsg} accuracy={accuracy} context="打卡錯誤" />
             <button
               className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all mt-2"
@@ -5475,22 +5473,6 @@ function EmployeeSopSection() {
   );
 }
 
-function NotLineBrowser() {
-  return (
-    <div className="min-h-screen bg-juns-surface flex flex-col items-center justify-center p-8 text-center">
-      <img src={junsLogo} alt="駿斯" className="h-14 w-14 rounded-xl mb-6 object-cover" />
-      <h1 className="text-lg font-bold text-juns-navy mb-3">請使用 LINE 開啟</h1>
-      <p className="text-sm text-slate-500 leading-relaxed mb-6">
-        員工入口網站僅限在<span className="font-semibold text-juns-navy"> LINE 內建瀏覽器 </span>中使用，
-        以確保帳號安全與正常功能。
-      </p>
-      <p className="text-xs text-slate-400 leading-relaxed">
-        請在 LINE 中點選官方帳號連結，或由 LINE 選單進入此頁面。
-      </p>
-    </div>
-  );
-}
-
 function PortalPageInner() {
   const [employee, setEmployee] = useState<PortalEmployee | null>(() => {
     try {
@@ -5560,17 +5542,6 @@ function PortalPageInner() {
   return <PortalMain employee={employee} />;
 }
 
-/** Returns true only when running inside LINE's in-app browser (mobile or desktop). */
-function isLineInAppBrowser(): boolean {
-  const ua = navigator.userAgent;
-  // LINE's in-app browser always includes "Line/" in the UA string.
-  // LIFF SDK also sets this flag when the page is opened inside LINE.
-  return /Line\//i.test(ua);
-}
-
 export default function PortalPage() {
-  if (!isLineInAppBrowser() && !import.meta.env.DEV) {
-    return <NotLineBrowser />;
-  }
   return <PortalPageInner />;
 }
