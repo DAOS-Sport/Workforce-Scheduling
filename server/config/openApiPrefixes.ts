@@ -7,7 +7,6 @@
  *  - /api/line/         → LINE webhook（X-Line-Signature 驗證）
  *  - /api/ragic/webhook/ → Ragic webhook（RAGIC_WEBHOOK_SECRET 驗證）
  *  - /api/internal/     → server-to-server（X-Internal-Token 驗證）
- *  - /api/anomaly-report 員工通報入口（公開表單）。這個前綴沒有結尾斜線，管理用的 /api/anomaly-reports/* 也會一起被放行
  *  - /api/announcements/active → 員工 portal 顯示公告
  *  - /api/schedule/cram-courses/ → Google 試算表匯入補習班課程
  *      （呼叫端是試算表的 Apps Script，沒有瀏覽器 session；
@@ -24,7 +23,6 @@ export const OPEN_API_PREFIXES = [
   "/api/line/",
   "/api/ragic/webhook/",
   "/api/internal/",
-  "/api/anomaly-report",
   "/api/announcements/active",
   // 健康檢查 API 自己驗 HEALTH_TOKEN（見 modules/health/health.routes.ts）。
   "/api/health/",
@@ -32,3 +30,9 @@ export const OPEN_API_PREFIXES = [
   // enrollment-counts 之類要後台登入的端點。
   "/api/schedule/cram-courses/",
 ] as const;
+
+/**
+ * 只放行完全相同的路徑（不分大小寫）。員工通報表單 POST /api/anomaly-report 要公開，
+ * 但不能用前綴放行：/api/anomaly-reports/* 是管理用 API，內含員工姓名與 LINE 代號。
+ */
+export const OPEN_API_PATHS = ["/api/anomaly-report"] as const;

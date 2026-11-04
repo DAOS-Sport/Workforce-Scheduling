@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { OPEN_API_PREFIXES } from "../../config/openApiPrefixes";
+import { OPEN_API_PATHS, OPEN_API_PREFIXES } from "../../config/openApiPrefixes";
 
 /**
  * Single source of truth for the admin-cookie guard used across every
@@ -26,5 +26,6 @@ export function gateAdminApi(req: Request, res: Response, next: NextFunction) {
   const path = req.path.toLowerCase();
   if (!path.startsWith("/api/")) return next();
   if (OPEN_API_PREFIXES.some((p) => path.startsWith(p))) return next();
+  if (OPEN_API_PATHS.some((p) => path === p)) return next();
   return requireAdmin(req, res, next);
 }
