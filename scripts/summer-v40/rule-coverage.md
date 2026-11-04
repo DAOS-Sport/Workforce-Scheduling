@@ -2,10 +2,19 @@
 
 由 `node scripts/summer-v40/check-rule-coverage.cjs` 產生，不要手改。資料來源是 `rule-coverage.cjs` 與 `client/src/lib/summer/__tests__` 的測試名稱。
 
-規則 242 條：已實作 176、刪除 25、待後續批 41。與 v40 不同的測試 16 個，涵蓋 S23 R010、R020、R057、R062、R066、R074、R129、R131、R134、R163、R168、R190。
+規則 242 條：已實作 187、刪除 25、待後續批 30。與 v40 不同的測試 25 個，涵蓋 S23 R010、R020、R057、R062、R066、R074、R129、R131、R134、R163、R168、R190。
 
 ## 與 v40 不同的行為
 
+- 與 v40 不同：劇本 1，舊請求回來不清掉在途期間新修改的未存旗標，也不顯示「已儲存」（R096, R099, R101）（draft-store.test.ts）
+- 與 v40 不同：劇本 2，A 在途時改 B，A 回來立刻補送 B，重整後 B 仍在（R096, R099）（draft-store.test.ts）
+- 與 v40 不同：劇本 3，輪詢回來只換 base，本機未存的 Z 保留並與遠端 X 一起存回（R102, R008）（draft-store.test.ts）
+- 與 v40 不同：劇本 4，切週時舊週帶著自己的 weekNo 送完，新週不被寫入（R116）（draft-store.test.ts）
+- 與 v40 不同：409 停下來提示重新載入，不再無限重試（R100, E05）（draft-store.test.ts）
+- 與 v40 不同：套用遠端只換 base，本機未存的格疊在上面（R102）（draft-store.test.ts）
+- 與 v40 不同：伺服器回 409 後不自動重試，重新載入時把本機修改疊上遠端再送（E05, R100）（draft-store.test.ts）
+- 與 v40 不同：切週時舊週的未存修改立刻帶著自己的週次送出，切回來資料都在（R116）（draft-store.test.ts）
+- 與 v40 不同：存檔在途時按發布，等存檔回來再發布，不誤報儲存失敗（R110）（draft-store.test.ts）
 - 與 v40 不同：已排判斷只認完整姓名，「陳美玲」不會擋住排「陳美」（R020）（edits.golden.test.ts）
 - 與 v40 不同：缺口排班的顯示名依 lineBound 加上（未綁定）（R010, R021）（edits.golden.test.ts）
 - 與 v40 不同：未綁 LINE 但留有 lineDisplayName 的員工會加上（未綁定）（R010, R014）（edits.golden.test.ts）
@@ -30,11 +39,11 @@
 | R001 | 已實作 | `WEEKS`、`weekByNo` | b1-gaps.test.ts、units.golden.test.ts |
 | R002 | 已實作 | `weekOptions`、`weekPrefix` | rules.test.ts |
 | R003 | 已實作 | `hourMinute` | rules.test.ts |
-| R004 | 待後續批 B2 | 寫格與 dirty 屬儲存佇列；localStorage 鏡像依 S13 刪除 | |
-| R005 | 已實作 | `unwrapApiPayload` | units.golden.test.ts |
+| R004 | 已實作 | `applyEdit`、`hasUnsaved` | draft-store.test.ts |
+| R005 | 已實作 | `unwrapApiPayload` | api.test.ts、units.golden.test.ts |
 | R006 | 已實作 | `extractApiItems` | units.golden.test.ts |
 | R007 | 已實作 | `extractApiMeta` | units.golden.test.ts |
-| R008 | 待後續批 B2 | 重繪安全判斷屬儲存佇列與輪詢 | |
+| R008 | 已實作 | `remoteDiscardReason` | draft-store.test.ts |
 | R009 | 已實作 | `normalizeEmployee` | units.golden.test.ts |
 | R010 | 已實作 | `isLineBound`、`displayNameWithLineStatus` | edits.golden.test.ts、units.golden.test.ts |
 | R011 | 已實作 | `displayNameWithLineStatus` | units.golden.test.ts |
@@ -122,27 +131,27 @@
 | R093 | 刪除 | S03：LINE 推播檢查刪除 | |
 | R094 | 已實作 | `validateWeek` | validate.golden.test.ts |
 | R095 | 刪除 | S02：模式切換與「只看問題」刪除，遞迴不存在 | |
-| R096 | 待後續批 B2 | 存檔流程 | |
-| R097 | 已實作 | `blocksEmptySave` | rules.test.ts |
+| R096 | 已實作 | `beginSave`、`viewDraft`、`payloadFromSnapshot` | draft-store.test.ts |
+| R097 | 已實作 | `blocksEmptySave` | draft-store.test.ts、rules.test.ts |
 | R098 | 已實作 | `rawEntryHasScheduleValue` | units.golden.test.ts |
-| R099 | 待後續批 B2 | 存檔成功處理 | |
-| R100 | 待後續批 B2 | 失敗退避 | |
-| R101 | 待後續批 B2 | 自動存檔 debounce | |
-| R102 | 待後續批 B2 | 輪詢 | |
-| R103 | 待後續批 B2 | 輸入綁定改由 React 受控元件處理 | |
-| R104 | 已實作 | `rawEntriesFromDraft`、`buildSavePayload` | b1-gaps.test.ts、payload.golden.test.ts |
+| R099 | 已實作 | `saveSucceeded`、`saveStatus` | api.test.ts、draft-store.test.ts |
+| R100 | 已實作 | `saveFailed`、`nextRetryDelay` | draft-store.test.ts |
+| R101 | 已實作 | `AUTO_SAVE_DELAY_MS`、`createDraftStore` | draft-store.test.ts |
+| R102 | 已實作 | `pollSkipReason`、`remoteDiscardReason`、`applyRemote`、`POLL_INTERVAL_MS` | draft-store.test.ts |
+| R103 | 已實作 | `createDraftStore` | draft-store.test.ts |
+| R104 | 已實作 | `rawEntriesFromDraft`、`buildSavePayload` | b1-gaps.test.ts、draft-store.test.ts、payload.golden.test.ts |
 | R105 | 已實作 | `collectAssignments` | payload.golden.test.ts |
 | R106 | 已實作 | `collectAssignments` | payload.golden.test.ts |
 | R107 | 已實作 | `collectShiftRows` | payload.golden.test.ts |
 | R108 | 已實作 | `notesForShift` | enrollment-failure.test.ts、payload.golden.test.ts、units.golden.test.ts |
 | R109 | 已實作 | `isoDateForWeekDay` | payload.golden.test.ts、units.golden.test.ts |
-| R110 | 待後續批 B2 | 發布前等佇列清空 | |
+| R110 | 已實作 | `publishWhenSaved`、`createDraftStore` | draft-store.test.ts |
 | R111 | 待後續批 B5 | 發布預檢與確認框屬頂列 | |
 | R112 | 刪除 | S04：檢查 API 刪除 | |
-| R113 | 已實作 | `draftFromRawEntries` | b1-gaps.test.ts、rules.test.ts |
+| R113 | 已實作 | `draftFromRawEntries` | b1-gaps.test.ts、draft-store.test.ts、rules.test.ts |
 | R114 | 刪除 | S13：本機遷移刪除 | |
 | R115 | 刪除 | S14：清空按鈕刪除 | |
-| R116 | 待後續批 B2 | 切週 | |
+| R116 | 已實作 | `createDraftStore` | draft-store.test.ts |
 | R117 | 刪除 | S12：管理端問卷刪除 | |
 | R118 | 刪除 | S12：管理端問卷刪除 | |
 | R119 | 刪除 | S12：管理端問卷刪除 | |
@@ -245,7 +254,7 @@
 | R216 | 待後續批 B3 | 視覺 | |
 | R217 | 待後續批 B3 | CSS 缺陷在畫面批修正（S23） | |
 | R218 | 待後續批 B3 | 隱藏區塊依 S01-S05 處理 | |
-| R219 | 待後續批 B2 | 焦點判斷屬輪詢 | |
+| R219 | 已實作 | `pollSkipReason` | draft-store.test.ts |
 | R220 | 已實作 | `weekOptions` | units.golden.test.ts |
 | R221 | 已實作 | `courseCellKey`、`manualCellKey`、`dutyGridCellKey`、`dutyGridRowsKey`、`availabilityKey`、`overrideKey`、`renderedCellKeys` | b1-gaps.test.ts、course-rows.golden.test.ts |
 | R222 | 已實作 | `buildWeekModel` | course-rows.golden.test.ts、rules.test.ts |
