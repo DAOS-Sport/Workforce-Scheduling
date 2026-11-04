@@ -565,14 +565,19 @@ describe('leaving the page (S24)', () => {
     const { store, at } = await setup();
     const target = new EventTarget();
     const unbind = bindBeforeUnload(store, target);
+    let lastReturnValue: unknown;
     const fire = () => {
+      // A browser's BeforeUnloadEvent has a writable returnValue; a plain Event's is a read-only getter.
       const ev = new Event('beforeunload', { cancelable: true }) as Event & { returnValue: unknown };
+      Object.defineProperty(ev, 'returnValue', { value: undefined, writable: true, configurable: true });
       target.dispatchEvent(ev);
+      lastReturnValue = ev.returnValue;
       return ev.defaultPrevented;
     };
     expect(fire()).toBe(false);
     store.edit(1, Y, 'A');
     expect(fire()).toBe(true);
+    expect(lastReturnValue).toBe('');
     await at(1500);
     expect(fire()).toBe(false);
     unbind();
