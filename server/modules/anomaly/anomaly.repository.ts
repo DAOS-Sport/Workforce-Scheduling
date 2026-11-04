@@ -1,10 +1,14 @@
 import { db } from "../../db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql, getTableColumns } from "drizzle-orm";
 import {
   anomalyReports,
   type AnomalyReport,
   type InsertAnomalyReport,
 } from "@shared/schema";
+
+export type AnomalyReportListItem = Omit<AnomalyReport, "imageUrls"> & { imageCount: number };
+
+const { imageUrls: _imageUrls, ...listColumns } = getTableColumns(anomalyReports);
 
 export const anomalyRepository = {
   async createAnomalyReport(data: InsertAnomalyReport): Promise<AnomalyReport> {
@@ -12,8 +16,15 @@ export const anomalyRepository = {
     return record;
   },
 
-  async getAnomalyReports(): Promise<AnomalyReport[]> {
-    return db.select().from(anomalyReports).orderBy(desc(anomalyReports.createdAt));
+  /** image_urls holds base64 data URLs (tens of MB across all rows), so the list only carries a count. */
+  async getAnomalyReports(): Promise<AnomalyReportListItem[]> {
+    return db
+      .select({
+        ...listColumns,
+        imageCount: sql<number>`coalesce(cardinality(${anomalyReports.imageUrls}), 0)`.mapWith(Number),
+      })
+      .from(anomalyReports)
+      .orderBy(desc(anomalyReports.createdAt));
   },
 
   async getAnomalyReport(id: number): Promise<AnomalyReport | undefined> {

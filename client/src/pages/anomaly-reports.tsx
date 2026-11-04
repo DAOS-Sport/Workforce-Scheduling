@@ -56,7 +56,7 @@ interface AnomalyReport {
   failReason: string | null;
   errorMsg: string | null;
   userNote: string | null;
-  imageUrls: string[] | null;
+  imageCount: number;
   reportText: string | null;
   resolution: string | null;
   resolvedNote: string | null;
@@ -114,7 +114,7 @@ function KpiCard({ title, value, icon: Icon, color }: { title: string; value: st
   );
 }
 
-function AnomalyCard({
+export function AnomalyCard({
   report,
   isSelected,
   onSelect,
@@ -144,7 +144,14 @@ function AnomalyCard({
 
   const isResolved = report.resolution === "resolved";
   const isFail = report.clockStatus === "fail";
-  const hasImages = report.imageUrls && report.imageUrls.length > 0;
+  const hasImages = report.imageCount > 0;
+
+  const imagesQuery = useQuery<{ imageUrls: string[] | null }>({
+    queryKey: ["anomaly-report-images", report.id],
+    queryFn: async () => (await apiRequest("GET", `/api/anomaly-reports/${report.id}`)).json(),
+    enabled: expanded && hasImages,
+  });
+  const imageUrls = imagesQuery.data?.imageUrls ?? [];
 
   return (
     <>
@@ -215,8 +222,8 @@ function AnomalyCard({
                 <span className="text-red-500 dark:text-red-400">{report.failReason}</span>
               )}
               {hasImages && (
-                <span className="flex items-center gap-0.5">
-                  <ImageIcon className="h-3 w-3" /> {report.imageUrls!.length}
+                <span className="flex items-center gap-0.5" data-testid={`text-image-count-${report.id}`}>
+                  <ImageIcon className="h-3 w-3" /> {report.imageCount}
                 </span>
               )}
             </div>
@@ -290,8 +297,14 @@ function AnomalyCard({
               {hasImages && (
                 <div>
                   <p className="text-[11px] text-muted-foreground mb-1.5 font-medium">附件圖片</p>
+                  {imagesQuery.isPending && (
+                    <p className="text-xs text-muted-foreground" data-testid={`text-images-loading-${report.id}`}>圖片載入中…</p>
+                  )}
+                  {imagesQuery.isError && (
+                    <p className="text-xs text-red-500" data-testid={`text-images-error-${report.id}`}>圖片載入失敗，請重新展開再試</p>
+                  )}
                   <div className="flex flex-wrap gap-2">
-                    {report.imageUrls!.map((url, i) => {
+                    {imageUrls.map((url, i) => {
                       const src = getImageSrc(url);
                       return (
                         <div

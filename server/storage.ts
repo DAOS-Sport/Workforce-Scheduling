@@ -54,7 +54,7 @@ import { guidelineRepository } from "./modules/guideline/guideline.repository";
 import { clockRepository } from "./modules/clock/clock.repository";
 import { dispatchRepository } from "./modules/dispatch/dispatch.repository";
 import { overtimeRepository } from "./modules/overtime/overtime.repository";
-import { anomalyRepository } from "./modules/anomaly/anomaly.repository";
+import { anomalyRepository, type AnomalyReportListItem } from "./modules/anomaly/anomaly.repository";
 import { notificationRepository } from "./modules/notification/notification.repository";
 import { systemRepository } from "./modules/system/system.repository";
 import { leaveRepository } from "./modules/leave/leave.repository";
@@ -166,7 +166,7 @@ export interface IStorage {
   getApprovedOvertimeByDateRange(startDate: string, endDate: string): Promise<OvertimeRequest[]>;
 
   createAnomalyReport(data: InsertAnomalyReport): Promise<AnomalyReport>;
-  getAnomalyReports(): Promise<AnomalyReport[]>;
+  getAnomalyReports(): Promise<AnomalyReportListItem[]>;
   getAnomalyReport(id: number): Promise<AnomalyReport | undefined>;
   updateAnomalyResolution(id: number, resolution: string, resolvedNote?: string): Promise<AnomalyReport | undefined>;
   deleteAnomalyReport(id: number): Promise<void>;
@@ -582,7 +582,7 @@ export class DatabaseStorage implements IStorage {
     return anomalyRepository.createAnomalyReport(data);
   }
 
-  async getAnomalyReports(): Promise<AnomalyReport[]> {
+  async getAnomalyReports(): Promise<AnomalyReportListItem[]> {
     return anomalyRepository.getAnomalyReports();
   }
 
