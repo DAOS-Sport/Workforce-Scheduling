@@ -29,6 +29,6 @@ export function parseFacilityKey(req: Request, res: Response, required: boolean)
 
 export function sendServiceError(res: Response, defaultCode: string, err: any) {
   const status = err?.status ?? 500;
-  const code = err?.code ?? defaultCode;
+  const code = err?.extra?.code ?? err?.code ?? defaultCode;
   res.status(status).json({ code, message: err?.message || String(err) });
 }

@@ -1,7 +1,8 @@
-import { db } from "./db";
-import { regions, venues, employees } from "@shared/schema";
-import { REGIONS_DATA } from "@shared/schema";
+import { db } from "../infra/db";
+import { regions, venues } from "@shared/schema";
+import { REGIONS_DATA, type Region } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { runOneTimeDataMigrations } from "./dataMigrations";
 
 const VENUE_FULL_DATA = [
   { name: "新北高中", shortName: "新北高中", regionCode: "A", address: "新北市三重區三信路1號", lat: 25.08725005030422, lng: 121.49125601819283, taxId: "85300099", operationType: "OT" },
@@ -34,8 +35,14 @@ const VENUE_FULL_DATA = [
   { name: "行銷事業處", shortName: "行銷事業處", regionCode: "D", address: "新北市永和區秀朗路2段148巷5弄13號4樓", lat: 25.0082, lng: 121.5133, taxId: "66601546", operationType: "內勤單位", isInternal: true },
 ];
 
+/** Fill in what is missing and start a new database; never changes a row an administrator may have edited. */
 export async function seedDatabase() {
   const existingRegions = await db.select().from(regions);
+  await seedRegionsAndVenues(existingRegions);
+  await runOneTimeDataMigrations({ freshDatabase: existingRegions.length === 0 });
+}
+
+async function seedRegionsAndVenues(existingRegions: Region[]) {
 
   if (existingRegions.length === 0) {
     console.log("Seeding database (fresh)...");
@@ -93,9 +100,7 @@ export async function seedDatabase() {
       if (!existing.taxId && v.taxId) updates.taxId = v.taxId;
       if (!existing.operationType) updates.operationType = v.operationType;
       if (!existing.address && v.address) updates.address = v.address;
-      if (v.lat && existing.latitude !== v.lat) updates.latitude = v.lat;
-      if (v.lng && existing.longitude !== v.lng) updates.longitude = v.lng;
-      updates.radius = 200;
+      // 座標與半徑只在新增場館時寫入；已存在的場館以後台設定為準，開機不還原（T98）。
       if (v.regionCode === "D" && existing.regionId !== regionId) {
         updates.regionId = regionId;
         updates.isInternal = true;
@@ -126,12 +131,5 @@ export async function seedDatabase() {
     console.log(`  Venues: ${addedCount} added, ${updatedCount} updated`);
   } else {
     console.log("  All venues up to date");
-  }
-
-  const INITIAL_ADMIN_LINE_ID = "U8fd0e4be4e44a1304f9fa2e9855f4559";
-  const [adminEmp] = await db.select().from(employees).where(eq(employees.lineId, INITIAL_ADMIN_LINE_ID));
-  if (adminEmp && !adminEmp.isAdmin) {
-    await db.update(employees).set({ isAdmin: true }).where(eq(employees.id, adminEmp.id));
-    console.log(`  Set employee ID=${adminEmp.id} as initial admin`);
   }
 }

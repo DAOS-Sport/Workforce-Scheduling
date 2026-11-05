@@ -8,7 +8,9 @@ import type { IntegrationState, JobSchedule, JobState, Level, Pipeline } from ".
 
 type Base = Pick<Pipeline, "id" | "name"> & { source?: string | null };
 
-function pipeline(base: Base, level: Level, reason: string, state?: { lastSuccessAt?: string; lastFailureAt?: string }): Pipeline {
+function pipeline(base: Base, level: Level, reason: string, state?: { lastSuccessAt?: string; lastFailureAt?: string; recoveredAt?: string }): Pipeline {
+  // 恢復時間只對最近一次失敗有意義：之後又失敗了，舊的恢復時間就不再顯示。
+  const recovered = state?.recoveredAt && state.lastFailureAt && Date.parse(state.recoveredAt) > Date.parse(state.lastFailureAt) ? { recoveredAt: state.recoveredAt } : {};
   return {
     id: base.id,
     name: base.name,
@@ -16,6 +18,7 @@ function pipeline(base: Base, level: Level, reason: string, state?: { lastSucces
     reason,
     lastSuccessAt: state?.lastSuccessAt ?? null,
     lastFailureAt: state?.lastFailureAt ?? null,
+    ...recovered,
     source: base.source ?? null,
   };
 }
@@ -87,6 +90,16 @@ export function evaluateSyncJob(input: Base & { state?: JobState; now: Date }): 
   if (failure > success) return pipeline(input, "yellow", `最近一次失敗（${at(state.lastFailureAt!)}）：${state.lastError ?? "未知錯誤"}；26 小時內有成功`, state);
   const errors = Number(state.lastSummary?.errors ?? 0);
   if (errors > 0) return pipeline(input, "yellow", `最近一次同步成功，但有 ${errors} 筆錯誤`, state);
+  return pipeline(input, "green", `最近一次成功 ${at(state.lastSuccessAt!)}`, state);
+}
+
+/** 只靠按鈕觸發的工作：沒人按就沒有「該跑沒跑」，所以沒紀錄、很久沒跑都是綠；最近一次失敗才黃。 */
+export function evaluateManualJob(input: Base & { state?: JobState }): Pipeline {
+  const { state } = input;
+  if (!state?.lastStartedAt) return pipeline(input, "green", "手動觸發的工作，還沒執行過", state);
+  const success = ms(state.lastSuccessAt);
+  const failure = ms(state.lastFailureAt);
+  if (failure > (success || 0)) return pipeline(input, "yellow", `最近一次失敗（${at(state.lastFailureAt!)}）：${state.lastError ?? "未知錯誤"}`, state);
   return pipeline(input, "green", `最近一次成功 ${at(state.lastSuccessAt!)}`, state);
 }
 

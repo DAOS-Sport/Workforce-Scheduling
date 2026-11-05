@@ -1,7 +1,11 @@
 import express, { type Express } from "express";
+import type { Server } from "http";
 import { log } from "../shared/log";
 import { installSession, ensureSessionTable } from "./session";
-import { globalErrorHandler } from "../shared/http/errorHandler";
+import { globalErrorHandler, requestContext } from "../shared/http/errorHandler";
+import { runWithRequestId } from "../shared/http/requestId";
+import { buildHttpServer } from "./http";
+import { registerRoutes } from "../routes";
 
 declare module "http" {
   interface IncomingMessage {
@@ -12,6 +16,7 @@ declare module "http" {
 /**
  * Build a fully-configured Express application:
  *   - trust proxy for Replit's TLS terminator
+ *   - request id on every request and the one gate every error answer leaves through
  *   - session table + session middleware
  *   - JSON body parser (with rawBody captured for LINE signature verify)
  *   - urlencoded body parser
@@ -23,6 +28,7 @@ declare module "http" {
 export async function createApp(): Promise<Express> {
   const app = express();
   app.set("trust proxy", 1);
+  app.use(requestContext);
 
   // Session table must exist before the session middleware tries to read.
   try {
@@ -50,7 +56,7 @@ export async function createApp(): Promise<Express> {
 
     res.on("finish", () => {
       if (path.startsWith("/api")) {
-        log(`${req.method} ${path} ${res.statusCode} in ${Date.now() - start}ms`);
+        runWithRequestId(res.locals.requestId, () => log(`${req.method} ${path} ${res.statusCode} in ${Date.now() - start}ms`));
       }
     });
 
@@ -66,4 +72,16 @@ export async function createApp(): Promise<Express> {
  */
 export function installErrorHandler(app: Express): void {
   app.use(globalErrorHandler);
+}
+
+/**
+ * The app as the process serves it, minus the migrations, seed and client assets that
+ * bootstrap() adds around it. Integration tests build this same app.
+ */
+export async function buildApp(): Promise<{ app: Express; httpServer: Server }> {
+  const app = await createApp();
+  const httpServer = buildHttpServer(app);
+  await registerRoutes(httpServer, app);
+  installErrorHandler(app);
+  return { app, httpServer };
 }

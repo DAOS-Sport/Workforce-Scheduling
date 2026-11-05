@@ -1,35 +1,22 @@
 /**
  * Announcement service plus the cross-domain pending-counts roll-up
  * that powers the admin dashboard badge.
- *
- * The pending-counts query is intentionally flat on purpose — duplicating
- * the four aggregations here is faster than asking each domain service
- * for its pending count over a separate round trip.
  */
-import { db } from "../../db";
-import { eq, count } from "drizzle-orm";
-import {
-  announcements,
-  insertAnnouncementSchema,
-  clockAmendments,
-  overtimeRequests,
-  leaveRequests,
-  anomalyReports,
-  type Announcement,
-} from "@shared/schema";
+import { insertAnnouncementSchema, type Announcement } from "@shared/schema";
+import { announcementRepository } from "./announcement.repository";
+import { clockService } from "../clock/clock.service";
+import { overtimeService } from "../overtime/overtime.service";
+import { leaveService } from "../leave/leave.service";
+import { anomalyService } from "../anomaly/anomaly.service";
 
 export const announcementService = {
   async pendingCounts() {
-    const [caRows, otRows, lrRows, arRows] = await Promise.all([
-      db.select({ cnt: count() }).from(clockAmendments).where(eq(clockAmendments.status, "pending")),
-      db.select({ cnt: count() }).from(overtimeRequests).where(eq(overtimeRequests.status, "pending")),
-      db.select({ cnt: count() }).from(leaveRequests).where(eq(leaveRequests.status, "pending")),
-      db.select({ cnt: count() }).from(anomalyReports).where(eq(anomalyReports.resolution, "pending")),
+    const [clockAmt, overtimeAmt, leaveAmt, anomalyAmt] = await Promise.all([
+      clockService.countPendingAmendments(),
+      overtimeService.countPendingRequests(),
+      leaveService.countPendingRequests(),
+      anomalyService.countPendingReports(),
     ]);
-    const clockAmt = Number(caRows[0]?.cnt ?? 0);
-    const overtimeAmt = Number(otRows[0]?.cnt ?? 0);
-    const leaveAmt = Number(lrRows[0]?.cnt ?? 0);
-    const anomalyAmt = Number(arRows[0]?.cnt ?? 0);
     return {
       clockAmendments: clockAmt,
       overtimeRequests: overtimeAmt,
@@ -41,19 +28,18 @@ export const announcementService = {
 
   async create(payload: unknown): Promise<Announcement> {
     const parsed = insertAnnouncementSchema.parse(payload);
-    const [ann] = await db.insert(announcements).values(parsed).returning();
-    return ann;
+    return announcementRepository.create(parsed);
   },
 
-  list: () => db.select().from(announcements).orderBy(announcements.publishedAt),
+  list: () => announcementRepository.list(),
 
   async remove(id: number) {
-    await db.delete(announcements).where(eq(announcements.id, id));
+    await announcementRepository.remove(id);
   },
 
   async listActive(regionCode?: string) {
     const now = new Date();
-    const all = await db.select().from(announcements).orderBy(announcements.publishedAt);
+    const all = await announcementRepository.list();
     const active = all.filter((a) => !a.expiresAt || new Date(a.expiresAt) > now);
     return regionCode
       ? active.filter((a) => !a.targetRegion || a.targetRegion === regionCode)

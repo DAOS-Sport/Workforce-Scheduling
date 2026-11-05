@@ -1,11 +1,11 @@
-import { storage } from "../../storage";
 import { httpError } from "../../shared/http/response";
 import { summerAvailabilityRepository } from "./summerAvailability.repository";
 import { summerScheduleService } from "./summerSchedule.service";
+import { employeeService } from "../employee/employee.service";
 
 async function employeeForLine(lineId: string) {
   if (!lineId) throw httpError(401, "需要 LINE 身份");
-  const employee = await storage.getEmployeeByLineId(lineId);
+  const employee = await employeeService.getEmployeeByLineId(lineId);
   if (!employee) throw httpError(404, "找不到員工資料");
   return employee;
 }

@@ -16,7 +16,7 @@ export function mountNotificationRoutes(_httpServer: Server, app: Express): void
     try {
       created(res, await notificationService.create(req.body));
     } catch (err: any) {
-      fail(res, err.message === "缺少 email" ? 400 : 500, err.message);
+      fail(res, err.status ?? (err.message === "缺少 email" ? 400 : 500), err.message);
     }
   });
 
@@ -26,7 +26,8 @@ export function mountNotificationRoutes(_httpServer: Server, app: Express): void
       if (!record) return notFound(res, "找不到此收件者");
       ok(res, record);
     } catch (err: any) {
-      fail(res, 500, err.message);
+      if (err.name === "ZodError") return badRequest(res, "資料格式錯誤");
+      fail(res, err.status ?? 500, err.message);
     }
   });
 

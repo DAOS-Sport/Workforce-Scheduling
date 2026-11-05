@@ -2,26 +2,74 @@ import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
 
-// 路由只負責讀請求、呼叫 service、寫回應；查資料庫的流程放在 service，才能單獨測試、換掉資料來源也不用改路由（P2-2D）。
-const MODULES_DIR = path.resolve(__dirname);
-const DATA_ACCESS_IMPORT = /from\s+["']([^"']*\/(db|storage)|[^"']*\.repository)["']/;
-// MCP 是給內部工具查資料的端點，每個工具本身就是一次資料查詢；它的驗證方式另案重做（安全問題 S5）。
-const ALLOWED = new Set(["mcp/mcp.routes.ts"]);
+// 分層規則（目標架構.md）：route 只讀請求、呼叫 service、寫回應；資料存取只在 repository；
+// 跨模組讀寫走對方 service；交易要能從 service 一路傳到 repository，所以不准有人繞過去直接用 db。
+const ROOT = path.resolve(__dirname, "../..");
 
-function routeFiles(dir: string): string[] {
+/** Files that still break a rule, each with the batch that removes the exception. */
+const DB_ALLOWED: Record<string, string> = {
+  "server/modules/health/health.service.ts": "U7：健康報告重做時把跨表統計移進 shift/clock repository",
+  "server/modules/internal/internal.service.ts": "B4：internal／MCP 入口（S5）整理時補 dispatch、shift 稽核的 repository 讀取",
+  "server/modules/mcp/mcp.routes.ts": "B4：MCP 的任意 SQL 工具隨 S5 關閉或移到 infra",
+  "server/modules/summerSchedule/summerSchedule.service.ts": "B5：暑假發布包交易＋週次鎖時補 summerSchedule repository",
+};
+const CROSS_REPOSITORY_ALLOWED: Record<string, string> = {
+  "server/shared/health/healthState.ts": "B6：健康紀錄改單句 jsonb upsert 時移進 system 模組（adapters 經 system.service 會形成循環）",
+};
+
+function sourceFiles(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return routeFiles(full);
-    return /\.routes\.ts$/.test(entry.name) ? [full] : [];
+    if (entry.isDirectory()) return entry.name === "node_modules" ? [] : sourceFiles(full);
+    return /\.tsx?$/.test(entry.name) ? [full] : [];
   });
 }
 
+const rel = (file: string) => path.relative(ROOT, file).split(path.sep).join("/");
+const isTest = (file: string) => /\.(test|itest)\.tsx?$/.test(file) || file.startsWith("server/test/");
+const moduleOf = (file: string) => file.match(/^server\/modules\/(\w+)\//)?.[1] ?? null;
+
+/** Every relative import of a file, resolved to a repository-root path without extension or /index. */
+function importsOf(file: string): string[] {
+  const src = fs.readFileSync(path.join(ROOT, file), "utf8");
+  const specs = [...src.matchAll(/(?:from\s+|import\s*\(\s*|import\s+)["'](\.[^"']*)["']/g)].map((m) => m[1]);
+  return specs.map((spec) => rel(path.resolve(path.join(ROOT, path.dirname(file)), spec)).replace(/\.tsx?$/, "").replace(/\/index$/, ""));
+}
+
+const files = [...sourceFiles(path.join(ROOT, "server")), ...sourceFiles(path.join(ROOT, "scripts"))].map(rel);
+const serverCode = files.filter((f) => f.startsWith("server/") && !isTest(f));
+
+const isDb = (target: string) => target === "server/infra/db";
+const repositoryOwner = (target: string) => target.match(/^server\/modules\/(\w+)\/[\w.]+\.repository$/)?.[1] ?? null;
+const isRoute = (file: string) => /\.routes\.ts$/.test(file) || file === "server/routes.ts";
+const mayUseDb = (file: string) =>
+  /\.repository\.ts$/.test(file) || file.startsWith("server/infra/") || file.startsWith("server/bootstrap/");
+
+const violations = (candidates: string[], breaks: (file: string, target: string) => boolean) =>
+  candidates.filter((file) => importsOf(file).some((target) => breaks(file, target)));
+
 describe("module layering", () => {
-  it("route files do not import the database, storage or a repository", () => {
-    const offenders = routeFiles(MODULES_DIR)
-      .map((file) => path.relative(MODULES_DIR, file).split(path.sep).join("/"))
-      .filter((rel) => !ALLOWED.has(rel))
-      .filter((rel) => DATA_ACCESS_IMPORT.test(fs.readFileSync(path.join(MODULES_DIR, rel), "utf8")));
-    expect(offenders).toEqual([]);
+  it("nothing imports the removed storage façade", () => {
+    expect(violations(files, (_f, target) => target === "server/storage")).toEqual([]);
+  });
+
+  it("route files do not import the database or a repository", () => {
+    const offenders = violations(serverCode.filter(isRoute), (_f, target) => isDb(target) || repositoryOwner(target) !== null);
+    expect(offenders.filter((f) => !(f in DB_ALLOWED))).toEqual([]);
+  });
+
+  it("a module imports only its own repositories; other modules are reached through their service", () => {
+    const offenders = violations(serverCode, (file, target) => {
+      const owner = repositoryOwner(target);
+      return owner !== null && owner !== moduleOf(file);
+    });
+    expect(offenders.filter((f) => !(f in CROSS_REPOSITORY_ALLOWED))).toEqual([]);
+    expect(Object.keys(CROSS_REPOSITORY_ALLOWED).filter((f) => !offenders.includes(f))).toEqual([]);
+  });
+
+  it("only repositories, infra and bootstrap import db", () => {
+    const offenders = violations(serverCode.filter((f) => !mayUseDb(f)), (_f, target) => isDb(target));
+    expect(offenders.filter((f) => !(f in DB_ALLOWED))).toEqual([]);
+    expect(Object.keys(DB_ALLOWED).filter((f) => !offenders.includes(f))).toEqual([]);
   });
 });

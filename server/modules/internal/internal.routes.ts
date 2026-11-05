@@ -136,8 +136,8 @@ export function registerInternalApi(app: Express) {
 
   app.post("/api/internal/trigger-weekly-schedule", async (_req, res) => {
     try {
-      const result = await syncService.weeklySchedule(true);
-      res.json({ ok: true, ...result });
+      const result = await syncService.weeklySchedule();
+      res.status("busy" in result ? 202 : 200).json({ ok: true, ...result });
     } catch (err: any) {
       sendServiceError(res, "TRIGGER_WEEKLY_SCHEDULE_FAILED", err);
     }

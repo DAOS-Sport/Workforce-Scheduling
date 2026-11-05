@@ -42,7 +42,7 @@ function healthySignals(): HealthSignals {
     build: "test",
     schedulerActive: true,
     flags: Object.fromEntries(SCHEDULED_JOBS.map((j) => [j.flag, true])),
-    jobs: Object.fromEntries(["ragic.sync", "ragic.webhook", ...SCHEDULED_JOBS.map((j) => j.id)].map((id) => [id, done])),
+    jobs: Object.fromEntries(["ragic.sync", "ragic.webhook", "ragic.venue-sync", ...SCHEDULED_JOBS.map((j) => j.id)].map((id) => [id, done])),
     integrations: Object.fromEntries(INTEGRATIONS.map((i) => [i.key, { lastSuccessAt: recent, consecutiveFailures: 0 }])) as HealthSignals["integrations"],
     coverage: { startedShifts: 10, coveredShifts: 10, attemptsToday: 10, failuresToday: 0 },
     database: { latencyMs: 12 },
@@ -63,7 +63,15 @@ describe("health-v1 contract", () => {
     expect(contractProblems(report)).toEqual([]);
     expect(report.overall).toBe("green");
     expect(report.pipelines.filter((p) => p.level !== "green").map((p) => `${p.id}: ${p.reason}`)).toEqual([]);
-    expect(report.pipelines).toHaveLength(2 + 1 + SCHEDULED_JOBS.length + INTEGRATIONS.length + 3);
+    expect(report.pipelines).toHaveLength(3 + 1 + SCHEDULED_JOBS.length + INTEGRATIONS.length + 3);
+  });
+
+  it("the manual Ragic venue sync is in the report, and a failed run only turns it yellow", () => {
+    expect(assembleReport(healthySignals()).pipelines.map((p) => p.id)).toContain("ragic.venue-sync");
+    const s = healthySignals();
+    s.jobs["ragic.venue-sync"] = { lastStartedAt: recent, lastStatus: "failed", lastFailureAt: recent, lastError: "HTTP 500" };
+    const venue = assembleReport(s).pipelines.find((p) => p.id === "ragic.venue-sync")!;
+    expect([venue.level, venue.reason.includes("HTTP 500")]).toEqual(["yellow", true]);
   });
 
   it("an expired holiday table turns only that pipeline red", () => {

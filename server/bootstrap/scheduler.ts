@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { syncFromRagic } from "../modules/ragic/ragic.service";
+import { drainRagicEvents, runRagicSync } from "../modules/ragic/ragic.service";
 import {
   sendShiftReminders,
   checkMissingClockIn,
@@ -9,8 +9,13 @@ import {
 } from "../modules/line/linePush.service";
 import { featureFlags } from "../config/featureFlags";
 import { IS_PRODUCTION } from "../config/env";
-import { trackJob } from "../shared/health/healthState";
+import { runJob } from "../shared/health/runJob";
 import { log } from "../shared/log";
+
+/** Another instance, or a manual trigger, is still running this job; this round has nothing to do. */
+function logBusy(job: string): void {
+  log(`${job} 已有另一個執行個體在執行，本輪略過`, "cron");
+}
 
 /**
  * Single, central place that decides whether cron should run AT ALL,
@@ -41,7 +46,9 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行每日 Ragic 員工同步...", "cron");
         try {
-          const syncResult = await trackJob("ragic.sync", "cron", () => syncFromRagic(), (r) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length }));
+          const run = await runRagicSync("cron");
+          if (run.busy) return logBusy("ragic.sync");
+          const syncResult = run.result;
           log(
             `Ragic 同步完成: 新增 ${syncResult.created}, 更新 ${syncResult.updated}, 停用 ${syncResult.deactivated}, 跳過 ${syncResult.skipped}, 錯誤 ${syncResult.errors.length}`,
             "cron",
@@ -56,6 +63,19 @@ export function registerCronJobs(): void {
       { timezone: "Asia/Taipei" },
     );
     log("已排程每日凌晨 3:00 (台灣時間) 自動執行 Ragic 同步", "cron");
+
+    // Every 5 minutes — run the sync that a webhook, or a run that found the lock taken, left waiting.
+    cron.schedule(
+      "*/5 * * * *",
+      async () => {
+        try {
+          await drainRagicEvents();
+        } catch (err: any) {
+          log(`Ragic 補跑失敗: ${err.message}`, "cron");
+        }
+      },
+      { timezone: "Asia/Taipei" },
+    );
   }
 
   // 19:00 daily — push tomorrow's shifts via LINE.
@@ -65,7 +85,9 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行明日班表推撥通知...", "cron");
         try {
-          const result = await trackJob("push.shift-reminders", "cron", () => sendShiftReminders(), (r) => ({ ...r }));
+          const run = await runJob("push.shift-reminders", "cron", () => sendShiftReminders(), (r) => ({ ...r }));
+          if (run.busy) return logBusy("push.shift-reminders");
+          const result = run.value;
           log(
             `班表推撥完成: 發送 ${result.sent}, 跳過 ${result.skipped}, 無LINE ${result.noLineId}`,
             "cron",
@@ -86,7 +108,9 @@ export function registerCronJobs(): void {
       async () => {
         log("開始檢查未打卡員工...", "cron");
         try {
-          const result = await trackJob("push.missing-clock", "cron", () => checkMissingClockIn(), (r) => ({ ...r }));
+          const run = await runJob("push.missing-clock", "cron", () => checkMissingClockIn(), (r) => ({ ...r }));
+          if (run.busy) return logBusy("push.missing-clock");
+          const result = run.value;
           log(
             `未打卡檢查完成: 通知 ${result.notified}, 跳過 ${result.skipped}`,
             "cron",
@@ -107,7 +131,9 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行每週下週班表推播...", "cron");
         try {
-          const result = await trackJob("push.weekly-schedule", "cron", () => sendWeeklySchedulePush(), (r) => ({ ...r }));
+          const run = await runJob("push.weekly-schedule", "cron", () => sendWeeklySchedulePush(), (r) => ({ ...r }));
+          if (run.busy) return logBusy("push.weekly-schedule");
+          const result = run.value;
           log(
             `週班表推播完成: 發送 ${result.sent}, 跳過 ${result.skipped}, 無LINE ${result.noLineId}`,
             "cron",
@@ -128,7 +154,9 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行意願填報未填提醒...", "cron");
         try {
-          const result = await trackJob("push.availability-reminder", "cron", () => sendAvailabilityReminders(), (r) => ({ ...r }));
+          const run = await runJob("push.availability-reminder", "cron", () => sendAvailabilityReminders(), (r) => ({ ...r }));
+          if (run.busy) return logBusy("push.availability-reminder");
+          const result = run.value;
           if (result.windowClosed) {
             log("意願提醒：目前無符合條件的開放視窗，略過", "cron");
           } else {
@@ -153,7 +181,9 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行上週遲到報告推播...", "cron");
         try {
-          const result = await trackJob("report.weekly-late", "cron", () => sendWeeklyLateReport(), (r) => ({ ...r }));
+          const run = await runJob("report.weekly-late", "cron", () => sendWeeklyLateReport(), (r) => ({ ...r }));
+          if (run.busy) return logBusy("report.weekly-late");
+          const result = run.value;
           log(
             `週遲到報告推播完成: 發送 ${result.sent}, 跳過 ${result.skipped}, 無LINE ${result.noLineId}`,
             "cron",

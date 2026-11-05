@@ -11,7 +11,7 @@ function sourceFiles(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) return entry.name === "node_modules" ? [] : sourceFiles(full);
-    return /\.ts$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) ? [full] : [];
+    return /\.ts$/.test(entry.name) && !/\.i?test\.ts$/.test(entry.name) ? [full] : [];
   });
 }
 

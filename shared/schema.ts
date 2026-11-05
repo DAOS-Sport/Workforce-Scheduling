@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, date, time, serial, timestamp, real, unique, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, date, time, serial, timestamp, real, unique, jsonb, primaryKey, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -253,6 +253,71 @@ export const insertClockRecordSchema = createInsertSchema(clockRecords).omit({ i
 export type InsertClockRecord = z.infer<typeof insertClockRecordSchema>;
 export type ClockRecord = typeof clockRecords.$inferSelect;
 
+/**
+ * A request that must take effect once however often it is sent. `scope` names who may reuse a key
+ * (for clock-in, the employee), `key` is the sender's request id, `result` the answer given the first time.
+ */
+export const idempotencyKeys = pgTable("idempotency_keys", {
+  scope: text("scope").notNull(),
+  key: text("key").notNull(),
+  result: jsonb("result"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.scope, t.key] }),
+}));
+
+/** One row per LINE webhook event ever received, so a redelivered event is recognised and skipped. */
+export const lineWebhookEvents = pgTable("line_webhook_events", {
+  eventId: text("event_id").primaryKey(),
+  receivedAt: timestamp("received_at").notNull().defaultNow(),
+  status: text("status").notNull().default("processing"), // processing | done | failed
+  processedAt: timestamp("processed_at"),
+  error: text("error"),
+});
+
+/**
+ * One row per request for a Ragic employee sync that has not been answered by a finished sync yet (and, for a while after,
+ * the record that it was): a webhook delivery, or a cron or manual run that found another sync holding the lock.
+ * `event_id` is the id Ragic sent when it sent one, otherwise a generated id, so unlabeled deliveries each get a row and merge into one sync.
+ */
+export const ragicSyncEvents = pgTable("ragic_sync_events", {
+  eventId: text("event_id").primaryKey(),
+  source: text("source").notNull(), // webhook | cron | manual
+  receivedAt: timestamp("received_at").notNull().defaultNow(),
+  status: text("status").notNull().default("pending"), // pending | processing | done | failed
+  processedAt: timestamp("processed_at"),
+  error: text("error"),
+}, (t) => ({
+  statusIdx: index("ragic_sync_events_status_idx").on(t.status, t.receivedAt),
+}));
+
+/**
+ * The status Ragic last implied for each employee code ('active' or 'inactive'), so a sync can tell a change made in Ragic
+ * from a local edit and apply only the former to employees.status.
+ */
+export const ragicEmployeeStatus = pgTable("ragic_employee_status", {
+  employeeCode: text("employee_code").primaryKey(),
+  status: text("status").notNull(),
+  observedAt: timestamp("observed_at").notNull().defaultNow(),
+});
+
+/**
+ * One row per LINE push that a scheduled job means to make: claimed (`pending`) before the push, then `sent` or `failed`.
+ * A `pending` row left behind is a push that may have gone out, so it is never pushed again.
+ * `ref_id` is '' when the push has no sub-reference (a shift id, a content digest).
+ */
+export const pushDedup = pgTable("push_dedup", {
+  scope: text("scope").notNull(),
+  period: text("period").notNull(),
+  employeeId: integer("employee_id").notNull(),
+  refId: text("ref_id").notNull().default(""),
+  status: text("status").notNull().default("pending"), // pending | sent | failed
+  attempts: integer("attempts").notNull().default(1),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.scope, t.period, t.employeeId, t.refId] }),
+}));
+
 export const clockAmendments = pgTable("clock_amendments", {
   id: serial("id").primaryKey(),
   employeeId: integer("employee_id").notNull(),
@@ -399,6 +464,28 @@ export const systemConfigs = pgTable("system_configs", {
 export const insertSystemConfigSchema = createInsertSchema(systemConfigs).omit({ id: true, updatedAt: true });
 export type InsertSystemConfig = z.infer<typeof insertSystemConfigSchema>;
 export type SystemConfig = typeof systemConfigs.$inferSelect;
+
+/**
+ * One row per server error (a 5xx answer), so a request id quoted by a user leads to what went wrong.
+ * Holds the request line and the error text only, never a request body, header or session value.
+ * Written by the response layer (server/shared/http/errorHandler.ts); read by GET /api/admin/errors.
+ */
+export const appErrors = pgTable("app_errors", {
+  id: serial("id").primaryKey(),
+  requestId: text("request_id").notNull(),
+  method: text("method").notNull(),
+  path: text("path").notNull(),
+  status: integer("status").notNull(),
+  message: text("message").notNull(),
+  stack: text("stack"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  requestIdIdx: index("app_errors_request_id_idx").on(t.requestId),
+  occurredAtIdx: index("app_errors_occurred_at_idx").on(t.occurredAt),
+}));
+
+export type AppErrorRow = typeof appErrors.$inferSelect;
+export type InsertAppError = typeof appErrors.$inferInsert;
 
 export type RegionCode = "D" | "A" | "B" | "C";
 

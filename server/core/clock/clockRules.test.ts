@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  amendedFailReason,
   classifyTiming,
   clockTypeForShift,
   coveredByApprovedOvertime,
@@ -134,5 +135,29 @@ describe("timing", () => {
   it("approved overtime covers until 15 minutes after it ends", () => {
     const ot = [{ status: "approved", startTime: "16:00", endTime: "18:00" }, { status: "pending", startTime: "18:00", endTime: "20:00" }];
     expect([coveredByApprovedOvertime(18 * 60 + 15, ot), coveredByApprovedOvertime(18 * 60 + 16, ot), coveredByApprovedOvertime(19 * 60, ot)]).toEqual([true, false, false]);
+  });
+});
+
+describe("amendedFailReason", () => {
+  const shift = { startTime: "09:00", endTime: "18:00" };
+  const at = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3));
+
+  it("names how late an amended clock-in is, in hours and minutes from 60 minutes on", () => {
+    expect(amendedFailReason("in", at("09:05"), shift)).toBe("遲到 5 分鐘（補正）");
+    expect(amendedFailReason("in", at("10:00"), shift)).toBe("遲到 1 小時 0 分鐘（補正）");
+    expect(amendedFailReason("in", at("10:15"), shift)).toBe("遲到 1 小時 15 分鐘（補正）");
+  });
+
+  it("names how early an amended clock-out is", () => {
+    expect(amendedFailReason("out", at("17:55"), shift)).toBe("早退 5 分鐘（補正）");
+    expect(amendedFailReason("out", at("16:45"), shift)).toBe("早退 1 小時 15 分鐘（補正）");
+  });
+
+  it("says only that it was corrected when the amended time is on time or the shift is unknown", () => {
+    expect(amendedFailReason("in", at("09:00"), shift)).toBe("已補正");
+    expect(amendedFailReason("in", at("08:40"), shift)).toBe("已補正");
+    expect(amendedFailReason("out", at("18:00"), shift)).toBe("已補正");
+    expect(amendedFailReason("out", at("19:30"), shift)).toBe("已補正");
+    expect(amendedFailReason("in", at("10:00"), null)).toBe("已補正");
   });
 });

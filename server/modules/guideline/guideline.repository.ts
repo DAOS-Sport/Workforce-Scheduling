@@ -1,4 +1,5 @@
-import { db } from "../../db";
+import { db } from "../../infra/db";
+import type { Executor } from "../../infra/db/tx";
 import { eq, desc } from "drizzle-orm";
 import {
   guidelines,
@@ -22,49 +23,52 @@ export interface GuidelineAckDetail {
 }
 
 export const guidelineRepository = {
-  async getGuidelines(category?: string): Promise<Guideline[]> {
+  async getGuidelines(category?: string, tx: Executor = db): Promise<Guideline[]> {
     if (category) {
-      return db.select().from(guidelines).where(eq(guidelines.category, category)).orderBy(guidelines.sortOrder);
+      return tx.select().from(guidelines).where(eq(guidelines.category, category)).orderBy(guidelines.sortOrder);
     }
-    return db.select().from(guidelines).orderBy(guidelines.sortOrder);
+    return tx.select().from(guidelines).orderBy(guidelines.sortOrder);
   },
 
-  async getGuideline(id: number): Promise<Guideline | undefined> {
-    const [g] = await db.select().from(guidelines).where(eq(guidelines.id, id));
+  async getGuideline(id: number, tx: Executor = db): Promise<Guideline | undefined> {
+    const [g] = await tx.select().from(guidelines).where(eq(guidelines.id, id));
     return g;
   },
 
-  async createGuideline(data: InsertGuideline): Promise<Guideline> {
-    const [g] = await db.insert(guidelines).values(data).returning();
+  async createGuideline(data: InsertGuideline, tx: Executor = db): Promise<Guideline> {
+    const [g] = await tx.insert(guidelines).values(data).returning();
     return g;
   },
 
-  async updateGuideline(id: number, data: Partial<InsertGuideline>): Promise<Guideline | undefined> {
-    const [g] = await db.update(guidelines).set({ ...data, updatedAt: new Date() }).where(eq(guidelines.id, id)).returning();
+  async updateGuideline(id: number, data: Partial<InsertGuideline>, tx: Executor = db): Promise<Guideline | undefined> {
+    const [g] = await tx.update(guidelines).set({ ...data, updatedAt: new Date() }).where(eq(guidelines.id, id)).returning();
     return g;
   },
 
-  async deleteGuideline(id: number): Promise<boolean> {
-    await db.delete(guidelineAcknowledgments).where(eq(guidelineAcknowledgments.guidelineId, id));
-    const result = await db.delete(guidelines).where(eq(guidelines.id, id)).returning();
+  async deleteGuidelineAcks(guidelineId: number, tx: Executor = db): Promise<void> {
+    await tx.delete(guidelineAcknowledgments).where(eq(guidelineAcknowledgments.guidelineId, guidelineId));
+  },
+
+  async deleteGuideline(id: number, tx: Executor = db): Promise<boolean> {
+    const result = await tx.delete(guidelines).where(eq(guidelines.id, id)).returning();
     return result.length > 0;
   },
 
-  async getGuidelineAcks(guidelineId: number): Promise<GuidelineAck[]> {
-    return db.select().from(guidelineAcknowledgments).where(eq(guidelineAcknowledgments.guidelineId, guidelineId));
+  async getGuidelineAcks(guidelineId: number, tx: Executor = db): Promise<GuidelineAck[]> {
+    return tx.select().from(guidelineAcknowledgments).where(eq(guidelineAcknowledgments.guidelineId, guidelineId));
   },
 
-  async createGuidelineAck(data: InsertGuidelineAck): Promise<GuidelineAck> {
-    const [ack] = await db.insert(guidelineAcknowledgments).values(data).returning();
+  async createGuidelineAck(data: InsertGuidelineAck, tx: Executor = db): Promise<GuidelineAck> {
+    const [ack] = await tx.insert(guidelineAcknowledgments).values(data).returning();
     return ack;
   },
 
-  async getGuidelineAcksByEmployee(employeeId: number): Promise<GuidelineAck[]> {
-    return db.select().from(guidelineAcknowledgments).where(eq(guidelineAcknowledgments.employeeId, employeeId));
+  async getGuidelineAcksByEmployee(employeeId: number, tx: Executor = db): Promise<GuidelineAck[]> {
+    return tx.select().from(guidelineAcknowledgments).where(eq(guidelineAcknowledgments.employeeId, employeeId));
   },
 
-  async getAllGuidelineAcksWithDetails(): Promise<GuidelineAckDetail[]> {
-    return db
+  async getAllGuidelineAcksWithDetails(tx: Executor = db): Promise<GuidelineAckDetail[]> {
+    return tx
       .select({
         id: guidelineAcknowledgments.id,
         guidelineId: guidelineAcknowledgments.guidelineId,

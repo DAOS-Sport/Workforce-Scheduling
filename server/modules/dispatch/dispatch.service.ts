@@ -5,8 +5,11 @@
  * (single-match active employees only), the batch insert path used by
  * scheduling pages, and the cross-table reconciliation broadcast.
  */
-import { storage } from "../../storage";
 import { type DispatchShift, type InsertDispatchShift } from "@shared/schema";
+import { employeeService } from "../employee/employee.service";
+import { regionService } from "../region/region.service";
+import { dispatchRepository } from "./dispatch.repository";
+import { httpError } from "../../shared/errors";
 
 const ALLOWED_PATCH_FIELDS = [
   "venueId", "date", "startTime", "endTime",
@@ -17,7 +20,7 @@ const ALLOWED_PATCH_FIELDS = [
 async function autoMatchLinkedEmployeeId(name: string, hint?: number | null): Promise<number | null> {
   if (hint != null) return hint;
   if (!name) return null;
-  const allEmps = await storage.getAllEmployees();
+  const allEmps = await employeeService.getAllEmployees();
   const matches = allEmps.filter(
     (e) => e.status === "active" && e.name.trim() === name.trim(),
   );
@@ -30,9 +33,9 @@ export const dispatchService = {
     const seen = new Set<number>();
     const out: DispatchShift[] = [];
     for (const code of codes) {
-      const region = await storage.getRegionByCode(code);
+      const region = await regionService.findByCode(code);
       if (!region) continue;
-      const records = await storage.getDispatchShifts(region.id, startDate, endDate);
+      const records = await dispatchRepository.getDispatchShifts(region.id, startDate, endDate);
       for (const r of records) {
         if (seen.has(r.id)) continue;
         seen.add(r.id);
@@ -45,18 +48,14 @@ export const dispatchService = {
   async create(payload: any): Promise<DispatchShift> {
     const { regionCode, venueId, date, startTime, endTime, dispatchName, dispatchCompany, dispatchPhone, role, notes, linkedEmployeeId } = payload;
     if (!regionCode || !date || !startTime || !endTime || !dispatchName) {
-      const err: any = new Error("缺少必要欄位（區域、日期、時間、派遣人員姓名）");
-      err.status = 400;
-      throw err;
+      throw httpError(400, "缺少必要欄位（區域、日期、時間、派遣人員姓名）");
     }
-    const region = await storage.getRegionByCode(regionCode);
+    const region = await regionService.findByCode(regionCode);
     if (!region) {
-      const err: any = new Error("找不到區域");
-      err.status = 404;
-      throw err;
+      throw httpError(404, "找不到區域");
     }
     const resolvedLinkedId = await autoMatchLinkedEmployeeId(dispatchName, linkedEmployeeId);
-    return storage.createDispatchShift({
+    return dispatchRepository.createDispatchShift({
       regionId: region.id,
       venueId: venueId || null,
       date,
@@ -74,15 +73,11 @@ export const dispatchService = {
   async batchCreate(payload: any) {
     const { regionCode, dates, venueId, startTime, endTime, dispatchName, dispatchCompany, dispatchPhone, role, notes, linkedEmployeeId } = payload;
     if (!regionCode || !dates || !Array.isArray(dates) || dates.length === 0 || !startTime || !endTime || !dispatchName) {
-      const err: any = new Error("缺少必要欄位（區域、日期列表、時間、派遣人員姓名）");
-      err.status = 400;
-      throw err;
+      throw httpError(400, "缺少必要欄位（區域、日期列表、時間、派遣人員姓名）");
     }
-    const region = await storage.getRegionByCode(regionCode);
+    const region = await regionService.findByCode(regionCode);
     if (!region) {
-      const err: any = new Error("找不到區域");
-      err.status = 404;
-      throw err;
+      throw httpError(404, "找不到區域");
     }
     const batchLinkedId = await autoMatchLinkedEmployeeId(dispatchName, linkedEmployeeId);
     const inserts: InsertDispatchShift[] = (dates as string[]).map((date) => ({
@@ -98,25 +93,21 @@ export const dispatchService = {
       notes: notes || null,
       linkedEmployeeId: batchLinkedId,
     }));
-    const records = await storage.batchCreateDispatchShifts(inserts);
+    const records = await dispatchRepository.batchCreateDispatchShifts(inserts);
     return { created: records.length, records };
   },
 
   async update(id: number, payload: any): Promise<DispatchShift | null | undefined> {
-    const existing = await storage.getDispatchShift(id);
+    const existing = await dispatchRepository.getDispatchShift(id);
     if (!existing) {
-      const err: any = new Error("找不到派遣班次");
-      err.status = 404;
-      throw err;
+      throw httpError(404, "找不到派遣班次");
     }
     const { regionCode, ...rest } = payload;
     const updateData: Record<string, any> = {};
     if (regionCode) {
-      const region = await storage.getRegionByCode(regionCode);
+      const region = await regionService.findByCode(regionCode);
       if (!region) {
-        const err: any = new Error("找不到區域");
-        err.status = 404;
-        throw err;
+        throw httpError(404, "找不到區域");
       }
       updateData.regionId = region.id;
     }
@@ -124,31 +115,27 @@ export const dispatchService = {
       if (rest[field] !== undefined) updateData[field] = rest[field];
     }
     if (updateData.dispatchName && updateData.linkedEmployeeId === undefined) {
-      const allEmps = await storage.getAllEmployees();
+      const allEmps = await employeeService.getAllEmployees();
       const matches = allEmps.filter(
         (e) => e.status === "active" && e.name.trim() === (updateData.dispatchName as string).trim(),
       );
       updateData.linkedEmployeeId = matches.length === 1 ? matches[0].id : null;
     }
-    return storage.updateDispatchShift(id, updateData);
+    return dispatchRepository.updateDispatchShift(id, updateData);
   },
 
   async remove(id: number, actor = "admin", reason?: string): Promise<boolean> {
-    const deleted = await storage.deleteDispatchShift(id, actor, reason);
+    const deleted = await dispatchRepository.deleteDispatchShift(id, actor, reason);
     if (!deleted) {
-      const err: any = new Error("找不到派遣班次或已是取消狀態");
-      err.status = 404;
-      throw err;
+      throw httpError(404, "找不到派遣班次或已是取消狀態");
     }
     return deleted;
   },
 
   async restore(id: number, actor = "admin"): Promise<DispatchShift> {
-    const restored = await storage.restoreDispatchShift(id, actor);
+    const restored = await dispatchRepository.restoreDispatchShift(id, actor);
     if (!restored) {
-      const err: any = new Error("找不到派遣班次或並非已取消狀態");
-      err.status = 404;
-      throw err;
+      throw httpError(404, "找不到派遣班次或並非已取消狀態");
     }
     return restored;
   },
@@ -158,9 +145,9 @@ export const dispatchService = {
     const seen = new Set<number>();
     const out: DispatchShift[] = [];
     for (const code of codes) {
-      const region = await storage.getRegionByCode(code);
+      const region = await regionService.findByCode(code);
       if (!region) continue;
-      const records = await storage.getCancelledDispatchShiftsByRegionAndDateRange(region.id, startDate, endDate);
+      const records = await dispatchRepository.getCancelledDispatchShiftsByRegionAndDateRange(region.id, startDate, endDate);
       for (const r of records) {
         if (seen.has(r.id)) continue;
         seen.add(r.id);
@@ -171,7 +158,15 @@ export const dispatchService = {
   },
 
   async reconcileLinks() {
-    const updated = await storage.reconcileDispatchLinks();
+    const updated = await dispatchRepository.reconcileDispatchLinks();
     return { updated, message: `已自動連結 ${updated} 筆派遣班次` };
   },
+
+  createDispatchShiftIfAbsent: dispatchRepository.createDispatchShiftIfAbsent,
+  getDispatchShift: dispatchRepository.getDispatchShift,
+  getLinkedDispatchShiftsInRange: dispatchRepository.getLinkedDispatchShiftsInRange,
+  getDispatchShifts: dispatchRepository.getDispatchShifts,
+  getDispatchShiftsByDate: dispatchRepository.getDispatchShiftsByDate,
+  getDispatchShiftsByLinkedEmployee: dispatchRepository.getDispatchShiftsByLinkedEmployee,
+  reconcileDispatchLinks: dispatchRepository.reconcileDispatchLinks,
 };

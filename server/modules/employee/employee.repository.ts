@@ -1,5 +1,6 @@
-import { db } from "../../db";
-import { eq, and, or, inArray } from "drizzle-orm";
+import { db } from "../../infra/db";
+import type { Executor } from "../../infra/db/tx";
+import { eq, and, or, inArray, isNull, sql } from "drizzle-orm";
 import {
   employees,
   shifts,
@@ -8,12 +9,12 @@ import {
 } from "@shared/schema";
 
 export const employeeRepository = {
-  async getEmployeesByRegion(regionId: number): Promise<Employee[]> {
-    return db.select().from(employees).where(eq(employees.regionId, regionId));
+  async getEmployeesByRegion(regionId: number, tx: Executor = db): Promise<Employee[]> {
+    return tx.select().from(employees).where(eq(employees.regionId, regionId));
   },
 
-  async getEmployeesForNeiQin(regionId: number): Promise<Employee[]> {
-    const rows = await db.select().from(employees).where(
+  async getEmployeesForNeiQin(regionId: number, tx: Executor = db): Promise<Employee[]> {
+    const rows = await tx.select().from(employees).where(
       or(
         eq(employees.regionId, regionId),
         eq(employees.department, "營運管理處")
@@ -27,37 +28,84 @@ export const employeeRepository = {
     });
   },
 
-  async getAllEmployees(): Promise<Employee[]> {
-    return db.select().from(employees);
+  async getAllEmployees(tx: Executor = db): Promise<Employee[]> {
+    return tx.select().from(employees);
   },
 
-  async getEmployee(id: number): Promise<Employee | undefined> {
-    const [emp] = await db.select().from(employees).where(eq(employees.id, id));
+  async getEmployee(id: number, tx: Executor = db): Promise<Employee | undefined> {
+    const [emp] = await tx.select().from(employees).where(eq(employees.id, id));
     return emp;
   },
 
-  async createEmployee(data: InsertEmployee): Promise<Employee> {
-    const [emp] = await db.insert(employees).values(data).returning();
+  async createEmployee(data: InsertEmployee, tx: Executor = db): Promise<Employee> {
+    const [emp] = await tx.insert(employees).values(data).returning();
     return emp;
   },
 
-  async updateEmployee(id: number, data: Partial<InsertEmployee>): Promise<Employee | undefined> {
-    const [emp] = await db.update(employees).set(data).where(eq(employees.id, id)).returning();
+  async updateEmployee(id: number, data: Partial<InsertEmployee>, tx: Executor = db): Promise<Employee | undefined> {
+    const [emp] = await tx.update(employees).set(data).where(eq(employees.id, id)).returning();
     return emp;
   },
 
-  async getEmployeeByCode(code: string): Promise<Employee | undefined> {
-    const [emp] = await db.select().from(employees).where(eq(employees.employeeCode, code));
+  /**
+   * Apply the fields Ragic owns. A LINE id that is not a LINE user id never replaces a valid one, judged on the row as it
+   * is when this statement runs, so an employee who bound their account a moment ago keeps it.
+   */
+  async updateFromRagic(id: number, data: Partial<InsertEmployee>, tx: Executor = db): Promise<Employee | undefined> {
+    const { lineId, ...rest } = data;
+    const lineIdSet =
+      lineId === undefined
+        ? {}
+        : /^U[0-9a-f]{32}$/.test(lineId ?? "")
+          ? { lineId }
+          : { lineId: sql`case when ${employees.lineId} is null or ${employees.lineId} !~ '^U[0-9a-f]{32}$' then ${lineId} else ${employees.lineId} end` };
+    const [emp] = await tx.update(employees).set({ ...rest, ...lineIdSet }).where(eq(employees.id, id)).returning();
     return emp;
   },
 
-  async getEmployeeByLineId(lineId: string): Promise<Employee | undefined> {
-    const [emp] = await db.select().from(employees).where(eq(employees.lineId, lineId));
+  async getEmployeeByCode(code: string, tx: Executor = db): Promise<Employee | undefined> {
+    const [emp] = await tx.select().from(employees).where(eq(employees.employeeCode, code));
     return emp;
   },
 
-  async getCoworkersByVenueAndDate(venueId: number, date: string, excludeEmployeeId: number): Promise<Employee[]> {
-    const venueShifts = await db.select().from(shifts).where(
+  /** The record a LINE account stands for: an active one first, then the lowest id (decision D1). */
+  async getEmployeeByLineId(lineId: string, tx: Executor = db): Promise<Employee | undefined> {
+    const [emp] = await tx
+      .select()
+      .from(employees)
+      .where(eq(employees.lineId, lineId))
+      .orderBy(sql`(${employees.status} = 'active') desc`, employees.id)
+      .limit(1);
+    return emp;
+  },
+
+  /**
+   * Bind a LINE account to an active employee, only if no other LINE account holds the record. The
+   * condition is evaluated on the row after any concurrent binder has committed, so of two accounts
+   * racing for one record exactly one gets a row back.
+   */
+  async bindLineIdIfFree(id: number, lineId: string, tx: Executor = db): Promise<Employee | undefined> {
+    const [emp] = await tx
+      .update(employees)
+      .set({ lineId })
+      .where(
+        and(
+          eq(employees.id, id),
+          eq(employees.status, "active"),
+          or(isNull(employees.lineId), sql`${employees.lineId} !~ '^U[0-9a-f]{32}$'`, eq(employees.lineId, lineId)),
+        ),
+      )
+      .returning();
+    return emp;
+  },
+
+  /** Every record bound to this LINE account, lowest id first. One person can have an old inactive record and a new one. */
+  async getEmployeesByLineId(lineId: string, tx: Executor = db): Promise<Employee[]> {
+    return tx.select().from(employees).where(eq(employees.lineId, lineId)).orderBy(employees.id);
+  },
+
+  async getCoworkersByVenueAndDate(venueId: number, date: string, excludeEmployeeId: number, tx: Executor = db): Promise<Employee[]> {
+    const venueShifts = await tx.select().from(shifts).where(
       and(
         eq(shifts.venueId, venueId),
         eq(shifts.date, date),
@@ -69,12 +117,7 @@ export const employeeRepository = {
       .filter((id) => id !== excludeEmployeeId);
     if (coworkerIds.length === 0) return [];
     const uniqueIds = Array.from(new Set(coworkerIds));
-    return db.select().from(employees).where(inArray(employees.id, uniqueIds));
-  },
-
-  async deleteEmployee(id: number): Promise<boolean> {
-    const result = await db.delete(employees).where(eq(employees.id, id)).returning();
-    return result.length > 0;
+    return tx.select().from(employees).where(inArray(employees.id, uniqueIds));
   },
 
 };

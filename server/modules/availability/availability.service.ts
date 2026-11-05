@@ -1,6 +1,7 @@
-import { storage } from "../../storage";
 import { httpError } from "../../shared/http/response";
 import { availabilityRepository } from "./availability.repository";
+import { regionService } from "../region/region.service";
+import { employeeService } from "../employee/employee.service";
 
 export async function listAvailabilities(regionCode: string | undefined, yearMonth: string | undefined) {
   if (!yearMonth || !/^\d{4}-\d{2}$/.test(yearMonth)) {
@@ -8,13 +9,23 @@ export async function listAvailabilities(regionCode: string | undefined, yearMon
   }
   let employeeIds: number[];
   if (regionCode) {
-    const region = await storage.getRegionByCode(regionCode);
+    const region = await regionService.findByCode(regionCode);
     if (!region) return [];
-    const emps = await storage.getEmployeesByRegion(region.id);
+    const emps = await employeeService.getEmployeesByRegion(region.id);
     employeeIds = emps.filter(e => e.status !== "inactive").map(e => e.id);
   } else {
-    const emps = await storage.getAllEmployees();
+    const emps = await employeeService.getAllEmployees();
     employeeIds = emps.filter(e => e.status !== "inactive").map(e => e.id);
   }
   return availabilityRepository.getByEmployeeIds(employeeIds, yearMonth);
 }
+
+export const availabilityService = {
+  countOffRequestsByNoteAndYear: availabilityRepository.countOffRequestsByNoteAndYear,
+  create: availabilityRepository.create,
+  delete: availabilityRepository.delete,
+  existsOnDate: availabilityRepository.existsOnDate,
+  getByEmployeeAndYearMonth: availabilityRepository.getByEmployeeAndYearMonth,
+  getById: availabilityRepository.getById,
+  getByYearMonth: availabilityRepository.getByYearMonth,
+};

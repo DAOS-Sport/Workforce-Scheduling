@@ -1,7 +1,9 @@
-import { storage } from "../../storage";
 import { httpError } from "../../shared/http/response";
-import { availabilityRepository } from "../availability/availability.repository";
 import { portalService } from "./portal.service";
+import { systemService } from "../system/system.service";
+import { employeeService } from "../employee/employee.service";
+import { venueService } from "../venue/venue.service";
+import { availabilityService } from "../availability/availability.service";
 
 interface AvailWindowEntry { openFrom: string; openUntil: string; }
 
@@ -12,7 +14,7 @@ function todayTaipei(): string {
 
 /** Load and validate the current availability window. Returns error string if closed, null if open. */
 async function checkWindowOpen(targetDate?: string): Promise<string | null> {
-  const cfg = await storage.getSystemConfig("availability_window");
+  const cfg = await systemService.findSystemConfig("availability_window");
   if (!cfg?.value) return "管理員尚未設定意願填寫開放時間";
   let raw: any;
   try { raw = JSON.parse(cfg.value); } catch { return "意願填寫設定格式錯誤"; }
@@ -38,7 +40,7 @@ async function checkWindowOpen(targetDate?: string): Promise<string | null> {
 
 /** Returns the array of holiday date strings (yyyy-MM-dd) for a given yearMonth from system_config. */
 async function getHolidaysForMonth(yearMonth: string): Promise<string[]> {
-  const cfg = await storage.getSystemConfig("monthly_holidays");
+  const cfg = await systemService.findSystemConfig("monthly_holidays");
   if (!cfg?.value) return [];
   try {
     const map = JSON.parse(cfg.value) as Record<string, string[]>;
@@ -57,7 +59,7 @@ export async function getMonthlyHolidays(yearMonth: string): Promise<string[]> {
 }
 
 export async function getAvailabilityWindow(): Promise<unknown> {
-  const cfg = await storage.getSystemConfig("availability_window");
+  const cfg = await systemService.findSystemConfig("availability_window");
   if (!cfg) return null;
   try {
     return JSON.parse(cfg.value);
@@ -71,7 +73,7 @@ export async function listMyAvailabilities(employeeIdParam: string, yearMonth: s
   if (isNaN(employeeId)) throw httpError(400, "無效的員工 ID");
   await assertCaller(employeeId, lineUserId);
   if (!/^\d{4}-\d{2}$/.test(yearMonth)) throw httpError(400, "yearMonth 格式須為 YYYY-MM");
-  return availabilityRepository.getByEmployeeAndYearMonth(employeeId, yearMonth);
+  return availabilityService.getByEmployeeAndYearMonth(employeeId, yearMonth);
 }
 
 export async function submitAvailability(body: any, lineUserId: string | undefined) {
@@ -90,7 +92,7 @@ export async function submitAvailability(body: any, lineUserId: string | undefin
   const windowErr = await checkWindowOpen(date);
   if (windowErr) throw httpError(403, windowErr);
   await assertCaller(Number(employeeId), lineUserId);
-  const emp = await storage.getEmployee(Number(employeeId));
+  const emp = await employeeService.getEmployee(Number(employeeId));
   if (!emp) throw httpError(404, "找不到員工資料");
   const empType = emp.employmentType ?? "full_time";
   if (isOffRequest && empType !== "full_time") {
@@ -106,7 +108,7 @@ export async function submitAvailability(body: any, lineUserId: string | undefin
     if (n !== "都可以") throw httpError(400, "兼職員工填寫可上班時段時須提供時間");
   }
   // 同一天不得重複填寫（正職、兼職皆適用）
-  const alreadyExists = await availabilityRepository.existsOnDate(Number(employeeId), date);
+  const alreadyExists = await availabilityService.existsOnDate(Number(employeeId), date);
   if (alreadyExists) {
     throw httpError(400, "該日已有填寫記錄，請先刪除後再重新填寫");
   }
@@ -115,7 +117,7 @@ export async function submitAvailability(body: any, lineUserId: string | undefin
     const leaveNote = (note as string | undefined)?.trim() ?? "";
     if (leaveNote === "事假") {
       const year = Number(date.slice(0, 4));
-      const yearCount = await availabilityRepository.countOffRequestsByNoteAndYear(Number(employeeId), "事假", year);
+      const yearCount = await availabilityService.countOffRequestsByNoteAndYear(Number(employeeId), "事假", year);
       if (yearCount >= 14) {
         throw httpError(400, `事假已達今年上限 14 天（勞工請假規則第7條）`);
       }
@@ -128,7 +130,7 @@ export async function submitAvailability(body: any, lineUserId: string | undefin
   }
   // 「都可以」沒有起訖時間，沒有時段可以跟營業時間比。
   if (!isOffRequest && emp.regionId && startTime && endTime) {
-    const regionVenues = await storage.getVenuesByRegion(emp.regionId);
+    const regionVenues = await venueService.getVenuesByRegion(emp.regionId);
     const operated = regionVenues.filter((v) => v.openTime && v.closeTime);
     if (operated.length > 0) {
       const regionOpen = operated.map((v) => v.openTime!).sort()[0];
@@ -141,7 +143,7 @@ export async function submitAvailability(body: any, lineUserId: string | undefin
     }
   }
   const leaveType = isOffRequest ? (note?.trim() || null) : null;
-  return availabilityRepository.create({
+  return availabilityService.create({
     employeeId: Number(employeeId),
     date,
     entryType: isOffRequest ? "off_request" : "available",
@@ -154,11 +156,11 @@ export async function submitAvailability(body: any, lineUserId: string | undefin
 export async function withdrawAvailability(idParam: string, lineUserId: string | undefined) {
   const id = parseInt(idParam);
   if (isNaN(id)) throw httpError(400, "無效的 ID");
-  const row = await availabilityRepository.getById(id);
+  const row = await availabilityService.getById(id);
   if (!row) throw httpError(404, "找不到此意願紀錄");
   const windowErr = await checkWindowOpen(row.date);
   if (windowErr) throw httpError(403, windowErr);
   await assertCaller(row.employeeId, lineUserId);
-  await availabilityRepository.delete(id);
+  await availabilityService.delete(id);
   return { success: true };
 }

@@ -5,6 +5,7 @@ import {
   evaluateDatabase,
   evaluateHolidayTable,
   evaluateIntegration,
+  evaluateManualJob,
   evaluateScheduledJob,
   evaluateSecurity,
   evaluateSyncJob,
@@ -141,5 +142,51 @@ describe("evaluateDatabase / evaluateHolidayTable / evaluateSecurity", () => {
   it("worst", () => {
     expect(worst(["green", "yellow"])).toBe("yellow");
     expect(worst([])).toBe("green");
+  });
+});
+
+describe("recovery time", () => {
+  const failedAt = iso("2026-10-21", "07:00");
+  const backAt = iso("2026-10-21", "07:30");
+  const laterSuccess = iso("2026-10-21", "09:00");
+
+  it("an integration that failed and came back reports when it came back, not its latest success", () => {
+    const p = evaluateIntegration({ ...base, state: { lastFailureAt: failedAt, lastSuccessAt: laterSuccess, recoveredAt: backAt, consecutiveFailures: 0 } });
+    expect(p.level).toBe("green");
+    expect(p.recoveredAt).toBe(backAt);
+    expect(p.lastSuccessAt).toBe(laterSuccess);
+  });
+
+  it("leaves the field out when nothing was recovered, and when a newer failure came after the recovery", () => {
+    expect("recoveredAt" in evaluateIntegration({ ...base, state: { lastSuccessAt: laterSuccess } })).toBe(false);
+    const again = evaluateIntegration({ ...base, state: { lastSuccessAt: laterSuccess, recoveredAt: backAt, lastFailureAt: iso("2026-10-21", "09:30"), consecutiveFailures: 1 } });
+    expect("recoveredAt" in again).toBe(false);
+  });
+
+  it("scheduled jobs, the sync job and the webhook carry it the same way", () => {
+    const state = { lastStartedAt: laterSuccess, lastFailureAt: failedAt, lastSuccessAt: laterSuccess, recoveredAt: backAt };
+    const now = T("2026-10-21", "09:05");
+    expect(evaluateScheduledJob({ ...base, schedule: { kind: "daily", at: 9 * 60 }, graceMinutes: 3, enabled: true, schedulerActive: true, state, now }).recoveredAt).toBe(backAt);
+    expect(evaluateSyncJob({ ...base, now, state }).recoveredAt).toBe(backAt);
+    expect(evaluateWebhook({ ...base, now, state }).recoveredAt).toBe(backAt);
+  });
+});
+
+describe("evaluateManualJob", () => {
+  it("is green when it has never been run, because nobody is waiting for it", () => {
+    expect(evaluateManualJob({ ...base }).level).toBe("green");
+  });
+  it("is green after a success, however long ago", () => {
+    expect(evaluateManualJob({ ...base, state: { lastStartedAt: iso("2026-09-01", "08:00"), lastSuccessAt: iso("2026-09-01", "08:00") } }).level).toBe("green");
+  });
+  it("is yellow, with the error, while the latest run is a failure", () => {
+    const p = evaluateManualJob({ ...base, state: { lastStartedAt: iso("2026-10-21", "08:00"), lastSuccessAt: iso("2026-10-20", "08:00"), lastFailureAt: iso("2026-10-21", "08:00"), lastError: "HTTP 500" } });
+    expect(p.level).toBe("yellow");
+    expect(p.reason).toContain("HTTP 500");
+  });
+  it("is green again after a later success and reports the recovery", () => {
+    const p = evaluateManualJob({ ...base, state: { lastStartedAt: iso("2026-10-21", "09:00"), lastFailureAt: iso("2026-10-21", "08:00"), lastSuccessAt: iso("2026-10-21", "09:00"), recoveredAt: iso("2026-10-21", "09:00") } });
+    expect(p.level).toBe("green");
+    expect(p.recoveredAt).toBe(iso("2026-10-21", "09:00"));
   });
 });

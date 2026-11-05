@@ -8,9 +8,8 @@
  *
  * The shift module is the canonical, fully-decomposed module
  * (types/repository/audit/validation/service/routes). Every module has a
- * `<name>.service.ts`; routes are meant to call it rather than `storage` or
- * `db`, but a few route files still query them directly. `storage.ts` is only
- * a facade that forwards to the repositories. Service-layer naming convention: `xxxService.findAll() / get(id) / create(data, actor) /
+ * `<name>.service.ts`; routes are meant to call it rather than a repository
+ * or `db`, but a few route files still query `db` directly. Service-layer naming convention: `xxxService.findAll() / get(id) / create(data, actor) /
  * update(id, patch, actor) / remove(id)`. Errors throw with `.status` set;
  * the route catch-block uses `err.status || 500`.
  *
@@ -49,6 +48,7 @@ import { mountAvailabilityRoutes } from "./availability/availability.routes";
 import { mountSummerScheduleRoutes } from "./summerSchedule/summerSchedule.routes";
 import { mountMcpRoutes } from "./mcp/mcp.routes";
 import { mountHealthRoutes } from "./health/health.routes";
+import { mountErrorsRoutes } from "./errors/errors.routes";
 
 export function registerModuleRoutes(httpServer: Server, app: Express): void {
   // Shift module — fully decomposed (the canonical pattern)
@@ -86,4 +86,7 @@ export function registerModuleRoutes(httpServer: Server, app: Express): void {
 
   // Health report for the monitoring hub (token-protected, outside the admin gate)
   mountHealthRoutes(app);
+
+  // Server error records, read by the monitoring page (admin cookie)
+  mountErrorsRoutes(httpServer, app);
 }

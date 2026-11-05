@@ -299,6 +299,71 @@ describe("API 回傳各種結果", () => {
   });
 });
 
+describe("重送去重 — request id", () => {
+  const sentRequestIds = () =>
+    vi.mocked(global.fetch).mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string).requestId);
+
+  async function pressAndSettle(expected: string) {
+    fireEvent.click(screen.getByTestId("button-clock-in"));
+    await waitFor(() => screen.getByText(expected));
+  }
+
+  it("每次送出都帶 requestId", async () => {
+    mockFetchOnce(SUCCESS_RESULT);
+    await renderAndWaitReady();
+
+    fireEvent.click(screen.getByTestId("button-clock-in"));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+
+    expect(sentRequestIds()[0]).toEqual(expect.any(String));
+    expect(sentRequestIds()[0].length).toBeGreaterThan(8);
+  });
+
+  it("沒拿到伺服器回覆（斷線）再按一次，沿用同一個 requestId", async () => {
+    vi.mocked(global.fetch).mockRejectedValueOnce(new Error("網路中斷"));
+    mockFetchOnce(SUCCESS_RESULT);
+    await renderAndWaitReady();
+
+    await pressAndSettle("網路中斷");
+    fireEvent.click(screen.getByTestId("button-retry"));
+    fireEvent.click(await screen.findByTestId("button-clock-in"));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+
+    const [first, second] = sentRequestIds();
+    expect(second).toBe(first);
+  });
+
+  it("伺服器回 5xx 再按一次，沿用同一個 requestId", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({ ok: false, status: 502, json: () => Promise.resolve({ message: "閘道錯誤" }) } as Response);
+    mockFetchOnce(SUCCESS_RESULT);
+    await renderAndWaitReady();
+
+    await pressAndSettle("閘道錯誤");
+    fireEvent.click(screen.getByTestId("button-retry"));
+    fireEvent.click(await screen.findByTestId("button-clock-in"));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+
+    const [first, second] = sentRequestIds();
+    expect(second).toBe(first);
+  });
+
+  it("拿到成功回覆後，下一次按下（例如下班打卡）換新的 requestId", async () => {
+    mockFetchOnce(SUCCESS_RESULT);
+    mockFetchOnce({ ...SUCCESS_RESULT, clockType: "out" });
+    await renderAndWaitReady();
+
+    fireEvent.click(screen.getByTestId("button-clock-in"));
+    await waitFor(() => screen.getByTestId("button-clock-again"));
+    fireEvent.click(screen.getByTestId("button-clock-again"));
+    await waitFor(() => screen.getByTestId("button-clock-in"));
+    fireEvent.click(screen.getByTestId("button-clock-in"));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+
+    const [first, second] = sentRequestIds();
+    expect(second).not.toBe(first);
+  });
+});
+
 describe("再次打卡", () => {
   it("打卡成功後可按「再次打卡」回到 ready 狀態", async () => {
     mockFetchOnce(SUCCESS_RESULT);

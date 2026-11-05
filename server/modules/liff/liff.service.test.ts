@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../storage", () => ({
-  storage: {
+vi.mock("../employee/employee.service", () => ({
+  employeeService: {
     getEmployee: vi.fn(),
     getEmployeeByLineId: vi.fn(),
     updateEmployee: vi.fn(),
   },
 }));
 
-vi.mock("../line/lineClock.service", () => ({
+vi.mock("../clock/clockIn.service", () => ({
   processClockIn: vi.fn(),
+}));
+vi.mock("../clock/clockInMessage", () => ({
   formatClockInMessage: vi.fn(() => "打卡成功訊息"),
 }));
 
@@ -24,8 +26,8 @@ vi.mock("../shift/shiftReview.service", () => ({
   },
 }));
 
-import { storage } from "../../storage";
-import { processClockIn } from "../line/lineClock.service";
+import { employeeService } from "../employee/employee.service";
+import { processClockIn } from "../clock/clockIn.service";
 import { pushToLine } from "../line/linePush.service";
 import { shiftReviewService } from "../shift/shiftReview.service";
 import { liffService } from "./liff.service";
@@ -58,9 +60,9 @@ const successResult = {
 describe("liffService.processLiffClockIn shift review", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(storage.getEmployeeByLineId).mockResolvedValue(employee as any);
-    vi.mocked(storage.getEmployee).mockResolvedValue(employee as any);
-    vi.mocked(processClockIn).mockResolvedValue(successResult as any);
+    vi.mocked(employeeService.getEmployeeByLineId).mockResolvedValue(employee as any);
+    vi.mocked(employeeService.getEmployee).mockResolvedValue(employee as any);
+    vi.mocked(processClockIn).mockResolvedValue({ result: successResult, employeeId: 1, replayed: false } as any);
   });
 
   it("does not push a clock message when the reviewed shift is no longer valid", async () => {

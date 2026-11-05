@@ -1,4 +1,5 @@
-import { db } from "../../db";
+import { db } from "../../infra/db";
+import type { Executor } from "../../infra/db/tx";
 import { eq, and, gte, lte, inArray, sql } from "drizzle-orm";
 import {
   shiftAvailabilities,
@@ -7,12 +8,12 @@ import {
 } from "@shared/schema";
 
 export const availabilityRepository = {
-  async getByEmployeeAndYearMonth(employeeId: number, yearMonth: string): Promise<ShiftAvailability[]> {
+  async getByEmployeeAndYearMonth(employeeId: number, yearMonth: string, tx: Executor = db): Promise<ShiftAvailability[]> {
     const start = `${yearMonth}-01`;
     const [y, m] = yearMonth.split("-").map(Number);
     const lastDay = new Date(y, m, 0).getDate();
     const end = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
-    return db
+    return tx
       .select()
       .from(shiftAvailabilities)
       .where(
@@ -24,13 +25,13 @@ export const availabilityRepository = {
       );
   },
 
-  async getByEmployeeIds(employeeIds: number[], yearMonth: string): Promise<ShiftAvailability[]> {
+  async getByEmployeeIds(employeeIds: number[], yearMonth: string, tx: Executor = db): Promise<ShiftAvailability[]> {
     if (employeeIds.length === 0) return [];
     const start = `${yearMonth}-01`;
     const [y, m] = yearMonth.split("-").map(Number);
     const lastDay = new Date(y, m, 0).getDate();
     const end = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
-    return db
+    return tx
       .select()
       .from(shiftAvailabilities)
       .where(
@@ -42,23 +43,23 @@ export const availabilityRepository = {
       );
   },
 
-  async create(data: InsertShiftAvailability): Promise<ShiftAvailability> {
-    const [row] = await db.insert(shiftAvailabilities).values(data).returning();
+  async create(data: InsertShiftAvailability, tx: Executor = db): Promise<ShiftAvailability> {
+    const [row] = await tx.insert(shiftAvailabilities).values(data).returning();
     return row;
   },
 
-  async delete(id: number): Promise<boolean> {
-    const result = await db.delete(shiftAvailabilities).where(eq(shiftAvailabilities.id, id));
+  async delete(id: number, tx: Executor = db): Promise<boolean> {
+    const result = await tx.delete(shiftAvailabilities).where(eq(shiftAvailabilities.id, id));
     return (result.rowCount ?? 0) > 0;
   },
 
-  async getById(id: number): Promise<ShiftAvailability | undefined> {
-    const [row] = await db.select().from(shiftAvailabilities).where(eq(shiftAvailabilities.id, id));
+  async getById(id: number, tx: Executor = db): Promise<ShiftAvailability | undefined> {
+    const [row] = await tx.select().from(shiftAvailabilities).where(eq(shiftAvailabilities.id, id));
     return row;
   },
 
-  async countOffRequestsInWeek(employeeId: number, weekStart: string, weekEnd: string): Promise<number> {
-    const [row] = await db
+  async countOffRequestsInWeek(employeeId: number, weekStart: string, weekEnd: string, tx: Executor = db): Promise<number> {
+    const [row] = await tx
       .select({ cnt: sql<number>`count(*)::int` })
       .from(shiftAvailabilities)
       .where(
@@ -76,11 +77,12 @@ export const availabilityRepository = {
   async countOffRequestsByNoteAndYear(
     employeeId: number,
     note: string,
-    year: number
+    year: number,
+    tx: Executor = db
   ): Promise<number> {
     const yearStart = `${year}-01-01`;
     const yearEnd = `${year}-12-31`;
-    const [row] = await db
+    const [row] = await tx
       .select({ cnt: sql<number>`count(*)::int` })
       .from(shiftAvailabilities)
       .where(
@@ -96,12 +98,12 @@ export const availabilityRepository = {
   },
 
   /** 取得某年月所有員工的意願填寫記錄（用於計算未填人員） */
-  async getByYearMonth(yearMonth: string): Promise<ShiftAvailability[]> {
+  async getByYearMonth(yearMonth: string, tx: Executor = db): Promise<ShiftAvailability[]> {
     const start = `${yearMonth}-01`;
     const [y, m] = yearMonth.split("-").map(Number);
     const lastDay = new Date(y, m, 0).getDate();
     const end = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
-    return db
+    return tx
       .select()
       .from(shiftAvailabilities)
       .where(
@@ -113,8 +115,8 @@ export const availabilityRepository = {
   },
 
   /** 檢查同一員工在同一天是否已有任何填寫記錄（防止重複） */
-  async existsOnDate(employeeId: number, date: string): Promise<boolean> {
-    const [row] = await db
+  async existsOnDate(employeeId: number, date: string, tx: Executor = db): Promise<boolean> {
+    const [row] = await tx
       .select({ cnt: sql<number>`count(*)::int` })
       .from(shiftAvailabilities)
       .where(

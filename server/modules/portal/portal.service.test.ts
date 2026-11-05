@@ -1,17 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../storage", () => ({
-  storage: {
-    getEmployee: vi.fn(),
-    getShiftsByEmployeeAndDateRange: vi.fn(),
-    getDispatchShiftsByLinkedEmployee: vi.fn(),
-    getVenue: vi.fn(),
-    getShiftsByVenueAndDate: vi.fn(),
-    getDispatchShifts: vi.fn(),
-  },
+const mockData = vi.hoisted(() => ({
+  getEmployee: vi.fn(),
+  getShiftsByEmployeeAndDateRange: vi.fn(),
+  getDispatchShiftsByLinkedEmployee: vi.fn(),
+  getVenue: vi.fn(),
+  getShiftsByVenueAndDate: vi.fn(),
+  getDispatchShifts: vi.fn(),
 }));
 
-import { storage } from "../../storage";
+vi.mock("../dispatch/dispatch.repository", () => ({ dispatchRepository: mockData }));
+vi.mock("../employee/employee.repository", () => ({ employeeRepository: mockData }));
+vi.mock("../shift/shift.repository", () => ({ shiftRepository: mockData }));
+vi.mock("../venue/venue.repository", () => ({ venueRepository: mockData }));
+
 import { portalService } from "./portal.service";
 
 const employee = {
@@ -56,18 +58,18 @@ const myShift = {
 describe("portalService.computeWorkmates shift review", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(storage.getEmployee).mockImplementation(async (id: number) => {
+    vi.mocked(mockData.getEmployee).mockImplementation(async (id: number) => {
       if (id === 1) return employee as any;
       if (id === 2) return coworker as any;
       return undefined;
     });
-    vi.mocked(storage.getVenue).mockResolvedValue(venue as any);
-    vi.mocked(storage.getShiftsByEmployeeAndDateRange).mockResolvedValue([myShift as any]);
-    vi.mocked(storage.getDispatchShiftsByLinkedEmployee).mockResolvedValue([]);
+    vi.mocked(mockData.getVenue).mockResolvedValue(venue as any);
+    vi.mocked(mockData.getShiftsByEmployeeAndDateRange).mockResolvedValue([myShift as any]);
+    vi.mocked(mockData.getDispatchShiftsByLinkedEmployee).mockResolvedValue([]);
   });
 
   it("returns only coworkers with reviewable active work shifts", async () => {
-    vi.mocked(storage.getShiftsByVenueAndDate).mockResolvedValue([
+    vi.mocked(mockData.getShiftsByVenueAndDate).mockResolvedValue([
       myShift,
       {
         ...myShift,
@@ -86,7 +88,7 @@ describe("portalService.computeWorkmates shift review", () => {
         role: "休假",
       },
     ] as any);
-    vi.mocked(storage.getDispatchShifts).mockResolvedValue([
+    vi.mocked(mockData.getDispatchShifts).mockResolvedValue([
       {
         id: 20,
         regionId: 1,
@@ -109,11 +111,11 @@ describe("portalService.computeWorkmates shift review", () => {
   });
 
   it("returns no shift when the employee only has a leave row", async () => {
-    vi.mocked(storage.getShiftsByEmployeeAndDateRange).mockResolvedValue([
+    vi.mocked(mockData.getShiftsByEmployeeAndDateRange).mockResolvedValue([
       { ...myShift, role: "休假", startTime: "00:00", endTime: "00:00" },
     ] as any);
-    vi.mocked(storage.getShiftsByVenueAndDate).mockResolvedValue([]);
-    vi.mocked(storage.getDispatchShifts).mockResolvedValue([]);
+    vi.mocked(mockData.getShiftsByVenueAndDate).mockResolvedValue([]);
+    vi.mocked(mockData.getDispatchShifts).mockResolvedValue([]);
 
     const result = await portalService.computeWorkmates(1, "2026-07-04");
 

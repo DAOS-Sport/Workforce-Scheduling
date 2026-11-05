@@ -184,3 +184,14 @@ export function coveredByApprovedOvertime(nowMinutes: number, overtime: { status
 export function lateDepartureReason(minutes: number): string {
   return `晚下班 ${span(minutes)}`;
 }
+
+/** failReason of a record whose time an approved amendment moved. The attendance reports parse the 遲到 and 早退 wording back out, so keep it. */
+export function amendedFailReason(clockType: ClockType, amendedMinutes: number, shift: { startTime: string; endTime: string } | null): string {
+  if (!shift) return "已補正";
+  if (clockType === "in") {
+    const diff = amendedMinutes - toMinutes(shift.startTime);
+    return diff > 0 ? `遲到 ${span(diff)}（補正）` : "已補正";
+  }
+  const diff = toMinutes(shift.endTime) - amendedMinutes;
+  return diff > 0 ? `早退 ${span(diff)}（補正）` : "已補正";
+}

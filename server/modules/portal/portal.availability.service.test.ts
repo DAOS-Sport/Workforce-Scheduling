@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockStorage, mockRepo, mockPortal } = vi.hoisted(() => ({
-  mockStorage: { getSystemConfig: vi.fn(), getEmployee: vi.fn(), getVenuesByRegion: vi.fn() },
+const { mockData, mockRepo, mockPortal } = vi.hoisted(() => ({
+  mockData: { getSystemConfig: vi.fn(), getEmployee: vi.fn(), getVenuesByRegion: vi.fn() },
   mockRepo: { existsOnDate: vi.fn(), create: vi.fn(), countOffRequestsByNoteAndYear: vi.fn() },
   mockPortal: { verifyCaller: vi.fn() },
 }));
 
-vi.mock("../../storage", () => ({ storage: mockStorage }));
+vi.mock("../system/system.repository", () => ({ systemRepository: mockData }));
+vi.mock("../employee/employee.repository", () => ({ employeeRepository: mockData }));
+vi.mock("../venue/venue.repository", () => ({ venueRepository: mockData }));
 vi.mock("../availability/availability.repository", () => ({ availabilityRepository: mockRepo }));
 vi.mock("./portal.service", () => ({ portalService: mockPortal }));
 
@@ -17,14 +19,14 @@ const date = `${today.slice(0, 7)}-15`;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockStorage.getSystemConfig.mockImplementation(async (key: string) =>
+  mockData.getSystemConfig.mockImplementation(async (key: string) =>
     key === "availability_window"
       ? { value: JSON.stringify({ targetYearMonth: date.slice(0, 7), windows: [{ openFrom: "2000-01-01", openUntil: "2999-12-31" }] }) }
       : undefined,
   );
   mockPortal.verifyCaller.mockResolvedValue({ ok: true });
-  mockStorage.getEmployee.mockResolvedValue({ id: 5, employmentType: "part_time", regionId: 1 });
-  mockStorage.getVenuesByRegion.mockResolvedValue([{ id: 1, openTime: "06:00", closeTime: "22:00" }]);
+  mockData.getEmployee.mockResolvedValue({ id: 5, employmentType: "part_time", regionId: 1 });
+  mockData.getVenuesByRegion.mockResolvedValue([{ id: 1, openTime: "06:00", closeTime: "22:00" }]);
   mockRepo.existsOnDate.mockResolvedValue(false);
   mockRepo.create.mockImplementation(async (row: unknown) => ({ id: 1, ...(row as object) }));
 });

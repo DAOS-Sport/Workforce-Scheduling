@@ -118,7 +118,7 @@ export default function EmployeesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
-      toast({ title: "員工已刪除" });
+      toast({ title: "員工已刪除（改為停用，紀錄保留）" });
     },
     onError: (err: Error) => {
       toast({ title: "刪除失敗", description: err.message, variant: "destructive" });
@@ -159,6 +159,11 @@ export default function EmployeesPage() {
       return res.json();
     },
     onSuccess: (data: any) => {
+      // 202: another sync is running; this request was recorded and is run again right after it.
+      if (data.status === "busy") {
+        toast({ title: "已有 Ragic 同步在執行", description: "這次要求已記下，會在它結束後自動補跑" });
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       setSyncResult(data);
       const parts = [`新增 ${data.created}`, `更新 ${data.updated}`, `略過 ${data.skipped}`];
@@ -170,6 +175,13 @@ export default function EmployeesPage() {
       });
     },
     onError: (err: Error) => {
+      // 409: the Ragic list has no employee code at all, so it is taken as incomplete and nothing was written.
+      if (err.message.startsWith("409")) {
+        let reason = err.message;
+        try { reason = JSON.parse(err.message.slice(5)).message ?? reason; } catch {}
+        toast({ title: "Ragic 名單不完整，未寫入", description: reason, variant: "destructive" });
+        return;
+      }
       toast({ title: "同步失敗", description: err.message, variant: "destructive" });
     },
   });
@@ -238,7 +250,7 @@ export default function EmployeesPage() {
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => ragicSync.mutate()}
+              onClick={() => ragicSync.mutate(undefined)}
               disabled={ragicSync.isPending}
               data-testid="button-ragic-sync"
             >
@@ -386,7 +398,7 @@ export default function EmployeesPage() {
                             variant="ghost"
                             className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
                             onClick={() => {
-                              if (confirm(`確定要刪除員工「${emp.name}」嗎？此操作無法復原。`)) {
+                              if (confirm(`確定要刪除員工「${emp.name}」嗎？員工會被停用（顯示為離職），班表與打卡紀錄會保留。`)) {
                                 deleteEmployee.mutate(emp.id);
                               }
                             }}

@@ -613,7 +613,7 @@ export default function SchedulePage() {
     queryKey: ["/api/dispatch-shifts", selectedRegionsKey, dateRange.start, dateRange.end],
   });
 
-  const { data: dateAnnotationsConfig } = useQuery<{ key: string; value: string | null }>({
+  const { data: dateAnnotationsConfig } = useQuery<{ key: string; value: string | null; updatedAt?: string | null }>({
     queryKey: ["/api/system-config/date_annotations"],
   });
 
@@ -637,11 +637,16 @@ export default function SchedulePage() {
   const saveDateAnnotationsMutation = useMutation({
     mutationFn: async (annotations: Map<string, DateAnnotation>) => {
       const arr = Array.from(annotations.entries()).map(([date, ann]) => ({ date, color: ann.color, note: ann.note }));
-      const res = await apiRequest("POST", "/api/system-config/date_annotations", { value: JSON.stringify(arr) });
+      const res = await apiRequest("POST", "/api/system-config/date_annotations", { value: JSON.stringify(arr), expectedUpdatedAt: dateAnnotationsConfig?.updatedAt ?? undefined });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/system-config/date_annotations"] });
+    },
+    onError: (err: Error) => {
+      // 409: someone saved a newer version first; reload it instead of keeping this stale copy on screen.
+      queryClient.invalidateQueries({ queryKey: ["/api/system-config/date_annotations"] });
+      toast({ title: err.message.startsWith("409") ? "日期標註已被其他人更新，已重新載入，請再操作一次" : "日期標註儲存失敗", variant: "destructive" });
     },
   });
 

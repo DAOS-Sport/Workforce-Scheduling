@@ -1,9 +1,9 @@
-import { createApp, installErrorHandler } from "./app";
-import { buildHttpServer, startListening } from "./http";
+import { buildApp } from "./app";
+import { startListening } from "./http";
 import { runStartupMigrations } from "./migrations";
 import { registerCronJobs } from "./scheduler";
 import { setupClientServing } from "./viteOrStatic";
-import { registerRoutes } from "../routes";
+import { installLogStamp } from "../shared/log";
 
 /**
  * The single entry point used by server/index.ts.
@@ -11,34 +11,28 @@ import { registerRoutes } from "../routes";
  * Boot sequence:
  *   1. Run idempotent startup migrations
  *   2. Seed database
- *   3. Build the Express app (session, body parsers, request logger)
- *   4. Register every route via routes.ts (which fans out to modules)
- *   5. Install the JSON error handler
+ *   3. Build the Express app (request id, session, body parsers, request logger,
+ *      every route via routes.ts, the JSON error handler) with buildApp()
  *   6. Mount Vite (dev) or static assets (prod) — must be LAST
  *   7. Listen on PORT (default 5000)
  *   8. Register cron jobs (only when REPLIT_DEPLOYMENT === "1")
  */
 export async function bootstrap(): Promise<void> {
+  installLogStamp();
+
   // 1) idempotent migrations first — ensures schema is up-to-date before seed queries it
   await runStartupMigrations();
 
   // 2) seed
   try {
-    const { seedDatabase } = await import("../seed");
+    const { seedDatabase } = await import("./seed");
     await seedDatabase();
   } catch (err) {
     console.error("Seed error:", err);
   }
 
-  // 3) build app
-  const app = await createApp();
-  const httpServer = buildHttpServer(app);
-
-  // 4) routes
-  await registerRoutes(httpServer, app);
-
-  // 5) error handler
-  installErrorHandler(app);
+  // 3-5) app with its session, body parsers, request logger, every route and the error handler
+  const { app, httpServer } = await buildApp();
 
   // 6) client (Vite dev or static prod) — MUST come after API routes
   await setupClientServing(httpServer, app);

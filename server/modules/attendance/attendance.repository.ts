@@ -1,4 +1,5 @@
-import { db } from "../../db";
+import { db } from "../../infra/db";
+import type { Executor } from "../../infra/db/tx";
 import { eq, and, gte, lte, inArray, desc } from "drizzle-orm";
 import {
   attendanceUploads,
@@ -10,42 +11,47 @@ import {
 } from "@shared/schema";
 
 export const attendanceRepository = {
-  async getAttendanceUploads(): Promise<AttendanceUpload[]> {
-    return db.select().from(attendanceUploads).orderBy(desc(attendanceUploads.uploadedAt));
+  async getAttendanceUploads(tx: Executor = db): Promise<AttendanceUpload[]> {
+    return tx.select().from(attendanceUploads).orderBy(desc(attendanceUploads.uploadedAt));
   },
 
-  async createAttendanceUpload(data: InsertAttendanceUpload): Promise<AttendanceUpload> {
-    const [upload] = await db.insert(attendanceUploads).values(data).returning();
+  async getAttendanceUpload(id: number, tx: Executor = db): Promise<AttendanceUpload | undefined> {
+    const [upload] = await tx.select().from(attendanceUploads).where(eq(attendanceUploads.id, id));
     return upload;
   },
 
-  async updateAttendanceUpload(id: number, data: Partial<InsertAttendanceUpload>): Promise<AttendanceUpload | undefined> {
-    const [upload] = await db.update(attendanceUploads).set(data).where(eq(attendanceUploads.id, id)).returning();
+  async createAttendanceUpload(data: InsertAttendanceUpload, tx: Executor = db): Promise<AttendanceUpload> {
+    const [upload] = await tx.insert(attendanceUploads).values(data).returning();
     return upload;
   },
 
-  async deleteAttendanceUpload(id: number): Promise<boolean> {
-    const result = await db.delete(attendanceUploads).where(eq(attendanceUploads.id, id)).returning();
+  async updateAttendanceUpload(id: number, data: Partial<InsertAttendanceUpload>, tx: Executor = db): Promise<AttendanceUpload | undefined> {
+    const [upload] = await tx.update(attendanceUploads).set(data).where(eq(attendanceUploads.id, id)).returning();
+    return upload;
+  },
+
+  async deleteAttendanceUpload(id: number, tx: Executor = db): Promise<boolean> {
+    const result = await tx.delete(attendanceUploads).where(eq(attendanceUploads.id, id)).returning();
     return result.length > 0;
   },
 
-  async createAttendanceRecords(records: InsertAttendanceRecord[]): Promise<AttendanceRecord[]> {
+  async createAttendanceRecords(records: InsertAttendanceRecord[], tx: Executor = db): Promise<AttendanceRecord[]> {
     if (records.length === 0) return [];
     const batchSize = 100;
     const allResults: AttendanceRecord[] = [];
     for (let i = 0; i < records.length; i += batchSize) {
       const batch = records.slice(i, i + batchSize);
-      const results = await db.insert(attendanceRecords).values(batch).returning();
+      const results = await tx.insert(attendanceRecords).values(batch).returning();
       allResults.push(...results);
     }
     return allResults;
   },
 
-  async getAttendanceRecordsByUpload(uploadId: number): Promise<AttendanceRecord[]> {
-    return db.select().from(attendanceRecords).where(eq(attendanceRecords.uploadId, uploadId));
+  async getAttendanceRecordsByUpload(uploadId: number, tx: Executor = db): Promise<AttendanceRecord[]> {
+    return tx.select().from(attendanceRecords).where(eq(attendanceRecords.uploadId, uploadId));
   },
 
-  async getAttendanceRecordsByDateRange(startDate: string, endDate: string, employeeCodes?: string[]): Promise<AttendanceRecord[]> {
+  async getAttendanceRecordsByDateRange(startDate: string, endDate: string, employeeCodes?: string[], tx: Executor = db): Promise<AttendanceRecord[]> {
     const conditions = [
       gte(attendanceRecords.date, startDate),
       lte(attendanceRecords.date, endDate),
@@ -53,11 +59,11 @@ export const attendanceRepository = {
     if (employeeCodes && employeeCodes.length > 0) {
       conditions.push(inArray(attendanceRecords.employeeCode, employeeCodes));
     }
-    return db.select().from(attendanceRecords).where(and(...conditions));
+    return tx.select().from(attendanceRecords).where(and(...conditions));
   },
 
-  async deleteAttendanceRecordsByUpload(uploadId: number): Promise<void> {
-    await db.delete(attendanceRecords).where(eq(attendanceRecords.uploadId, uploadId));
+  async deleteAttendanceRecordsByUpload(uploadId: number, tx: Executor = db): Promise<void> {
+    await tx.delete(attendanceRecords).where(eq(attendanceRecords.uploadId, uploadId));
   },
 
 };

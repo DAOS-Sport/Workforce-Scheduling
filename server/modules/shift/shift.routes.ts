@@ -3,11 +3,12 @@
  * /api/shifts-cancelled/*. Handlers read params, body and the session
  * actor, call shift.service.ts, and write the response.
  *
- * An error without a status maps to 400 on create, update and /batch and
- * to 500 elsewhere. The reads, single delete and restore have no catch and
- * fall through to the global error handler.
+ * A ZodError is a 400 and an httpError keeps its own status. Any other error is
+ * unexpected and goes to the global error handler (500, recorded). The reads,
+ * single delete and restore have no catch and fall through to it as well.
  */
 import type { Express, Request, Response } from "express";
+import { HttpError } from "../../shared/errors";
 import { fail } from "../../shared/http/response";
 import {
   listShifts,
@@ -33,7 +34,8 @@ function actorOf(req: Request): string {
 
 function failShiftWrite(res: Response, err: any) {
   if (err.name === "ZodError") return fail(res, 400, "排班資料格式錯誤");
-  fail(res, err.status || 400, err.message);
+  if (!(err instanceof HttpError)) throw err;
+  fail(res, err.status, err.message);
 }
 
 export function mountShiftRoutes(app: Express): void {
@@ -124,7 +126,7 @@ export function mountShiftRoutes(app: Express): void {
     try {
       res.json(await batchUpsertShifts(req.body, actorOf(req)));
     } catch (err: any) {
-      fail(res, err.status || 400, err.message);
+      failShiftWrite(res, err);
     }
   });
 

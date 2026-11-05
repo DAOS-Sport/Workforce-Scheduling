@@ -343,6 +343,10 @@ export default function VenuesPage() {
               try {
                 const res = await apiRequest("POST", "/api/ragic/sync-venues");
                 const data = await res.json();
+                if (data.status === "busy") {
+                  toast({ title: "已有 Ragic 同步在執行", description: "請稍後再試" });
+                  return;
+                }
                 queryClient.invalidateQueries({ queryKey: ["/api/venues", activeRegion] });
                 toast({
                   title: "Ragic 場館同步完成",

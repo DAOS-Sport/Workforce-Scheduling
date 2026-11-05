@@ -4,13 +4,13 @@
  */
 import { sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
-import { db } from "../../db";
+import { db } from "../../infra/db";
 import { featureFlags } from "../../config/featureFlags";
 import { IS_PRODUCTION } from "../../config/env";
 import { LEAVE_TYPES } from "../shift/shift.types";
 import { lastHolidayDate } from "../../core/calendar/taiwanHolidays";
 import { taipeiClock } from "../../core/time/taipei";
-import { assembleReport, INTEGRATIONS, SCHEDULED_JOBS, type HealthSignals, type ReadError } from "../../core/health/report";
+import { assembleReport, INTEGRATIONS, MANUAL_JOBS, SCHEDULED_JOBS, type HealthSignals, type ReadError } from "../../core/health/report";
 import type { ClockCoverage } from "../../core/health/rules";
 import type { HealthReport } from "../../core/health/types";
 import { readIntegrationState, readJobState } from "../../shared/health/healthState";
@@ -61,7 +61,7 @@ async function probeDatabase(): Promise<{ latencyMs: number | null; error?: stri
 }
 
 export async function collectSignals(now: Date): Promise<HealthSignals> {
-  const jobIds = ["ragic.sync", "ragic.webhook", ...SCHEDULED_JOBS.map((j) => j.id)];
+  const jobIds = ["ragic.sync", "ragic.webhook", ...MANUAL_JOBS.map((j) => j.id), ...SCHEDULED_JOBS.map((j) => j.id)];
   const jobs = Object.fromEntries(await Promise.all(jobIds.map(async (id) => [id, await attempt(() => readJobState(id))] as const)));
   const integrations = Object.fromEntries(
     await Promise.all(INTEGRATIONS.map(async (i) => [i.key, await attempt(() => readIntegrationState(i.key))] as const)),

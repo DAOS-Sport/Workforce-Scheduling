@@ -16,6 +16,8 @@ export interface Pipeline {
   reason: string;
   lastSuccessAt: string | null;
   lastFailureAt: string | null;
+  /** 最近一次失敗之後的第一次成功；沒有失敗過、或之後又失敗了就不出現。 */
+  recoveredAt?: string;
   source: string | null;
 }
 
@@ -37,6 +39,8 @@ export interface JobState {
   lastError?: string;
   lastTrigger?: string;
   lastSummary?: Record<string, unknown>;
+  /** 失敗之後第一次成功的時間，由 recordRecovery 那句 SQL 蓋章，之後的成功不會移動它。 */
+  recoveredAt?: string;
 }
 
 /** 外部系統最後一次呼叫的成敗。 */
@@ -45,6 +49,7 @@ export interface IntegrationState {
   lastFailureAt?: string;
   lastError?: string;
   consecutiveFailures?: number;
+  recoveredAt?: string;
 }
 
 export type JobSchedule =

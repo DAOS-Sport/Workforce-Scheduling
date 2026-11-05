@@ -16,14 +16,15 @@
  *
  * Webhook URL (public prefix, protected by RAGIC_WEBHOOK_SECRET):
  *   POST /api/ragic/webhook/h01
+ *   Stores the delivery and answers 202; the sync runs after a short debounce.
  *
- * Both pairs delegate to the same service functions, so request bodies,
- * response shapes, and side-effects are identical.
+ * Both pairs delegate to the same service functions, so request bodies and
+ * response shapes are identical. A sync that finds another one running answers 202.
  */
-import { type Express, type Request } from "express";
+import { type Express, type Request, type Response } from "express";
 import { type Server } from "http";
 import { timingSafeEqual } from "crypto";
-import { syncFromRagic, syncVenuesFromRagic } from "./ragic.service";
+import { acceptWebhook, runRagicSync, runVenueSync } from "./ragic.service";
 import { trackJob } from "../../shared/health/healthState";
 
 function getWebhookSecret(req: Request): string {
@@ -42,6 +43,34 @@ function secretsMatch(received: string, expected: string): boolean {
   return timingSafeEqual(receivedBuffer, expectedBuffer);
 }
 
+/** The event id Ragic sent, if it sent one; a delivery without one is simply recorded as its own event. */
+function webhookEventId(req: Request): string | undefined {
+  const id = req.header("x-ragic-event-id")?.trim();
+  return id ? id.slice(0, 200) : undefined;
+}
+
+const BUSY = { status: "busy", message: "已有另一個 Ragic 同步在執行，已記錄待補跑" };
+
+async function respondEmployeeSync(_req: Request, res: Response): Promise<void> {
+  try {
+    const outcome = await runRagicSync("manual");
+    if (outcome.busy) res.status(202).json(BUSY);
+    else res.json(outcome.result);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ message: err.message });
+  }
+}
+
+async function respondVenueSync(_req: Request, res: Response): Promise<void> {
+  try {
+    const outcome = await runVenueSync();
+    if (outcome.busy) res.status(202).json(BUSY);
+    else res.json(outcome.result);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ message: err.message });
+  }
+}
+
 export function mountRagicRoutes(_httpServer: Server, app: Express): void {
   app.post("/api/ragic/webhook/h01", async (req, res) => {
     const expectedSecret = process.env.RAGIC_WEBHOOK_SECRET;
@@ -55,44 +84,18 @@ export function mountRagicRoutes(_httpServer: Server, app: Express): void {
     }
 
     try {
-      const result = await trackJob("ragic.webhook", "webhook", () => syncFromRagic(), (r) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length }));
-      res.json({ message: "H01 webhook sync completed", result });
+      const { eventId, duplicate } = await trackJob("ragic.webhook", "webhook", () => acceptWebhook(webhookEventId(req)));
+      res.status(202).json({ message: "H01 webhook accepted", eventId, duplicate });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
   });
 
   // Legacy URLs (kept verbatim for backwards compatibility).
-  app.post("/api/ragic-venue-sync", async (_req, res) => {
-    try {
-      res.json(await syncVenuesFromRagic());
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  app.post("/api/ragic-sync", async (_req, res) => {
-    try {
-      res.json(await trackJob("ragic.sync", "manual", () => syncFromRagic(), (r) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length })));
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
+  app.post("/api/ragic-venue-sync", respondVenueSync);
+  app.post("/api/ragic-sync", respondEmployeeSync);
 
   // Module-scoped URLs (Task #73 重構 D).
-  app.post("/api/ragic/sync-employees", async (_req, res) => {
-    try {
-      res.json(await trackJob("ragic.sync", "manual", () => syncFromRagic(), (r) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length })));
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  app.post("/api/ragic/sync-venues", async (_req, res) => {
-    try {
-      res.json(await syncVenuesFromRagic());
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
+  app.post("/api/ragic/sync-employees", respondEmployeeSync);
+  app.post("/api/ragic/sync-venues", respondVenueSync);
 }

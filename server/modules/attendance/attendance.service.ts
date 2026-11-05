@@ -3,18 +3,28 @@
  * The import handler itself lives in modules/importExport because it
  * spans more than one persistence concern.
  */
-import { storage } from "../../storage";
+import { withTx } from "../../infra/db/tx";
+import { attendanceRepository } from "./attendance.repository";
 
 export const attendanceService = {
-  listUploads: () => storage.getAttendanceUploads(),
+  listUploads: () => attendanceRepository.getAttendanceUploads(),
 
-  recordsByUpload: (uploadId: number) => storage.getAttendanceRecordsByUpload(uploadId),
+  recordsByUpload: (uploadId: number) => attendanceRepository.getAttendanceRecordsByUpload(uploadId),
 
   recordsByDateRange: (startDate: string, endDate: string, codes?: string[]) =>
-    storage.getAttendanceRecordsByDateRange(startDate, endDate, codes),
+    attendanceRepository.getAttendanceRecordsByDateRange(startDate, endDate, codes),
 
+  /** Remove an upload and its records together; if either delete fails, both stay. */
   async deleteUpload(id: number): Promise<boolean> {
-    await storage.deleteAttendanceRecordsByUpload(id);
-    return storage.deleteAttendanceUpload(id);
+    return withTx(async (tx) => {
+      await attendanceRepository.deleteAttendanceRecordsByUpload(id, tx);
+      return attendanceRepository.deleteAttendanceUpload(id, tx);
+    });
   },
+
+  createAttendanceRecords: attendanceRepository.createAttendanceRecords,
+  createAttendanceUpload: attendanceRepository.createAttendanceUpload,
+  getAttendanceUpload: attendanceRepository.getAttendanceUpload,
+  getAttendanceRecordsByDateRange: attendanceRepository.getAttendanceRecordsByDateRange,
+  updateAttendanceUpload: attendanceRepository.updateAttendanceUpload,
 };

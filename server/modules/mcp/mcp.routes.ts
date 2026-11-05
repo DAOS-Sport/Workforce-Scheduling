@@ -8,7 +8,7 @@
  *
  * Two tool groups:
  *   1. Business tools — read scheduling data (regions, venues, employees,
- *      shifts, anomaly reports) through the storage façade.
+ *      shifts, anomaly reports) through each module's service.
  *   2. Code-level tools — read/write project files, run shell commands and
  *      SQL queries. These operate on the environment this server runs in;
  *      file edits only persist in the development workspace (a published
@@ -21,9 +21,13 @@ import { exec } from "child_process";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { storage } from "../../storage";
 import { db } from "../../infra/db";
 import { sql } from "drizzle-orm";
+import { regionService } from "../region/region.service";
+import { venueService } from "../venue/venue.service";
+import { employeeService } from "../employee/employee.service";
+import { shiftService } from "../shift/shift.service";
+import { anomalyService } from "../anomaly/anomaly.service";
 const PROJECT_ROOT = process.cwd();
 
 // Full-access mode: code-level (file / shell / SQL) tools are enabled in ALL
@@ -89,7 +93,7 @@ function buildMcpServer(): McpServer {
   server.registerTool(
     "list_regions",
     { description: "列出所有營運區域 (regions)", inputSchema: {} },
-    async () => textResult(await storage.getRegions())
+    async () => textResult(await regionService.findAll())
   );
 
   server.registerTool(
@@ -99,9 +103,9 @@ function buildMcpServer(): McpServer {
       inputSchema: { regionId: z.number().optional() },
     },
     async ({ regionId }) => {
-      if (regionId != null) return textResult(await storage.getVenuesByRegion(regionId));
-      const regions = await storage.getRegions();
-      const all = await Promise.all(regions.map((r) => storage.getVenuesByRegion(r.id)));
+      if (regionId != null) return textResult(await venueService.getVenuesByRegion(regionId));
+      const regions = await regionService.findAll();
+      const all = await Promise.all(regions.map((r) => venueService.getVenuesByRegion(r.id)));
       return textResult(all.flat());
     }
   );
@@ -114,11 +118,11 @@ function buildMcpServer(): McpServer {
     },
     async ({ regionId, employeeCode }) => {
       if (employeeCode) {
-        const emp = await storage.getEmployeeByCode(employeeCode);
+        const emp = await employeeService.getEmployeeByCode(employeeCode);
         return textResult(emp ?? { error: "找不到該員工編號" });
       }
-      if (regionId != null) return textResult(await storage.getEmployeesByRegion(regionId));
-      return textResult(await storage.getAllEmployees());
+      if (regionId != null) return textResult(await employeeService.getEmployeesByRegion(regionId));
+      return textResult(await employeeService.getAllEmployees());
     }
   );
 
@@ -135,20 +139,20 @@ function buildMcpServer(): McpServer {
     },
     async ({ startDate, endDate, employeeCode }) => {
       if (employeeCode) {
-        const emp = await storage.getEmployeeByCode(employeeCode);
+        const emp = await employeeService.getEmployeeByCode(employeeCode);
         if (!emp) return textResult({ error: "找不到該員工編號" });
         return textResult(
-          await storage.getShiftsByEmployeeAndDateRange(emp.id, startDate, endDate)
+          await shiftService.getShiftsByEmployeeAndDateRange(emp.id, startDate, endDate)
         );
       }
-      return textResult(await storage.getAllShiftsByDateRange(startDate, endDate));
+      return textResult(await shiftService.getAllShiftsByDateRange(startDate, endDate));
     }
   );
 
   server.registerTool(
     "list_anomaly_reports",
     { description: "列出員工異常通報 (anomaly reports)", inputSchema: {} },
-    async () => textResult(await storage.getAnomalyReports())
+    async () => textResult(await anomalyService.list())
   );
 
   // ── Code-level tools (gated) ────────────────────────────────────────────

@@ -1,14 +1,24 @@
-import { storage } from "../../storage";
 import { calcShiftHours, sumScheduledHours, getAllPeriodsForMonth } from "@shared/schema";
 import { pushToLine } from "../line/linePush.service";
-import { db } from "../../db";
-import { isNotNull, and, gte, lte } from "drizzle-orm";
-import { dispatchShifts as dispatchShiftsTable } from "@shared/schema";
+import { pushOnce } from "../line/pushOnce.service";
 import { sendAnomalyEmail } from "../../shared/email/sendAnomalyEmail";
 import { TAIWAN_HOLIDAYS } from "../../core/calendar/taiwanHolidays";
 import ExcelJS from "exceljs";
 
 import { LEAVE_TYPES } from "@shared/leave";
+import { httpError } from "../../shared/http/response";
+import { systemRepository } from "./system.repository";
+import { shiftService } from "../shift/shift.service";
+import { overtimeService } from "../overtime/overtime.service";
+import { dispatchService } from "../dispatch/dispatch.service";
+import { employeeService } from "../employee/employee.service";
+import { regionService } from "../region/region.service";
+import { venueService } from "../venue/venue.service";
+import { clockService } from "../clock/clock.service";
+import { notificationService } from "../notification/notification.service";
+/** The settings the pages save through /api/system-config. Health records and boot markers share the table but are not theirs. */
+const WRITABLE_CONFIG_KEYS = ["availability_window", "monthly_holidays", "date_annotations", "four_week_reference_date", "summer-payroll-config-v1"];
+
 const ATTENDANCE_GRACE_MINUTES = 10;
 
 function parseAttendanceIssueMinutes(reason: string | null | undefined, prefix: string): number | null {
@@ -36,45 +46,51 @@ function hasAttendanceIssueBeyondGrace(
   });
 }
 
-function err(status: number, message: string): Error {
-  const e: any = new Error(message);
-  e.status = status;
-  return e;
-}
-
 export const systemService = {
   async listSalaryRates() {
-    return await storage.getSalaryRates();
+    return await systemRepository.getSalaryRates();
   },
 
   async upsertSalaryRate(role: string, ratePerHour: number, label?: string) {
-    if (!role || ratePerHour === undefined || ratePerHour === null) throw err(400, "需提供 role 和 ratePerHour");
-    return await storage.upsertSalaryRate(role, Number(ratePerHour), label);
+    if (!role || ratePerHour === undefined || ratePerHour === null) throw httpError(400, "需提供 role 和 ratePerHour");
+    return await systemRepository.upsertSalaryRate(role, Number(ratePerHour), label);
   },
 
-  async getSystemConfig(key: string) {
-    const config = await storage.getSystemConfig(key);
+  async getSystemConfig(key: string): Promise<{ key: string; value: string | null; updatedAt?: Date | null }> {
+    const config = await systemRepository.getSystemConfig(key);
     return config ?? { key, value: null };
   },
 
-  async upsertSystemConfig(key: string, value: any) {
-    if (value === undefined || value === null) throw err(400, "需提供 value");
-    return await storage.upsertSystemConfig(key, String(value));
+  /**
+   * Save a setting the pages own. `expectedUpdatedAt` is the version the writer read; the settings that hold a whole JSON
+   * document pass it so that a second administrator's save is not silently replaced by the first one's stale copy.
+   */
+  async upsertSystemConfig(key: string, value: any, expectedUpdatedAt?: string) {
+    if (!WRITABLE_CONFIG_KEYS.includes(key)) throw httpError(400, "不支援的設定項目");
+    if (value === undefined || value === null) throw httpError(400, "需提供 value");
+    let expected: Date | undefined;
+    if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+      expected = new Date(expectedUpdatedAt);
+      if (Number.isNaN(expected.getTime())) throw httpError(400, "expectedUpdatedAt 格式錯誤");
+    }
+    const saved = await systemRepository.upsertSystemConfig(key, String(value), expected);
+    if (!saved) throw httpError(409, "設定已被其他人更新，請重新整理後再儲存");
+    return saved;
   },
 
   async fourWeekCompliance(year: number, month: number, regionCode?: string) {
-    if (!year || !month || month < 1 || month > 12) throw err(400, "需提供正確的 year 和 month");
-    const refConfig = await storage.getSystemConfig("four_week_reference_date");
+    if (!year || !month || month < 1 || month > 12) throw httpError(400, "需提供正確的 year 和 month");
+    const refConfig = await systemRepository.getSystemConfig("four_week_reference_date");
     const referenceDate = refConfig?.value || "2025-01-06";
 
     const periods = getAllPeriodsForMonth(year, month, referenceDate);
     const allStart = periods.reduce((min, p) => p.start < min ? p.start : min, periods[0].start);
     const allEnd = periods.reduce((max, p) => p.end > max ? p.end : max, periods[0].end);
 
-    const allShifts = await storage.getAllShiftsByDateRange(allStart, allEnd);
-    const approvedOT = await storage.getApprovedOvertimeByDateRange(allStart, allEnd);
-    const allEmployees = await storage.getAllEmployees();
-    const allRegions = await storage.getRegions();
+    const allShifts = await shiftService.getAllShiftsByDateRange(allStart, allEnd);
+    const approvedOT = await overtimeService.getApprovedOvertimeByDateRange(allStart, allEnd);
+    const allEmployees = await employeeService.getAllEmployees();
+    const allRegions = await regionService.findAll();
     const regionMap = new Map(allRegions.map(r => [r.id, r]));
     const regionFilter = regionCode ? allRegions.find(r => r.code === regionCode) : null;
 
@@ -120,16 +136,16 @@ export const systemService = {
   },
 
   async salaryReport(year: number, month: number, regionCode?: string) {
-    if (!year || !month || month < 1 || month > 12) throw err(400, "需提供正確的 year 和 month");
+    if (!year || !month || month < 1 || month > 12) throw httpError(400, "需提供正確的 year 和 month");
 
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-    const allShifts = await storage.getAllShiftsByDateRange(startDate, endDate);
-    const approvedOT = await storage.getApprovedOvertimeByDateRange(startDate, endDate);
-    const allEmployees = await storage.getAllEmployees();
-    const allRegions = await storage.getRegions();
+    const allShifts = await shiftService.getAllShiftsByDateRange(startDate, endDate);
+    const approvedOT = await overtimeService.getApprovedOvertimeByDateRange(startDate, endDate);
+    const allEmployees = await employeeService.getAllEmployees();
+    const allRegions = await regionService.findAll();
     const regionMap = new Map(allRegions.map(r => [r.id, r]));
     const regionFilter = regionCode ? allRegions.find(r => r.code === regionCode) : null;
 
@@ -239,13 +255,7 @@ export const systemService = {
       }
     }
 
-    const linkedDispatch = await db.select().from(dispatchShiftsTable).where(
-      and(
-        gte(dispatchShiftsTable.date, startDate),
-        lte(dispatchShiftsTable.date, endDate),
-        isNotNull(dispatchShiftsTable.linkedEmployeeId)
-      )
-    );
+    const linkedDispatch = await dispatchService.getLinkedDispatchShiftsInRange(startDate, endDate);
     for (const ds of linkedDispatch) {
       const empId = ds.linkedEmployeeId!;
       const emp = empMap.get(empId);
@@ -307,7 +317,7 @@ export const systemService = {
   },
 
   async salaryReportExcel(year: number, month: number, regionCode?: string): Promise<Buffer> {
-    if (!year || !month || month < 1 || month > 12) throw err(400, "需提供正確的 year 和 month");
+    if (!year || !month || month < 1 || month > 12) throw httpError(400, "需提供正確的 year 和 month");
 
     const report = await this.salaryReport(year, month, regionCode);
 
@@ -315,18 +325,12 @@ export const systemService = {
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-    const allEmployees = await storage.getAllEmployees();
-    const allVenues = await storage.getAllVenues();
+    const allEmployees = await employeeService.getAllEmployees();
+    const allVenues = await venueService.findAll();
     const venueMap = new Map(allVenues.map(v => [v.id, v]));
     const empMap = new Map(allEmployees.map(e => [e.id, e]));
 
-    const linkedDispatch = await db.select().from(dispatchShiftsTable).where(
-      and(
-        gte(dispatchShiftsTable.date, startDate),
-        lte(dispatchShiftsTable.date, endDate),
-        isNotNull(dispatchShiftsTable.linkedEmployeeId),
-      )
-    );
+    const linkedDispatch = await dispatchService.getLinkedDispatchShiftsInRange(startDate, endDate);
 
     const rawHoursLocal = (start: string, end: string): number => {
       const [sh, sm] = start.split(":").map(Number);
@@ -389,7 +393,7 @@ export const systemService = {
     for (const ds of sortedDispatch) {
       const emp = empMap.get(ds.linkedEmployeeId!);
       const venue = ds.venueId ? venueMap.get(ds.venueId) : null;
-      const allRegions = await storage.getRegions();
+      const allRegions = await regionService.findAll();
       const regionMap2 = new Map(allRegions.map(r => [r.id, r]));
       const region = emp ? regionMap2.get(emp.regionId) : null;
       const hrs = rawHoursLocal(ds.startTime, ds.endTime);
@@ -413,16 +417,16 @@ export const systemService = {
       d.setUTCDate(d.getUTCDate() + 6);
       return d.toISOString().split("T")[0];
     })();
-    const allShifts = await storage.getAllShiftsByDateRange(weekStart, weekEnd);
-    const clockRecords = await storage.getClockRecordsByDateRange(weekStart, weekEnd);
-    const allEmployees = await storage.getAllEmployees();
-    const allVenues = await storage.getAllVenues();
+    const allShifts = await shiftService.getAllShiftsByDateRange(weekStart, weekEnd);
+    const clockRecords = await clockService.getClockRecordsByDateRange(weekStart, weekEnd);
+    const allEmployees = await employeeService.getAllEmployees();
+    const allVenues = await venueService.findAll();
     return { weekEnd, allShifts, clockRecords, allEmployees, allVenues };
   },
 
   async weeklyAttendance(weekStart: string) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || isNaN(new Date(weekStart + "T00:00:00Z").getTime())) {
-      throw err(400, "weekStart 格式不正確 (YYYY-MM-DD)");
+      throw httpError(400, "weekStart 格式不正確 (YYYY-MM-DD)");
     }
     const { weekEnd, allShifts, clockRecords, allEmployees, allVenues } = await this._buildWeeklyData(weekStart);
     const empMap = new Map(allEmployees.map(e => [e.id, e]));
@@ -488,7 +492,7 @@ export const systemService = {
 
   async notifyWeeklyAttendance(weekStart: string) {
     if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || isNaN(new Date(weekStart + "T00:00:00Z").getTime())) {
-      throw err(400, "缺少或格式不正確的 weekStart (YYYY-MM-DD)");
+      throw httpError(400, "缺少或格式不正確的 weekStart (YYYY-MM-DD)");
     }
     const { weekEnd, allShifts, clockRecords, allEmployees, allVenues } = await this._buildWeeklyData(weekStart);
     const empMap = new Map(allEmployees.map(e => [e.id, e]));
@@ -556,8 +560,10 @@ export const systemService = {
         }
         lines.push("");
         lines.push(hasAnomaly ? "如有上述異常狀況，請盡速向主管回報說明，謝謝 🙏" : "本週出勤正常，辛苦了 👍");
-        const ok = await pushToLine(emp.lineId, lines.join("\n").trim());
-        if (ok) lineSent++; else lineSkipped++;
+        const lineId = emp.lineId;
+        const text = lines.join("\n").trim();
+        const { outcome } = await pushOnce({ scope: "weekly-attendance", period: weekStart, employeeId: empId }, () => pushToLine(lineId, text));
+        if (outcome === "sent") lineSent++; else lineSkipped++;
       } else {
         lineSkipped++;
       }
@@ -565,7 +571,7 @@ export const systemService = {
 
     let emailSent = false;
     try {
-      const recipients = await storage.getNotificationRecipients();
+      const recipients = await notificationService.findAll();
       const targets = recipients.filter(r => r.enabled && r.notifyNewReport);
       if (targets.length > 0) {
         const tableRows = summaryRows.map(row => `<tr><td style="padding: 6px 12px; border: 1px solid #e5e7eb; font-size: 13px; white-space: nowrap;">${row}</td></tr>`).join("");
@@ -578,12 +584,21 @@ export const systemService = {
           </table>
           <p>共 ${employeeIds.size} 位員工，LINE 推播 ${lineSent} 位，跳過 ${lineSkipped} 位。</p>
         `;
-        await sendAnomalyEmail(
-          targets.map(r => r.email),
-          `📊 週報打卡狀況 — ${displayRange}（${employeeIds.size} 位員工）`,
-          emailHtml
-        );
-        emailSent = true;
+        // One report per week: triggering again does not mail the managers again. A refused mail counts as failed and is tried next time.
+        const mail = await pushOnce({ scope: "weekly-attendance-mail", period: weekStart, employeeId: 0 }, async () => {
+          try {
+            await sendAnomalyEmail(
+              targets.map(r => r.email),
+              `📊 週報打卡狀況 — ${displayRange}（${employeeIds.size} 位員工）`,
+              emailHtml
+            );
+            return true;
+          } catch (e) {
+            console.error("[週報] Email 發送失敗:", e);
+            return false;
+          }
+        });
+        emailSent = mail.outcome === "sent";
       }
     } catch (e: any) {
       console.error("[週報] Email 發送失敗:", e);
@@ -595,4 +610,10 @@ export const systemService = {
       message: `已發送 LINE 推播 ${lineSent} 位，${emailSent ? "管理員 Email 已發送" : "Email 未發送"}`,
     };
   },
+
+  clearOldMissingClockNotifications: systemRepository.clearOldMissingClockNotifications,
+  clearOldWeeklyPushNotifications: systemRepository.clearOldWeeklyPushNotifications,
+  findSystemConfig: systemRepository.getSystemConfig,
+  getMissingClockNotificationsForDate: systemRepository.getMissingClockNotificationsForDate,
+  hasWeeklyPushNotification: systemRepository.hasWeeklyPushNotification,
 };

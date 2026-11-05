@@ -8,6 +8,7 @@ import {
   evaluateDatabase,
   evaluateHolidayTable,
   evaluateIntegration,
+  evaluateManualJob,
   evaluateScheduledJob,
   evaluateSecurity,
   evaluateSyncJob,
@@ -25,6 +26,11 @@ export const SCHEDULED_JOBS: ReadonlyArray<{ id: string; name: string; schedule:
   { id: "push.missing-clock", name: "未打卡提醒（06:00–21:30 每 30 分鐘）", schedule: { kind: "every30", from: 6 * 60, to: 21 * 60 + 30 }, graceMinutes: 10, flag: "missingClockCheck" },
   { id: "report.weekly-late", name: "上週遲到報告（週一 09:00）", schedule: { kind: "weekly", weekday: 1, at: 9 * 60 }, graceMinutes: 30, flag: "weeklyLateReport" },
   { id: "push.availability-reminder", name: "排班意願提醒（每天 10:00）", schedule: { kind: "daily", at: 10 * 60 }, graceMinutes: 30, flag: "availabilityReminder" },
+];
+
+/** 只由人按按鈕觸發的工作，沒有排程。要加一個，在這裡加一筆，並讓它用 trackJob 記錄。 */
+export const MANUAL_JOBS: ReadonlyArray<{ id: string; name: string }> = [
+  { id: "ragic.venue-sync", name: "Ragic 場館同步（手動）" },
 ];
 
 export const INTEGRATIONS = [
@@ -86,6 +92,12 @@ export function assembleReport(s: HealthSignals): HealthReport {
     pipelines.push(isReadError(state)
       ? unreadable(j.id, j.name, source, state)
       : evaluateScheduledJob({ id: j.id, name: j.name, source, schedule: j.schedule, graceMinutes: j.graceMinutes, enabled: s.flags[j.flag] ?? true, schedulerActive: s.schedulerActive, state, now: s.now }));
+  }
+
+  for (const j of MANUAL_JOBS) {
+    const state = job(j.id);
+    const source = `health:job:${j.id}`;
+    pipelines.push(isReadError(state) ? unreadable(j.id, j.name, source, state) : evaluateManualJob({ id: j.id, name: j.name, source, state }));
   }
 
   for (const i of INTEGRATIONS) {

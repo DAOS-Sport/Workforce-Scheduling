@@ -1,4 +1,4 @@
-import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff, PenLine, ListChecks, ClipboardList, Sun } from "lucide-react";
+import { Calendar, Users, Building2, LayoutGrid, ClipboardCheck, BookOpen, MapPin, LogOut, ShieldCheck, ShieldAlert, CalendarCheck, Clock, FileSpreadsheet, CalendarOff, PenLine, ListChecks, ClipboardList, Sun, Activity } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +30,7 @@ const reportItems = [
 
 const systemItems = [
   { title: "系統 SOP 說明", url: "/sop", icon: ListChecks },
+  { title: "IT 監控", url: "/it-monitor", icon: Activity },
 ];
 
 interface PendingCounts {

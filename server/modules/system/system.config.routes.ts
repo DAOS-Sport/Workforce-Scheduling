@@ -32,7 +32,7 @@ export function mountSystemConfigRoutes(_httpServer: Server, app: Express): void
 
   app.post("/api/system-config/:key", async (req, res) => {
     try {
-      res.json(await systemService.upsertSystemConfig(req.params.key, req.body?.value));
+      res.json(await systemService.upsertSystemConfig(req.params.key, req.body?.value, req.body?.expectedUpdatedAt));
     } catch (err: any) {
       res.status(err.status || 500).json({ message: err.message });
     }

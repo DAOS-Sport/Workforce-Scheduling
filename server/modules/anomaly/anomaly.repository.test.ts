@@ -8,7 +8,7 @@ const pg = vi.hoisted(() => ({
   rows: [] as unknown[][],
 }));
 
-vi.mock("../../db", async () => {
+vi.mock("../../infra/db", async () => {
   const { drizzle } = await import("drizzle-orm/node-postgres");
   const fakePool = {
     query: async (q: { text: string }) => {

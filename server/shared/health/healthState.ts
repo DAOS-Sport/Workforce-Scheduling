@@ -5,7 +5,8 @@
  * 這樣不需要改正式庫結構，也不會踩到 Replit 發布時依開發庫 schema 提議 DROP 的問題。
  * 只存「最後一次」，不存歷史。
  *
- * 記錄失敗只印警告，絕不讓原本的工作失敗。同一個鍵的寫入依呼叫順序排隊，避免讀改寫互相覆蓋。
+ * 記錄失敗只印警告，絕不讓原本的工作失敗。每次寫入是單句 SQL（jsonb 合併、計數在資料庫內加一），
+ * 不先讀再寫，多個執行個體同時寫同一個鍵也不會互相蓋掉；同一個程序內對同一個鍵仍依呼叫順序送出。
  */
 import { systemRepository } from "../../modules/system/system.repository";
 import type { IntegrationState, JobState } from "../../core/health/types";
@@ -18,13 +19,16 @@ export type IntegrationName = "line" | "mail" | "ragic" | "enrollment";
 
 const queues = new Map<string, Promise<void>>();
 
-function updateJson<T extends object>(key: string, change: (current: T) => T): Promise<void> {
+/**
+ * Merges `patch` into the stored state with one statement, so two instances never overwrite each other's fields
+ * or lose a count. `increment` names a counter raised by one inside that statement. Writes from this process
+ * to one key still go out in call order.
+ */
+function mergeState(key: string, patch: object, options: { increment?: string; stampRecovery?: boolean } = {}): Promise<void> {
   const previous = queues.get(key) ?? Promise.resolve();
   const next = previous.then(async () => {
     try {
-      const row = await systemRepository.getSystemConfig(key);
-      const current = row ? (JSON.parse(row.value) as T) : ({} as T);
-      await systemRepository.upsertSystemConfig(key, JSON.stringify(change(current)));
+      await systemRepository.mergeJsonConfig(key, patch as Record<string, unknown>, options);
     } catch (err: any) {
       console.warn(`[health] 無法寫入 ${key}: ${err?.message ?? err}`);
     }
@@ -53,7 +57,7 @@ export async function trackJob<T>(
   run: () => Promise<T>,
   summarize?: (result: T) => Record<string, unknown>,
 ): Promise<T> {
-  await updateJson<JobState>(JOB_KEY_PREFIX + job, (s) => ({ ...s, lastStartedAt: nowIso(), lastStatus: "running", lastTrigger: trigger }));
+  await mergeState(JOB_KEY_PREFIX + job, { lastStartedAt: nowIso(), lastStatus: "running", lastTrigger: trigger } satisfies JobState);
   try {
     const result = await run();
     let summary: Record<string, unknown> | undefined;
@@ -62,39 +66,36 @@ export async function trackJob<T>(
     } catch {
       summary = undefined;
     }
-    await updateJson<JobState>(JOB_KEY_PREFIX + job, (s) => ({ ...s, lastFinishedAt: nowIso(), lastStatus: "success", lastSuccessAt: nowIso(), lastSummary: summary }));
+    await mergeState(JOB_KEY_PREFIX + job, { lastFinishedAt: nowIso(), lastStatus: "success", lastSuccessAt: nowIso(), lastSummary: summary } satisfies JobState, { stampRecovery: true });
     return result;
   } catch (err) {
-    await updateJson<JobState>(JOB_KEY_PREFIX + job, (s) => ({ ...s, lastFinishedAt: nowIso(), lastStatus: "failed", lastFailureAt: nowIso(), lastError: message(err) }));
+    await mergeState(JOB_KEY_PREFIX + job, { lastFinishedAt: nowIso(), lastStatus: "failed", lastFailureAt: nowIso(), lastError: message(err) } satisfies JobState);
     throw err;
   }
 }
 
 const SUCCESS_PERSIST_INTERVAL_MS = 5 * 60 * 1000;
-const memo = new Map<IntegrationName, { lastOk?: boolean; okPersistedAt: number; consecutiveFailures: number }>();
+const memo = new Map<IntegrationName, { lastOk?: boolean; okPersistedAt: number }>();
 
 /**
- * 記下一次外部呼叫的成敗。不等待寫入完成，不影響呼叫端的時序。
+ * 記下一次外部呼叫的成敗。呼叫端可以不等待回傳值，寫入不影響呼叫端的時序。
  * 成功時 5 分鐘內最多寫一次（推播一次發幾百則），失敗一定寫。
+ * 連續失敗次數由資料庫在同一句 SQL 內加一，多個執行個體同時失敗也不會少算；成功把它歸零。
  */
-export function recordIntegration(name: IntegrationName, ok: boolean, error?: unknown): void {
-  const m = memo.get(name) ?? { okPersistedAt: 0, consecutiveFailures: 0 };
+export function recordIntegration(name: IntegrationName, ok: boolean, error?: unknown): Promise<void> {
+  const m = memo.get(name) ?? { okPersistedAt: 0 };
   const now = Date.now();
   if (ok) {
     const skip = m.lastOk === true && now - m.okPersistedAt < SUCCESS_PERSIST_INTERVAL_MS;
-    m.consecutiveFailures = 0;
     m.lastOk = true;
     memo.set(name, m);
-    if (skip) return;
+    if (skip) return Promise.resolve();
     m.okPersistedAt = now;
-    void updateJson<IntegrationState>(INTEGRATION_KEY_PREFIX + name, (s) => ({ ...s, lastSuccessAt: nowIso(), consecutiveFailures: 0 }));
-    return;
+    return mergeState(INTEGRATION_KEY_PREFIX + name, { lastSuccessAt: nowIso(), consecutiveFailures: 0 } satisfies IntegrationState, { stampRecovery: true });
   }
-  m.consecutiveFailures += 1;
   m.lastOk = false;
   memo.set(name, m);
-  const failures = m.consecutiveFailures;
-  void updateJson<IntegrationState>(INTEGRATION_KEY_PREFIX + name, (s) => ({ ...s, lastFailureAt: nowIso(), lastError: message(error ?? "失敗"), consecutiveFailures: failures }));
+  return mergeState(INTEGRATION_KEY_PREFIX + name, { lastFailureAt: nowIso(), lastError: message(error ?? "失敗") } satisfies IntegrationState, { increment: "consecutiveFailures" });
 }
 
 export function readJobState(job: string): Promise<JobState | undefined> {

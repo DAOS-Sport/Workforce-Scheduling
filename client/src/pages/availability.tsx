@@ -83,7 +83,7 @@ export default function AvailabilityPage() {
     },
   });
 
-  const { data: holidayConfigData } = useQuery<{ key: string; value: string | null } | null>({
+  const { data: holidayConfigData } = useQuery<{ key: string; value: string | null; updatedAt?: string | null } | null>({
     queryKey: ["/api/system-config/monthly_holidays"],
     queryFn: async () => {
       const res = await fetch("/api/system-config/monthly_holidays");
@@ -156,13 +156,17 @@ export default function AvailabilityPage() {
       let existing: Record<string, string[]> = {};
       try { existing = holidayConfigData?.value ? JSON.parse(holidayConfigData.value) : {}; } catch {}
       existing[windowForm.targetYearMonth] = dates;
-      await apiRequest("POST", "/api/system-config/monthly_holidays", { value: JSON.stringify(existing) });
+      await apiRequest("POST", "/api/system-config/monthly_holidays", { value: JSON.stringify(existing), expectedUpdatedAt: holidayConfigData?.updatedAt ?? undefined });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/system-config/monthly_holidays"] });
       toast({ title: "休館日已儲存" });
     },
-    onError: () => toast({ title: "儲存失敗", variant: "destructive" }),
+    onError: (err: Error) => {
+      // 409: someone saved a newer version first; reload it so the next save builds on that.
+      if (err.message.startsWith("409")) queryClient.invalidateQueries({ queryKey: ["/api/system-config/monthly_holidays"] });
+      toast({ title: err.message.startsWith("409") ? "休館日已被其他人更新，已重新載入，請再操作一次" : "儲存失敗", variant: "destructive" });
+    },
   });
 
   function toggleHoliday(dateStr: string) {

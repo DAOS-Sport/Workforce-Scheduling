@@ -1,17 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { mockDb, mockStorage } = vi.hoisted(() => ({
+const { mockDb, mockData } = vi.hoisted(() => ({
   mockDb: {},
-  mockStorage: {},
+  mockData: {},
 }));
 
-vi.mock("../../db", () => ({
+vi.mock("../../infra/db", () => ({
   db: mockDb,
 }));
 
-vi.mock("../../storage", () => ({
-  storage: mockStorage,
-}));
+
 
 vi.mock("../line/lineSignature", () => ({
   isValidLineUserId: vi.fn(() => true),

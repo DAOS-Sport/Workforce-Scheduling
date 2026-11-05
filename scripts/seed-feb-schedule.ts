@@ -1,4 +1,4 @@
-import { db } from "../server/db";
+import { db } from "../server/infra/db";
 import { employees, scheduleSlots, shifts } from "../shared/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 

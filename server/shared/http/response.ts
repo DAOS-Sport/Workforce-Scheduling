@@ -27,14 +27,7 @@ export function noContent(res: Response): void {
   res.status(204).end();
 }
 
-/** Thrown by services for a non-2xx outcome; the route's catch passes it to fail(). */
-export function httpError(
-  status: number,
-  message: string,
-  extra?: Record<string, unknown>,
-): Error & { status: number; extra?: Record<string, unknown> } {
-  return Object.assign(new Error(message), { status, extra });
-}
+export { httpError } from "../errors";
 
 /** Error response with a message string. */
 export function fail(

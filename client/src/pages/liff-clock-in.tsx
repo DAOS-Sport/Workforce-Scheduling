@@ -19,6 +19,13 @@ interface ClockInResult {
   radius: number | null;
 }
 
+const REQUEST_ID_REUSE_MS = 2 * 60 * 1000;
+
+const newRequestId = (): string =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
 type Stage = "init" | "ready" | "locating" | "submitting" | "done" | "error";
 
 export default function LiffClockInPage() {
@@ -32,6 +39,10 @@ export default function LiffClockInPage() {
   // 防呆鎖：打卡請求進行中時擋掉重複觸發，但「不鎖死、不隱藏」按鈕本身。
   // 一定會在 finally 解除，確保成功打到卡前按鈕都還能再按。
   const inFlightRef = useRef(false);
+  // 每次按下打卡一個 request id。送出後沒拿到伺服器的明確回覆（斷線、逾時、5xx）時，
+  // 再按沿用同一個，伺服器若已記下就回第一次的結果、不會多記。拿到回覆就換新的；
+  // 超過兩分鐘也換新的，免得很久以後的下班打卡被當成上班那次的重送。
+  const requestRef = useRef<{ id: string; startedAt: number } | null>(null);
 
   useEffect(() => {
     initLiff();
@@ -97,6 +108,9 @@ export default function LiffClockInPage() {
       setAccuracy(Math.round(acc));
       setStage("submitting");
 
+      if (!requestRef.current || Date.now() - requestRef.current.startedAt > REQUEST_ID_REUSE_MS) {
+        requestRef.current = { id: newRequestId(), startedAt: Date.now() };
+      }
       const resp = await fetch("/api/liff/clock-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -105,8 +119,10 @@ export default function LiffClockInPage() {
           latitude,
           longitude,
           accuracy: Math.round(acc),
+          requestId: requestRef.current.id,
         }),
       });
+      if (!(resp.status >= 500)) requestRef.current = null;
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}));

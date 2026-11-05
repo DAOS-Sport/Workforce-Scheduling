@@ -5,7 +5,8 @@
  * handler is left with HTTP / session concerns only. Session writes
  * remain in the route because they touch req.session and need a callback.
  */
-import { storage } from "../../storage";
+import { employeeService } from "../employee/employee.service";
+import { httpError } from "../../shared/errors";
 
 export interface AdminIdentity {
   id: number;
@@ -15,26 +16,20 @@ export interface AdminIdentity {
 export const adminService = {
   async authenticate(password: string | undefined): Promise<AdminIdentity> {
     if (!password) {
-      const err: any = new Error("請輸入密碼");
-      err.status = 400;
-      throw err;
+      throw httpError(400, "請輸入密碼");
     }
     const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
     if (!ADMIN_PASSWORD) {
-      const err: any = new Error("伺服器未設定管理員密碼");
-      err.status = 500;
-      throw err;
+      throw httpError(500, "伺服器未設定管理員密碼");
     }
     if (password !== ADMIN_PASSWORD) {
-      const err: any = new Error("密碼錯誤");
-      err.status = 401;
-      throw err;
+      throw httpError(401, "密碼錯誤");
     }
     return this.resolveAdminIdentity();
   },
 
   async resolveAdminIdentity(): Promise<AdminIdentity> {
-    const allEmployees = await storage.getAllEmployees();
+    const allEmployees = await employeeService.getAllEmployees();
     const admin = allEmployees.find((e) => e.isAdmin);
     return { id: admin?.id || 1, name: admin?.name || "管理員" };
   },

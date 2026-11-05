@@ -44,12 +44,12 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
     }
   });
 
-  // 排班草稿儲存
+  // 排班草稿儲存。body 帶 expectedUpdatedAt（上次讀到或存到的 updatedAt）時做版本比對，版本不符回 409。
   app.post("/api/admin/schedule-assignments", requireAdmin, async (req, res) => {
     try {
       ok(res, await summerScheduleService.saveScheduleAssignments(req.body));
     } catch (err: any) {
-      fail(res, err.status || 500, err.message);
+      fail(res, err.status || 500, err.message, err.extra);
     }
   });
 
@@ -63,11 +63,11 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
     }
   });
 
-  // 手動課程新增（接受 {items:[...]} 或單筆物件）
+  // 手動課程新增（接受 {items:[...]} 或單筆物件）。帶 requestId 時，同一個 requestId 重送只新增一次。
   app.post("/api/admin/manual-schedule-courses", requireAdmin, async (req, res) => {
     try {
       const items: any[] = Array.isArray(req.body.items) ? req.body.items : [req.body];
-      const rows = await summerScheduleService.createManualCourses(items);
+      const rows = await summerScheduleService.createManualCourses(items, req.body?.requestId);
       ok(res, { items: rows });
     } catch (err: any) {
       fail(res, err.status || 500, err.message);
@@ -134,8 +134,7 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
   });
 
   // 發布到員工前台 shifts
-  // 新版前端只送 {weekNo} → 服務端讀取母資料表已儲存的 shiftEntries 發布（DB 驅動，republish 永遠一致）。
-  // 舊版若帶 {weekNo, shifts:[...]} 仍相容。
+  // 只送 {weekNo}：服務端讀取已儲存的草稿發布（DB 驅動，republish 永遠一致）。請求裡的 shifts 一律忽略。
   app.post("/api/admin/summer-schedule/publish-shifts", requireAdmin, async (req, res) => {
     try {
       ok(res, await summerScheduleService.publishShifts(req.body));
