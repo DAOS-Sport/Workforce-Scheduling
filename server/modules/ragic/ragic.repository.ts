@@ -4,7 +4,7 @@ import type { Executor } from "../../infra/db/tx";
 import { ragicEmployeeStatus, ragicSyncEvents } from "@shared/schema";
 import type { ImpliedStatus } from "../../core/ragic/employeeSync";
 
-export type SyncEventSource = "webhook" | "cron" | "manual";
+export type SyncEventSource = "webhook" | "cron" | "manual" | "startup";
 
 export const ragicRepository = {
   /** Record a request for a sync. False means this event id was recorded before. */

@@ -6,6 +6,11 @@ import { globalErrorHandler, requestContext } from "../shared/http/errorHandler"
 import { runWithRequestId } from "../shared/http/requestId";
 import { buildHttpServer } from "./http";
 import { registerRoutes } from "../routes";
+import { IS_PRODUCTION } from "../config/env";
+import { featureFlags } from "../config/featureFlags";
+import { ragicCatchUp } from "../modules/ragic/ragicCatchUp";
+import { runRagicSync } from "../modules/ragic/ragic.service";
+import { readJobState } from "../shared/health/healthState";
 
 declare module "http" {
   interface IncomingMessage {
@@ -62,6 +67,15 @@ export async function createApp(): Promise<Express> {
 
     next();
   });
+
+  // The 03:00 cron does not always run on Autoscale: the first request after a missed run starts it in the background.
+  app.use(
+    ragicCatchUp({
+      enabled: IS_PRODUCTION && featureFlags.ragicSync,
+      readState: () => readJobState("ragic.sync"),
+      run: () => runRagicSync("startup"),
+    }),
+  );
 
   return app;
 }
