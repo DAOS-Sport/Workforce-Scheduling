@@ -6,8 +6,9 @@ import { buildApp, createApp } from "../../bootstrap/app";
 import { db } from "../../infra/db";
 import { withFailingWrites } from "../../test/failWrites";
 import { log } from "../../shared/log";
-import { createEmployee, createRegion, createVenue, resetDatabase } from "../../test/itest";
-import { settleErrorWrites } from "./errors.service";
+import { createEmployee, createRegion, createShift, createVenue, resetDatabase } from "../../test/itest";
+import { LAT, LNG, employeeOnShiftNow, lineUserId } from "../../test/clock";
+import { purgeOldErrors, settleErrorWrites } from "./errors.service";
 
 const ADMIN_PASSWORD = "itest-admin-password";
 const eight = { startTime: "08:00", endTime: "16:00", role: "救生" };
@@ -128,7 +129,7 @@ describe("a server error leaves a row that its request id finds", () => {
     expect(found.status).toBe(200);
     expect(found.body.items).toHaveLength(1);
     expect(found.body.items[0]).toMatchObject({ requestId: failed.requestId, method: "POST", path: "/api/shifts", status: 500 });
-    expect(Object.keys(found.body.items[0]).sort()).toEqual(["id", "message", "method", "occurredAt", "path", "requestId", "stack", "status"]);
+    expect(Object.keys(found.body.items[0]).sort()).toEqual(["id", "message", "method", "occurredAt", "path", "requestId", "stack", "status", "subject"]);
     expect(new Date(found.body.items[0].occurredAt).getTime()).not.toBeNaN();
   });
 
@@ -150,6 +151,67 @@ describe("a server error leaves a row that its request id finds", () => {
     const app = await boot();
     const res = await app.call("GET", "/api/admin/errors");
     expect(res.status).toBe(401);
+  });
+});
+
+describe("the record names the business record it was about", () => {
+  it("a clock-in that fails inside the database records the employee", async () => {
+    const app = await boot();
+    const { employee } = await employeeOnShiftNow({ lineId: lineUserId(3) });
+
+    const res = await withFailingWrites("clock_records", "insert", "true", () =>
+      app.call("POST", "/api/liff/clock-in", { lineUserId: lineUserId(3), latitude: LAT, longitude: LNG, accuracy: 5, requestId: "clock-try-1" }),
+    );
+    await settleErrorWrites();
+
+    expect(res.status).toBe(500);
+    const rows = await db.select().from(appErrors).where(eq(appErrors.requestId, res.requestId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].subject).toEqual({ employeeId: employee.id });
+  });
+
+  it("a route whose error reaches the error handler records the ids in its path", async () => {
+    const app = await boot();
+    await app.login();
+    const { venue, employee } = await world();
+    const shift = await createShift({ employeeId: employee.id, venueId: venue.id, date: "2026-11-03", ...eight });
+
+    const res = await withFailingWrites("shift_audit_log", "insert", "true", () => app.call("PATCH", `/api/shifts/${shift.id}`, { notes: "改備註" }));
+    await settleErrorWrites();
+
+    expect(res.status).toBe(500);
+    const rows = await db.select().from(appErrors).where(eq(appErrors.requestId, res.requestId));
+    expect(rows[0].subject).toEqual({ id: String(shift.id) });
+  });
+
+  it("a route that names no record leaves the subject empty", async () => {
+    const app = await boot();
+    await app.login();
+
+    const res = await triggerServerError(app.call);
+
+    const rows = await db.select().from(appErrors).where(eq(appErrors.requestId, res.requestId));
+    expect(rows[0].subject).toBeNull();
+  });
+});
+
+describe("old records are deleted after the retention period", () => {
+  it("deletes records older than 90 days and keeps the rest", async () => {
+    const now = new Date("2026-11-06T04:00:00Z");
+    const day = 86_400_000;
+    const row = (requestId: string, ageDays: number) => ({
+      requestId,
+      method: "GET",
+      path: "/api/x",
+      status: 500,
+      message: "boom",
+      occurredAt: new Date(now.getTime() - ageDays * day),
+    });
+    await db.insert(appErrors).values([row("too-old", 91), row("just-kept", 89), row("today", 0)]);
+
+    expect(await purgeOldErrors(now)).toEqual({ deleted: 1 });
+    expect((await db.select().from(appErrors)).map((r) => r.requestId).sort()).toEqual(["just-kept", "today"]);
+    expect(await purgeOldErrors(now)).toEqual({ deleted: 0 });
   });
 });
 

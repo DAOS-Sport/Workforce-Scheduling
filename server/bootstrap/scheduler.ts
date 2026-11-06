@@ -7,10 +7,48 @@ import {
   sendWeeklyLateReport,
   sendAvailabilityReminders,
 } from "../modules/line/linePush.service";
+import { purgeOldErrors } from "../modules/errors/errors.service";
 import { featureFlags } from "../config/featureFlags";
 import { IS_PRODUCTION } from "../config/env";
+import { SCHEDULED_JOBS } from "../core/health/report";
+import type { CatchUpJob, SlotSchedule } from "../shared/health/catchUp";
+import type { JobTrigger } from "../shared/health/healthState";
 import { runJob } from "../shared/health/runJob";
 import { log } from "../shared/log";
+
+/** How each job runs. Cron and the wake-up catch-up (catchUpJobs) both start a job through here, so they share its lock and record. */
+const runs = {
+  "push.shift-reminders": (trigger: JobTrigger) => runJob("push.shift-reminders", trigger, () => sendShiftReminders(), (r) => ({ ...r })),
+  "push.missing-clock": (trigger: JobTrigger) => runJob("push.missing-clock", trigger, () => checkMissingClockIn(), (r) => ({ ...r })),
+  "push.weekly-schedule": (trigger: JobTrigger) => runJob("push.weekly-schedule", trigger, () => sendWeeklySchedulePush(), (r) => ({ ...r })),
+  "push.availability-reminder": (trigger: JobTrigger) => runJob("push.availability-reminder", trigger, () => sendAvailabilityReminders(), (r) => ({ ...r })),
+  "report.weekly-late": (trigger: JobTrigger) => runJob("report.weekly-late", trigger, () => sendWeeklyLateReport(), (r) => ({ ...r })),
+  "errors.purge": (trigger: JobTrigger) => runJob("errors.purge", trigger, () => purgeOldErrors(), (r) => ({ ...r })),
+};
+
+const RAGIC_SYNC_SCHEDULE: SlotSchedule = { kind: "daily", at: 3 * 60 };
+const ERRORS_PURGE_SCHEDULE: SlotSchedule = { kind: "daily", at: 4 * 60 };
+/** A push for a slot that was missed still goes out until 23:00 that day; later, "tomorrow's shifts" would arrive after midnight. */
+const PUSH_CLOSES_AT = 23 * 60;
+
+/**
+ * The jobs that run on the first request after their slot when no instance was awake at the slot (Autoscale).
+ * Times come from SCHEDULED_JOBS, the table the health lights read. Production only, like the cron jobs.
+ */
+export function catchUpJobs(): CatchUpJob[] {
+  if (!IS_PRODUCTION) return [];
+  const flags: Record<string, boolean> = featureFlags;
+  const pushes = SCHEDULED_JOBS.flatMap((job): CatchUpJob[] => {
+    const run = runs[job.id as keyof typeof runs];
+    if (job.schedule.kind === "every30" || !flags[job.flag] || !run) return [];
+    return [{ id: job.id, schedule: job.schedule, closesAt: PUSH_CLOSES_AT, run: () => run("startup") }];
+  });
+  return [
+    ...(featureFlags.ragicSync ? [{ id: "ragic.sync", schedule: RAGIC_SYNC_SCHEDULE, run: () => runRagicSync("startup") }] : []),
+    ...pushes,
+    { id: "errors.purge", schedule: ERRORS_PURGE_SCHEDULE, run: () => runs["errors.purge"]("startup") },
+  ];
+}
 
 /** Another instance, or a manual trigger, is still running this job; this round has nothing to do. */
 function logBusy(job: string): void {
@@ -85,7 +123,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行明日班表推撥通知...", "cron");
         try {
-          const run = await runJob("push.shift-reminders", "cron", () => sendShiftReminders(), (r) => ({ ...r }));
+          const run = await runs["push.shift-reminders"]("cron");
           if (run.busy) return logBusy("push.shift-reminders");
           const result = run.value;
           log(
@@ -108,7 +146,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始檢查未打卡員工...", "cron");
         try {
-          const run = await runJob("push.missing-clock", "cron", () => checkMissingClockIn(), (r) => ({ ...r }));
+          const run = await runs["push.missing-clock"]("cron");
           if (run.busy) return logBusy("push.missing-clock");
           const result = run.value;
           log(
@@ -131,7 +169,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行每週下週班表推播...", "cron");
         try {
-          const run = await runJob("push.weekly-schedule", "cron", () => sendWeeklySchedulePush(), (r) => ({ ...r }));
+          const run = await runs["push.weekly-schedule"]("cron");
           if (run.busy) return logBusy("push.weekly-schedule");
           const result = run.value;
           log(
@@ -154,7 +192,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行意願填報未填提醒...", "cron");
         try {
-          const run = await runJob("push.availability-reminder", "cron", () => sendAvailabilityReminders(), (r) => ({ ...r }));
+          const run = await runs["push.availability-reminder"]("cron");
           if (run.busy) return logBusy("push.availability-reminder");
           const result = run.value;
           if (result.windowClosed) {
@@ -181,7 +219,7 @@ export function registerCronJobs(): void {
       async () => {
         log("開始執行上週遲到報告推播...", "cron");
         try {
-          const run = await runJob("report.weekly-late", "cron", () => sendWeeklyLateReport(), (r) => ({ ...r }));
+          const run = await runs["report.weekly-late"]("cron");
           if (run.busy) return logBusy("report.weekly-late");
           const result = run.value;
           log(
@@ -196,4 +234,19 @@ export function registerCronJobs(): void {
     );
     log("已排程每週一 09:00 (台灣時間) 自動推播上週遲到報告", "cron");
   }
+
+  // 04:00 daily — delete error records past their retention period.
+  cron.schedule(
+    "0 4 * * *",
+    async () => {
+      try {
+        const run = await runs["errors.purge"]("cron");
+        if (run.busy) return logBusy("errors.purge");
+        log(`錯誤紀錄清理完成: 刪除 ${run.value.deleted} 筆`, "cron");
+      } catch (err: any) {
+        log(`錯誤紀錄清理失敗: ${err.message}`, "cron");
+      }
+    },
+    { timezone: "Asia/Taipei" },
+  );
 }

@@ -176,7 +176,7 @@ export interface SecuritySignals {
 export function evaluateSecurity(input: Base & { signals: SecuritySignals }): Pipeline {
   const s = input.signals;
   const problems = [
-    !s.mcpTokenSet && "沒有設定 MCP_TOKEN（/mcp 會改用 INTERNAL_API_TOKEN）",
+    !s.mcpTokenSet && "沒有設定 MCP_TOKEN（/mcp 無法使用）",
     s.mcpTokenSet && !s.mcpTokenDistinct && "MCP_TOKEN 跟 INTERNAL_API_TOKEN 相同",
     !s.sessionSecretSet && "沒有設定 SESSION_SECRET",
     !s.lineChannelSecretSet && "沒有設定 LINE_CHANNEL_SECRET（LINE 簽章可被偽造）",

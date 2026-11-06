@@ -478,6 +478,8 @@ export const appErrors = pgTable("app_errors", {
   status: integer("status").notNull(),
   message: text("message").notNull(),
   stack: text("stack"),
+  /** The business records the request was about, by name (`{ employeeId: 12 }`); null when the route named none. */
+  subject: jsonb("subject").$type<Record<string, string | number>>(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   requestIdIdx: index("app_errors_request_id_idx").on(t.requestId),

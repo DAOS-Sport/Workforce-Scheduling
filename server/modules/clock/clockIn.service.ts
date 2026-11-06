@@ -20,6 +20,7 @@ import {
 } from "../../core/clock/clockRules";
 import { pickLineEmployee } from "../../core/clock/lineEmployee";
 import { LOCK_NS, lockXact, withTx, type Tx } from "../../infra/db/tx";
+import { noteRequestSubject } from "../../shared/http/requestId";
 import { maskId } from "../../shared/log";
 import { venueService } from "../venue/venue.service";
 import { employeeService } from "../employee/employee.service";
@@ -156,6 +157,7 @@ export async function processClockIn(
   if (early) return { result: early, employeeId: candidate?.id ?? null, replayed: false };
 
   const employeeId = candidate!.id;
+  noteRequestSubject({ employeeId });
   const match: VenueMatch | null = picked && { picked, nearbyVenues: nearbyVenueList(ranked) };
 
   return withTx(async (tx): Promise<ClockInOutcome> => {

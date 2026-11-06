@@ -1,4 +1,4 @@
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, lt } from "drizzle-orm";
 import { appErrors, type AppErrorRow, type InsertAppError } from "@shared/schema";
 import { db } from "../../infra/db";
 import type { Executor } from "../../infra/db/tx";
@@ -22,5 +22,10 @@ export const errorsRepository = {
       .where(and(...conditions))
       .orderBy(desc(appErrors.occurredAt), desc(appErrors.id))
       .limit(limit);
+  },
+
+  async deleteBefore(before: Date, tx: Executor = db): Promise<number> {
+    const result = await tx.delete(appErrors).where(lt(appErrors.occurredAt, before));
+    return result.rowCount ?? 0;
   },
 };

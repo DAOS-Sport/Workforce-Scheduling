@@ -3,8 +3,8 @@
  * Claude Desktop / Claude Code / Claude web connect to this project.
  *
  * Endpoint: POST /mcp  (Streamable HTTP transport, stateless mode)
- * Auth: same token scheme as the internal API (INTERNAL_API_TOKEN via
- *       Authorization: Bearer / X-Internal-Token / X-API-Key / ?token=).
+ * Auth: MCP_TOKEN only, in the Authorization: Bearer / X-Internal-Token / X-API-Key header.
+ *       Without MCP_TOKEN the endpoint is off; it never accepts INTERNAL_API_TOKEN.
  *
  * Two tool groups:
  *   1. Business tools — read scheduling data (regions, venues, employees,
@@ -18,6 +18,7 @@ import type { Express, Request, Response } from "express";
 import path from "path";
 import fs from "fs/promises";
 import { exec } from "child_process";
+import { createHash, timingSafeEqual } from "crypto";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -48,14 +49,14 @@ function safePath(p: string): string {
  * Header-only token auth for /mcp. Unlike the internal API, the query-string
  * `?token=` form is deliberately NOT accepted here — this endpoint can expose
  * shell/DB access, and URL tokens leak into logs and browser history.
- * Uses MCP_TOKEN if set, otherwise falls back to INTERNAL_API_TOKEN.
+ * Only MCP_TOKEN opens it: the internal API's token is accepted in URLs, so it must not double as a shell key.
  */
-function requireMcpToken(req: Request, res: Response, next: () => void) {
-  const expected = process.env.MCP_TOKEN || process.env.INTERNAL_API_TOKEN;
+export function requireMcpToken(req: Request, res: Response, next: () => void) {
+  const expected = process.env.MCP_TOKEN;
   if (!expected) {
     return res.status(503).json({
       code: "MCP_DISABLED",
-      message: "No MCP_TOKEN or INTERNAL_API_TOKEN configured on the server",
+      message: "MCP_TOKEN is not configured on the server",
     });
   }
   let provided: string | undefined;
@@ -69,10 +70,16 @@ function requireMcpToken(req: Request, res: Response, next: () => void) {
       message: "Missing token. Provide Authorization: Bearer, X-Internal-Token, or X-API-Key header.",
     });
   }
-  if (provided !== expected) {
+  if (!sameToken(provided, expected)) {
     return res.status(403).json({ code: "INVALID_TOKEN", message: "Invalid token" });
   }
   next();
+}
+
+/** Compares digests, so the time taken says nothing about how much of the token matched or how long it is. */
+function sameToken(provided: string, expected: string): boolean {
+  const digest = (value: string) => createHash("sha256").update(value).digest();
+  return timingSafeEqual(digest(provided), digest(expected));
 }
 
 function textResult(data: unknown) {

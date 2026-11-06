@@ -6,11 +6,9 @@ import { globalErrorHandler, requestContext } from "../shared/http/errorHandler"
 import { runWithRequestId } from "../shared/http/requestId";
 import { buildHttpServer } from "./http";
 import { registerRoutes } from "../routes";
-import { IS_PRODUCTION } from "../config/env";
-import { featureFlags } from "../config/featureFlags";
-import { ragicCatchUp } from "../modules/ragic/ragicCatchUp";
-import { runRagicSync } from "../modules/ragic/ragic.service";
+import { catchUpMissedRuns } from "../shared/health/catchUp";
 import { readJobState } from "../shared/health/healthState";
+import { catchUpJobs } from "./scheduler";
 
 declare module "http" {
   interface IncomingMessage {
@@ -68,14 +66,8 @@ export async function createApp(): Promise<Express> {
     next();
   });
 
-  // The 03:00 cron does not always run on Autoscale: the first request after a missed run starts it in the background.
-  app.use(
-    ragicCatchUp({
-      enabled: IS_PRODUCTION && featureFlags.ragicSync,
-      readState: () => readJobState("ragic.sync"),
-      run: () => runRagicSync("startup"),
-    }),
-  );
+  // Cron only fires on an instance that is awake at the slot; on Autoscale the first request after a missed slot runs it in the background.
+  app.use(catchUpMissedRuns({ jobs: catchUpJobs(), readState: readJobState }));
 
   return app;
 }

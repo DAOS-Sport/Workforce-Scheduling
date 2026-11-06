@@ -18,7 +18,7 @@ import type { NextFunction, Request, Response } from "express";
 import { recordServerError } from "../../modules/errors/errors.service";
 import { HttpError } from "../errors";
 import { log } from "../log";
-import { REQUEST_ID_HEADER, resolveRequestId, runWithRequestId } from "./requestId";
+import { REQUEST_ID_HEADER, resolveRequestId, runInRequestContext, runWithRequestId, type RequestContext } from "./requestId";
 
 export const GENERIC_ERROR_MESSAGE = "伺服器發生錯誤，請稍後再試";
 
@@ -35,6 +35,22 @@ const isBody = (value: unknown): value is Record<string, unknown> => typeof valu
 
 function pathOf(req: Request): string {
   return (req.originalUrl ?? req.url ?? "").split("?")[0];
+}
+
+/**
+ * The record ids in the matched route's path (`:id`, `:employeeId`, `:shiftId` …). Read from `req.route` and the URL, not
+ * `req.params`: the router empties `req.params` before an error thrown by the route reaches the error handler.
+ */
+function idParams(req: Request): Record<string, string> {
+  const pattern = typeof req.route?.path === "string" ? req.route.path.split("/") : [];
+  const actual = pathOf(req).split("/");
+  if (pattern.length !== actual.length) return {};
+  const ids: Record<string, string> = {};
+  pattern.forEach((segment: string, i: number) => {
+    const name = segment.startsWith(":") ? segment.slice(1) : "";
+    if (/^id$|Id$/.test(name) && actual[i].length > 0 && actual[i].length <= 64) ids[name] = actual[i];
+  });
+  return ids;
 }
 
 /** The error text of a body: `message`, or a JSON-RPC style `error.message`. */
@@ -54,8 +70,9 @@ function shapeErrorBody(req: Request, res: Response, body: unknown): unknown {
   const failure = res.locals.serverError as Failure | undefined;
   const message = failure?.message ?? textOf(body) ?? "(no message)";
   runWithRequestId(requestId, () => log(`${req.method} ${pathOf(req)} ${status} ${message}${failure?.stack ? `\n${failure.stack}` : ""}`, "error"));
+  const subject = { ...idParams(req), ...(res.locals.requestContext as RequestContext | undefined)?.subject };
   try {
-    recordServerError({ requestId, method: req.method, path: pathOf(req), status, message, stack: failure?.stack });
+    recordServerError({ requestId, method: req.method, path: pathOf(req), status, message, stack: failure?.stack, subject });
   } catch (err) {
     console.error("[errors] could not start the error record:", err);
   }
@@ -75,7 +92,10 @@ function attach(req: Request, res: Response): string {
 }
 
 export function requestContext(req: Request, res: Response, next: NextFunction): void {
-  runWithRequestId(attach(req, res), next);
+  // Kept on the response too: the error gate can run after the async context that served the request is gone.
+  const context: RequestContext = { requestId: attach(req, res), subject: {} };
+  res.locals.requestContext = context;
+  runInRequestContext(context, next);
 }
 
 /** A 4xx a library raised on purpose, such as body-parser rejecting malformed JSON. */
