@@ -37,7 +37,7 @@ export function createLogBuffer(options: {
         occurredAt: entry.occurredAt ?? new Date(), level: entry.level,
         pipeline: redactLogMessage(entry.pipeline).slice(0, 120),
         requestId: entry.requestId ? redactLogMessage(entry.requestId).slice(0, 100) : null,
-        message: redactLogMessage(entry.message).slice(0, 2000),
+        message: redactLogMessage(entry.message.slice(0, 4000)).slice(0, 2000),
       });
     },
     size: () => queue.length + inFlight,
