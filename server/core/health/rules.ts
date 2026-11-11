@@ -184,3 +184,20 @@ export function evaluateSecurity(input: Base & { signals: SecuritySignals }): Pi
   if (problems.length) return pipeline(input, "red", problems.join("；"));
   return pipeline(input, "green", "必要的安全設定都有設");
 }
+
+export const CLOCK_NEVER_SUCCESS_MIN_SHIFTS = 3;
+export const CLOCK_NEVER_SUCCESS_THRESHOLD_DAYS = 7;
+export const CLOCK_NEVER_SUCCESS_LOOKBACK_DAYS = 14;
+export const CLOCK_NEVER_SUCCESS_NEW_HOURS = 24;
+
+export interface ClockNeverSuccess {
+  affectedEmployees: number;
+  newlyQualifiedEmployees: number;
+}
+
+export function evaluateClockNeverSuccess(input: Base & { signals: ClockNeverSuccess }): Pipeline {
+  const { affectedEmployees, newlyQualifiedEmployees } = input.signals;
+  if (newlyQualifiedEmployees > 0) return pipeline(input, "red", `最近 ${CLOCK_NEVER_SUCCESS_NEW_HOURS} 小時新達門檻 ${newlyQualifiedEmployees} 人；有班沒成功上班打卡共 ${affectedEmployees} 人`);
+  if (affectedEmployees > 0) return pipeline(input, "yellow", `有班沒成功上班打卡 ${affectedEmployees} 人（持續中或未達 ${CLOCK_NEVER_SUCCESS_THRESHOLD_DAYS} 天 ${CLOCK_NEVER_SUCCESS_MIN_SHIFTS} 班門檻）`);
+  return pipeline(input, "green", "有班沒成功上班打卡 0 人");
+}

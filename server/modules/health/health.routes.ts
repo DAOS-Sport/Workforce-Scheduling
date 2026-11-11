@@ -9,7 +9,7 @@
 import type { Express } from "express";
 import { timingSafeEqual } from "crypto";
 import { requireAdmin } from "../../shared/middleware/requireAdmin";
-import { buildHealthReport } from "./health.service";
+import { buildHealthReport, readClockNeverSuccessEmployees } from "./health.service";
 
 function tokenMatches(received: string, expected: string): boolean {
   const a = Buffer.from(received);
@@ -40,6 +40,15 @@ export function mountHealthRoutes(app: Express): void {
     } catch (err: any) {
       console.error("[health] 後台健康報告產生失敗:", err?.message ?? err);
       res.status(500).json({ message: "無法產生健康報告" });
+    }
+  });
+
+  app.get("/api/admin/health/clock-never-success", requireAdmin, async (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      res.json(await readClockNeverSuccessEmployees(new Date()));
+    } catch {
+      res.status(500).json({ message: "無法取得從未成功打卡名單" });
     }
   });
 }
