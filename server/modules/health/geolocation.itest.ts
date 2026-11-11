@@ -41,7 +41,7 @@ describe("geolocation failure watchdog PostgreSQL aggregate", () => {
     const before = await db.select().from(appLogs);
     const input = await collectSignals(now);
     expect(input.geolocation).toEqual({ recentFailures: 3, failures24h: 4, lastFailureAt: now.toISOString() });
-    expect(assembleReport(input).pipelines.find(p => p.id === "clock.geolocation")).toMatchObject({ level: "red" });
+    expect(assembleReport(input).pipelines.find(p => p.id === "clock.geolocation")).toMatchObject({ level: "yellow" });
     expect(await db.select().from(appLogs)).toEqual(before);
   });
 
@@ -78,7 +78,7 @@ describe("geolocation failure watchdog PostgreSQL aggregate", () => {
       );
       const input = await collectSignals(new Date());
       expect(input.geolocation).toMatchObject({ recentFailures: 3, failures24h: 3 });
-      expect(assembleReport(input).pipelines.find(p => p.id === "clock.geolocation")?.level).toBe("red");
+      expect(assembleReport(input).pipelines.find(p => p.id === "clock.geolocation")?.level).toBe("yellow");
     } finally {
       await flushLogs();
       stop();
@@ -96,7 +96,7 @@ describe("geolocation failure watchdog PostgreSQL aggregate", () => {
     const input = await collectSignals(now);
     expect(input.geolocation).toEqual({ readError: "synthetic private query detail" });
     const report = assembleReport(input);
-    expect(report.pipelines.find(p => p.id === "clock.geolocation")).toMatchObject({ level: "red" });
+    expect(report.pipelines.find(p => p.id === "clock.geolocation")).toMatchObject({ level: "yellow" });
     expect(report.pipelines.find(p => p.id === "clock.coverage")?.level).toBe("green");
     expect(JSON.stringify(report)).not.toContain("synthetic private query detail");
   });

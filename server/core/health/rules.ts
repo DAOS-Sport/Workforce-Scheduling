@@ -264,12 +264,11 @@ export type ClockGeolocation = {
   lastFailureAt: string | null;
 };
 
-/** Three failed attempts in 15 minutes are red; any remaining 24-hour failures are yellow. */
+/** Device geolocation failures are at most yellow, regardless of retry count. */
 export function evaluateClockGeolocation(input: Base & { signals?: ClockGeolocation }): Pipeline {
   const s = input.signals;
   if (!s) return pipeline(input, "yellow", "無法觀測：尚未取得定位失敗訊號");
   const state = s.lastFailureAt ? { lastFailureAt: s.lastFailureAt } : undefined;
-  if (s.recentFailures >= 3) return pipeline(input, "red", `最近 15 分鐘定位失敗 ${s.recentFailures} 次；最近 24 小時共 ${s.failures24h} 次`, state);
   if (s.failures24h > 0) return pipeline(input, "yellow", `最近 24 小時定位失敗 ${s.failures24h} 次；最近 15 分鐘 ${s.recentFailures} 次`, state);
   return pipeline(input, "green", "最近 24 小時沒有定位失敗回報");
 }

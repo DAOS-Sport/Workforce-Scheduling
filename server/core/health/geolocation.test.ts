@@ -7,11 +7,14 @@ const lastFailureAt = "2026-11-11T03:59:00.000Z";
 const healthy = { recentFailures: 0, failures24h: 0, lastFailureAt: null };
 
 describe("clock.geolocation", () => {
-  it("is red at three failures in 15 minutes and describes attempts rather than people", () => {
-    const result = evaluateClockGeolocation({ ...base, signals: { recentFailures: 3, failures24h: 5, lastFailureAt } });
-    expect(result).toMatchObject({ level: "red", lastFailureAt });
+  it.each([3, 30])("remains yellow at %i recent failures and describes attempts rather than people", recentFailures => {
+    const failures24h = recentFailures + 2;
+    const result = evaluateClockGeolocation({ ...base, signals: { recentFailures, failures24h, lastFailureAt } });
+    expect(result).toMatchObject({ level: "yellow", lastFailureAt });
     expect(result.reason).toContain("15 分鐘");
-    expect(result.reason).toContain("3 次");
+    expect(result.reason).toContain(`${recentFailures} 次`);
+    expect(result.reason).toContain("24 小時");
+    expect(result.reason).toContain(`${failures24h} 次`);
     expect(result.reason).not.toMatch(/人|員工|employee/i);
   });
 
@@ -56,15 +59,25 @@ describe("clock.geolocation report assembly", () => {
     const report = assembleReport(input);
     expect(report.pipelines.filter(p => p.id === base.id)).toHaveLength(1);
     expect(report.pipelines.filter(p => p.level !== "green").map(p => p.id)).toEqual([base.id]);
-    expect(report.overall).toBe("red");
+    expect(report.overall).toBe("yellow");
   });
 
   it("isolates an unreadable aggregate and does not disclose the query error", () => {
     const input = signals();
     input.geolocation = { readError: "synthetic private query detail" };
     const report = assembleReport(input);
-    expect(report.pipelines.filter(p => p.level === "red").map(p => p.id)).toEqual([base.id]);
-    expect(report.pipelines.find(p => p.id === base.id)?.reason).toBe("讀取狀態失敗：定位失敗訊號讀取失敗");
+    expect(report.pipelines.filter(p => p.level === "red")).toEqual([]);
+    expect(report.pipelines.find(p => p.id === base.id)).toMatchObject({ level: "yellow", reason: expect.stringContaining("無法觀測") });
     expect(JSON.stringify(report)).not.toContain("synthetic private query detail");
+  });
+
+  it("keeps other unreadable pipelines red while geolocation remains yellow", () => {
+    const input = signals();
+    input.geolocation = { readError: "synthetic private query detail" };
+    input.coverage = { readError: "synthetic coverage failure" };
+    const report = assembleReport(input);
+    expect(report.pipelines.filter(p => p.level === "red").map(p => p.id)).toEqual(["clock.coverage"]);
+    expect(report.pipelines.find(p => p.id === base.id)?.level).toBe("yellow");
+    expect(report.overall).toBe("red");
   });
 });

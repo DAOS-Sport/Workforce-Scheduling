@@ -34,7 +34,7 @@ describe("geolocation health collection", () => {
   it("collects the independent aggregate and uses only read statements", async () => {
     const input = await collectSignals(now);
     expect(input.geolocation).toEqual(aggregate);
-    expect(assembleReport(input).pipelines.find(p => p.id === "clock.geolocation")).toMatchObject({ level: "red" });
+    expect(assembleReport(input).pipelines.find(p => p.id === "clock.geolocation")).toMatchObject({ level: "yellow" });
     expect(execute.mock.calls.map(([query]) => dialect.sqlToQuery(query).sql).some(text => /\b(insert|update|delete)\b/i.test(text))).toBe(false);
   });
 
@@ -49,7 +49,7 @@ describe("geolocation health collection", () => {
     expect(input.coverage).toEqual({ startedShifts: 0, coveredShifts: 0, attemptsToday: 0, failuresToday: 0 });
     expect(input.database.latencyMs).not.toBeNull();
     const pipeline = assembleReport(input).pipelines.find(p => p.id === "clock.geolocation");
-    expect(pipeline).toMatchObject({ level: "red" });
+    expect(pipeline).toMatchObject({ level: "yellow" });
     expect(pipeline?.reason).not.toContain("synthetic private query detail");
   });
 });
