@@ -2,8 +2,10 @@ import express from "express";
 import type { AddressInfo } from "net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockBuild } = vi.hoisted(() => ({ mockBuild: vi.fn() }));
+const { mockBuild, mockLogs } = vi.hoisted(() => ({ mockBuild: vi.fn(), mockLogs: vi.fn() }));
 vi.mock("./health.service", () => ({ buildHealthReport: mockBuild }));
+vi.mock("../../infra/db", () => ({ db: { execute: vi.fn() } }));
+vi.mock("./healthLogs", async (importOriginal) => ({ ...(await importOriginal<object>()), queryHealthLogs: mockLogs }));
 
 import { gateAdminApi } from "../../shared/middleware/requireAdmin";
 import { mountHealthRoutes } from "./health.routes";
@@ -36,7 +38,9 @@ describe("GET /api/health/pipelines", () => {
     await withApp(async (base) => {
       const res = await fetch(`${base}/api/health/pipelines`, { headers: { Authorization: "Bearer anything" } });
       expect(res.status).toBe(503);
+      expect((await fetch(`${base}/api/health/logs`, { headers: { Authorization: "Bearer anything" } })).status).toBe(503);
       expect(mockBuild).not.toHaveBeenCalled();
+      expect(mockLogs).not.toHaveBeenCalled();
     });
   });
 
@@ -72,6 +76,40 @@ describe("GET /api/health/pipelines", () => {
     await withApp(async (base) => {
       const res = await fetch(`${base}/api/health/pipelines`, { headers: { Authorization: "Bearer right-token" } });
       expect(res.status).toBe(503);
+    });
+  });
+
+  it("protects logs with the same token and returns a non-cached page", async () => {
+    process.env.HEALTH_TOKEN = "right-token";
+    mockLogs.mockResolvedValue({ logs: [], nextCursor: null });
+    await withApp(async (base) => {
+      expect((await fetch(`${base}/api/health/logs`)).status).toBe(401);
+      const res = await fetch(`${base}/api/health/logs?pipeline=future.job&since=2026-11-01T00:00:00Z&level=warn&limit=10`, { headers: { Authorization: "Bearer right-token" } });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(await res.json()).toEqual({ logs: [], nextCursor: null });
+      expect(mockLogs).toHaveBeenCalledWith(expect.objectContaining({ pipeline: "future.job", level: "warn", limit: 10 }));
+    });
+  });
+
+  it("rejects invalid and repeated log filters before querying", async () => {
+    process.env.HEALTH_TOKEN = "right-token";
+    await withApp(async (base) => {
+      for (const query of ["limit=0", "limit=101", "limit=1.5", "limit=1x", "limit=", "level=debug", "since=2026-02-30T00:00:00Z", "since=yesterday", "since=2026-01-01", "cursor=garbage", "level=warn&level=error"]) {
+        const res = await fetch(`${base}/api/health/logs?${query}`, { headers: { Authorization: "Bearer right-token" } });
+        expect([query, res.status]).toEqual([query, 400]);
+      }
+      expect(mockLogs).not.toHaveBeenCalled();
+    });
+  });
+
+  it("does not expose database errors from the log endpoint", async () => {
+    process.env.HEALTH_TOKEN = "right-token";
+    mockLogs.mockRejectedValue(new Error("postgres://private:password@10.0.0.1/logs"));
+    await withApp(async (base) => {
+      const res = await fetch(`${base}/api/health/logs`, { headers: { Authorization: "Bearer right-token" } });
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ message: "無法讀取日誌" });
     });
   });
 });
@@ -169,6 +207,23 @@ describe("GET /api/admin/health", () => {
       const res = await fetch(`${base}/api/admin/health`);
       expect(res.status).toBe(500);
       expect(JSON.stringify(await res.json())).not.toContain("ECONNREFUSED");
+    });
+  });
+
+  it("requires admin login for logs even with a health token, and queries the same service after login", async () => {
+    process.env.HEALTH_TOKEN = "right-token";
+    mockLogs.mockResolvedValue({ logs: [], nextCursor: null });
+    await withAdminApp({}, async (base) => {
+      const res = await fetch(`${base}/api/admin/health/logs`, { headers: { Authorization: "Bearer right-token" } });
+      expect(res.status).toBe(401);
+      expect(mockLogs).not.toHaveBeenCalled();
+    }, false);
+    await withAdminApp({ adminId: 1 }, async (base) => {
+      const res = await fetch(`${base}/api/admin/health/logs?level=error`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(await res.json()).toEqual({ logs: [], nextCursor: null });
+      expect(mockLogs).toHaveBeenCalledWith(expect.objectContaining({ level: "error" }));
     });
   });
 });

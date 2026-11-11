@@ -13,6 +13,8 @@ import { taipeiClock, taipeiInstant } from "../../core/time/taipei";
 import type { JobSchedule, JobState } from "../../core/health/types";
 import { outsideRequest, runWithRequestId } from "../http/requestId";
 import { log } from "../log";
+import { recordLog } from "../logging/collector";
+import { withPipeline } from "../logging/context";
 
 /** A job that runs at one time of day; a missed every-30-minutes reminder is stale by the next round, so it is not caught up. */
 export type SlotSchedule = Exclude<JobSchedule, { kind: "every30" }>;
@@ -48,19 +50,28 @@ export interface CatchUpDeps {
 
 export function catchUpMissedRuns(deps: CatchUpDeps): RequestHandler {
   const now = deps.now ?? (() => new Date());
-  const say = deps.log ?? ((message: string) => log(message, "catch-up"));
+  const say = (message: string) => {
+    (deps.log ?? ((text: string) => log(text, "catch-up")))(message);
+  };
   const inFlight = new Set<string>();
   let lastCheck = Number.NEGATIVE_INFINITY;
   let checking = false;
 
   function start(job: CatchUpJob, lastSuccessAt: string | undefined): void {
     inFlight.add(job.id);
+    recordLog("info", "catch-up.started", "scheduler.catch-up");
     say(`補跑 ${job.id}（上次成功：${lastSuccessAt ?? "無紀錄"}）`);
     // The job's log lines carry this label in place of a request id, so a caught-up run is easy to find in the deployment log.
     runWithRequestId(`catch-up.${job.id}`, () => job.run())
       .then(
-        (outcome) => say(outcome.busy ? `${job.id} 正在別處執行，這次不補` : `補跑 ${job.id} 完成`),
-        (err: any) => say(`補跑 ${job.id} 失敗: ${err?.message ?? err}`),
+        (outcome) => {
+          recordLog("info", outcome.busy ? "catch-up.busy" : "catch-up.completed", "scheduler.catch-up");
+          say(outcome.busy ? `${job.id} 正在別處執行，這次不補` : `補跑 ${job.id} 完成`);
+        },
+        (err: any) => {
+          recordLog("error", `catch-up.failed ${job.id}: ${err?.message ?? err}`, "scheduler.catch-up");
+          say(`補跑 ${job.id} 失敗: ${err?.message ?? err}`);
+        },
       )
       .finally(() => inFlight.delete(job.id));
   }
@@ -72,19 +83,22 @@ export function catchUpMissedRuns(deps: CatchUpDeps): RequestHandler {
         const state = await deps.readState(job.id);
         if (catchUpDue(job, state, now())) start(job, state?.lastSuccessAt);
       } catch (err: any) {
+        recordLog("error", `catch-up.check-failed ${job.id}: ${err?.message ?? err}`, "scheduler.catch-up");
         say(`補跑 ${job.id} 檢查失敗: ${err?.message ?? err}`);
       }
     }
   }
 
-  return (_req, _res, next) => {
+  return (req, _res, next) => {
     next();
+    // A watchdog poll must never start business work or make an external call.
+    if (/^\/api\/(?:admin\/)?health(?:\/|$)/i.test(req.path ?? "")) return;
     if (deps.jobs.length === 0 || checking) return;
     const t = now().getTime();
     if (t - lastCheck < CHECK_EVERY_MS) return;
     lastCheck = t;
     checking = true;
-    void outsideRequest(check).finally(() => {
+    void outsideRequest(() => withPipeline("scheduler.catch-up", check)).finally(() => {
       checking = false;
     });
   };

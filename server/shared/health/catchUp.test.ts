@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { currentRequestId, runWithRequestId } from "../http/requestId";
 import { CHECK_EVERY_MS, catchUpDue, catchUpMissedRuns, type CatchUpJob } from "./catchUp";
+import { currentPipeline, withPipeline } from "../logging/context";
 
 const at = (iso: string) => new Date(iso);
 const ragic = { schedule: { kind: "daily", at: 3 * 60 } } as const;
@@ -89,9 +90,9 @@ function harness(options: { jobs?: Array<Partial<CatchUpJob> & { id: string }>; 
   const readState = vi.fn(options.state ?? (async () => ({ lastStatus: "success", lastSuccessAt: "2026-10-30T03:12:25Z" })));
   const log = vi.fn(options.log ?? (() => undefined));
   const handler = catchUpMissedRuns({ jobs, readState, now: () => new Date(clock), log });
-  const request = () => {
+  const request = (path = "/api/employees") => {
     const next = vi.fn();
-    handler({} as any, {} as any, next);
+    handler({ path } as any, {} as any, next);
     return next;
   };
   const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -99,6 +100,23 @@ function harness(options: { jobs?: Array<Partial<CatchUpJob> & { id: string }>; 
 }
 
 describe("catchUpMissedRuns middleware", () => {
+  it.each(["/api/health/pipelines", "/api/health/logs", "/api/admin/health", "/API/ADMIN/HEALTH/logs"])("keeps %s read-only even when jobs are overdue", async (path) => {
+    const h = harness();
+    expect(h.request(path)).toHaveBeenCalledTimes(1);
+    await h.settle();
+    expect(h.readState).not.toHaveBeenCalled();
+    expect(h.runs["ragic.sync"]).not.toHaveBeenCalled();
+  });
+
+  it("never inherits the visitor's logging pipeline when catching up", async () => {
+    const seen: Array<string | undefined> = [];
+    const h = harness({ log: () => { seen.push(currentPipeline()); } });
+    withPipeline("employee.manage", () => h.request());
+    await vi.waitFor(() => expect(h.runs["ragic.sync"]).toHaveBeenCalledTimes(1));
+    await h.settle();
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((id) => id === "scheduler.catch-up")).toBe(true);
+  });
   it("lets the request through at once, without waiting for the run", () => {
     const h = harness({ jobs: [{ id: "ragic.sync", run: () => new Promise(() => {}) }] });
     expect(h.request()).toHaveBeenCalledTimes(1);

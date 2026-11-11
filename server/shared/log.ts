@@ -1,4 +1,5 @@
 import { currentRequestId } from "./http/requestId";
+import { collectConsole, recordLog } from "./logging/collector";
 
 const TAIPEI_OFFSET_MS = 8 * 60 * 60 * 1000;
 
@@ -13,6 +14,9 @@ export function formatTimestamp(date: Date): string {
  * Every line is `<time with offset> [source] [request id or -] message`.
  */
 export function log(message: string, source = "express") {
+  if (source === "error") recordLog("error", message);
+  else if (source !== "catch-up" && /失敗|錯誤/.test(message)) recordLog("error", message);
+  else if (source === "warn") recordLog("warn", message);
   console.log(`${formatTimestamp(new Date())} [${source}] [${currentRequestId() ?? "-"}] ${message}`);
 }
 
@@ -30,6 +34,7 @@ export function installLogStamp(): () => void {
   PATCHED.forEach((level, i) => {
     const original = originals[i];
     console[level] = (...args: unknown[]) => {
+      if (level === "warn" || level === "error") collectConsole(level, args);
       if (typeof args[0] === "string" && STAMPED.test(args[0])) return original.apply(console, args);
       return original.call(console, `${formatTimestamp(new Date())} [console] [${currentRequestId() ?? "-"}]`, ...args);
     };

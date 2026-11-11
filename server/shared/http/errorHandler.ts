@@ -15,6 +15,7 @@
  * (4xx) and a malformed request body stays a 400. Anything else is an unexpected failure: 500.
  */
 import type { NextFunction, Request, Response } from "express";
+import { logRequestPipeline } from "../logging/requestLogging";
 import { recordServerError } from "../../modules/errors/errors.service";
 import { HttpError } from "../errors";
 import { log } from "../log";
@@ -95,7 +96,7 @@ export function requestContext(req: Request, res: Response, next: NextFunction):
   // Kept on the response too: the error gate can run after the async context that served the request is gone.
   const context: RequestContext = { requestId: attach(req, res), subject: {} };
   res.locals.requestContext = context;
-  runInRequestContext(context, next);
+  runInRequestContext(context, () => logRequestPipeline(req, res, next));
 }
 
 /** A 4xx a library raised on purpose, such as body-parser rejecting malformed JSON. */

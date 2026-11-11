@@ -3,6 +3,7 @@
  * 管線清單是下面兩張表；要加一條排程管線，在 SCHEDULED_JOBS 加一筆就好。
  */
 import { taipeiClock } from "../time/taipei";
+import { evaluateFlowPipelines, type FlowSignals } from "./flowRules";
 import {
   evaluateClockCoverage,
   evaluateDatabase,
@@ -50,6 +51,7 @@ export interface ReadError {
 type Signal<T> = T | ReadError;
 
 export interface HealthSignals {
+  flow?: FlowSignals;
   now: Date;
   build: string;
   schedulerActive: boolean;
@@ -109,6 +111,7 @@ export function assembleReport(s: HealthSignals): HealthReport {
   pipelines.push(evaluateDatabase({ id: "database", name: "資料庫", source: "select 1", latencyMs: s.database.latencyMs, error: s.database.error }));
   pipelines.push(evaluateHolidayTable({ id: "holiday-table", name: "國定假日表", source: "server/core/calendar/taiwanHolidays.ts", lastDate: s.holidayLastDate, today: taipeiClock(s.now).date }));
   pipelines.push(evaluateSecurity({ id: "security-config", name: "安全設定", source: "環境變數", signals: s.security }));
+  if (s.flow) pipelines.push(...evaluateFlowPipelines(s.flow));
 
   return {
     system: SYSTEM_ID,

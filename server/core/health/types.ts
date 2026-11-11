@@ -3,6 +3,15 @@
  */
 export type Level = "green" | "yellow" | "red";
 
+export interface HealthLogEntry {
+  id: number;
+  at: string;
+  level: "info" | "warn" | "error";
+  pipeline: string;
+  requestId: string | null;
+  message: string;
+}
+
 const ORDER: Record<Level, number> = { green: 0, yellow: 1, red: 2 };
 
 export function worst(levels: Level[]): Level {
@@ -10,6 +19,8 @@ export function worst(levels: Level[]): Level {
 }
 
 export interface Pipeline {
+  logs?: HealthLogEntry[];
+  logsError?: string;
   id: string;
   name: string;
   level: Level;

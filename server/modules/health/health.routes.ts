@@ -6,10 +6,11 @@
  * GET /api/admin/health：給後台「IT 監控」頁用的同一份報告。瀏覽器不能拿到 HEALTH_TOKEN，
  * 所以這條走後台登入（不在放行清單裡），不驗 token；直接呼叫 health service，不轉發 HTTP。
  */
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import { timingSafeEqual } from "crypto";
 import { requireAdmin } from "../../shared/middleware/requireAdmin";
 import { buildHealthReport } from "./health.service";
+import { InvalidHealthLogQuery, parseHealthLogsOptions, queryHealthLogs } from "./healthLogs";
 
 function tokenMatches(received: string, expected: string): boolean {
   const a = Buffer.from(received);
@@ -18,14 +19,29 @@ function tokenMatches(received: string, expected: string): boolean {
 }
 
 export function mountHealthRoutes(app: Express): void {
-  app.get("/api/health/pipelines", async (req, res) => {
+  const healthToken: RequestHandler = (req, res, next) => {
     res.set("Cache-Control", "no-store");
-    // 在 Secrets 貼值時容易多帶空白或換行，只修剪設定值；送來的 token 照原樣比對。
     const expected = process.env.HEALTH_TOKEN?.trim();
-    if (!expected) return res.status(503).json({ message: "HEALTH_TOKEN not configured" });
+    if (!expected) return void res.status(503).json({ message: "HEALTH_TOKEN not configured" });
     const header = req.header("authorization") ?? "";
     const received = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
-    if (!received || !tokenMatches(received, expected)) return res.status(401).json({ message: "invalid health token" });
+    if (!received || !tokenMatches(received, expected)) return void res.status(401).json({ message: "invalid health token" });
+    next();
+  };
+  const readLogs: RequestHandler = async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const options = parseHealthLogsOptions(req.query);
+      res.json(await queryHealthLogs(options));
+    } catch (err) {
+      if (err instanceof InvalidHealthLogQuery) return void res.status(400).json({ message: err.message });
+      res.status(500).json({ message: "無法讀取日誌" });
+    }
+  };
+  app.get("/api/health/logs", healthToken, readLogs);
+  app.get("/api/admin/health/logs", requireAdmin, readLogs);
+
+  app.get("/api/health/pipelines", healthToken, async (_req, res) => {
     try {
       res.json(await buildHealthReport(new Date()));
     } catch (err: any) {
