@@ -85,6 +85,9 @@ export interface FlowSignals {
 const unreadable = (value: unknown): value is FlowReadError => typeof value === "object" && value !== null && "readError" in value;
 const light = (d: Pick<FlowDefinition, "id" | "name">, level: Level, reason: string, source: string, lastFailureAt: string | null = null): Pipeline =>
   ({ id: d.id, name: d.name, level, reason, source, lastFailureAt, lastSuccessAt: null });
+// A job's raw exception can contain names or record ids; the lamp reason is count/time-only.
+const jobForReason = (state: JobState | undefined): JobState | undefined => state
+  ? { ...state, lastError: state.lastError ? "詳細內容請查管線日誌" : undefined } : undefined;
 
 function errors(d: Pick<FlowDefinition, "id" | "name">, signal: FlowSignal<FlowErrorWindow> | undefined, source: string, recentName = "1 小時", warningOnly = false): Pipeline {
   if (!signal) return light(d, "yellow", "無法觀測：沒有訊號", source);
@@ -115,7 +118,7 @@ export function evaluateFlowPipelines(s: FlowSignals): Pipeline[] {
       const state = s.weeklyAttendance;
       p = combine(p, unreadable(state)
         ? light(d, "red", "無法觀測：讀取手動通知結果失敗", "health:job:manual.weekly-attendance")
-        : evaluateManualJob({ ...d, source: "health:job:manual.weekly-attendance", state }));
+        : evaluateManualJob({ ...d, source: "health:job:manual.weekly-attendance", state: jobForReason(state) }));
     }
     return p;
   });
@@ -130,6 +133,6 @@ export function evaluateFlowPipelines(s: FlowSignals): Pipeline[] {
   const purge = { id: "errors.purge", name: "錯誤紀錄清理（每天 04:00）", source: "health:job:errors.purge" };
   pipelines.push(unreadable(s.purge)
     ? light(purge, "red", "無法觀測：讀取清理結果失敗", purge.source)
-    : evaluateScheduledJob({ ...purge, state: s.purge, schedule: { kind: "daily", at: 4 * 60 }, graceMinutes: 30, enabled: true, schedulerActive: s.schedulerActive, now: s.now }));
+    : evaluateScheduledJob({ ...purge, state: jobForReason(s.purge), schedule: { kind: "daily", at: 4 * 60 }, graceMinutes: 30, enabled: true, schedulerActive: s.schedulerActive, now: s.now }));
   return pipelines;
 }

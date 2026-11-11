@@ -15,7 +15,7 @@ export function formatTimestamp(date: Date): string {
  */
 export function log(message: string, source = "express") {
   if (source === "error") recordLog("error", message);
-  else if (source !== "catch-up" && /失敗|錯誤/.test(message)) recordLog("error", message);
+  else if (source !== "catch-up" && /失敗|^(?:同步)?錯誤[:：]/.test(message)) recordLog("error", message);
   else if (source === "warn") recordLog("warn", message);
   console.log(`${formatTimestamp(new Date())} [${source}] [${currentRequestId() ?? "-"}] ${message}`);
 }

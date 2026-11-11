@@ -3,6 +3,7 @@ import { pool } from "../../infra/db";
 import { resetDatabase } from "../../test/itest";
 import { evaluateFlowPipelines } from "../../core/health/flowRules";
 import { collectFlowSignals } from "./flowSignals";
+import { buildHealthReport } from "./health.service";
 
 const now = new Date("2026-11-11T04:00:00.000Z");
 const at = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * 60_000).toISOString();
@@ -16,6 +17,19 @@ async function event(pipeline: string, level: string, message: string, minutesAg
 }
 
 describe("read-only workflow signal collection against PostgreSQL", () => {
+  it("assembles all 47 pipelines and their persisted logs through the real health service without writes", async () => {
+    await error("/api/leave-requests/42", 5);
+    await event("leave.request", "warn", "synthetic warning", 5);
+    const report = await buildHealthReport(now);
+    expect(report.pipelines).toHaveLength(47);
+    expect(new Set(report.pipelines.map((p) => p.id)).size).toBe(47);
+    expect(report.pipelines.every((p) => Array.isArray(p.logs) && p.logs.length <= 20)).toBe(true);
+    const leave = report.pipelines.find((p) => p.id === "leave.request")!;
+    expect(leave.level).toBe("red");
+    expect(leave.logs).toEqual([expect.objectContaining({ pipeline: "leave.request", message: "synthetic warning" })]);
+    expect((await pool.query("select count(*)::int as count from app_logs")).rows[0].count).toBe(1);
+    expect((await pool.query("select count(*)::int as count from system_configs")).rows[0].count).toBe(0);
+  });
   it("attributes 5xx by exact route prefix and counts the 1h/24h windows", async () => {
     await error("/api/employees/4", 60);
     await error("/api/employees/4", 60.01);
@@ -60,6 +74,7 @@ describe("read-only workflow signal collection against PostgreSQL", () => {
     for (let i = 0; i < 4; i++) await event("server.restarts", "info", "server.started", 60 + i);
     await event("server.restarts", "info", "other", 1);
     await event("server.restarts", "info", "server.started", 1440.01);
+    await event("scheduler.catch-up", "info", "catch-up.started", 5);
     await event("scheduler.catch-up", "info", "catch-up.started", 2);
     await event("scheduler.catch-up", "info", "catch-up.completed", 1);
     await event("scheduler.catch-up", "error", "catch-up.failed", 1);
@@ -68,7 +83,7 @@ describe("read-only workflow signal collection against PostgreSQL", () => {
     await event("admin.login", "info", "authentication.ok", 1);
     const s = await collectFlowSignals(now);
     expect(s.restarts).toBe(4);
-    expect(s.catchUp).toEqual({ recent: 1, day: 1, attempts24h: 1, lastFailureAt: at(1) });
+    expect(s.catchUp).toEqual({ recent: 1, day: 1, attempts24h: 2, lastFailureAt: at(1) });
     expect(s.logins["portal.login"]).toMatchObject({ recent: 1, day: 1 });
     expect(s.logins["admin.login"]).toMatchObject({ recent: 0, day: 1 });
     expect(evaluateFlowPipelines(s).find((p) => p.id === "portal.login")?.level).toBe("yellow");

@@ -22,6 +22,7 @@ describe("log collection wiring", () => {
         console.error(new Error("broken"));
         console.info("ignore-info");
         log("失敗 testing", "cron");
+        log("Ragic 同步完成: 新增 0, 更新 0, 錯誤 0", "cron");
         console.error("[app-logs] batch write failed; records dropped");
       }));
       await flushLogs();
@@ -63,14 +64,19 @@ describe("log collection wiring", () => {
     const app = express();
     app.use((req,res,next) => { res.locals.requestId='req-login'; logRequestPipeline(req,res,next); });
     app.post('/api/admin/login', (_req,res) => res.status(401).json({message:'refused'}));
+    app.get('/api/admin/me', (_req,res) => res.status(401).json({message:'not signed in'}));
+    app.post('/api/admin/dev-login', (_req,res) => res.json({ok:true}));
     app.get('/api/employees', (_req,res) => { recordLog('warn','failure employeeId=42'); res.json({ok:true}); });
     const server=app.listen(0,'127.0.0.1');
     await new Promise<void>((resolve)=>server.once('listening',resolve));
     const base=`http://127.0.0.1:${(server.address() as any).port}`;
     try {
       await fetch(base+'/api/admin/login?token=secret-query',{method:'POST',body:'PRIVATE-BODY'});
+      await fetch(base+'/api/admin/me');
+      await fetch(base+'/api/admin/dev-login',{method:'POST'});
       await fetch(base+'/api/employees');
       await flushLogs();
+      expect(rows).toHaveLength(2);
       expect(rows[0]).toMatchObject({pipeline:'admin.login',requestId:'req-login',level:'warn'});
       expect(rows[1]).toMatchObject({pipeline:'employee.manage',level:'warn'});
       expect(JSON.stringify(rows)).not.toMatch(/secret-query|PRIVATE-BODY/);

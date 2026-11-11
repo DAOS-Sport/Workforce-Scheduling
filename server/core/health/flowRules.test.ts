@@ -53,6 +53,14 @@ describe("workflow routes", () => {
   });
 });
 
+it.each(["manual.weekly-attendance", "errors.purge"])("%s keeps raw job errors out of public lamp reasons", (id) => {
+  const s = healthy();
+  const state = { lastStatus: "failed" as const, lastStartedAt: now.toISOString(), lastFailureAt: now.toISOString(), lastError: "SyntheticName employeeId=4242 mail@example.test" };
+  if (id === "errors.purge") s.purge = state;
+  else s.weeklyAttendance = state;
+  expect(get(s, id).reason).not.toMatch(/SyntheticName|employeeId=4242|mail@example.test/);
+});
+
 describe("all HTTP workflow lights", () => {
   it("has no duplicate ids", () => expect(new Set(FLOW_DEFINITIONS.map((d) => d.id)).size).toBe(FLOW_DEFINITIONS.length));
   it.each(FLOW_DEFINITIONS.flatMap((d) => (["green", "yellow", "red"] as const).map((level) => ({ id: d.id, level }))))("$id is $level for its error window", ({ id, level }) => {
