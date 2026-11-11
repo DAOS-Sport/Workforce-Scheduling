@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { fetchAllRagicRecords } from "../../adapters/ragic";
+import { fetchAllRagicRecords, fetchH02RagicRecords } from "../../adapters/ragic";
 import { SnapshotRejected, assertSnapshotComplete, planEmployeeSync } from "../../core/ragic/employeeSync";
 import { VENUE_DATA } from "../../core/ragic/venueData";
 import { LOCK_NS, withSessionLock, withTx } from "../../infra/db/tx";
@@ -48,6 +48,13 @@ export async function syncFromRagic(dryRun = false): Promise<SyncResult> {
   if (!apiKey) throw new Error("RAGIC_API_KEY not configured");
 
   const records = await fetchAllRagicRecords(apiKey);
+  let h02Records: Record<string, unknown> = {};
+  const h02Errors: string[] = [];
+  try {
+    h02Records = await fetchH02RagicRecords(apiKey);
+  } catch {
+    h02Errors.push("H02 讀取失敗；本輪僅同步 H01");
+  }
   console.log(`[ragic] 共拉取 ${Object.keys(records).length} 筆原始記錄，開始處理...`);
 
   const regions = await regionService.findAll();
@@ -56,7 +63,7 @@ export async function syncFromRagic(dryRun = false): Promise<SyncResult> {
   const plan = await withTx(async (tx) => {
     const locals = await employeeService.getAllEmployees(tx);
     const observed = await ragicRepository.getObservedStatuses(tx);
-    const next = planEmployeeSync({ records, locals, regionIdByCode, observed, isValidLineId: isValidLineUserId });
+    const next = planEmployeeSync({ records, h02Records, locals, regionIdByCode, observed, isValidLineId: isValidLineUserId });
     try {
       assertSnapshotComplete(next);
     } catch (err) {
@@ -82,7 +89,7 @@ export async function syncFromRagic(dryRun = false): Promise<SyncResult> {
     updated: plan.updated,
     skipped: plan.skipped,
     deactivated: plan.deactivated,
-    errors: plan.errors,
+    errors: [...plan.errors, ...h02Errors],
     skipReasons: plan.skipReasons,
     totalFetched: plan.totalFetched,
   };
