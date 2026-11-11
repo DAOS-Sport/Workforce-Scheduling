@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("../../infra/db", () => ({ db: {}, pool: {} }));
 
 const { mockData, mockRepo, mockPortal } = vi.hoisted(() => ({
   mockData: { getSystemConfig: vi.fn(), getEmployee: vi.fn(), getVenuesByRegion: vi.fn() },

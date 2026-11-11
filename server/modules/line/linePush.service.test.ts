@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("../../infra/db", () => ({ db: {}, pool: {} }));
 
 const mockData = vi.hoisted(() => ({
   getShiftsByDate: vi.fn(),
@@ -13,6 +14,7 @@ const mockData = vi.hoisted(() => ({
   getClockRecordsByDateRange: vi.fn(),
   clearOldWeeklyPushNotifications: vi.fn(),
   hasWeeklyPushNotification: vi.fn(),
+  mergeJsonConfig: vi.fn(async () => undefined),
 }));
 
 // pushOnce keeps its slots in the database; here a map stands in for push_dedup.

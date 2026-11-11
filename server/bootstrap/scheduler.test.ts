@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SCHEDULED_JOBS } from "../core/health/report";
+vi.mock("../infra/db", () => ({ db: {}, pool: {} }));
 
 async function catchUpJobsWith(env: { production: boolean; flags: Record<string, boolean> }) {
   vi.resetModules();

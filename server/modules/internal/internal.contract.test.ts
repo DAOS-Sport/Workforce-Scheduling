@@ -11,7 +11,8 @@
  *      them from on-shift gating.
  *   4. employee.employeeNumber is populated for gating.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+vi.mock("../../infra/db", () => ({ db: {}, pool: {} }));
 import {
   buildShiftTime,
   deriveShiftLabel,

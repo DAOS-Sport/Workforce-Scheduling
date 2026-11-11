@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("../../infra/db", () => ({ db: {}, pool: {} }));
 import { requireMcpToken } from "./mcp.routes";
 
 const saved = { mcp: process.env.MCP_TOKEN, internal: process.env.INTERNAL_API_TOKEN };
