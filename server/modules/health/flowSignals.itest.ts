@@ -17,12 +17,13 @@ async function event(pipeline: string, level: string, message: string, minutesAg
 }
 
 describe("read-only workflow signal collection against PostgreSQL", () => {
-  it("assembles all 47 pipelines and their persisted logs through the real health service without writes", async () => {
+  it("assembles all 51 pipelines and their persisted logs through the real health service without writes", async () => {
     await error("/api/leave-requests/42", 5);
     await event("leave.request", "warn", "synthetic warning", 5);
     const report = await buildHealthReport(now);
-    expect(report.pipelines).toHaveLength(47);
-    expect(new Set(report.pipelines.map((p) => p.id)).size).toBe(47);
+    expect(report.pipelines).toHaveLength(51);
+    expect(new Set(report.pipelines.map((p) => p.id)).size).toBe(51);
+    expect(report.pipelines.map((p) => p.id)).toEqual(expect.arrayContaining(["push.delivery", "clock.never-success", "schedule.save", "audit.actor"]));
     expect(report.pipelines.every((p) => Array.isArray(p.logs) && p.logs.length <= 20)).toBe(true);
     const leave = report.pipelines.find((p) => p.id === "leave.request")!;
     expect(leave.level).toBe("red");
