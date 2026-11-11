@@ -16,9 +16,10 @@ import { collectSignals, buildHealthReport } from "./health.service";
 const now = new Date("2026-11-11T12:00:00.000Z");
 const recent = new Date(now.getTime() - 60_000).toISOString();
 const dialect = new PgDialect();
-const delivery = { pendingCount: 2, oldestPendingAt: "2026-11-11T10:00:00.000Z" };
+let delivery: { pendingCount: number; recentPendingCount: number; oldestPendingAt: string | null };
 
 beforeEach(() => {
+  delivery = { pendingCount: 2, recentPendingCount: 2, oldestPendingAt: "2026-11-11T10:00:00.000Z" };
   vi.stubEnv("MCP_TOKEN", "health-test-mcp");
   vi.stubEnv("INTERNAL_API_TOKEN", "health-test-internal");
   vi.stubEnv("SESSION_SECRET", "health-test-session");
@@ -39,12 +40,17 @@ afterEach(() => {
 });
 
 describe("push delivery health collection", () => {
-  it("collects the pending aggregate and includes it in the report", async () => {
+  it.each([
+    [2, 2, "2026-11-11T10:00:00.000Z", "red"],
+    [2, 0, "2026-11-09T10:00:00.000Z", "yellow"],
+    [0, 0, null, "green"],
+  ] as const)("collects total=%i recent=%i oldest=%s as %s", async (pendingCount, recentPendingCount, oldestPendingAt, level) => {
+    delivery = { pendingCount, recentPendingCount, oldestPendingAt };
     const signals = await collectSignals(now);
     expect(signals.pushDelivery).toEqual(delivery);
     const report = await buildHealthReport(now);
-    expect(report.pipelines.find((p) => p.id === "push.delivery")).toMatchObject({ level: "yellow" });
-    expect(report.pipelines.filter((p) => p.level !== "green").map((p) => p.id)).toEqual(["push.delivery"]);
+    expect(report.pipelines.find((p) => p.id === "push.delivery")).toMatchObject({ level });
+    expect(report.pipelines.filter((p) => p.level !== "green").map((p) => p.id)).toEqual(level === "green" ? [] : ["push.delivery"]);
   });
 
   it("keeps all other signals usable when the pending aggregate cannot be read", async () => {

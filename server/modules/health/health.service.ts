@@ -50,19 +50,6 @@ async function readClockCoverage(now: Date): Promise<ClockCoverage> {
   return { startedShifts: row.started, coveredShifts: row.covered, attemptsToday: row.attempts, failuresToday: row.failures };
 }
 
-async function readPushDelivery(): Promise<PushDelivery> {
-  const result = await db.execute(sql`
-    select count(*)::int as "pendingCount",
-      to_char(min(updated_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "oldestPendingAt"
-    from push_dedup
-    where status = 'pending'
-      and updated_at >= (now() at time zone 'UTC') - interval '7 days'
-      and updated_at < (now() at time zone 'UTC') - interval '10 minutes'
-  `);
-  const row = result.rows[0];
-  return { pendingCount: row.pendingCount as number, oldestPendingAt: row.oldestPendingAt as string | null };
-}
-
 async function probeDatabase(): Promise<{ latencyMs: number | null; error?: string }> {
   const t0 = performance.now();
   try {
@@ -102,4 +89,18 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
 
 export async function buildHealthReport(now: Date): Promise<HealthReport> {
   return assembleReport(await collectSignals(now));
+}
+
+async function readPushDelivery(): Promise<PushDelivery> {
+  const result = await db.execute(sql`
+    select count(*)::int as "pendingCount",
+      count(*) filter (where updated_at >= (now() at time zone 'UTC') - interval '24 hours')::int as "recentPendingCount",
+      to_char(min(updated_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "oldestPendingAt"
+    from push_dedup
+    where status = 'pending'
+      and updated_at >= (now() at time zone 'UTC') - interval '7 days'
+      and updated_at < (now() at time zone 'UTC') - interval '10 minutes'
+  `);
+  const row = result.rows[0];
+  return { pendingCount: row.pendingCount as number, recentPendingCount: row.recentPendingCount as number, oldestPendingAt: row.oldestPendingAt as string | null };
 }

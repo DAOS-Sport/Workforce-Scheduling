@@ -45,7 +45,7 @@ function healthySignals(): HealthSignals {
     jobs: Object.fromEntries(["ragic.sync", "ragic.webhook", "ragic.venue-sync", ...SCHEDULED_JOBS.map((j) => j.id)].map((id) => [id, done])),
     integrations: Object.fromEntries(INTEGRATIONS.map((i) => [i.key, { lastSuccessAt: recent, consecutiveFailures: 0 }])) as HealthSignals["integrations"],
     coverage: { startedShifts: 10, coveredShifts: 10, attemptsToday: 10, failuresToday: 0 },
-    pushDelivery: { pendingCount: 0, oldestPendingAt: null },
+    pushDelivery: { pendingCount: 0, recentPendingCount: 0, oldestPendingAt: null },
     database: { latencyMs: 12 },
     holidayLastDate: "2027-12-31",
     security: { mcpTokenSet: true, mcpTokenDistinct: true, sessionSecretSet: true, lineChannelSecretSet: true },
@@ -82,15 +82,26 @@ describe("health-v1 contract", () => {
     expect(report.overall).toBe("red");
   });
 
-  it("reports uncertain push delivery as yellow without exposing employee identifiers", () => {
-    const report = assembleReport({ ...healthySignals(), pushDelivery: { pendingCount: 2, oldestPendingAt: "2026-10-21T10:00:00.000Z" } });
+  it("reports only older pending pushes as yellow without exposing employee identifiers", () => {
+    const report = assembleReport({ ...healthySignals(), pushDelivery: { pendingCount: 2, recentPendingCount: 0, oldestPendingAt: "2026-10-19T10:00:00.000Z" } });
     const delivery = report.pipelines.find((p) => p.id === "push.delivery");
     expect(delivery).toMatchObject({ name: "推播送達", level: "yellow", source: "push_dedup" });
     expect(delivery?.reason).toContain("2 筆");
-    expect(delivery?.reason).toContain("10/21 18:00");
+    expect(delivery?.reason).toContain("10/19 18:00");
     expect(delivery?.reason).not.toMatch(/employee|員工編號/i);
     expect(report.pipelines.filter((p) => p.level !== "green").map((p) => p.id)).toEqual(["push.delivery"]);
     expect(report.overall).toBe("yellow");
+  });
+
+  it("reports recent overdue pending pushes as red for the watchdog even when older pushes remain", () => {
+    const report = assembleReport({ ...healthySignals(), pushDelivery: { pendingCount: 3, recentPendingCount: 1, oldestPendingAt: "2026-10-19T10:00:00.000Z" } });
+    const delivery = report.pipelines.find((p) => p.id === "push.delivery");
+    expect(delivery).toMatchObject({ name: "推播送達", level: "red", source: "push_dedup" });
+    expect(delivery?.reason).toContain("最近 24 小時有 1 筆");
+    expect(delivery?.reason).toContain("最近 7 天共 3 筆");
+    expect(delivery?.reason).not.toMatch(/employee|員工編號/i);
+    expect(report.pipelines.filter((p) => p.level !== "green").map((p) => p.id)).toEqual(["push.delivery"]);
+    expect(report.overall).toBe("red");
   });
 
   it("a push delivery read error turns only that pipeline red", () => {

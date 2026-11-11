@@ -149,18 +149,6 @@ export function evaluateClockCoverage(input: Base & { coverage: ClockCoverage })
   return pipeline(input, "green", summary);
 }
 
-export interface PushDelivery {
-  pendingCount: number;
-  oldestPendingAt: string | null;
-}
-
-/** 最近 7 天超過 10 分鐘仍待確認的推播，需要人工查核送達狀態。 */
-export function evaluatePushDelivery(input: Base & { delivery: PushDelivery }): Pipeline {
-  const { pendingCount, oldestPendingAt } = input.delivery;
-  if (pendingCount === 0) return pipeline(input, "green", "最近 7 天沒有等待確認超過 10 分鐘的推播");
-  return pipeline(input, "yellow", `有 ${pendingCount} 筆推播等待確認超過 10 分鐘，最早 ${at(oldestPendingAt!)}（台北時間）`);
-}
-
 /** 資料庫：查詢時間分級回報，避免把每次不同的毫秒數寫進理由。 */
 export function evaluateDatabase(input: Base & { latencyMs: number | null; error?: string }): Pipeline {
   if (input.latencyMs === null) return pipeline(input, "red", `連不上資料庫：${input.error ?? "未知錯誤"}`);
@@ -195,4 +183,20 @@ export function evaluateSecurity(input: Base & { signals: SecuritySignals }): Pi
   ].filter(Boolean) as string[];
   if (problems.length) return pipeline(input, "red", problems.join("；"));
   return pipeline(input, "green", "必要的安全設定都有設");
+}
+
+export interface PushDelivery {
+  pendingCount: number;
+  recentPendingCount: number;
+  oldestPendingAt: string | null;
+}
+
+/** 超過 10 分鐘仍 pending：最近 24 小時紅燈，僅剩 7 天內舊紀錄則黃燈。 */
+export function evaluatePushDelivery(input: Base & { delivery: PushDelivery }): Pipeline {
+  const { pendingCount, recentPendingCount, oldestPendingAt } = input.delivery;
+  if (recentPendingCount > 0) {
+    return pipeline(input, "red", `最近 24 小時有 ${recentPendingCount} 筆推播等待確認超過 10 分鐘；最近 7 天共 ${pendingCount} 筆，最早 ${at(oldestPendingAt!)}（台北時間）`);
+  }
+  if (pendingCount > 0) return pipeline(input, "yellow", `最近 7 天有 ${pendingCount} 筆較舊推播等待確認超過 10 分鐘，最早 ${at(oldestPendingAt!)}（台北時間）`);
+  return pipeline(input, "green", "最近 7 天沒有等待確認超過 10 分鐘的推播");
 }

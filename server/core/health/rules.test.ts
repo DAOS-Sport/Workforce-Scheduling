@@ -126,17 +126,27 @@ describe("evaluateClockCoverage", () => {
 });
 
 describe("evaluatePushDelivery", () => {
+  it("is red when any overdue pending push is within the last 24 hours, even alongside older pending pushes", () => {
+    const p = evaluatePushDelivery({ ...base, delivery: { pendingCount: 3, recentPendingCount: 1, oldestPendingAt: "2026-11-05T16:20:00.000Z" } });
+    expect(p.level).toBe("red");
+    expect(p.reason).toContain("最近 24 小時有 1 筆");
+    expect(p.reason).toContain("最近 7 天共 3 筆");
+    expect(p.reason).toContain("11/06 00:20");
+    expect(p.reason).not.toMatch(/employee|員工編號/i);
+  });
+
   it("is green when there are no overdue pending pushes", () => {
-    const p = evaluatePushDelivery({ ...base, delivery: { pendingCount: 0, oldestPendingAt: null } });
+    const p = evaluatePushDelivery({ ...base, delivery: { pendingCount: 0, recentPendingCount: 0, oldestPendingAt: null } });
     expect(p.level).toBe("green");
   });
 
-  it("is yellow with the count and earliest Taipei time when delivery is uncertain", () => {
-    const p = evaluatePushDelivery({ ...base, delivery: { pendingCount: 3, oldestPendingAt: "2026-11-10T16:20:00.000Z" } });
+  it("is yellow with the count and earliest Taipei time when only older pending pushes remain", () => {
+    const p = evaluatePushDelivery({ ...base, delivery: { pendingCount: 3, recentPendingCount: 0, oldestPendingAt: "2026-11-10T16:20:00.000Z" } });
     expect(p.level).toBe("yellow");
     expect(p.reason).toContain("3 筆");
     expect(p.reason).toContain("11/11 00:20");
     expect(p.reason).toContain("台北時間");
+    expect(p.reason).not.toMatch(/employee|員工編號/i);
   });
 });
 
