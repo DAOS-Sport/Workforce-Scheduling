@@ -16,7 +16,7 @@ import { mountRagicRoutes } from "./ragic.routes";
 
 // Ragic is always a stub here; nothing leaves this machine.
 const ragic = vi.hoisted(() => ({ fetch: vi.fn() }));
-vi.mock("../../adapters/ragic", () => ({ fetchAllRagicRecords: ragic.fetch }));
+vi.mock("../../adapters/ragic", () => ({ fetchAllRagicRecords: ragic.fetch, fetchH02RagicRecords: async () => ({}) }));
 
 const SECRET = "test-webhook-secret";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

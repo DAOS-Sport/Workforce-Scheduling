@@ -106,6 +106,10 @@ export function employeeCodeOf(record: Record<string, any>): string {
   return firstValue(record["員工編號"]);
 }
 
+export function jobTitleOf(record: Record<string, any>): string {
+  return allValues(record["應徵職務"]).map(cleanText).filter(Boolean).join(", ");
+}
+
 export function parseRagicRecord(record: Record<string, any>): RagicEmployee | null {
   // 單值欄位：取陣列第一個非空值。
   // 員工編號是比對鍵 → 只去頭尾空白（不做內部清洗），避免清洗後對不到既有資料而重複新增。
@@ -116,7 +120,7 @@ export function parseRagicRecord(record: Record<string, any>): RagicEmployee | n
   // 多值欄位：完整讀取所有值、逐一清洗後 join，供 mapRole / mapDepartmentToRegionCode 比對
   //（兩者皆以 includes 比對，因此能對應到陣列中的任一個值）。
   const department = allValues(record["部門"]).map(cleanText).filter(Boolean).join(", ");
-  const roleStr = allValues(record["應徵職務"]).map(cleanText).filter(Boolean).join(", ");
+  const roleStr = jobTitleOf(record);
 
   // 聘雇類別 / 在職狀態為精確比對欄位，去除所有空白以確保 mapStatus / mapEmploymentType 命中。
   const typeStr = tidyToken(firstValue(record["聘雇類別"]));

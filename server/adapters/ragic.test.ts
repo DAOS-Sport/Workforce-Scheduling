@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const { recordIntegration } = vi.hoisted(() => ({ recordIntegration: vi.fn() }));
 vi.mock("../shared/health/healthState", () => ({ recordIntegration }));
 
-import { fetchAllRagicRecords, RagicHttpError } from "./ragic";
+import { fetchAllRagicRecords, fetchH02RagicRecords, RagicHttpError } from "./ragic";
 
 type Handler = (req: http.IncomingMessage, res: http.ServerResponse, n: number) => void;
 const open: http.Server[] = [];
@@ -20,6 +20,19 @@ async function fakeRagic(handler: Handler): Promise<{ url: string; calls: () => 
 }
 
 const fast = { attemptTimeoutMs: 150, maxRetries: 3, backoffMs: () => 10, pageDelayMs: 0 };
+
+it("reads the H02 employee sheet through the existing v3 adapter", async () => {
+  const records = { "81": { 員工編號: "H02-FIX-001", 應徵職務: ["主管職", "行政專員"] } };
+  const request = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify(records), { status: 200 }));
+  try {
+    expect(await fetchH02RagicRecords("fixture-key")).toEqual(records);
+    expect(request).toHaveBeenCalledTimes(1);
+    const url = new URL(String(request.mock.calls[0][0]));
+    expect([url.origin, url.pathname, url.searchParams.get("v")]).toEqual(["https://ap7.ragic.com", "/xinsheng/ragicforms4/13", "3"]);
+  } finally {
+    request.mockRestore();
+  }
+});
 
 afterEach(async () => {
   for (const s of open.splice(0)) {

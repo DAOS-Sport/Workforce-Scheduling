@@ -1,5 +1,5 @@
 /**
- * Ragic 的唯一對外出口（H01 員工表）。只負責傳輸與分頁，不含業務規則、不寫資料庫。
+ * Ragic 的唯一對外出口（H01／H02 員工表）。只負責傳輸與分頁，不含業務規則、不寫資料庫。
  *
  * 每次請求有逾時（涵蓋等標頭與讀內容），只有逾時、網路錯誤、429、5xx 會重試；
  * 其他 4xx（例如金鑰錯誤）重試也不會好，直接停（GitHub #1）。
@@ -8,6 +8,7 @@
 import { recordIntegration } from "../shared/health/healthState";
 
 export const RAGIC_API_URL = "https://ap7.ragic.com/xinsheng/ragicforms4/20004";
+export const RAGIC_H02_API_URL = "https://ap7.ragic.com/xinsheng/ragicforms4/13";
 export const PAGE_SIZE = 1000;
 export const MAX_RETRIES = 3;
 export const ATTEMPT_TIMEOUT_MS = 30_000;
@@ -119,4 +120,8 @@ export async function fetchAllRagicRecords(apiKey: string, options: RagicFetchOp
   }
 
   return allRecords;
+}
+
+export function fetchH02RagicRecords(apiKey: string): Promise<Record<string, any>> {
+  return fetchAllRagicRecords(apiKey, { baseUrl: RAGIC_H02_API_URL });
 }

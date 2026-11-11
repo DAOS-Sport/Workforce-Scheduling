@@ -6,7 +6,7 @@
  * (`observed`); in between, an administrator's edit stands. With no earlier observation Ragic decides, as it always did.
  */
 import type { Employee, InsertEmployee } from "@shared/schema";
-import { SYNC_ROLES, employeeCodeOf, mapDepartmentToRegionCode, parseRagicRecord, type RagicEmployee } from "./employeeParse";
+import { SYNC_ROLES, employeeCodeOf, jobTitleOf, mapDepartmentToRegionCode, mapRole, parseRagicRecord, type RagicEmployee } from "./employeeParse";
 
 export type ImpliedStatus = "active" | "inactive";
 
@@ -32,6 +32,7 @@ export interface EmployeeSyncPlan {
 
 export interface EmployeeSyncInput {
   records: Record<string, unknown>;
+  h02Records?: Record<string, unknown>;
   locals: Employee[];
   regionIdByCode: Map<string, number>;
   observed: Map<string, ImpliedStatus>;
@@ -78,6 +79,7 @@ export function planEmployeeSync(input: EmployeeSyncInput): EmployeeSyncPlan {
     plan.skipReasons[reason] = (plan.skipReasons[reason] ?? 0) + n;
   };
   const byCode = new Map(locals.map((e) => [e.employeeCode, e]));
+  const countedUpdates = new Set<string>();
 
   // A code Ragic lists protects its employee from the "missing" rule even when the record has no name.
   const listedCodes = new Set<string>();
@@ -112,6 +114,7 @@ export function planEmployeeSync(input: EmployeeSyncInput): EmployeeSyncPlan {
         if (existing.status !== "inactive" && decides) {
           plan.ops.push({ kind: "update", id: existing.id, employeeCode: parsed.employeeCode, data: { status: "inactive" }, reason: "ragic" });
           plan.updated++;
+          countedUpdates.add(parsed.employeeCode);
           plan.deactivated++;
         }
       } else {
@@ -143,6 +146,7 @@ export function planEmployeeSync(input: EmployeeSyncInput): EmployeeSyncPlan {
       observe(parsed.employeeCode, "active");
       if (Object.keys(data).length > 0) plan.ops.push({ kind: "update", id: existing.id, employeeCode: parsed.employeeCode, data, reason: "ragic" });
       plan.updated++;
+      countedUpdates.add(parsed.employeeCode);
     } else {
       if (!regionId) {
         plan.errors.push(`${parsed.name}(${parsed.employeeCode}): 部門「${parsed.department}」無對應區域，跳過新增`);
@@ -181,6 +185,31 @@ export function planEmployeeSync(input: EmployeeSyncInput): EmployeeSyncPlan {
     plan.ops.push({ kind: "update", id: local.id, employeeCode: local.employeeCode, data: { status: "inactive" }, reason: "missing" });
     observe(local.employeeCode, "inactive");
     plan.deactivated++;
+  }
+
+  // H02 supplements roles only; H01 still owns the roster, status observations and all other fields.
+  const h01Titles = new Map(Object.values(input.records).map((record) => {
+    const r = record as Record<string, any>;
+    return [employeeCodeOf(r), jobTitleOf(r)];
+  }));
+  const h02Titles = new Map(Object.values(input.h02Records ?? {}).map((record) => {
+    const r = record as Record<string, any>;
+    return [employeeCodeOf(r), jobTitleOf(r)];
+  }));
+  for (const [code, h02Title] of h02Titles) {
+    const existing = byCode.get(code);
+    const h01Title = latestByCode.get(code)?.rawRole ?? h01Titles.get(code);
+    const title = h01Title || h02Title;
+    if (!existing || !title) continue;
+    const role = mapRole(title);
+    if (role === "無職" || role === existing.role) continue;
+    const op = plan.ops.find((op) => op.kind === "update" && op.id === existing.id);
+    if (op?.kind === "update") op.data.role = role;
+    else plan.ops.push({ kind: "update", id: existing.id, employeeCode: code, data: { role }, reason: "ragic" });
+    if (!countedUpdates.has(code)) {
+      plan.updated++;
+      countedUpdates.add(code);
+    }
   }
 
   return plan;
