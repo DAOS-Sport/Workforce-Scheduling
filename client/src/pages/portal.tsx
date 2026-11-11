@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, withErrorCode } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SummerShiftCard } from "@/components/SummerShiftCard";
@@ -261,11 +261,11 @@ function AnomalyReportButton({ employee, clockResult, errorMsg, accuracy, contex
       images.forEach(img => formData.append("images", img));
 
       const res = await fetch("/api/anomaly-report", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("送出失敗");
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       setSubmitted(true);
       toast({ title: "異常報告已送出", description: "管理員將會收到通知並處理" });
-    } catch {
-      toast({ title: "送出失敗", description: "請稍後再試或手動截圖回報", variant: "destructive" });
+    } catch (err) {
+      toast({ title: withErrorCode("送出失敗", err), description: "請稍後再試或手動截圖回報", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }

@@ -10,7 +10,7 @@ import { useRegion } from "@/lib/region-context";
 import { Users, Building2, Calendar, CheckCircle2, Clock, Shield, TrendingUp, Zap, Send, AlertTriangle, RotateCcw } from "lucide-react";
 import type { Employee, Venue, Shift, ScheduleSlot } from "@shared/schema";
 import { useMemo, useState } from "react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, withErrorCode } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 function CircularProgress({ value, max, size = 56, strokeWidth = 5, color = "hsl(var(--primary))" }: { value: number; max: number; size?: number; strokeWidth?: number; color?: string }) {
@@ -48,7 +48,7 @@ export default function DashboardPage() {
       setScheduleResult(data);
       toast({ title: "下週班表推播完成", description: `發送 ${data.sent} 人，跳過 ${data.skipped}，無LINE ${data.noLineId}` });
     },
-    onError: () => { toast({ title: "推播失敗", variant: "destructive" }); },
+    onError: (err) => { toast({ title: withErrorCode("推播失敗", err), variant: "destructive" }); },
   });
 
   const weeklyLateReportMutation = useMutation({
@@ -58,7 +58,7 @@ export default function DashboardPage() {
       setLateReportResult(data);
       toast({ title: "上週遲到報告推播完成", description: `發送 ${data.sent} 人，跳過 ${data.skipped}，無LINE ${data.noLineId}` });
     },
-    onError: () => { toast({ title: "推播失敗", variant: "destructive" }); },
+    onError: (err) => { toast({ title: withErrorCode("推播失敗", err), variant: "destructive" }); },
   });
 
   const weekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }), []);

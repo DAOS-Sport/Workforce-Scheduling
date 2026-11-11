@@ -7,6 +7,19 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+export function withErrorCode(message: string, error: unknown): string {
+  if (!(error instanceof Error)) return message;
+  const response = error.message.match(/^5\d{2}:\s*([\s\S]*)$/);
+  if (!response) return message;
+  try {
+    const body = JSON.parse(response[1]);
+    if (typeof body?.requestId === "string" && body.requestId) {
+      return `${message}（錯誤代碼：${body.requestId}）`;
+    }
+  } catch {}
+  return message;
+}
+
 export async function apiRequest(
   method: string,
   url: string,

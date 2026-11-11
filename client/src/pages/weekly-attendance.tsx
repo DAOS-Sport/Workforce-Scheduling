@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, withErrorCode } from "@/lib/queryClient";
 
 interface DayData {
   date: string;
@@ -62,7 +62,7 @@ export default function WeeklyAttendancePage() {
 
   const weekStartStr = format(currentWeekStart, "yyyy-MM-dd");
 
-  const { data, isLoading, isError, refetch } = useQuery<WeeklyData>({
+  const { data, isLoading, isError, error, refetch } = useQuery<WeeklyData>({
     queryKey: ["/api/weekly-attendance", weekStartStr],
   });
 
@@ -175,7 +175,7 @@ export default function WeeklyAttendancePage() {
         </div>
       ) : isError ? (
         <div className="text-center py-20 space-y-3" data-testid="text-error">
-          <p className="text-destructive font-medium">載入資料失敗</p>
+          <p className="text-destructive font-medium">{withErrorCode("載入資料失敗", error)}</p>
           <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-retry">
             重試
           </Button>

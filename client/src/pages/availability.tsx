@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RegionTabs } from "@/components/region-tabs";
 import { useRegion } from "@/lib/region-context";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, withErrorCode } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CalendarDays, Settings, Save, ChevronLeft, ChevronRight, CalendarOff } from "lucide-react";
 import type { Employee, Region } from "@shared/schema";
@@ -146,8 +146,8 @@ export default function AvailabilityPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/system-config/availability_window"] });
       toast({ title: "開放設定已儲存" });
     },
-    onError: () => {
-      toast({ title: "儲存失敗", variant: "destructive" });
+    onError: (err) => {
+      toast({ title: withErrorCode("儲存失敗", err), variant: "destructive" });
     },
   });
 
@@ -165,7 +165,7 @@ export default function AvailabilityPage() {
     onError: (err: Error) => {
       // 409: someone saved a newer version first; reload it so the next save builds on that.
       if (err.message.startsWith("409")) queryClient.invalidateQueries({ queryKey: ["/api/system-config/monthly_holidays"] });
-      toast({ title: err.message.startsWith("409") ? "休館日已被其他人更新，已重新載入，請再操作一次" : "儲存失敗", variant: "destructive" });
+      toast({ title: err.message.startsWith("409") ? "休館日已被其他人更新，已重新載入，請再操作一次" : withErrorCode("儲存失敗", err), variant: "destructive" });
     },
   });
 

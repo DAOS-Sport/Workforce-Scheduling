@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { RegionPills } from "@/components/region-pills";
 import { useRegion } from "@/lib/region-context";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, withErrorCode } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -646,7 +646,7 @@ export default function SchedulePage() {
     onError: (err: Error) => {
       // 409: someone saved a newer version first; reload it instead of keeping this stale copy on screen.
       queryClient.invalidateQueries({ queryKey: ["/api/system-config/date_annotations"] });
-      toast({ title: err.message.startsWith("409") ? "日期標註已被其他人更新，已重新載入，請再操作一次" : "日期標註儲存失敗", variant: "destructive" });
+      toast({ title: err.message.startsWith("409") ? "日期標註已被其他人更新，已重新載入，請再操作一次" : withErrorCode("日期標註儲存失敗", err), variant: "destructive" });
     },
   });
 
@@ -4083,8 +4083,8 @@ export default function SchedulePage() {
                                     });
                                     queryClient.invalidateQueries({ queryKey: ["/api/schedule-slots"] });
                                     toast({ title: "需求已刪除" });
-                                  } catch {
-                                    toast({ title: "操作失敗", variant: "destructive" });
+                                  } catch (err) {
+                                    toast({ title: withErrorCode("操作失敗", err), variant: "destructive" });
                                   }
                                 }
                               }}
