@@ -59,6 +59,6 @@ export function listErrors(filter: ErrorFilter): Promise<AppErrorRow[]> {
 /** Deletes the records older than the retention period. */
 export async function purgeOldErrors(now: Date = new Date()): Promise<{ deleted: number }> {
   const deleted = await errorsRepository.deleteBefore(new Date(now.getTime() - ERROR_RETENTION_DAYS * 86_400_000));
-  await purgeOldLogs(now);
+  try { await purgeOldLogs(now); } catch { /* Log cleanup must not change a completed errors purge. */ }
   return { deleted };
 }
