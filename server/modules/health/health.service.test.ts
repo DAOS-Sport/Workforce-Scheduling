@@ -1,12 +1,13 @@
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { execute, readJobState, readIntegrationState } = vi.hoisted(() => ({
+const { execute, query, readJobState, readIntegrationState } = vi.hoisted(() => ({
   execute: vi.fn(),
+  query: vi.fn(),
   readJobState: vi.fn(),
   readIntegrationState: vi.fn(),
 }));
-vi.mock("../../infra/db", () => ({ db: { execute } }));
+vi.mock("../../infra/db", () => ({ db: { execute }, pool: { query } }));
 vi.mock("../../config/env", () => ({ IS_PRODUCTION: true }));
 vi.mock("../../config/featureFlags", () => ({ featureFlags: {} }));
 vi.mock("../../shared/health/healthState", () => ({ readJobState, readIntegrationState }));
@@ -26,9 +27,17 @@ beforeEach(() => {
   vi.stubEnv("LINE_CHANNEL_SECRET", "health-test-line");
   readJobState.mockResolvedValue({ lastStartedAt: recent, lastSuccessAt: recent, lastStatus: "success" });
   readIntegrationState.mockResolvedValue({ lastSuccessAt: recent, consecutiveFailures: 0 });
+  query.mockImplementation(async (text: string) => {
+    if (text.includes("group by path")) return { rows: [] };
+    if (text.includes("select value from system_configs")) return { rows: [{ value: JSON.stringify({ lastStartedAt: recent, lastSuccessAt: recent, lastStatus: "success" }) }] };
+    return { rows: [{ recent: 0, day: 0, last_failure_at: null, count: 0, attempts: 0 }] };
+  });
   execute.mockImplementation(async (query) => {
     const text = dialect.sqlToQuery(query).sql;
     if (text.includes("push_dedup")) return { rows: [delivery] };
+    if (text.includes("audit_mutations")) return { rows: [{ enabled: true, shared_writes: 0, disabled_writes: 0, missing_audits: 0, failures: 0, witness_available: true }] };
+    if (text.includes("with snapshots")) return { rows: [{ affectedEmployees: 0, newlyQualifiedEmployees: 0 }] };
+    if (text.includes("app_logs")) return { rows: [] };
     if (text.includes("clock_records")) return { rows: [{ started: 1, covered: 1, attempts: 1, failures: 0 }] };
     return { rows: [{ "?column?": 1 }] };
   });
