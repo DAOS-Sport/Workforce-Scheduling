@@ -12,6 +12,7 @@ import {
   evaluateManualJob,
   evaluatePushDelivery,
   evaluateScheduledJob,
+  evaluateScheduleSave,
   evaluateSecurity,
   evaluateSyncJob,
   evaluateWebhook,
@@ -19,6 +20,7 @@ import {
   type PushDelivery,
   type ClockNeverSuccess,
   type SecuritySignals,
+  type ScheduleSaveState,
 } from "./rules";
 import { worst, type HealthReport, type IntegrationState, type JobSchedule, type JobState, type Pipeline } from "./types";
 
@@ -63,6 +65,7 @@ export interface HealthSignals {
   coverage: Signal<ClockCoverage>;
   pushDelivery: Signal<PushDelivery>;
   clockNeverSuccess: Signal<ClockNeverSuccess>;
+  scheduleSave: Signal<ScheduleSaveState>;
   database: { latencyMs: number | null; error?: string };
   holidayLastDate: string;
   security: SecuritySignals;
@@ -120,6 +123,10 @@ export function assembleReport(s: HealthSignals): HealthReport {
   pipelines.push(evaluateHolidayTable({ id: "holiday-table", name: "國定假日表", source: "server/core/calendar/taiwanHolidays.ts", lastDate: s.holidayLastDate, today: taipeiClock(s.now).date }));
   pipelines.push(evaluateSecurity({ id: "security-config", name: "安全設定", source: "環境變數", signals: s.security }));
   pipelines.push(isReadError(s.clockNeverSuccess) ? unreadable("clock.never-success", "有班沒打卡", "shifts / clock_records", { readError: "有班沒打卡訊號讀取失敗" }) : evaluateClockNeverSuccess({ id: "clock.never-success", name: "有班沒打卡", source: "shifts / clock_records", signals: s.clockNeverSuccess }));
+
+  pipelines.push(isReadError(s.scheduleSave)
+    ? unreadable("schedule.save", "排班儲存", "app_errors", s.scheduleSave)
+    : evaluateScheduleSave({ id: "schedule.save", name: "排班儲存", source: "app_errors", state: s.scheduleSave, now: s.now }));
 
   return {
     system: SYSTEM_ID,

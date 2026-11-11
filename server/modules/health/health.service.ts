@@ -11,7 +11,7 @@ import { LEAVE_TYPES } from "../shift/shift.types";
 import { lastHolidayDate } from "../../core/calendar/taiwanHolidays";
 import { addDays, taipeiClock } from "../../core/time/taipei";
 import { assembleReport, INTEGRATIONS, MANUAL_JOBS, SCHEDULED_JOBS, type HealthSignals, type ReadError } from "../../core/health/report";
-import type { ClockCoverage, PushDelivery } from "../../core/health/rules";
+import type { ClockCoverage, PushDelivery, ScheduleSaveState } from "../../core/health/rules";
 import { CLOCK_NEVER_SUCCESS_LOOKBACK_DAYS, CLOCK_NEVER_SUCCESS_MIN_SHIFTS, CLOCK_NEVER_SUCCESS_NEW_HOURS, CLOCK_NEVER_SUCCESS_THRESHOLD_DAYS, type ClockNeverSuccess } from "../../core/health/rules";
 import type { HealthReport } from "../../core/health/types";
 import { readIntegrationState, readJobState } from "../../shared/health/healthState";
@@ -78,6 +78,7 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
     coverage: await attempt(() => readClockCoverage(now)),
     pushDelivery: await attempt(() => readPushDelivery()),
     clockNeverSuccess: await attempt(() => readClockNeverSuccess(now)),
+    scheduleSave: await attempt(() => readScheduleSaveState(now)),
     database: await probeDatabase(),
     holidayLastDate: lastHolidayDate(),
     security: {
@@ -178,4 +179,22 @@ export async function readClockNeverSuccessEmployees(now: Date): Promise<ClockNe
     from never_success ns join employees e on e.id = ns.employee_id order by e.id
   `);
   return result.rows;
+}
+
+async function readScheduleSaveState(now: Date): Promise<ScheduleSaveState> {
+  const result: any = await db.execute(sql`
+    select
+      max(occurred_at) filter (where
+        (subject ->> 'pipeline' = 'schedule.save' and subject ->> 'event' in ('save_failed', 'readback_mismatch'))
+        or (method = 'POST' and path = ${"/api/admin/schedule-assignments"} and status between 500 and 599)
+      ) as last_critical_at,
+      max(occurred_at) filter (where subject ->> 'pipeline' = 'schedule.save' and subject ->> 'event' = 'unsaved_exit') as last_unsaved_exit_at
+    from app_errors
+    where occurred_at >= ${new Date(now.getTime() - 24 * 3_600_000)} and occurred_at <= ${now}
+  `);
+  const row = result.rows[0];
+  return {
+    ...(row.last_critical_at ? { lastCriticalAt: new Date(row.last_critical_at).toISOString() } : {}),
+    ...(row.last_unsaved_exit_at ? { lastUnsavedExitAt: new Date(row.last_unsaved_exit_at).toISOString() } : {}),
+  };
 }

@@ -1,5 +1,6 @@
 import { type Express } from "express";
 import { type Server } from "http";
+import { z } from "zod";
 import { summerScheduleService } from "./summerSchedule.service";
 import {
   getMySummerAvailability,
@@ -10,6 +11,8 @@ import {
 import { ok, fail } from "../../shared/http/response";
 import { requireAdmin } from "../../shared/middleware/requireAdmin";
 import { requireInternalToken } from "../internal/internal.auth";
+import { recordServerError } from "../errors/errors.service";
+import { currentRequestId, resolveRequestId } from "../../shared/http/requestId";
 
 export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): void {
   // 員工選擇：後台暑假排班頁使用，必須登入管理後台
@@ -182,5 +185,20 @@ export function mountSummerScheduleRoutes(_httpServer: Server, app: Express): vo
     } catch (err: any) {
       fail(res, err.status || 500, err.message);
     }
+  });
+
+  app.post("/api/admin/schedule-save-events", requireAdmin, (req, res) => {
+    const parsed = z.object({ event: z.enum(["save_failed", "readback_mismatch", "unsaved_exit"]) }).strict().safeParse(req.body);
+    if (!parsed.success) return fail(res, 400, "event 只允許 save_failed、readback_mismatch 或 unsaved_exit，且不得帶其他欄位");
+    const { event } = parsed.data;
+    recordServerError({
+      requestId: currentRequestId() ?? resolveRequestId(undefined),
+      method: "POST",
+      path: "/api/admin/schedule-save-events",
+      status: 0,
+      message: `schedule.save: ${event}`,
+      subject: { pipeline: "schedule.save", event },
+    });
+    ok(res, { ok: true });
   });
 }

@@ -47,6 +47,7 @@ function healthySignals(): HealthSignals {
     coverage: { startedShifts: 10, coveredShifts: 10, attemptsToday: 10, failuresToday: 0 },
     pushDelivery: { pendingCount: 0, recentPendingCount: 0, oldestPendingAt: null },
     clockNeverSuccess: { affectedEmployees: 0, newlyQualifiedEmployees: 0 },
+    scheduleSave: {},
     database: { latencyMs: 12 },
     holidayLastDate: "2027-12-31",
     security: { mcpTokenSet: true, mcpTokenDistinct: true, sessionSecretSet: true, lineChannelSecretSet: true },
@@ -65,7 +66,8 @@ describe("health-v1 contract", () => {
     expect(contractProblems(report)).toEqual([]);
     expect(report.overall).toBe("green");
     expect(report.pipelines.filter((p) => p.level !== "green").map((p) => `${p.id}: ${p.reason}`)).toEqual([]);
-    expect(report.pipelines).toHaveLength(3 + 1 + 1 + SCHEDULED_JOBS.length + INTEGRATIONS.length + 3 + 1);\n  });
+    expect(report.pipelines).toHaveLength(3 + 1 + 1 + 1 + SCHEDULED_JOBS.length + INTEGRATIONS.length + 3 + 1);
+  });
 
   it("the manual Ragic venue sync is in the report, and a failed run only turns it yellow", () => {
     expect(assembleReport(healthySignals()).pipelines.map((p) => p.id)).toContain("ragic.venue-sync");
@@ -118,6 +120,13 @@ describe("health-v1 contract", () => {
     const report = assembleReport(s);
     expect(contractProblems(report)).toEqual([]);
     expect(report.pipelines.filter((p) => p.level === "red").map((p) => p.id).sort()).toEqual(["clock.coverage", "push.missing-clock"]);
+  });
+
+  it("an unreadable schedule save signal turns only that pipeline red", () => {
+    const report = assembleReport({ ...healthySignals(), scheduleSave: { readError: "schedule signal unavailable" } });
+    expect(contractProblems(report)).toEqual([]);
+    expect(report.pipelines.filter((p) => p.level === "red").map((p) => p.id)).toEqual(["schedule.save"]);
+    expect(report.overall).toBe("red");
   });
 });
 
