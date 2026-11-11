@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { HealthMonitor } from "@/components/health-monitor";
+import { HealthLogs } from "@/components/health-logs";
 import type { HealthReport } from "@/lib/health-view";
 
 const HEALTH_REFRESH_MS = 60_000;
@@ -40,6 +41,7 @@ export default function ItMonitorPage() {
           refreshing={query.isFetching}
           onRefresh={() => void query.refetch()}
         />
+        {query.data && <HealthLogs report={query.data} />}
       </div>
     </div>
   );

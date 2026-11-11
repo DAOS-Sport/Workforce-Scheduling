@@ -15,6 +15,8 @@ import type { AuditActorSignals, ClockCoverage, PushDelivery, ScheduleSaveState 
 import { CLOCK_NEVER_SUCCESS_LOOKBACK_DAYS, CLOCK_NEVER_SUCCESS_MIN_SHIFTS, CLOCK_NEVER_SUCCESS_NEW_HOURS, CLOCK_NEVER_SUCCESS_THRESHOLD_DAYS, type ClockNeverSuccess } from "../../core/health/rules";
 import type { HealthReport } from "../../core/health/types";
 import { readIntegrationState, readJobState } from "../../shared/health/healthState";
+import { collectFlowSignals } from "./flowSignals";
+import { attachPipelineLogs } from "./healthLogs";
 
 async function attempt<T>(read: () => Promise<T>): Promise<T | ReadError> {
   try {
@@ -69,6 +71,7 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
   ) as HealthSignals["integrations"];
   const mcpToken = process.env.MCP_TOKEN ?? "";
   return {
+    flow: await collectFlowSignals(now),
     now,
     build: process.env.HEALTH_BUILD_LABEL || "unknown",
     schedulerActive: IS_PRODUCTION,
@@ -92,7 +95,7 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
 }
 
 export async function buildHealthReport(now: Date): Promise<HealthReport> {
-  return assembleReport(await collectSignals(now));
+  return attachPipelineLogs(assembleReport(await collectSignals(now)), now);
 }
 
 async function readPushDelivery(): Promise<PushDelivery> {

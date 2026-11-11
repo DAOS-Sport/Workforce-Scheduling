@@ -3,6 +3,7 @@
  * 管線清單是下面兩張表；要加一條排程管線，在 SCHEDULED_JOBS 加一筆就好。
  */
 import { taipeiClock } from "../time/taipei";
+import { evaluateFlowPipelines, type FlowSignals } from "./flowRules";
 import {
   evaluateAuditActor,
   type AuditActorSignals,
@@ -58,6 +59,7 @@ export interface ReadError {
 type Signal<T> = T | ReadError;
 
 export interface HealthSignals {
+  flow?: FlowSignals;
   now: Date;
   build: string;
   schedulerActive: boolean;
@@ -131,6 +133,7 @@ export function assembleReport(s: HealthSignals): HealthReport {
     ? unreadable("schedule.save", "排班儲存", "app_errors", s.scheduleSave)
     : evaluateScheduleSave({ id: "schedule.save", name: "排班儲存", source: "app_errors", state: s.scheduleSave, now: s.now }));
   pipelines.push(isReadError(s.auditActor) ? unreadable("audit.actor", "操作紀錄", "audit_mutations", s.auditActor) : evaluateAuditActor({ id: "audit.actor", name: "操作紀錄", source: "audit_mutations", signals: s.auditActor }));
+  if (s.flow) pipelines.push(...evaluateFlowPipelines(s.flow));
 
   return {
     system: SYSTEM_ID,

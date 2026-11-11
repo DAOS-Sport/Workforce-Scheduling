@@ -175,6 +175,16 @@ describe("ItMonitorPage", () => {
     expect(level("api")).toBe("green");
   });
 
+  it("renders embedded pipeline logs from the report without another request", async () => {
+    const calls = mount(async () => reportOf([pipe("future.job", "red", {
+      logs: [{ id: 1, at: "2026-11-03T03:00:00.000000Z", level: "error", pipeline: "future.job", requestId: "req-page", message: "管線錯誤內容" }],
+    })]));
+    await flush();
+    expect(screen.getByText("管線錯誤內容")).toBeTruthy();
+    expect(screen.getByText("req-page")).toBeTruthy();
+    expect(calls).toEqual(["/api/admin/health"]);
+  });
+
   it("asks again every 60 seconds and shows the newer report", async () => {
     let current = reportOf([pipe("database", "red", { reason: "連不上資料庫" })]);
     const calls = mount(async () => current);

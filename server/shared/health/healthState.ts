@@ -10,6 +10,9 @@
  */
 import { systemRepository } from "../../modules/system/system.repository";
 import type { IntegrationState, JobState } from "../../core/health/types";
+import { pipelineForJob } from "../../core/health/flowRules";
+import { withPipeline } from "../logging/context";
+import { recordLog } from "../logging/collector";
 
 export const JOB_KEY_PREFIX = "health:job:";
 export const INTEGRATION_KEY_PREFIX = "health:integration:";
@@ -57,9 +60,11 @@ export async function trackJob<T>(
   run: () => Promise<T>,
   summarize?: (result: T) => Record<string, unknown>,
 ): Promise<T> {
+  const pipeline = pipelineForJob(job);
+  recordLog("info", `job started (${trigger})`, pipeline);
   await mergeState(JOB_KEY_PREFIX + job, { lastStartedAt: nowIso(), lastStatus: "running", lastTrigger: trigger } satisfies JobState);
   try {
-    const result = await run();
+    const result = await withPipeline(pipeline, run);
     let summary: Record<string, unknown> | undefined;
     try {
       summary = summarize?.(result);
@@ -67,8 +72,10 @@ export async function trackJob<T>(
       summary = undefined;
     }
     await mergeState(JOB_KEY_PREFIX + job, { lastFinishedAt: nowIso(), lastStatus: "success", lastSuccessAt: nowIso(), lastSummary: summary } satisfies JobState, { stampRecovery: true });
+    recordLog("info", "job finished (success)", pipeline);
     return result;
   } catch (err) {
+    recordLog("error", `job finished (failed): ${message(err)}`, pipeline);
     await mergeState(JOB_KEY_PREFIX + job, { lastFinishedAt: nowIso(), lastStatus: "failed", lastFailureAt: nowIso(), lastError: message(err) } satisfies JobState);
     throw err;
   }
@@ -94,6 +101,7 @@ export function recordIntegration(name: IntegrationName, ok: boolean, error?: un
     return mergeState(INTEGRATION_KEY_PREFIX + name, { lastSuccessAt: nowIso(), consecutiveFailures: 0 } satisfies IntegrationState, { stampRecovery: true });
   }
   m.lastOk = false;
+  recordLog("error", `integration failed: ${message(error ?? "失敗")}`, `integration.${name}`);
   memo.set(name, m);
   return mergeState(INTEGRATION_KEY_PREFIX + name, { lastFailureAt: nowIso(), lastError: message(error ?? "失敗") } satisfies IntegrationState, { increment: "consecutiveFailures" });
 }

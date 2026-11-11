@@ -8,6 +8,7 @@
 import { type Express } from "express";
 import { type Server } from "http";
 import { systemService } from "./system.service";
+import { trackJob } from "../../shared/health/healthState";
 
 export function mountSystemSalaryRoutes(_httpServer: Server, app: Express): void {
   app.get("/api/salary-report", async (req, res) => {
@@ -45,7 +46,8 @@ export function mountSystemSalaryRoutes(_httpServer: Server, app: Express): void
 
   app.post("/api/weekly-attendance/notify", async (req, res) => {
     try {
-      res.json(await systemService.notifyWeeklyAttendance(req.body?.weekStart));
+      res.json(await trackJob("manual.weekly-attendance", "manual", () => systemService.notifyWeeklyAttendance(req.body?.weekStart),
+        (r) => ({ lineSent: r.lineSent, lineSkipped: r.lineSkipped, emailSent: r.emailSent })));
     } catch (err: any) {
       res.status(err.status || 500).json({ message: err.message });
     }

@@ -1,6 +1,7 @@
 import type { AppErrorRow } from "@shared/schema";
 import type { RequestSubject } from "../../shared/http/requestId";
 import { errorsRepository, type ErrorFilter } from "./errors.repository";
+import { purgeOldLogs } from "../../shared/logging/persistence";
 
 export interface ServerErrorEntry {
   requestId: string;
@@ -58,5 +59,6 @@ export function listErrors(filter: ErrorFilter): Promise<AppErrorRow[]> {
 /** Deletes the records older than the retention period. */
 export async function purgeOldErrors(now: Date = new Date()): Promise<{ deleted: number }> {
   const deleted = await errorsRepository.deleteBefore(new Date(now.getTime() - ERROR_RETENTION_DAYS * 86_400_000));
+  await purgeOldLogs(now);
   return { deleted };
 }

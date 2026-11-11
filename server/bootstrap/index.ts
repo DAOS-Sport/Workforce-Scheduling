@@ -4,6 +4,7 @@ import { runStartupMigrations } from "./migrations";
 import { registerCronJobs } from "./scheduler";
 import { setupClientServing } from "./viteOrStatic";
 import { installLogStamp } from "../shared/log";
+import { startLogPersistence } from "../shared/logging/persistence";
 
 /**
  * The single entry point used by server/index.ts.
@@ -19,6 +20,7 @@ import { installLogStamp } from "../shared/log";
  */
 export async function bootstrap(): Promise<void> {
   installLogStamp();
+  startLogPersistence();
 
   // 1) idempotent migrations first — ensures schema is up-to-date before seed queries it
   await runStartupMigrations();
