@@ -92,11 +92,12 @@ describe("RadarClockIn 定位被拒", () => {
     expect(screen.getByTestId("button-retry-clock")).toBeTruthy();
   });
 
-  it("code 3：只顯示逾時訊息，沒有定位權限說明", async () => {
+  it("code 3：顯示逾時訊息，LINE 仍可改用瀏覽器或申請補打卡", async () => {
     await clockInWithGeoError(3);
 
     expect(await screen.findByText("定位逾時，請到空曠處再試")).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId("button-retry-clock")).toBeTruthy());
-    expect(screen.queryByTestId("location-permission-help")).toBeNull();
+    expect(screen.getByTestId("button-open-external-browser")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "無法定位，改送補打卡申請" })).toBeTruthy();
   });
 });

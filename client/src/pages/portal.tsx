@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { LEAVE_TYPES, OFF_DUTY_ROLES } from "@shared/leave";
 import { LocationPermissionHelp } from "@/components/portal/location-permission-help";
+import { detectPlatform, isInLine } from "@/lib/location-help";
 
 interface PortalEmployee {
   id: number;
@@ -1332,6 +1333,8 @@ export function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatest
   const [result, setResult] = useState<ClockInResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [errorCode, setErrorCode] = useState<number | null>(null);
+  const [geoFailure, setGeoFailure] = useState<GeoFailureKind | null>(null);
+  const [attemptedClockType, setAttemptedClockType] = useState<"in" | "out">("in");
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [scanAngle, setScanAngle] = useState(0);
   const [reasonSubmitted, setReasonSubmitted] = useState(false);
@@ -1424,39 +1427,16 @@ export function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatest
   }, [stage]);
 
   const handleClockIn = useCallback(async (clockType: "in" | "out" = "in") => {
-    if (!navigator.geolocation) {
-      setErrorMsg("此裝置或瀏覽器不支援定位功能");
-      setStage("error");
-      return;
-    }
+    setAttemptedClockType(clockType);
+    setGeoFailure(null);
+    setErrorCode(null);
     setStage("scanning");
     setResult(null);
     setScanAngle(0);
     setReasonSubmitted(false);
 
     try {
-      // 兩階段定位策略：
-      // 第一階段：高精度 GPS，不使用快取（適合室外、訊號良好）。
-      // 第二階段（code 2/3 時 fallback）：低精度（WiFi/基地台），允許 2 分鐘快取。
-      // 這樣室內或訊號弱的裝置（code 2 位置無法取得、code 3 逾時）可以透過第二階段成功打卡，
-      // 同時避免第一階段因 enableHighAccuracy:false 失去精度而讓室外使用者距離計算偏差。
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, (err) => {
-          if (err.code === 2 || err.code === 3) {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: false,
-              timeout: 20000,
-              maximumAge: 120000,
-            });
-          } else {
-            reject(err);
-          }
-        }, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        });
-      });
+      const position = await getClockPosition("portal");
 
       const { latitude, longitude, accuracy: acc } = position.coords;
       setAccuracy(Math.round(acc));
@@ -1475,6 +1455,13 @@ export function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatest
       }
 
       const data: ClockInResult = await resp.json();
+      if (data.status === "fail" && data.radius && acc > data.radius) {
+        reportGeoFailure("POOR_ACCURACY", "portal");
+        setGeoFailure("POOR_ACCURACY");
+        setErrorMsg(`${data.failReason || "打卡失敗"}。定位精度不足，請重新取得位置或申請補打卡。`);
+        setStage("error");
+        return;
+      }
       setResult(data);
       onResult?.(data);
       setStage("done");
@@ -1487,6 +1474,7 @@ export function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatest
         setCountdown(60);
       }
     } catch (err: any) {
+      setGeoFailure(err.geoKind ?? null);
       setErrorCode(err.code ?? null);
       if (err.code === 1) {
         setErrorMsg("位置存取權限被拒絕");
@@ -1736,15 +1724,16 @@ export function RadarClockIn({ employee, onPositionUpdate, onResult, todayLatest
               <XCircle className="h-5 w-5 text-red-500 shrink-0" />
               <span className="font-medium text-sm text-red-500">{errorMsg}</span>
             </div>
-            {errorCode === 1 && <LocationPermissionHelp />}
+            {geoFailure && <GeoFailureActions kind={geoFailure} employee={employee} clockType={attemptedClockType} onRetry={() => handleClockIn(attemptedClockType)} />}
+            {!geoFailure && errorCode === 1 && <LocationPermissionHelp />}
             <AnomalyReportButton employee={employee} errorMsg={errorMsg} accuracy={accuracy} context="打卡錯誤" />
-            <button
+            {!geoFailure && <button
               className="w-full h-10 rounded-lg border border-juns-border bg-white text-sm text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all mt-2"
               onClick={() => { setStage("idle"); setErrorMsg(""); setErrorCode(null); }}
               data-testid="button-retry-clock"
             >
               重試
-            </button>
+            </button>}
           </div>
         )}
       </div>
@@ -1797,7 +1786,7 @@ interface EligibleDate {
 const AMENDMENT_REASONS = ["漏打卡", "系統異常", "入職開通中", "其他"] as const;
 type AmendmentReason = typeof AMENDMENT_REASONS[number];
 
-function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
+function ClockAmendmentSection({ employee, initial }: { employee: PortalEmployee; initial?: { at: Date; clockType: "in" | "out"; kind: GeoFailureKind } }) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
   const thisYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const [yr, mo] = thisYearMonth.split("-").map(Number);
@@ -1805,11 +1794,13 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
   const daysInMonth = new Date(yr, mo, 0).getDate();
   const startDow = firstDayOfMonth.getDay();
 
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [clockType, setClockType] = useState<"in" | "out">("in");
-  const [requestedTime, setRequestedTime] = useState("09:00");
-  const [reason, setReason] = useState<AmendmentReason>("漏打卡");
-  const [notes, setNotes] = useState("");
+  const initialTaipei = initial ? new Date(initial.at.toLocaleString("en-US", { timeZone: "Asia/Taipei" })) : null;
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => initialTaipei ? format(initialTaipei, "yyyy-MM-dd") : null);
+  const [clockType, setClockType] = useState<"in" | "out">(initial?.clockType ?? "in");
+  const [requestedTime, setRequestedTime] = useState(() => initialTaipei ? format(initialTaipei, "HH:mm") : "09:00");
+  const [reason, setReason] = useState<AmendmentReason>(initial ? "其他" : "漏打卡");
+  const [notes, setNotes] = useState(initial ? `定位失敗：${initial.kind}` : "");
+  const [submitted, setSubmitted] = useState(false);
   const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
@@ -1860,6 +1851,7 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
 
   const handleClockTypeChange = (type: "in" | "out") => {
     setClockType(type);
+    if (initial) return;
     if (selectedDate) {
       const e = (eligibleMap.get(selectedDate) || []).find(ent => ent.missingClockType === type);
       if (e) setRequestedTime(defaultTimeFor(e));
@@ -1926,7 +1918,8 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
         shiftId: selectedEntry?.isDispatch ? null : (selectedEntry?.shiftId ?? null),
         originalClockRecordId: selectedEntry?.originalClockRecordId ?? null,
       });
-      toast({ title: "補打卡申請已送出" });
+      toast({ title: "已送出，待主管審核" });
+      setSubmitted(true);
       setSelectedDate(null);
       setReason("漏打卡");
       setNotes("");
@@ -1979,6 +1972,7 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
 
   return (
     <div className="space-y-4" data-testid="section-clock-amendment">
+      {submitted && <p role="status" className="text-sm text-juns-teal">已送出，待主管審核</p>}
       {/* Rules notice */}
       <div className="border border-amber-200 rounded-xl bg-amber-50 p-4">
         <p className="text-xs font-semibold text-amber-700 mb-2.5">補打卡申請規範</p>
@@ -2069,7 +2063,7 @@ function ClockAmendmentSection({ employee }: { employee: PortalEmployee }) {
             <div>
               <p className="text-xs font-medium text-slate-500 mb-1.5">補卡類型</p>
               <div className="flex gap-2">
-                {(eligibleMap.get(selectedDate) || [])
+                {(initial ? (["in", "out"] as const).map(type => (eligibleMap.get(selectedDate) || []).find(e => e.missingClockType === type) ?? { missingClockType: type, amendmentStatus: null, isResolved: false } as EligibleDate) : (eligibleMap.get(selectedDate) || []))
                   .filter(e => !e.isResolved && e.amendmentStatus !== "approved")
                   .map(e => {
                     const isPending = e.amendmentStatus === "pending";
@@ -5556,4 +5550,106 @@ function PortalPageInner() {
 
 export default function PortalPage() {
   return <PortalPageInner />;
+}
+
+export type GeoFailureKind = "PERMISSION_DENIED" | "POSITION_UNAVAILABLE" | "TIMEOUT" | "UNSUPPORTED" | "INSECURE_CONTEXT" | "POOR_ACCURACY" | "UNKNOWN";
+
+export function reportGeoFailure(kind: GeoFailureKind, entry: "liff" | "portal") {
+  const platform = detectPlatform(navigator.userAgent ?? "");
+  try {
+    void Promise.resolve(fetch("/api/anomaly-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event: "geolocation_failure", kind, entry,
+        platform: platform === "ios" ? "iOS" : platform === "android" ? "Android" : "other",
+        inLine: isInLine(navigator.userAgent ?? "") }),
+    })).catch(() => {}); // 回報斷線不能阻擋員工重試或申請補卡。
+  } catch { /* fetch 不可用時仍保留畫面退路。 */ }
+}
+
+/** 兩入口共用：只取得位置，不改打卡的距離或成功判斷。 */
+export async function getClockPosition(entry: "liff" | "portal"): Promise<GeolocationPosition> {
+  const failure = (kind: GeoFailureKind, code: number, message: string) => {
+    reportGeoFailure(kind, entry);
+    return Object.assign(new Error(message), { geoKind: kind, code });
+  };
+  if (window.isSecureContext === false) throw failure("INSECURE_CONTEXT", 0, "目前不是安全連線，請用 HTTPS 開啟打卡頁。");
+  if (!navigator.geolocation) throw failure("UNSUPPORTED", 0, "此裝置或瀏覽器不支援定位功能");
+  if (navigator.permissions?.query) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const permission = await Promise.race([
+        navigator.permissions.query({ name: "geolocation" }),
+        new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 1000); }),
+      ]);
+      if (permission?.state === "denied") throw failure("PERMISSION_DENIED", 1, "位置存取權限被拒絕");
+    } catch (err: any) {
+      if (err.geoKind) throw err;
+      // 不支援該 permission name 的瀏覽器照原定位流程。
+    } finally { clearTimeout(timer); }
+  }
+  const locate = (enableHighAccuracy: boolean, timeout: number, maximumAge: number) =>
+    new Promise<GeolocationPosition>((resolve, reject) => {
+      let settled = false;
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        callback();
+      };
+      // 部分 LINE WebView 不回呼，不能只依賴原生 timeout。
+      const timer = setTimeout(() => finish(() => reject({ code: 3 })), timeout + 1000);
+      try {
+        navigator.geolocation.getCurrentPosition(
+          pos => finish(() => resolve(pos)),
+          err => finish(() => reject(err)),
+          { enableHighAccuracy, timeout, maximumAge },
+        );
+      } catch (err) { finish(() => reject(err)); }
+    }).catch((err: any) => {
+      const code = Number(err?.code) || 0;
+      const kind = code === 1 ? "PERMISSION_DENIED" : code === 2 ? "POSITION_UNAVAILABLE" : code === 3 ? "TIMEOUT" : "UNKNOWN";
+      throw failure(kind, code, "定位發生問題，請重新取得位置或申請補打卡。");
+    });
+  try { return await locate(true, 10000, 0); }
+  catch (err: any) {
+    if (err.code !== 2 && err.code !== 3) throw err;
+    return locate(false, 20000, 120000);
+  }
+}
+
+export function GeoFailureActions({ kind, employee, lineUserId, clockType = "in", onRetry, retryTestId = "button-retry-clock" }: {
+  kind: GeoFailureKind;
+  employee?: PortalEmployee;
+  lineUserId?: string;
+  clockType?: "in" | "out";
+  onRetry: () => void;
+  retryTestId?: string;
+}) {
+  const [amendment, setAmendment] = useState<{ employee: PortalEmployee; at: Date } | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [openError, setOpenError] = useState("");
+  async function openAmendment() {
+    const at = new Date();
+    setOpening(true);
+    setOpenError("");
+    try {
+      let target = employee;
+      if (!target) {
+        const res = await apiRequest("POST", "/api/portal/verify", { lineId: lineUserId });
+        target = await res.json();
+      }
+      if (!target?.id) throw new Error("無法載入員工資料，請重新登入員工入口或聯絡主管。");
+      setAmendment({ employee: target, at });
+    } catch (err: any) { setOpenError(err.message || "無法開啟申請，請重試或聯絡主管。"); }
+    finally { setOpening(false); }
+  }
+  return <div className="space-y-3">
+    {(kind === "PERMISSION_DENIED" || isInLine(navigator.userAgent ?? "")) && <LocationPermissionHelp />}
+    <Button variant="outline" className="w-full" onClick={onRetry} data-testid={retryTestId}>重新取得位置</Button>
+    <Button variant="outline" className="w-full" disabled={opening} onClick={() => void openAmendment()}>無法定位，改送補打卡申請</Button>
+    {opening && <p role="status">正在開啟補打卡申請…</p>}
+    {openError && <p role="alert">{openError}</p>}
+    {amendment && <ClockAmendmentSection employee={amendment.employee} initial={{ at: amendment.at, clockType, kind }} />}
+  </div>;
 }

@@ -11,7 +11,7 @@ import { LEAVE_TYPES } from "../shift/shift.types";
 import { lastHolidayDate } from "../../core/calendar/taiwanHolidays";
 import { addDays, taipeiClock } from "../../core/time/taipei";
 import { assembleReport, INTEGRATIONS, MANUAL_JOBS, SCHEDULED_JOBS, type HealthSignals, type ReadError } from "../../core/health/report";
-import type { AuditActorSignals, ClockCoverage, PushDelivery, ScheduleSaveState } from "../../core/health/rules";
+import type { AuditActorSignals, ClockCoverage, ClockGeolocation, PushDelivery, ScheduleSaveState } from "../../core/health/rules";
 import { CLOCK_NEVER_SUCCESS_LOOKBACK_DAYS, CLOCK_NEVER_SUCCESS_MIN_SHIFTS, CLOCK_NEVER_SUCCESS_NEW_HOURS, CLOCK_NEVER_SUCCESS_THRESHOLD_DAYS, type ClockNeverSuccess } from "../../core/health/rules";
 import type { HealthReport } from "../../core/health/types";
 import { readIntegrationState, readJobState } from "../../shared/health/healthState";
@@ -83,6 +83,7 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
     clockNeverSuccess: await attempt(() => readClockNeverSuccess(now)),
     scheduleSave: await attempt(() => readScheduleSaveState(now)),
     auditActor: await attempt(() => readAuditActorSignals(now)),
+    geolocation: await attempt(() => readClockGeolocation(now)),
     database: await probeDatabase(),
     holidayLastDate: lastHolidayDate(),
     security: {
@@ -253,4 +254,19 @@ export async function readAuditActorSignals(now: Date): Promise<AuditActorSignal
     failures24h: Number(row.failures),
     witnessAvailable: row.witness_available === true,
   };
+}
+
+async function readClockGeolocation(now: Date): Promise<ClockGeolocation> {
+  const result = await db.execute<ClockGeolocation>(sql`
+    select
+      count(*) filter (where occurred_at >= ${new Date(now.getTime() - 15 * 60_000).toISOString()}::timestamp)::int as "recentFailures",
+      count(*)::int as "failures24h",
+      to_char(max(occurred_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "lastFailureAt"
+    from pipeline_logs
+    where pipeline = 'clock.coverage' and level = 'warn'
+      and position(${"geolocation_failure "} in message) = 1
+      and occurred_at >= ${new Date(now.getTime() - 24 * 60 * 60_000).toISOString()}::timestamp
+      and occurred_at <= ${now.toISOString()}::timestamp
+  `);
+  return result.rows[0];
 }

@@ -8,6 +8,7 @@ import {
   evaluateAuditActor,
   type AuditActorSignals,
   evaluateClockCoverage,
+  evaluateClockGeolocation,
   evaluateClockNeverSuccess,
   evaluateDatabase,
   evaluateHolidayTable,
@@ -20,6 +21,7 @@ import {
   evaluateSyncJob,
   evaluateWebhook,
   type ClockCoverage,
+  type ClockGeolocation,
   type PushDelivery,
   type ClockNeverSuccess,
   type SecuritySignals,
@@ -74,6 +76,7 @@ export interface HealthSignals {
   holidayLastDate: string;
   security: SecuritySignals;
   auditActor?: Signal<AuditActorSignals>;
+  geolocation?: Signal<ClockGeolocation>;
 }
 
 const isReadError = (v: unknown): v is ReadError => typeof v === "object" && v !== null && "readError" in v;
@@ -133,6 +136,7 @@ export function assembleReport(s: HealthSignals): HealthReport {
     ? unreadable("schedule.save", "排班儲存", "app_errors", s.scheduleSave)
     : evaluateScheduleSave({ id: "schedule.save", name: "排班儲存", source: "app_errors", state: s.scheduleSave, now: s.now }));
   pipelines.push(isReadError(s.auditActor) ? unreadable("audit.actor", "操作紀錄", "audit_mutations", s.auditActor) : evaluateAuditActor({ id: "audit.actor", name: "操作紀錄", source: "audit_mutations", signals: s.auditActor }));
+  pipelines.push(isReadError(s.geolocation) ? unreadable("clock.geolocation", "打卡定位", "pipeline_logs", { readError: "定位失敗訊號讀取失敗" }) : evaluateClockGeolocation({ id: "clock.geolocation", name: "打卡定位", source: "pipeline_logs", signals: s.geolocation }));
   if (s.flow) pipelines.push(...evaluateFlowPipelines(s.flow));
 
   return {

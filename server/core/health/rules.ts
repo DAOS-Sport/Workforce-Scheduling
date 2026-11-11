@@ -256,3 +256,20 @@ export function evaluateAuditActor(input: Base & { signals?: AuditActorSignals }
   if (s.sharedPasswordEnabled && s.sharedWrites24h > 0) return pipeline(input, "yellow", `共用密碼仍開啟，最近 24 小時使用它寫入 ${s.sharedWrites24h} 筆`);
   return pipeline(input, "green", "最近 24 小時異動都有操作紀錄，未發現停用後的共用密碼寫入");
 }
+
+export type ClockGeolocation = {
+  /** Counts failed attempts, including a failed high-accuracy fallback; not unique employees. */
+  recentFailures: number;
+  failures24h: number;
+  lastFailureAt: string | null;
+};
+
+/** Three failed attempts in 15 minutes are red; any remaining 24-hour failures are yellow. */
+export function evaluateClockGeolocation(input: Base & { signals?: ClockGeolocation }): Pipeline {
+  const s = input.signals;
+  if (!s) return pipeline(input, "yellow", "無法觀測：尚未取得定位失敗訊號");
+  const state = s.lastFailureAt ? { lastFailureAt: s.lastFailureAt } : undefined;
+  if (s.recentFailures >= 3) return pipeline(input, "red", `最近 15 分鐘定位失敗 ${s.recentFailures} 次；最近 24 小時共 ${s.failures24h} 次`, state);
+  if (s.failures24h > 0) return pipeline(input, "yellow", `最近 24 小時定位失敗 ${s.failures24h} 次；最近 15 分鐘 ${s.recentFailures} 次`, state);
+  return pipeline(input, "green", "最近 24 小時沒有定位失敗回報");
+}

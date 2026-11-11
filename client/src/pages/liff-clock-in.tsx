@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin, CheckCircle2, AlertTriangle, XCircle, Loader2, Navigation, Camera, ImagePlus, X, Send } from "lucide-react";
 import { LocationPermissionHelp } from "@/components/portal/location-permission-help";
+import { getClockPosition, GeoFailureActions, reportGeoFailure, type GeoFailureKind } from "./portal";
 
 const LIFF_ID = import.meta.env.VITE_LIFF_ID || "";
 
@@ -35,6 +36,7 @@ export default function LiffClockInPage() {
   const [result, setResult] = useState<ClockInResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [errorCode, setErrorCode] = useState<number | null>(null);
+  const [geoFailure, setGeoFailure] = useState<GeoFailureKind | null>(null);
   const [accuracy, setAccuracy] = useState<number | null>(null);
   // 防呆鎖：打卡請求進行中時擋掉重複觸發，但「不鎖死、不隱藏」按鈕本身。
   // 一定會在 finally 解除，確保成功打到卡前按鈕都還能再按。
@@ -82,27 +84,13 @@ export default function LiffClockInPage() {
     // 防呆：請求進行中時，重複點擊一律忽略（不重送、不鎖死按鈕、不讓畫面卡住）。
     if (inFlightRef.current) return;
     inFlightRef.current = true;
+    setResult(null);
+    setGeoFailure(null);
+    setErrorCode(null);
     setStage("locating");
 
     try {
-      // 永久拒絕定位時，LINE 內建瀏覽器的 getCurrentPosition 有時完全不回呼，
-      // 使用者就卡在「定位中」轉圈、永遠到不了錯誤畫面（回報「就都開不了了」）。
-      // 加一道硬性逾時保險：保證 20 秒內一定結束、不會無限轉圈。正常允許定位
-      // 的使用者（1～3 秒就回來）完全不受影響；逾時則導向錯誤畫面 + 拍照備援。
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        let settled = false;
-        const finish = (cb: () => void) => { if (!settled) { settled = true; cb(); } };
-        const guard = setTimeout(() => finish(() => {
-          const t: any = new Error("定位逾時，請到戶外空曠處再試一次，或改用下方拍照打卡。");
-          t.code = 3;
-          reject(t);
-        }), 20000);
-        navigator.geolocation.getCurrentPosition(
-          (pos) => finish(() => { clearTimeout(guard); resolve(pos); }),
-          (e) => finish(() => { clearTimeout(guard); reject(e); }),
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-        );
-      });
+      const position = await getClockPosition("liff");
 
       const { latitude, longitude, accuracy: acc } = position.coords;
       setAccuracy(Math.round(acc));
@@ -131,9 +119,17 @@ export default function LiffClockInPage() {
 
       const data: ClockInResult = await resp.json();
       setResult(data);
+      if (data.status === "fail" && data.radius && acc > data.radius) {
+        reportGeoFailure("POOR_ACCURACY", "liff");
+        setGeoFailure("POOR_ACCURACY");
+        setErrorMsg(`${data.failReason || "打卡失敗"}。定位精度不足，請重新取得位置或申請補打卡。`);
+        setStage("error");
+        return;
+      }
       setStage("done");
     } catch (err: any) {
       console.error("Clock-in error:", err);
+      setGeoFailure(err.geoKind ?? null);
       setErrorCode(err.code ?? null);
       if (err.code === 1) {
         setErrorMsg("位置存取權限被拒絕");
@@ -241,20 +237,20 @@ export default function LiffClockInPage() {
             </div>
 
             <div className="p-5 space-y-4">
-              <LocationPermissionHelp />
+              {geoFailure ? <GeoFailureActions kind={geoFailure} lineUserId={profile?.userId} onRetry={handleClockIn} retryTestId="button-retry" /> : <LocationPermissionHelp />}
 
               <p className="text-center text-white/30 text-[11px]">
                 開啟後若還是有問題，請聯絡主管
               </p>
 
-              <Button
+              {!geoFailure && <Button
                 variant="outline"
                 className="w-full border-slate-600 text-white hover:bg-slate-700"
                 onClick={() => { setErrorMsg(""); setErrorCode(null); setStage("ready"); }}
                 data-testid="button-retry"
               >
                 我已開啟，重試打卡
-              </Button>
+              </Button>}
             </div>
           </Card>
         ) : stage === "error" ? (
@@ -264,14 +260,14 @@ export default function LiffClockInPage() {
             </div>
             <p className="text-white font-medium mb-2">發生錯誤</p>
             <p className="text-white/60 text-sm whitespace-pre-line mb-6">{errorMsg}</p>
-            <Button
+            {geoFailure ? <GeoFailureActions kind={geoFailure} lineUserId={profile?.userId} clockType={result?.clockType} onRetry={handleClockIn} retryTestId="button-retry" /> : <Button
               variant="outline"
               className="w-full border-slate-600 text-white hover:bg-slate-700"
               onClick={() => { setErrorMsg(""); setErrorCode(null); setStage("ready"); }}
               data-testid="button-retry"
             >
               重試
-            </Button>
+            </Button>}
           </Card>
         ) : null}
 

@@ -1,8 +1,18 @@
 import { type Express } from "express";
 import { type Server } from "http";
 import multer from "multer";
+import { z } from "zod";
 import { anomalyService } from "./anomaly.service";
 import { ok, created, fail, notFound } from "../../shared/http/response";
+import { recordLog } from "../../shared/logging/collector";
+
+const geolocationFailure = z.object({
+  event: z.literal("geolocation_failure"),
+  kind: z.enum(["PERMISSION_DENIED", "POSITION_UNAVAILABLE", "TIMEOUT", "UNSUPPORTED", "INSECURE_CONTEXT", "POOR_ACCURACY", "UNKNOWN"]),
+  entry: z.enum(["liff", "portal"]),
+  platform: z.enum(["iOS", "Android", "other"]),
+  inLine: z.boolean(),
+}).strict();
 
 export function mountAnomalyRoutes(_httpServer: Server, app: Express): void {
   const anomalyUpload = multer({
@@ -17,6 +27,13 @@ export function mountAnomalyRoutes(_httpServer: Server, app: Express): void {
   app.post("/api/anomaly-report", anomalyUpload.array("images", 5), async (req, res) => {
     try {
       const body = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body;
+      if (body?.event === "geolocation_failure") {
+        const parsed = geolocationFailure.safeParse(body);
+        if (!parsed.success) return fail(res, 400, "定位失敗回報格式不正確");
+        const { kind, entry, platform, inLine } = parsed.data;
+        recordLog("warn", `geolocation_failure ${JSON.stringify({ kind, entry, platform, inLine })}`, "clock.coverage");
+        return ok(res, { received: true });
+      }
       const files = (req.files as Express.Multer.File[]) || [];
       const imageUrls = files.map((f) => `data:${f.mimetype};base64,${f.buffer.toString("base64")}`);
       const { record, reportText } = await anomalyService.create({

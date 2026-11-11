@@ -37,6 +37,7 @@ beforeEach(() => {
     if (text.includes("push_dedup")) return { rows: [delivery] };
     if (text.includes("audit_mutations")) return { rows: [{ enabled: true, shared_writes: 0, disabled_writes: 0, missing_audits: 0, failures: 0, witness_available: true }] };
     if (text.includes("with snapshots")) return { rows: [{ affectedEmployees: 0, newlyQualifiedEmployees: 0 }] };
+    if (text.includes('as "recentFailures"')) return { rows: [{ recentFailures: 0, failures24h: 0, lastFailureAt: null }] };
     if (text.includes("pipeline_logs")) return { rows: [] };
     if (text.includes("clock_records")) return { rows: [{ started: 1, covered: 1, attempts: 1, failures: 0 }] };
     return { rows: [{ "?column?": 1 }] };
