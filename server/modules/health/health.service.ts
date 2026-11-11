@@ -11,7 +11,7 @@ import { LEAVE_TYPES } from "../shift/shift.types";
 import { lastHolidayDate } from "../../core/calendar/taiwanHolidays";
 import { taipeiClock } from "../../core/time/taipei";
 import { assembleReport, INTEGRATIONS, MANUAL_JOBS, SCHEDULED_JOBS, type HealthSignals, type ReadError } from "../../core/health/report";
-import type { ClockCoverage } from "../../core/health/rules";
+import type { AuditActorSignals, ClockCoverage } from "../../core/health/rules";
 import type { HealthReport } from "../../core/health/types";
 import { readIntegrationState, readJobState } from "../../shared/health/healthState";
 
@@ -75,6 +75,7 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
     jobs,
     integrations,
     coverage: await attempt(() => readClockCoverage(now)),
+    auditActor: await attempt(() => readAuditActorSignals(now)),
     database: await probeDatabase(),
     holidayLastDate: lastHolidayDate(),
     security: {
@@ -88,4 +89,56 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
 
 export async function buildHealthReport(now: Date): Promise<HealthReport> {
   return assembleReport(await collectSignals(now));
+}
+
+export async function readAuditActorSignals(now: Date): Promise<AuditActorSignals> {
+  const since = new Date(now.getTime() - 24 * 60 * 60_000).toISOString();
+  const result = await db.execute(sql`
+    with config as (
+      select coalesce((select value = 'true' from system_configs where key = 'admin.shared-password-enabled'), true) as enabled
+    ), recent as (
+      select m.* from audit_mutations m
+      where m.created_at >= ${since}::timestamptz at time zone 'UTC'
+        and m.created_at <= ${now.toISOString()}::timestamptz at time zone 'UTC'
+    ), missing as (
+      select m.id from recent m
+      where not exists (
+        select 1 from operation_audit a
+        where a.mutation_id = m.id and a.transaction_id = m.transaction_id
+          and a.entity = m.table_name and a.record_id = m.record_id
+      ) and not exists (
+        select 1 from shift_audit_log a where m.table_name = 'shifts'
+          and a.shift_id::text = m.record_id and a.payload->>'mutationId' = m.id::text
+          and a.payload->>'transactionId' = m.transaction_id
+      ) and not exists (
+        select 1 from dispatch_shift_audit_log a where m.table_name = 'dispatch_shifts'
+          and a.dispatch_shift_id::text = m.record_id and a.payload->>'mutationId' = m.id::text
+          and a.payload->>'transactionId' = m.transaction_id
+      )
+    )
+    select
+      (select enabled from config) as enabled,
+      (select count(*)::int from recent where actor->>'kind' = 'shared_password') as shared_writes,
+      (select count(*)::int from recent where not shared_password_enabled
+        and actor->>'kind' = 'shared_password') as disabled_writes,
+      (select count(*)::int from missing) as missing_audits,
+      (select count(*)::int from system_configs where key = 'audit.failure'
+        and (value::jsonb->>'at')::timestamptz >= ${since}::timestamptz
+        and (value::jsonb->>'at')::timestamptz <= ${now.toISOString()}::timestamptz) as failures,
+      (select count(*) = 8 from pg_trigger t join pg_class c on c.oid = t.tgrelid
+        join pg_namespace n on n.oid = c.relnamespace join pg_proc f on f.oid = t.tgfoid
+        where n.nspname = 'public' and not t.tgisinternal
+          and t.tgname = 'ws_f8f9_audit_mutation' and t.tgenabled in ('O', 'A') and (t.tgtype::int & 29) = 29
+          and f.proname = 'ws_f8f9_capture_mutation'
+          and c.relname in ('shifts','dispatch_shifts','clock_records','clock_amendments','leave_requests','employee_leave_balances','system_configs','admin_role_permissions')) as witness_available
+  `);
+  const row = result.rows[0];
+  return {
+    sharedPasswordEnabled: row.enabled === true,
+    sharedWrites24h: Number(row.shared_writes),
+    disabledSharedWrites24h: Number(row.disabled_writes),
+    missingAudits24h: Number(row.missing_audits),
+    failures24h: Number(row.failures),
+    witnessAvailable: row.witness_available === true,
+  };
 }

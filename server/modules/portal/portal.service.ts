@@ -12,6 +12,7 @@ import { scheduleSlotService } from "../scheduleSlot/scheduleSlot.service";
 import { guidelineService } from "../guideline/guideline.service";
 import { attendanceService } from "../attendance/attendance.service";
 import { clockService } from "../clock/clock.service";
+import { withAuditActor } from "../../shared/audit/actor";
 
 const isDevMode = process.env.NODE_ENV !== "production";
 
@@ -328,7 +329,9 @@ export const portalService = {
     const shift = await shiftService.getShift(shiftId);
     if (!shift) throw httpError(404, "班次不存在");
     if (shift.employeeId !== employeeId) throw httpError(403, "無權限");
-    return await shiftService.updateShiftRecord(shiftId, { certificateImageUrl: certificateImageUrl || null }, actor, true);
+    const employee = await employeeService.getEmployee(employeeId);
+    return withAuditActor({ kind: "employee", employeeId, name: employee?.name }, () =>
+      shiftService.updateShiftRecord(shiftId, { certificateImageUrl: certificateImageUrl || null }, "portal:certificate", true));
   },
 
   async getUpcomingCoworkers(employeeId: number) {

@@ -48,6 +48,7 @@ function healthySignals(): HealthSignals {
     database: { latencyMs: 12 },
     holidayLastDate: "2027-12-31",
     security: { mcpTokenSet: true, mcpTokenDistinct: true, sessionSecretSet: true, lineChannelSecretSet: true },
+    auditActor: { sharedPasswordEnabled: true, sharedWrites24h: 0, disabledSharedWrites24h: 0, missingAudits24h: 0, failures24h: 0, witnessAvailable: true },
   };
 }
 
@@ -63,7 +64,7 @@ describe("health-v1 contract", () => {
     expect(contractProblems(report)).toEqual([]);
     expect(report.overall).toBe("green");
     expect(report.pipelines.filter((p) => p.level !== "green").map((p) => `${p.id}: ${p.reason}`)).toEqual([]);
-    expect(report.pipelines).toHaveLength(3 + 1 + SCHEDULED_JOBS.length + INTEGRATIONS.length + 3);
+    expect(report.pipelines).toHaveLength(3 + 1 + SCHEDULED_JOBS.length + INTEGRATIONS.length + 4);
   });
 
   it("the manual Ragic venue sync is in the report, and a failed run only turns it yellow", () => {

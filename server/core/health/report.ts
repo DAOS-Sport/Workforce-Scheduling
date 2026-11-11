@@ -4,6 +4,8 @@
  */
 import { taipeiClock } from "../time/taipei";
 import {
+  evaluateAuditActor,
+  type AuditActorSignals,
   evaluateClockCoverage,
   evaluateDatabase,
   evaluateHolidayTable,
@@ -60,6 +62,7 @@ export interface HealthSignals {
   database: { latencyMs: number | null; error?: string };
   holidayLastDate: string;
   security: SecuritySignals;
+  auditActor?: Signal<AuditActorSignals>;
 }
 
 const isReadError = (v: unknown): v is ReadError => typeof v === "object" && v !== null && "readError" in v;
@@ -109,6 +112,7 @@ export function assembleReport(s: HealthSignals): HealthReport {
   pipelines.push(evaluateDatabase({ id: "database", name: "資料庫", source: "select 1", latencyMs: s.database.latencyMs, error: s.database.error }));
   pipelines.push(evaluateHolidayTable({ id: "holiday-table", name: "國定假日表", source: "server/core/calendar/taiwanHolidays.ts", lastDate: s.holidayLastDate, today: taipeiClock(s.now).date }));
   pipelines.push(evaluateSecurity({ id: "security-config", name: "安全設定", source: "環境變數", signals: s.security }));
+  pipelines.push(isReadError(s.auditActor) ? unreadable("audit.actor", "操作紀錄", "audit_mutations", s.auditActor) : evaluateAuditActor({ id: "audit.actor", name: "操作紀錄", source: "audit_mutations", signals: s.auditActor }));
 
   return {
     system: SYSTEM_ID,

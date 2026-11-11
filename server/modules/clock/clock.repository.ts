@@ -1,6 +1,7 @@
 import { db } from "../../infra/db";
 import type { Executor } from "../../infra/db/tx";
-import { eq, and, gte, lte, desc, count } from "drizzle-orm";
+import { auditedAtomic, prepareAudit, recordOperation } from "../../shared/audit/recorder";
+import { eq, and, gte, lte, desc, count, sql } from "drizzle-orm";
 import {
   clockRecords,
   clockAmendments,
@@ -31,8 +32,42 @@ export const clockRepository = {
   },
 
   async createClockRecord(data: InsertClockRecord, tx: Executor = db): Promise<ClockRecord> {
-    const [record] = await tx.insert(clockRecords).values(data).returning();
-    return record;
+    return tx.transaction(async (t) => {
+      await t.execute(sql`select set_config('app.audit_clock_insert', 'ordinary', true)`);
+      const [record] = await t.insert(clockRecords).values(data).returning();
+      return record;
+    });
+  },
+
+  async createManualClockRecord(data: InsertClockRecord, tx: Executor = db): Promise<ClockRecord> {
+    return auditedAtomic(tx, async (t) => {
+      await prepareAudit(t, true);
+      const [record] = await t.insert(clockRecords).values(data).returning();
+      await recordOperation(t, { entity: "clock_records", recordId: record.id, employeeId: record.employeeId, action: "create", after: record });
+      return record;
+    });
+  },
+
+  async updateAdminClockRecord(id: number, data: Partial<InsertClockRecord>, tx: Executor = db): Promise<ClockRecord | undefined> {
+    return auditedAtomic(tx, async (t) => {
+      await prepareAudit(t, true);
+      const [before] = await t.select().from(clockRecords).where(eq(clockRecords.id, id)).for("update");
+      if (!before) return undefined;
+      const [record] = await t.update(clockRecords).set(data).where(eq(clockRecords.id, id)).returning();
+      await recordOperation(t, { entity: "clock_records", recordId: id, employeeId: record.employeeId, action: "update", before, after: record });
+      return record;
+    });
+  },
+
+  async deleteAdminClockRecord(id: number, tx: Executor = db): Promise<boolean> {
+    return auditedAtomic(tx, async (t) => {
+      await prepareAudit(t);
+      const [before] = await t.select().from(clockRecords).where(eq(clockRecords.id, id)).for("update");
+      if (!before) return false;
+      await t.delete(clockRecords).where(eq(clockRecords.id, id));
+      await recordOperation(t, { entity: "clock_records", recordId: id, employeeId: before.employeeId, action: "delete", before });
+      return true;
+    });
   },
 
   async getClockRecord(id: number, tx: Executor = db): Promise<ClockRecord | undefined> {
@@ -86,14 +121,19 @@ export const clockRepository = {
 
   /** Moves a pending amendment to its reviewed status. Undefined means it was not pending, so someone else already reviewed it (or it does not exist). */
   async reviewPendingAmendment(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string, tx: Executor = db): Promise<ClockAmendment | undefined> {
-    const [record] = await tx.update(clockAmendments).set({
+    return auditedAtomic(tx, async (t) => {
+    await prepareAudit(t);
+    const [before] = await t.select().from(clockAmendments).where(eq(clockAmendments.id, id)).for("update");
+    const [record] = await t.update(clockAmendments).set({
       status,
       reviewedBy,
       reviewedByName,
       reviewedAt: new Date(),
       reviewNote: reviewNote || null,
     }).where(and(eq(clockAmendments.id, id), eq(clockAmendments.status, "pending"))).returning();
+    if (record) await recordOperation(t, { entity: "clock_amendments", recordId: id, employeeId: record.employeeId, action: status === "approved" ? "approve" : "reject", before, after: record });
     return record;
+    });
   },
 
   async updateClockRecordReason(id: number, earlyArrivalReason?: string, lateDepartureReason?: string, tx: Executor = db): Promise<ClockRecord | undefined> {
@@ -101,17 +141,27 @@ export const clockRepository = {
     if (earlyArrivalReason !== undefined) updates.earlyArrivalReason = earlyArrivalReason;
     if (lateDepartureReason !== undefined) updates.lateDepartureReason = lateDepartureReason;
     if (Object.keys(updates).length === 0) return undefined;
-    const [record] = await tx.update(clockRecords).set(updates).where(eq(clockRecords.id, id)).returning();
-    return record;
+    return auditedAtomic(tx, async (t) => {
+      await prepareAudit(t);
+      const [before] = await t.select().from(clockRecords).where(eq(clockRecords.id, id)).for("update");
+      const [record] = await t.update(clockRecords).set(updates).where(eq(clockRecords.id, id)).returning();
+      if (record) await recordOperation(t, { entity: "clock_records", recordId: id, employeeId: record.employeeId, action: "reason_update", before, after: record });
+      return record;
+    });
   },
 
   async applyClockRecordAmendment(clockRecordId: number, amendedTime: Date, amendmentId: number, newFailReason: string | null, tx: Executor = db): Promise<ClockRecord | undefined> {
-    const [record] = await tx.update(clockRecords).set({
+    return auditedAtomic(tx, async (t) => {
+    await prepareAudit(t);
+    const [before] = await t.select().from(clockRecords).where(eq(clockRecords.id, clockRecordId)).for("update");
+    const [record] = await t.update(clockRecords).set({
       amendedTime,
       amendmentId,
       failReason: newFailReason,
     }).where(eq(clockRecords.id, clockRecordId)).returning();
+    if (record) await recordOperation(t, { entity: "clock_records", recordId: clockRecordId, employeeId: record.employeeId, action: "amend", before, after: record });
     return record;
+    });
   },
 
   async countPendingAmendments(tx: Executor = db): Promise<number> {

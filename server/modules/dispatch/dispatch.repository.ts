@@ -1,22 +1,41 @@
 import { db } from "../../infra/db";
 import type { Executor } from "../../infra/db/tx";
+import { auditActorLabel, currentAuditActor } from "../../shared/audit/actor";
+import { auditedAtomic, insertAudit, mutationLink, prepareAudit } from "../../shared/audit/recorder";
 import { eq, and, gte, lte, isNull, isNotNull, ne, sql } from "drizzle-orm";
 import {
   dispatchShifts,
+  dispatchShiftAuditLog,
   type DispatchShift,
   type InsertDispatchShift,
 } from "@shared/schema";
 
+async function appendAudit(tx: Executor, record: DispatchShift, action: string, before?: DispatchShift) {
+  await insertAudit(async () => {
+    const link = await mutationLink(tx, "dispatch_shifts", record.id);
+    await tx.insert(dispatchShiftAuditLog).values({ dispatchShiftId: record.id, action, actor: auditActorLabel(), createdAt: sql`timezone('UTC',clock_timestamp())`, payload: { before: before ?? null, after: record, actor: currentAuditActor(), ...link } });
+  });
+}
+
 export const dispatchRepository = {
   async createDispatchShift(data: InsertDispatchShift, tx: Executor = db): Promise<DispatchShift> {
-    const [record] = await tx.insert(dispatchShifts).values(data).returning();
-    return record;
+    return auditedAtomic(tx, async (t) => {
+      await prepareAudit(t);
+      const [record] = await t.insert(dispatchShifts).values(data).returning();
+      await appendAudit(t, record, "create");
+      return record;
+    });
   },
 
   /** One multi-row INSERT, so the batch is written whole or not at all. */
   async batchCreateDispatchShifts(data: InsertDispatchShift[], tx: Executor = db): Promise<DispatchShift[]> {
     if (data.length === 0) return [];
-    return tx.insert(dispatchShifts).values(data).returning();
+    return auditedAtomic(tx, async (t) => {
+      await prepareAudit(t);
+      const records = await t.insert(dispatchShifts).values(data).returning();
+      for (const record of records) await appendAudit(t, record, "create");
+      return records;
+    });
   },
 
   /**
@@ -37,7 +56,7 @@ export const dispatchRepository = {
       ),
     ).orderBy(dispatchShifts.id).limit(1);
     if (existing) return { shift: existing, created: false };
-    const [shift] = await tx.insert(dispatchShifts).values(data).returning();
+    const shift = await dispatchRepository.createDispatchShift(data, tx);
     return { shift, created: true };
   },
 
@@ -84,27 +103,39 @@ export const dispatchRepository = {
   },
 
   async updateDispatchShift(id: number, data: Partial<InsertDispatchShift>, tx: Executor = db): Promise<DispatchShift | undefined> {
-    const [record] = await tx.update(dispatchShifts).set(data).where(eq(dispatchShifts.id, id)).returning();
-    return record;
+    return auditedAtomic(tx, async (t) => {
+      await prepareAudit(t);
+      const [before] = await t.select().from(dispatchShifts).where(eq(dispatchShifts.id, id)).for("update");
+      const [record] = await t.update(dispatchShifts).set(data).where(eq(dispatchShifts.id, id)).returning();
+      if (record) await appendAudit(t, record, "update", before);
+      return record;
+    });
   },
 
   async deleteDispatchShift(id: number, actor = "admin", reason?: string, tx: Executor = db): Promise<boolean> {
-    const [existing] = await tx.select().from(dispatchShifts).where(eq(dispatchShifts.id, id));
-    if (!existing || existing.status === "cancelled") return false;
-    await tx.update(dispatchShifts)
-      .set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: actor, cancelReason: reason || null })
-      .where(eq(dispatchShifts.id, id));
-    return true;
+    return auditedAtomic(tx, async (t) => {
+      await prepareAudit(t);
+      const [existing] = await t.select().from(dispatchShifts).where(eq(dispatchShifts.id, id)).for("update");
+      if (!existing || existing.status === "cancelled") return false;
+      const [record] = await t.update(dispatchShifts)
+        .set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: auditActorLabel(), cancelReason: reason || null })
+        .where(eq(dispatchShifts.id, id)).returning();
+      await appendAudit(t, record, "cancel", existing);
+      return true;
+    });
   },
 
   async restoreDispatchShift(id: number, actor = "admin", tx: Executor = db): Promise<DispatchShift | undefined> {
-    const [existing] = await tx.select().from(dispatchShifts).where(eq(dispatchShifts.id, id));
-    if (!existing || existing.status !== "cancelled") return undefined;
-    const [restored] = await tx.update(dispatchShifts)
-      .set({ status: "active", cancelledAt: null, cancelledBy: null, cancelReason: null })
-      .where(eq(dispatchShifts.id, id))
-      .returning();
-    return restored;
+    return auditedAtomic(tx, async (t) => {
+      await prepareAudit(t);
+      const [existing] = await t.select().from(dispatchShifts).where(eq(dispatchShifts.id, id)).for("update");
+      if (!existing || existing.status !== "cancelled") return undefined;
+      const [restored] = await t.update(dispatchShifts)
+        .set({ status: "active", cancelledAt: null, cancelledBy: null, cancelReason: null })
+        .where(eq(dispatchShifts.id, id)).returning();
+      await appendAudit(t, restored, "restore", existing);
+      return restored;
+    });
   },
 
   async getCancelledDispatchShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string, tx: Executor = db): Promise<DispatchShift[]> {
@@ -122,8 +153,12 @@ export const dispatchRepository = {
    * A name shared by two active employees is left unlinked. One statement, so a concurrent run cannot interleave.
    */
   async reconcileDispatchLinks(tx: Executor = db): Promise<number> {
+    return auditedAtomic(tx, async (t) => {
+    await prepareAudit(t);
+    const beforeRows = await t.select().from(dispatchShifts).where(isNull(dispatchShifts.linkedEmployeeId)).for("update");
+    const before = new Map(beforeRows.map((r) => [r.id, r]));
     const blank = sql.raw(`E' \t\r\n\u00a0\u3000'`);
-    const result = await tx.execute(sql`
+    const result = await t.execute(sql`
       update dispatch_shifts ds set linked_employee_id = e.id
       from (
         select btrim(name, ${blank}) as name, min(id) as id
@@ -135,7 +170,12 @@ export const dispatchRepository = {
       where ds.linked_employee_id is null
         and btrim(ds.dispatch_name, ${blank}) = e.name
       returning ds.id`);
+    for (const row of result.rows) {
+      const [record] = await t.select().from(dispatchShifts).where(eq(dispatchShifts.id, Number(row.id)));
+      await appendAudit(t, record, "reconcile", before.get(record.id));
+    }
     return result.rows.length;
+    });
   },
 
 };

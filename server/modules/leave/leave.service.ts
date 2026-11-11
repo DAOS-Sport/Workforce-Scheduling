@@ -8,9 +8,21 @@ import { employeeService } from "../employee/employee.service";
 import { LOCK_NS, lockXact, withTx } from "../../infra/db/tx";
 import { httpError } from "../../shared/http/response";
 import { leaveRepository } from "./leave.repository";
+import { z } from "zod";
+import { currentAuditActor } from "../../shared/audit/actor";
+import { prepareAudit, recordOperation, withAuditFailureSignal } from "../../shared/audit/recorder";
 
 const CERTIFICATE_REQUIRED = new Set(["病假", "生理假"]);
 export const ANNUAL_LEAVE_TYPES = new Set(["特休", "特別休假", "annual_leave"]);
+const adjustmentSchema = z.object({
+  leaveType: z.string().min(1).optional(),
+  startDate: z.string().date().optional(),
+  endDate: z.string().date().optional(),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  reason: z.string().nullable().optional(),
+  certificateImageUrl: z.string().nullable().optional(),
+});
 
 function getTaipeiYear(): number {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" })).getFullYear();
@@ -117,8 +129,10 @@ export const leaveService = {
     if (!request) throw httpError(404, "找不到請假申請");
 
     return withTx(async (tx) => {
-      const annual = ANNUAL_LEAVE_TYPES.has(request.leaveType);
-      if (annual) await lockXact(tx, LOCK_NS.leaveBalance, request.employeeId);
+      await lockXact(tx, LOCK_NS.leaveBalance, request.employeeId);
+      const current = await leaveRepository.getLeaveRequestForUpdate(id, tx);
+      if (!current) throw httpError(404, "找不到請假申請");
+      const annual = ANNUAL_LEAVE_TYPES.has(current.leaveType);
 
       const reviewed = await leaveRepository.reviewPendingRequest(id, status, adminId, adminName, reviewNote, tx);
       if (!reviewed) throw httpError(409, "此申請已審核完畢");
@@ -168,15 +182,69 @@ export const leaveService = {
     if (totalHours < 0) {
       throw httpError(400, "總時數不可為負數");
     }
-    return withTx(async (tx) => {
+    return withAuditFailureSignal(() => withTx(async (tx) => {
       await lockXact(tx, LOCK_NS.leaveBalance, employeeId);
+      await prepareAudit(tx);
+      const before = await leaveRepository.getLeaveBalance(employeeId, year, tx);
       const balance = await leaveRepository.upsertLeaveBalance(employeeId, year, totalHours, tx);
       await leaveRepository.appendLeaveBalanceLog(
         employeeId, year, totalHours,
         `管理員設定年度特休總時數為 ${totalHours}h`,
         undefined, adminId, adminName, tx,
       );
+      await recordOperation(tx, { entity: "employee_leave_balances", recordId: balance.id, employeeId, action: "adjust", before, after: balance });
       return balance;
+    }));
+  },
+
+  async revoke(id: number, reason?: string) {
+    const first = await leaveRepository.getLeaveRequest(id);
+    if (!first) throw httpError(404, "找不到請假申請");
+    return withTx(async (tx) => {
+      await lockXact(tx, LOCK_NS.leaveBalance, first.employeeId);
+      const before = await leaveRepository.getLeaveRequestForUpdate(id, tx);
+      if (!before) throw httpError(404, "找不到請假申請");
+      if (before.status === "cancelled") throw httpError(409, "此申請已撤銷");
+      if (ANNUAL_LEAVE_TYPES.has(before.leaveType) && ["pending", "approved"].includes(before.status)) {
+        const hours = before.hours ?? calcLeaveHours(before.startDate, before.endDate, before.startTime, before.endTime);
+        const year = Number(before.startDate.slice(0, 4));
+        if (!await leaveRepository.moveLeaveHours(before.employeeId, year, before.status === "pending" ? "pending" : "used", -hours, tx)) throw httpError(409, "特休時數與申請不符，無法撤銷");
+        const actor = currentAuditActor();
+        await leaveRepository.appendLeaveBalanceLog(before.employeeId, year, before.status === "approved" ? hours : 0, `撤銷特休 ${hours}h`, id, actor.employeeId, actor.name, tx);
+      }
+      return leaveRepository.changeLeaveRequest(id, { status: "cancelled", reviewNote: reason ?? before.reviewNote }, "revoke", tx);
+    });
+  },
+
+  async adjustRequest(id: number, payload: unknown) {
+    const changes = adjustmentSchema.parse(payload);
+    if (!Object.keys(changes).length) throw httpError(400, "沒有要調整的欄位");
+    const first = await leaveRepository.getLeaveRequest(id);
+    if (!first) throw httpError(404, "找不到請假申請");
+    return withTx(async (tx) => {
+      await lockXact(tx, LOCK_NS.leaveBalance, first.employeeId);
+      const before = await leaveRepository.getLeaveRequestForUpdate(id, tx);
+      if (!before) throw httpError(404, "找不到請假申請");
+      if (!["pending", "approved"].includes(before.status)) throw httpError(409, "只能調整待審或已核准的請假");
+      const after = { ...before, ...changes };
+      if (after.endDate < after.startDate) throw httpError(400, "結束日期不可早於開始日期");
+      if (CERTIFICATE_REQUIRED.has(after.leaveType) && !after.certificateImageUrl) throw httpError(400, `${after.leaveType}需附上證明文件照片`);
+      const hours = calcLeaveHours(after.startDate, after.endDate, after.startTime, after.endTime);
+      if (hours <= 0) throw httpError(400, "請假時數必須大於0");
+      const bucket = before.status === "approved" ? "used" : "pending";
+      const actor = currentAuditActor();
+      if (ANNUAL_LEAVE_TYPES.has(before.leaveType)) {
+        const oldHours = before.hours ?? calcLeaveHours(before.startDate, before.endDate, before.startTime, before.endTime);
+        const year = Number(before.startDate.slice(0, 4));
+        if (!await leaveRepository.moveLeaveHours(before.employeeId, year, bucket, -oldHours, tx)) throw httpError(409, "特休時數與申請不符，無法調整");
+        await leaveRepository.appendLeaveBalanceLog(before.employeeId, year, bucket === "used" ? oldHours : 0, "調整請假：返還原時數", id, actor.employeeId, actor.name, tx);
+      }
+      if (ANNUAL_LEAVE_TYPES.has(after.leaveType)) {
+        const year = Number(after.startDate.slice(0, 4));
+        if (!await leaveRepository.moveLeaveHours(before.employeeId, year, bucket, hours, tx)) throw httpError(400, "特休餘額不足，無法調整");
+        await leaveRepository.appendLeaveBalanceLog(before.employeeId, year, bucket === "used" ? -hours : 0, "調整請假：套用新時數", id, actor.employeeId, actor.name, tx);
+      }
+      return leaveRepository.changeLeaveRequest(id, { ...changes, hours }, "adjust", tx);
     });
   },
 

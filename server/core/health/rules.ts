@@ -184,3 +184,23 @@ export function evaluateSecurity(input: Base & { signals: SecuritySignals }): Pi
   if (problems.length) return pipeline(input, "red", problems.join("；"));
   return pipeline(input, "green", "必要的安全設定都有設");
 }
+
+export interface AuditActorSignals {
+  sharedPasswordEnabled: boolean;
+  sharedWrites24h: number;
+  disabledSharedWrites24h: number;
+  missingAudits24h: number;
+  failures24h: number;
+  witnessAvailable: boolean;
+}
+
+export function evaluateAuditActor(input: Base & { signals?: AuditActorSignals }): Pipeline {
+  const s = input.signals;
+  if (!s) return pipeline(input, "yellow", "無法觀測：操作異動見證尚未完整安裝");
+  if (s.missingAudits24h > 0) return pipeline(input, "red", `最近 24 小時有 ${s.missingAudits24h} 筆異動缺少同交易操作紀錄`);
+  if (s.failures24h > 0) return pipeline(input, "red", "最近 24 小時操作紀錄寫入失敗");
+  if (s.disabledSharedWrites24h > 0) return pipeline(input, "red", `共用密碼關閉後仍有 ${s.disabledSharedWrites24h} 筆異動`);
+  if (!s.witnessAvailable) return pipeline(input, "yellow", "無法觀測：操作異動見證尚未完整安裝");
+  if (s.sharedPasswordEnabled && s.sharedWrites24h > 0) return pipeline(input, "yellow", `共用密碼仍開啟，最近 24 小時使用它寫入 ${s.sharedWrites24h} 筆`);
+  return pipeline(input, "green", "最近 24 小時異動都有操作紀錄，未發現停用後的共用密碼寫入");
+}

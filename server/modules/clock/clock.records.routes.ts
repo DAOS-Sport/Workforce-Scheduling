@@ -9,8 +9,23 @@
 import { type Express } from "express";
 import { type Server } from "http";
 import { clockService } from "./clock.service";
+import { employeeService } from "../employee/employee.service";
+import { currentAuditActor, withAuditActor, type AuditActor } from "../../shared/audit/actor";
+import { requireAdmin } from "../../shared/middleware/requireAdmin";
 
 export function mountClockRecordsRoutes(_httpServer: Server, app: Express): void {
+  app.post("/api/clock-records", requireAdmin, async (req, res) => {
+    try { res.status(201).json(await clockService.adminCreateRecord(req.body)); }
+    catch (err: any) { res.status(err.name === "ZodError" ? 400 : err.status || 500).json({ message: err.message }); }
+  });
+  app.patch("/api/clock-records/:id", requireAdmin, async (req, res) => {
+    try { res.json(await clockService.adminUpdateRecord(Number(req.params.id), req.body)); }
+    catch (err: any) { res.status(err.name === "ZodError" ? 400 : err.status || 500).json({ message: err.message }); }
+  });
+  app.delete("/api/clock-records/:id", requireAdmin, async (req, res) => {
+    try { res.json(await clockService.adminDeleteRecord(Number(req.params.id))); }
+    catch (err: any) { res.status(err.name === "ZodError" ? 400 : err.status || 500).json({ message: err.message }); }
+  });
   app.get("/api/clock-records", async (req, res) => {
     try {
       const { startDate, endDate, employeeId } = req.query;
@@ -54,7 +69,16 @@ export function mountClockRecordsRoutes(_httpServer: Server, app: Express): void
     try {
       const id = parseInt(req.params.id);
       const { earlyArrivalReason, lateDepartureReason } = req.body;
-      res.json(await clockService.updateRecordReason(id, earlyArrivalReason, lateDepartureReason));
+      let actor: AuditActor = currentAuditActor();
+      if (actor.kind === "system") {
+        actor = { kind: "employee" };
+        const lineId = req.header("x-line-user-id");
+        if (lineId) {
+          const matches = (await employeeService.getEmployeesByLineId(lineId)).filter((e) => e.status === "active");
+          if (matches.length === 1) actor = { kind: "employee", employeeId: matches[0].id, name: matches[0].name };
+        }
+      }
+      res.json(await withAuditActor(actor, () => clockService.updateRecordReason(id, earlyArrivalReason, lateDepartureReason)));
     } catch (err: any) {
       res.status(err.status || 500).json({ message: err.message });
     }

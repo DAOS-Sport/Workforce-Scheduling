@@ -775,3 +775,5 @@ export interface VacancyInfo {
   assigned: number;
   shortage: number;
 }
+export { adminRolePermissions } from "./admin-permissions";
+export { operationAudit, auditMutations } from "./operation-audit-schema";
