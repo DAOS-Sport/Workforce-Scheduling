@@ -200,6 +200,7 @@ async function readScheduleSaveState(now: Date): Promise<ScheduleSaveState> {
   return {
     ...(row.last_critical_at ? { lastCriticalAt: new Date(row.last_critical_at).toISOString() } : {}),
     ...(row.last_unsaved_exit_at ? { lastUnsavedExitAt: new Date(row.last_unsaved_exit_at).toISOString() } : {}),
+  };
 }
 
 export async function readAuditActorSignals(now: Date): Promise<AuditActorSignals> {
