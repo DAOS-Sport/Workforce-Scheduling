@@ -5583,13 +5583,12 @@ export async function getClockPosition(entry: "liff" | "portal"): Promise<Geoloc
   if (navigator.permissions?.query) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const permission = await Promise.race([
+      // LINE WebView 可能誤報 denied，仍以實際 GPS 回呼判斷能否定位。
+      await Promise.race([
         navigator.permissions.query({ name: "geolocation" }),
         new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 1000); }),
       ]);
-      if (permission?.state === "denied") throw failure("PERMISSION_DENIED", 1, "位置存取權限被拒絕");
-    } catch (err: any) {
-      if (err.geoKind) throw err;
+    } catch {
       // 不支援該 permission name 的瀏覽器照原定位流程。
     } finally { clearTimeout(timer); }
   }

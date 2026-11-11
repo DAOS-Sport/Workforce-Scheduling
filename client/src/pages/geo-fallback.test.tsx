@@ -97,14 +97,27 @@ describe.each(["liff", "portal"] as const)("%s 定位退路", entry => {
     expect(screen.queryByText(/打卡成功/)).toBeNull();
   });
 
-  it.each([UA_IPHONE_LINE, UA_ANDROID_LINE, UA_IPHONE_SAFARI])("已拒絕的舊員工先查權限；只在LINE顯示外開", async ua => {
+  it.each([UA_IPHONE_LINE, UA_ANDROID_LINE, UA_IPHONE_SAFARI])("查詢denied仍實測GPS，真正拒絕時只在LINE顯示外開", async ua => {
     Object.defineProperty(navigator, "userAgent", { configurable: true, value: ua });
     query.mockResolvedValue({ state: "denied" });
+    geo.mockImplementation((_ok, fail) => fail({ code: 1 }));
     await start(entry);
     expect(await screen.findByRole("button", { name: "重新取得位置" })).toBeTruthy();
     expect(query).toHaveBeenCalledWith({ name: "geolocation" });
-    expect(geo).not.toHaveBeenCalled();
+    expect(geo).toHaveBeenCalledTimes(1);
+    expect(calls("/api/liff/clock-in")).toHaveLength(0);
+    expect(calls("/api/anomaly-report")).toHaveLength(1);
     expect(Boolean(screen.queryByTestId("button-open-external-browser"))).toBe(/Line\//i.test(ua));
+  });
+  it("WebView誤報denied時實測GPS一次，成功仍正常打卡且不記失敗", async () => {
+    query.mockResolvedValue({ state: "denied" });
+    await start(entry);
+    expect(await screen.findByText(/下班打卡成功/)).toBeTruthy();
+    expect(query).toHaveBeenCalledWith({ name: "geolocation" });
+    expect(geo).toHaveBeenCalledTimes(1);
+    expect(calls("/api/liff/clock-in")).toHaveLength(1);
+    expect(calls("/api/anomaly-report")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "無法定位，改送補打卡申請" })).toBeNull();
   });
   it("重取真的再定位，失敗不鎖住原方向", async () => {
     geo.mockImplementation((_ok, fail) => fail({ code: 1 }));
