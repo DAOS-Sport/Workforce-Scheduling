@@ -260,7 +260,7 @@ export default function LiffClockInPage() {
             </div>
             <p className="text-white font-medium mb-2">發生錯誤</p>
             <p className="text-white/60 text-sm whitespace-pre-line mb-6">{errorMsg}</p>
-            {geoFailure ? <GeoFailureActions kind={geoFailure} lineUserId={profile?.userId} clockType={result?.clockType} onRetry={handleClockIn} retryTestId="button-retry" /> : <Button
+            {geoFailure ? <GeoFailureActions kind={geoFailure} lineUserId={profile?.userId} onRetry={handleClockIn} retryTestId="button-retry" /> : <Button
               variant="outline"
               className="w-full border-slate-600 text-white hover:bg-slate-700"
               onClick={() => { setErrorMsg(""); setErrorCode(null); setStage("ready"); }}

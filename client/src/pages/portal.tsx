@@ -1786,7 +1786,7 @@ interface EligibleDate {
 const AMENDMENT_REASONS = ["漏打卡", "系統異常", "入職開通中", "其他"] as const;
 type AmendmentReason = typeof AMENDMENT_REASONS[number];
 
-function ClockAmendmentSection({ employee, initial }: { employee: PortalEmployee; initial?: { at: Date; clockType: "in" | "out"; kind: GeoFailureKind } }) {
+function ClockAmendmentSection({ employee, initial }: { employee: PortalEmployee; initial?: { at: Date; clockType?: "in" | "out"; kind: GeoFailureKind } }) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
   const thisYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const [yr, mo] = thisYearMonth.split("-").map(Number);
@@ -1796,7 +1796,7 @@ function ClockAmendmentSection({ employee, initial }: { employee: PortalEmployee
 
   const initialTaipei = initial ? new Date(initial.at.toLocaleString("en-US", { timeZone: "Asia/Taipei" })) : null;
   const [selectedDate, setSelectedDate] = useState<string | null>(() => initialTaipei ? format(initialTaipei, "yyyy-MM-dd") : null);
-  const [clockType, setClockType] = useState<"in" | "out">(initial?.clockType ?? "in");
+  const [clockType, setClockType] = useState<"in" | "out" | null>(initial ? initial.clockType ?? null : "in");
   const [requestedTime, setRequestedTime] = useState(() => initialTaipei ? format(initialTaipei, "HH:mm") : "09:00");
   const [reason, setReason] = useState<AmendmentReason>(initial ? "其他" : "漏打卡");
   const [notes, setNotes] = useState(initial ? `定位失敗：${initial.kind}` : "");
@@ -1893,6 +1893,10 @@ function ClockAmendmentSection({ employee, initial }: { employee: PortalEmployee
   const handleSubmit = async () => {
     if (!selectedDate) {
       toast({ title: "請選擇補打卡日期", variant: "destructive" });
+      return;
+    }
+    if (!clockType) {
+      toast({ title: "請選擇上班或下班", variant: "destructive" });
       return;
     }
     if (!evidencePreview) {
@@ -2062,6 +2066,7 @@ function ClockAmendmentSection({ employee, initial }: { employee: PortalEmployee
             {/* Clock type toggle — show only options that are missing */}
             <div>
               <p className="text-xs font-medium text-slate-500 mb-1.5">補卡類型</p>
+              {!clockType && <p className="text-xs text-red-500 mb-1.5">請選擇上班或下班</p>}
               <div className="flex gap-2">
                 {(initial ? (["in", "out"] as const).map(type => (eligibleMap.get(selectedDate) || []).find(e => e.missingClockType === type) ?? { missingClockType: type, amendmentStatus: null, isResolved: false } as EligibleDate) : (eligibleMap.get(selectedDate) || []))
                   .filter(e => !e.isResolved && e.amendmentStatus !== "approved")
@@ -2179,7 +2184,7 @@ function ClockAmendmentSection({ employee, initial }: { employee: PortalEmployee
 
             <button
               onClick={handleSubmit}
-              disabled={submitting || !evidencePreview || (monthlyRemaining === 0 && !isSystemIssue)}
+              disabled={submitting || !clockType || !evidencePreview || (monthlyRemaining === 0 && !isSystemIssue)}
               className="w-full py-3 bg-juns-navy text-white rounded-xl text-sm font-semibold disabled:opacity-50 hover:bg-juns-navy/90 active:scale-[0.99] transition-all"
               data-testid="button-submit-amendment"
             >
@@ -5618,7 +5623,7 @@ export async function getClockPosition(entry: "liff" | "portal"): Promise<Geoloc
   }
 }
 
-export function GeoFailureActions({ kind, employee, lineUserId, clockType = "in", onRetry, retryTestId = "button-retry-clock" }: {
+export function GeoFailureActions({ kind, employee, lineUserId, clockType, onRetry, retryTestId = "button-retry-clock" }: {
   kind: GeoFailureKind;
   employee?: PortalEmployee;
   lineUserId?: string;

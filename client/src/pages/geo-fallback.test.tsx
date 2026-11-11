@@ -56,7 +56,7 @@ async function uploadEvidence() {
   fireEvent.change(screen.getByTestId("input-amendment-evidence"), {
     target: { files: [new File(["synthetic"], "synthetic.png", { type: "image/png" })] },
   });
-  await waitFor(() => expect((screen.getByTestId("button-submit-amendment") as HTMLButtonElement).disabled).toBe(false));
+  await screen.findByAltText("截圖預覽");
 }
 
 describe.each(["liff", "portal"] as const)("%s 定位退路", entry => {
@@ -80,8 +80,13 @@ describe.each(["liff", "portal"] as const)("%s 定位退路", entry => {
     expect((await screen.findByTestId("input-amendment-notes") as HTMLTextAreaElement).value).toBe(`定位失敗：${kind}`);
     expect((screen.getByTestId("input-amendment-time") as HTMLInputElement).value).toBe("21:04");
     // LIFF 的原入口自動判斷方向；補卡表單讓員工明確選擇，portal 帶入原按鈕方向。
-    expect(screen.getByTestId(`button-amendment-type-${entry === "portal" || kind === "POOR_ACCURACY" ? "out" : "in"}`).className).toContain("bg-juns-teal");
-    if (entry === "liff") fireEvent.click(screen.getByTestId("button-amendment-type-out"));
+    if (entry === "liff") {
+      expect(screen.getByTestId("button-amendment-type-in").className).not.toContain("bg-juns-teal");
+      expect(screen.getByTestId("button-amendment-type-out").className).not.toContain("bg-juns-teal");
+      fireEvent.click(screen.getByTestId("button-amendment-type-out"));
+    } else {
+      expect(screen.getByTestId("button-amendment-type-out").className).toContain("bg-juns-teal");
+    }
     await uploadEvidence();
     fireEvent.click(screen.getByTestId("button-submit-amendment"));
     expect(await screen.findByText("已送出，待主管審核")).toBeTruthy();
@@ -151,7 +156,7 @@ describe("定位取得策略", () => {
   });
 });
 
-it("LIFF新一次無座標失敗不沿用前次結果的補卡方向", async () => {
+it("LIFF再次定位失敗仍要求員工明確選擇補卡方向", async () => {
   failedResult = true;
   geo.mockImplementation(ok => ok({ ...position, coords: { ...position.coords, accuracy: 800 } }));
   await start("liff");
@@ -160,5 +165,23 @@ it("LIFF新一次無座標失敗不沿用前次結果的補卡方向", async () 
   fireEvent.click(retry);
   fireEvent.click(await screen.findByRole("button", { name: "無法定位，改送補打卡申請" }));
   const inButton = await screen.findByTestId("button-amendment-type-in");
-  expect(inButton.className).toContain("bg-juns-teal");
+  expect(inButton.className).not.toContain("bg-juns-teal");
+  expect(screen.getByTestId("button-amendment-type-out").className).not.toContain("bg-juns-teal");
+});
+
+it("LIFF補卡即使已附截圖，仍必須先選上下班才能送出", async () => {
+  geo.mockImplementation((_ok, fail) => fail({ code: 1 }));
+  await start("liff");
+  fireEvent.click(await screen.findByRole("button", { name: "無法定位，改送補打卡申請" }));
+  await screen.findByTestId("input-amendment-notes");
+  await uploadEvidence();
+  const submit = screen.getByTestId("button-submit-amendment") as HTMLButtonElement;
+  expect(submit.disabled).toBe(true);
+  fireEvent.click(submit);
+  expect(calls("/api/portal/clock-amendment")).toHaveLength(0);
+  fireEvent.click(screen.getByTestId("button-amendment-type-in"));
+  expect(submit.disabled).toBe(false);
+  fireEvent.click(submit);
+  expect(await screen.findByText("已送出，待主管審核")).toBeTruthy();
+  expect(JSON.parse(String(calls("/api/portal/clock-amendment")[0][1]?.body)).clockType).toBe("in");
 });
