@@ -55,6 +55,7 @@ export async function replyMessages(replyToken: string, messages: object[]): Pro
       method: "POST",
       headers: botHeaders(),
       body: JSON.stringify({ replyToken, messages }),
+      signal: AbortSignal.timeout(10_000),
     });
     // 回覆被拒通常只是 reply token 過期（之後會改用推播），不算外部系統故障。
     if (resp.ok) recordIntegration("line", true);
