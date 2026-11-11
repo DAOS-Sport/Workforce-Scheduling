@@ -1,5 +1,5 @@
 import { calcShiftHours, sumScheduledHours, getAllPeriodsForMonth } from "@shared/schema";
-import { pushToLine } from "../line/linePush.service";
+import { pushToLineResult } from "../line/linePush.service";
 import { pushOnce } from "../line/pushOnce.service";
 import { sendAnomalyEmail } from "../../shared/email/sendAnomalyEmail";
 import { TAIWAN_HOLIDAYS } from "../../core/calendar/taiwanHolidays";
@@ -519,6 +519,7 @@ export const systemService = {
     const displayRange = `${wsDate.getUTCMonth() + 1}/${wsDate.getUTCDate()} ~ ${weDate.getUTCMonth() + 1}/${weDate.getUTCDate()}`;
 
     let lineSent = 0;
+    let lineUnknown = 0;
     let lineSkipped = 0;
     const summaryRows: string[] = [];
 
@@ -562,8 +563,10 @@ export const systemService = {
         lines.push(hasAnomaly ? "如有上述異常狀況，請盡速向主管回報說明，謝謝 🙏" : "本週出勤正常，辛苦了 👍");
         const lineId = emp.lineId;
         const text = lines.join("\n").trim();
-        const { outcome } = await pushOnce({ scope: "weekly-attendance", period: weekStart, employeeId: empId }, () => pushToLine(lineId, text));
-        if (outcome === "sent") lineSent++; else lineSkipped++;
+        const { outcome } = await pushOnce({ scope: "weekly-attendance", period: weekStart, employeeId: empId }, (retryKey) => pushToLineResult(lineId, text, retryKey));
+        if (outcome === "sent") lineSent++;
+        else if (outcome === "unknown") lineUnknown++;
+        else lineSkipped++;
       } else {
         lineSkipped++;
       }
@@ -582,9 +585,9 @@ export const systemService = {
           <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
             <tbody>${tableRows}</tbody>
           </table>
-          <p>共 ${employeeIds.size} 位員工，LINE 推播 ${lineSent} 位，跳過 ${lineSkipped} 位。</p>
+          <p>共 ${employeeIds.size} 位員工，LINE 推播 ${lineSent} 位，結果不明 ${lineUnknown} 位，跳過 ${lineSkipped} 位。</p>
         `;
-        // One report per week: triggering again does not mail the managers again. A refused mail counts as failed and is tried next time.
+        // SMTP has no retry key: keep uncertain mail pending. Explicit refusals can still be tried next time.
         const mail = await pushOnce({ scope: "weekly-attendance-mail", period: weekStart, employeeId: 0 }, async () => {
           try {
             await sendAnomalyEmail(
@@ -592,12 +595,12 @@ export const systemService = {
               `📊 週報打卡狀況 — ${displayRange}（${employeeIds.size} 位員工）`,
               emailHtml
             );
-            return true;
+            return "accepted" as const;
           } catch (e) {
             console.error("[週報] Email 發送失敗:", e);
-            return false;
+            return "rejected" as const;
           }
-        });
+        }, { reclaimPending: false });
         emailSent = mail.outcome === "sent";
       }
     } catch (e: any) {
@@ -605,9 +608,9 @@ export const systemService = {
     }
 
     return {
-      success: true, lineSent, lineSkipped, emailSent,
+      success: true, lineSent, lineUnknown, lineSkipped, emailSent,
       totalEmployees: employeeIds.size,
-      message: `已發送 LINE 推播 ${lineSent} 位，${emailSent ? "管理員 Email 已發送" : "Email 未發送"}`,
+      message: `已發送 LINE 推播 ${lineSent} 位，結果不明 ${lineUnknown} 位，${emailSent ? "管理員 Email 已發送" : "Email 未發送"}`,
     };
   },
 

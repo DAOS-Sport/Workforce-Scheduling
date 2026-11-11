@@ -1,44 +1,66 @@
+import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
+import type { PushDeliveryOutcome } from "../../adapters/line";
 import { pushDedupRepository, type PushKey } from "./pushDedup.repository";
 
-/**
- * sent: LINE took it. failed: LINE refused it, the next round pushes it again. unknown: the push or the
- * record of its result threw, so it may have gone out and is not pushed again. skipped: someone else holds it or it was sent.
- */
+/** sent: LINE accepted; failed: LINE refused; unknown: acceptance or persistence is uncertain. */
 export type PushOutcome = "sent" | "failed" | "unknown" | "skipped";
 
 export interface PushResult {
   outcome: PushOutcome;
-  /** 1 for the first push of this key, 2 for the first retry, and so on. 0 when skipped. */
+  /** Advances only after a rejected attempt; 0 when skipped. */
   attempt: number;
+  /** This caller took over an existing slot, including stale pending. */
+  reclaimed: boolean;
 }
 
 export type PushSlot = Omit<PushKey, "refId"> & { refId?: string };
 
-/**
- * Claim the slot, push, then record how it went. The claim is a single statement, so of any number of instances
- * running the same job only one pushes a given slot, and only a `failed` slot is ever pushed again.
- * Claim after every decision to skip, right before the push, so a skipped employee is not locked out.
- */
-export async function pushOnce(slot: PushSlot, send: () => Promise<boolean>): Promise<PushResult> {
+function retryKeyFor(key: PushKey, attempt: number): string {
+  const bytes = createHash("sha1").update(JSON.stringify([key.scope, key.period, key.employeeId, key.refId, attempt])).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/** Claim immediately before sending. Retries of an uncertain attempt always reuse its LINE retry key. */
+export async function pushOnce(
+  slot: PushSlot,
+  send: (retryKey: string) => Promise<PushDeliveryOutcome>,
+  options: { reclaimPending?: boolean } = {},
+): Promise<PushResult> {
   const key: PushKey = { ...slot, refId: slot.refId ?? "" };
-  const attempt = await pushDedupRepository.claim(key);
-  if (attempt === null) return { outcome: "skipped", attempt: 0 };
+  const claim = await pushDedupRepository.claim(key, undefined, options.reclaimPending ?? true);
+  if (claim === null) return { outcome: "skipped", attempt: 0, reclaimed: false };
+  const retryKey = retryKeyFor(key, claim.attempt);
 
-  let delivered: boolean;
-  try {
-    delivered = await send();
-  } catch (err) {
-    console.error(`[push] ${key.scope} ${key.period} employee ${key.employeeId}: push threw, left pending and not retried:`, err);
-    return { outcome: "unknown", attempt };
+  let delivered: PushDeliveryOutcome = "unknown";
+  const sendBackoff = [1_000, 3_000];
+  for (let retry = 0; retry <= sendBackoff.length; retry++) {
+    if (retry > 0) await delay(sendBackoff[retry - 1]);
+    try {
+      delivered = await send(retryKey);
+    } catch (err) {
+      console.error("[push] Send result unknown:", err);
+      delivered = "unknown";
+    }
+    if (delivered !== "unknown") break;
   }
+  if (delivered === "unknown") return { outcome: "unknown", ...claim };
 
-  try {
-    await pushDedupRepository.finish(key, delivered ? "sent" : "failed");
-  } catch (err) {
-    console.error(`[push] ${key.scope} ${key.period} employee ${key.employeeId}: could not record the result, left pending and not retried:`, err);
-    return { outcome: "unknown", attempt };
+  const outcome = delivered === "accepted" ? "sent" : "failed";
+  const finishBackoff = [250, 750];
+  for (let retry = 0; retry <= finishBackoff.length; retry++) {
+    if (retry > 0) await delay(finishBackoff[retry - 1]);
+    try {
+      await pushDedupRepository.finish(key, outcome);
+      return { outcome, ...claim };
+    } catch (err) {
+      console.error("[push] Could not record delivery result:", err);
+    }
   }
-  return { outcome: delivered ? "sent" : "failed", attempt };
+  return { outcome: "unknown", ...claim };
 }
 
 const KEEP_PUSH_RECORDS_DAYS = 35;

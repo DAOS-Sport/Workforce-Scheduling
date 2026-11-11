@@ -6,6 +6,7 @@ import {
   evaluateHolidayTable,
   evaluateIntegration,
   evaluateManualJob,
+  evaluatePushDelivery,
   evaluateScheduledJob,
   evaluateSecurity,
   evaluateSyncJob,
@@ -121,6 +122,21 @@ describe("evaluateClockCoverage", () => {
     expect(c(10, 4).level).toBe("yellow");
     expect(c(10, 9).level).toBe("green");
     expect(c(10, 9, 20, 5).level).toBe("yellow");
+  });
+});
+
+describe("evaluatePushDelivery", () => {
+  it("is green when there are no overdue pending pushes", () => {
+    const p = evaluatePushDelivery({ ...base, delivery: { pendingCount: 0, oldestPendingAt: null } });
+    expect(p.level).toBe("green");
+  });
+
+  it("is yellow with the count and earliest Taipei time when delivery is uncertain", () => {
+    const p = evaluatePushDelivery({ ...base, delivery: { pendingCount: 3, oldestPendingAt: "2026-11-10T16:20:00.000Z" } });
+    expect(p.level).toBe("yellow");
+    expect(p.reason).toContain("3 筆");
+    expect(p.reason).toContain("11/11 00:20");
+    expect(p.reason).toContain("台北時間");
   });
 });
 

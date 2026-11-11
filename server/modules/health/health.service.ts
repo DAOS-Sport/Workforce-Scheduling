@@ -11,7 +11,7 @@ import { LEAVE_TYPES } from "../shift/shift.types";
 import { lastHolidayDate } from "../../core/calendar/taiwanHolidays";
 import { taipeiClock } from "../../core/time/taipei";
 import { assembleReport, INTEGRATIONS, MANUAL_JOBS, SCHEDULED_JOBS, type HealthSignals, type ReadError } from "../../core/health/report";
-import type { ClockCoverage } from "../../core/health/rules";
+import type { ClockCoverage, PushDelivery } from "../../core/health/rules";
 import type { HealthReport } from "../../core/health/types";
 import { readIntegrationState, readJobState } from "../../shared/health/healthState";
 
@@ -50,6 +50,19 @@ async function readClockCoverage(now: Date): Promise<ClockCoverage> {
   return { startedShifts: row.started, coveredShifts: row.covered, attemptsToday: row.attempts, failuresToday: row.failures };
 }
 
+async function readPushDelivery(): Promise<PushDelivery> {
+  const result = await db.execute(sql`
+    select count(*)::int as "pendingCount",
+      to_char(min(updated_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "oldestPendingAt"
+    from push_dedup
+    where status = 'pending'
+      and updated_at >= (now() at time zone 'UTC') - interval '7 days'
+      and updated_at < (now() at time zone 'UTC') - interval '10 minutes'
+  `);
+  const row = result.rows[0];
+  return { pendingCount: row.pendingCount as number, oldestPendingAt: row.oldestPendingAt as string | null };
+}
+
 async function probeDatabase(): Promise<{ latencyMs: number | null; error?: string }> {
   const t0 = performance.now();
   try {
@@ -75,6 +88,7 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
     jobs,
     integrations,
     coverage: await attempt(() => readClockCoverage(now)),
+    pushDelivery: await attempt(() => readPushDelivery()),
     database: await probeDatabase(),
     holidayLastDate: lastHolidayDate(),
     security: {
