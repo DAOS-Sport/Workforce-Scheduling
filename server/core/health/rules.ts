@@ -184,3 +184,22 @@ export function evaluateSecurity(input: Base & { signals: SecuritySignals }): Pi
   if (problems.length) return pipeline(input, "red", problems.join("；"));
   return pipeline(input, "green", "必要的安全設定都有設");
 }
+
+export interface ScheduleSaveState {
+  lastCriticalAt?: string;
+  lastUnsavedExitAt?: string;
+}
+
+/** 排班儲存：一小時內有儲存失敗或回讀不符為紅，24 小時內的異常與未儲存離開為黃。 */
+export function evaluateScheduleSave(input: Base & { state?: ScheduleSaveState; now: Date }): Pipeline {
+  const hour = 60 * MINUTE;
+  const recent = (iso: string | undefined, window: number) => {
+    const age = input.now.getTime() - ms(iso);
+    return age >= 0 && age <= window;
+  };
+  const state = { lastFailureAt: input.state?.lastCriticalAt };
+  if (recent(input.state?.lastCriticalAt, hour)) return pipeline(input, "red", "最近 1 小時有排班儲存失敗或回讀不符", state);
+  if (recent(input.state?.lastCriticalAt, 24 * hour)) return pipeline(input, "yellow", "最近 24 小時有排班儲存失敗或回讀不符", state);
+  if (recent(input.state?.lastUnsavedExitAt, 24 * hour)) return pipeline(input, "yellow", "最近 24 小時有未儲存便離開頁面的紀錄", state);
+  return pipeline(input, "green", "最近 24 小時沒有排班儲存異常紀錄", state);
+}

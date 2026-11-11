@@ -11,7 +11,7 @@ import { LEAVE_TYPES } from "../shift/shift.types";
 import { lastHolidayDate } from "../../core/calendar/taiwanHolidays";
 import { taipeiClock } from "../../core/time/taipei";
 import { assembleReport, INTEGRATIONS, MANUAL_JOBS, SCHEDULED_JOBS, type HealthSignals, type ReadError } from "../../core/health/report";
-import type { ClockCoverage } from "../../core/health/rules";
+import type { ClockCoverage, ScheduleSaveState } from "../../core/health/rules";
 import type { HealthReport } from "../../core/health/types";
 import { readIntegrationState, readJobState } from "../../shared/health/healthState";
 
@@ -75,6 +75,7 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
     jobs,
     integrations,
     coverage: await attempt(() => readClockCoverage(now)),
+    scheduleSave: await attempt(() => readScheduleSaveState(now)),
     database: await probeDatabase(),
     holidayLastDate: lastHolidayDate(),
     security: {
@@ -88,4 +89,22 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
 
 export async function buildHealthReport(now: Date): Promise<HealthReport> {
   return assembleReport(await collectSignals(now));
+}
+
+async function readScheduleSaveState(now: Date): Promise<ScheduleSaveState> {
+  const result: any = await db.execute(sql`
+    select
+      max(occurred_at) filter (where
+        (subject ->> 'pipeline' = 'schedule.save' and subject ->> 'event' in ('save_failed', 'readback_mismatch'))
+        or (method = 'POST' and path = ${"/api/admin/schedule-assignments"} and status between 500 and 599)
+      ) as last_critical_at,
+      max(occurred_at) filter (where subject ->> 'pipeline' = 'schedule.save' and subject ->> 'event' = 'unsaved_exit') as last_unsaved_exit_at
+    from app_errors
+    where occurred_at >= ${new Date(now.getTime() - 24 * 3_600_000)} and occurred_at <= ${now}
+  `);
+  const row = result.rows[0];
+  return {
+    ...(row.last_critical_at ? { lastCriticalAt: new Date(row.last_critical_at).toISOString() } : {}),
+    ...(row.last_unsaved_exit_at ? { lastUnsavedExitAt: new Date(row.last_unsaved_exit_at).toISOString() } : {}),
+  };
 }

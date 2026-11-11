@@ -1679,6 +1679,7 @@ const LEGACY_STORAGE_PREFIX = "schedule-v39-";
  */
 let scheduleState = { weekNo: 0, cells: new Map(), meta: new Map(), loaded: false, updatedAt: 0 };
 let _dirty = false;
+let _editRevision = 0;
 let _saveRetryTimer = null;
 let _saveRetryDelay = 0;
 let _serverHadScheduleData = false;
@@ -1688,12 +1689,13 @@ let _serverHadShiftRows = false;
 function currentWeekNo(){ return Number(document.getElementById('weekSelect')?.value || 0) + 1; }
 function nowHm(){ return new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false}); }
 function resetScheduleState(weekNo){
-  scheduleState = { weekNo: Number(weekNo)||0, cells: new Map(), meta: new Map(), loaded: false, updatedAt: scheduleState.updatedAt };
+  scheduleState = { weekNo: Number(weekNo)||0, cells: new Map(), meta: new Map(), loaded: false, updatedAt: 0 };
+  _lastServerUpdatedAt = 0;
   _serverHadScheduleData = false;
   _serverHadWorkRows = false;
   _serverHadShiftRows = false;
 }
-function markDirty(){ _dirty = true; document.body.classList.add('unsaved'); }
+function markDirty(){ _editRevision++; _dirty = true; document.body.classList.add('unsaved'); }
 function hasUnsavedChanges(){ return _dirty; }
 function isEditingFocused(){
   const el = document.activeElement;
@@ -2749,8 +2751,7 @@ function onEnrollOverride(el){
   el.classList.remove('api','empty','mock','loading');
   el.setAttribute('title','雙擊可重置回系統值');
   _lastEditTime=Date.now();
-  _dirty=true;
-  document.body.classList.add('unsaved');
+  markDirty();
   setSyncStatus('pending','待自動儲存');
 }
 function resetEnrollOverride(el){
@@ -2765,8 +2766,7 @@ function resetEnrollOverride(el){
   el.classList.add('api');
   el.setAttribute('title','點擊可輸入手動人數；雙擊重置回系統值');
   _lastEditTime=Date.now();
-  _dirty=true;
-  document.body.classList.add('unsaved');
+  markDirty();
   setSyncStatus('pending','待自動儲存');
 }
 function syncDerivedCellValue(el,value){
@@ -3526,13 +3526,26 @@ let _autoSaveTimer=null;
 let _lastServerUpdatedAt=0;
 let _lastEditTime=0;
 let _isSaving=false;
+let _savePromise=null;
 let _isApplyingRemote=false;
 function setSyncStatus(state,text){const el=document.getElementById('syncStatus');if(!el)return;el.className='sync-status'+(state?' '+state:'');el.textContent=text;}
+function reportScheduleSaveEvent(event){
+  // Fixed event names only: never send notes, assignments or employee data to the error log.
+  fetch('/api/admin/schedule-save-events',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',keepalive:true,body:JSON.stringify({event})}).catch(()=>{});
+}
+window.addEventListener('pagehide',()=>{ if(_dirty) reportScheduleSaveEvent('unsaved_exit'); });
 async function saveToServer(){
-  if(_isSaving)return;
+  if(_isSaving)return _savePromise;
   _isSaving=true;
+  _savePromise=savePendingChanges().finally(()=>{_isSaving=false;_savePromise=null;});
+  return _savePromise;
+}
+async function savePendingChanges(){
+  do {
   clearTimeout(_autoSaveTimer);
   clearTimeout(_saveRetryTimer);
+  _saveRetryTimer=null;
+  if(!_dirty) markDirty();
   setSyncStatus('saving','儲存中');
   // flush 目前 DOM 可編輯格 → state（只更新可見格；display:none 隱藏館別的格 innerText 回傳空字串，不得覆蓋已儲存的值）
   document.querySelectorAll('[contenteditable][data-key]').forEach(el=>{
@@ -3542,42 +3555,63 @@ async function saveToServer(){
     try{localStorage.setItem(LOCAL_STORAGE_PREFIX+el.dataset.key, v);}catch(e){}
   });
   const payload=collectSchedulePayload();
+  const revision=_editRevision;
+  const weekNo=payload.weekNo;
+  payload.expectedUpdatedAt=scheduleState.updatedAt?new Date(scheduleState.updatedAt).toISOString():null;
   if(shouldBlockProtectedEmptySave(payload)){
     _dirty=true;
     document.body.classList.add('unsaved');
     setSyncStatus('error','保護：空白班表未寫入');
     alert('保護機制：目前畫面沒有任何可辨識的排班資料，因此未寫入資料庫，避免覆蓋已排好的班。請先確認班表已載入或重新整理後再存檔。');
-    _isSaving=false;
     return;
   }
   try{
     const res=await fetch(API_ENDPOINTS.scheduleAssignments,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});
-    if(!res.ok)throw new Error('API status '+res.status);
-    const raw=await res.json().catch(()=>null);
+    if(!res.ok){ const error=new Error('API status '+res.status); error.status=res.status; throw error; }
+    const raw=await res.json();
     const saved=unwrapApiPayload(raw)||{};
-    _lastServerUpdatedAt=saved.updatedAt?new Date(saved.updatedAt).getTime():Date.now();
+    // The POST acknowledgement advances our CAS base even if the verification GET fails.
+    if(saved.updatedAt) scheduleState.updatedAt=new Date(saved.updatedAt).getTime();
+    const readback=await fetch(`${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`,{credentials:'include',cache:'no-store'});
+    if(!readback.ok) throw new Error('readback API status '+readback.status);
+    const stored=unwrapApiPayload(await readback.json())||{};
+    if(!saved.updatedAt || stored.updatedAt!==saved.updatedAt){
+      reportScheduleSaveEvent('readback_mismatch');
+      setSyncStatus('error','儲存版本不一致，請重新整理確認');
+      return; // Keep the local draft; do not overwrite the other writer's version on retry.
+    }
+    _lastServerUpdatedAt=new Date(saved.updatedAt).getTime();
     scheduleState.updatedAt=_lastServerUpdatedAt;
     _serverHadScheduleData=payloadHasScheduleValue(payload);
     _serverHadWorkRows=payloadHasWorkRows(payload);
     _serverHadShiftRows=payloadHasShiftRows(payload);
-    _dirty=false;
     _saveRetryDelay=0;
-    document.body.classList.remove('unsaved');
-    setSyncStatus('saved','已儲存 '+nowHm());
+    if(revision===_editRevision){
+      _dirty=false;
+      document.body.classList.remove('unsaved');
+      setSyncStatus('saved','已儲存 '+nowHm());
+    }
   }catch(err){
     console.warn('saveToServer failed:',err);
+    reportScheduleSaveEvent('save_failed');
+    if(err.status===409){
+      clearTimeout(_autoSaveTimer);
+      setSyncStatus('error','儲存衝突：請先複製未存內容，再重新整理確認');
+      return;
+    }
     setSyncStatus('error','儲存失敗，重試中…');
     // backoff 重試；保留 _dirty=true，不更新 _lastEditTime（避免餓死輪詢）
     _saveRetryDelay=Math.min((_saveRetryDelay||1000)*2,10000);
     clearTimeout(_saveRetryTimer);
     _saveRetryTimer=setTimeout(()=>{ if(_dirty) saveToServer(); }, _saveRetryDelay);
-  }finally{_isSaving=false;}
+    return;
+  }
+  } while(_dirty);
 }
 function scheduleAutoSave(){
   if(_isApplyingRemote) return;
   _lastEditTime=Date.now();
-  _dirty=true;
-  document.body.classList.add('unsaved');
+  markDirty();
   setSyncStatus('pending','待自動儲存');
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer=setTimeout(()=>saveToServer(),900);
@@ -3590,11 +3624,13 @@ function startSyncPolling(){
     if(Date.now()-_lastEditTime<5000) return;
     if(isEditingFocused()) return;
     const weekNo=currentWeekNo();
+    const revision=_editRevision;
     let shouldRender=false;
     try{
       const res=await fetch(`${API_ENDPOINTS.scheduleAssignments}?weekNo=${weekNo}`,{credentials:'include'});
       if(!res.ok)throw new Error('schedule assignment API status '+res.status);
       const raw=unwrapApiPayload(await res.json());
+      if(_isSaving || _dirty || revision!==_editRevision || currentWeekNo()!==weekNo || isEditingFocused()) return;
       const serverTime=raw.updatedAt?new Date(raw.updatedAt).getTime():0;
       if(serverTime>0 && serverTime>_lastServerUpdatedAt+1000 && weekNo===scheduleState.weekNo){
         // 遠端較新且仍同一週：整批套用進 state（state 為權威，不寫回個別 localStorage 避免分歧）
@@ -3907,6 +3943,7 @@ function collectSchedulePayload(){
 }
 async function loadExistingScheduleAssignments(){
   const weekNo=currentWeekNo();
+  const revision=_editRevision;
   // 已水合且同一週 → 不重抓（取代原 sessionStorage 守門，避免每次 render 都打 API）
   if(scheduleState.loaded && scheduleState.weekNo===weekNo) return;
   try{
@@ -3916,7 +3953,7 @@ async function loadExistingScheduleAssignments(){
     // 兩個 await 之間使用者可能已經切週。若這是「遲到的舊週回應」，直接丟掉：
     // 否則 3790 會把舊週的 cells 塞進 scheduleState 並 render()，新週的畫面被舊週資料灌滿，
     // 而且 _dirty 被清掉，接著的自動存檔會把這份錯的內容寫回新週。
-    if(currentWeekNo()!==weekNo) return;
+    if(currentWeekNo()!==weekNo || _isSaving || _dirty || revision!==_editRevision) return;
     const serverTime=raw.updatedAt?new Date(raw.updatedAt).getTime():0;
     const entries=Array.isArray(raw.rawEntries)?raw.rawEntries:(Array.isArray(raw.entries)?raw.entries:[]);
     _serverHadScheduleData=payloadHasScheduleValue({rawEntries:entries,assignments:raw.assignments||[],shifts:raw.shifts||[],shiftEntries:raw.shiftEntries||[]});
@@ -3942,6 +3979,7 @@ async function loadExistingScheduleAssignments(){
     const migrated=migrateLocalWeekIntoState(weekNo);
     scheduleState.weekNo=weekNo;
     scheduleState.loaded=true;
+    scheduleState.updatedAt=serverTime;
     if(serverTime>_lastServerUpdatedAt) _lastServerUpdatedAt=serverTime;
     render();
     if(migrated){ saveToServer(); }  // 把本機草稿寫進母資料表 summer_schedule_assignments
@@ -5717,7 +5755,9 @@ async function bootSummerScheduleV40(){
     const sel=ev.target, nextIndex=sel.value;
     if(hasUnsavedChanges()){
       sel.value=_prevWeekIndex;
-      try{ await saveToServer(); } finally { sel.value=nextIndex; }
+      await saveToServer();
+      if(hasUnsavedChanges()) return; // 儲存失敗時保留原週與本機草稿。
+      sel.value=nextIndex;
     }
     _prevWeekIndex=nextIndex;
     resetScheduleState(currentWeekNo());  // 重置為新週（loaded=false → render 尾端會重新從 DB 水合）
