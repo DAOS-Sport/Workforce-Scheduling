@@ -47,13 +47,14 @@ export function hasPermission(permissions: readonly string[], resource: string, 
 
 /** Matches authorization to both Express route variants and decoded static asset paths. */
 export function canonicalAdminPath(path: string): string {
+  if (/%(?:2f|5c)/i.test(path)) throw new Error("路徑編碼錯誤");
   let decoded: string;
   try { decoded = decodeURIComponent(path); } catch { throw new Error("路徑編碼錯誤"); }
   if (decoded.includes("%") || decoded.includes("\\") || /[\u0000-\u001f\u007f]/.test(decoded)) throw new Error("路徑編碼錯誤");
   const segments: string[] = [];
   for (const part of decoded.split("/")) {
     if (!part || part === ".") continue;
-    if (part === "..") segments.pop(); else segments.push(part.toLowerCase());
+    segments.push(part.toLowerCase());
   }
   return "/" + segments.join("/");
 }
