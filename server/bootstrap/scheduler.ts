@@ -15,6 +15,8 @@ import type { CatchUpJob, SlotSchedule } from "../shared/health/catchUp";
 import type { JobTrigger } from "../shared/health/healthState";
 import { runJob } from "../shared/health/runJob";
 import { log } from "../shared/log";
+import { withPipeline } from "../shared/logging/context";
+import { pipelineForJob } from "../core/health/flowRules";
 
 /** How each job runs. Cron and the wake-up catch-up (catchUpJobs) both start a job through here, so they share its lock and record. */
 const runs = {
@@ -52,7 +54,7 @@ export function catchUpJobs(): CatchUpJob[] {
 
 /** Another instance, or a manual trigger, is still running this job; this round has nothing to do. */
 function logBusy(job: string): void {
-  log(`${job} 已有另一個執行個體在執行，本輪略過`, "cron");
+  withPipeline(pipelineForJob(job), () => log(`${job} 已有另一個執行個體在執行，本輪略過`, "warn"));
 }
 
 /**
@@ -95,7 +97,7 @@ export function registerCronJobs(): void {
             log(`同步錯誤: ${syncResult.errors.slice(0, 10).join("; ")}`, "cron");
           }
         } catch (err: any) {
-          log(`Ragic 同步失敗: ${err.message}`, "cron");
+          withPipeline("ragic.employee-sync", () => log(`Ragic 同步失敗: ${err.message}`, "error"));
         }
       },
       { timezone: "Asia/Taipei" },
@@ -109,7 +111,7 @@ export function registerCronJobs(): void {
         try {
           await drainRagicEvents();
         } catch (err: any) {
-          log(`Ragic 補跑失敗: ${err.message}`, "cron");
+          withPipeline("ragic.employee-sync", () => log(`Ragic 補跑失敗: ${err.message}`, "error"));
         }
       },
       { timezone: "Asia/Taipei" },
@@ -131,7 +133,7 @@ export function registerCronJobs(): void {
             "cron",
           );
         } catch (err: any) {
-          log(`班表推撥失敗: ${err.message}`, "cron");
+          withPipeline("push.shift-reminders", () => log(`班表推撥失敗: ${err.message}`, "error"));
         }
       },
       { timezone: "Asia/Taipei" },
@@ -154,7 +156,7 @@ export function registerCronJobs(): void {
             "cron",
           );
         } catch (err: any) {
-          log(`未打卡檢查失敗: ${err.message}`, "cron");
+          withPipeline("push.missing-clock", () => log(`未打卡檢查失敗: ${err.message}`, "error"));
         }
       },
       { timezone: "Asia/Taipei" },
@@ -177,7 +179,7 @@ export function registerCronJobs(): void {
             "cron",
           );
         } catch (err: any) {
-          log(`週班表推播失敗: ${err.message}`, "cron");
+          withPipeline("push.weekly-schedule", () => log(`週班表推播失敗: ${err.message}`, "error"));
         }
       },
       { timezone: "Asia/Taipei" },
@@ -204,7 +206,7 @@ export function registerCronJobs(): void {
             );
           }
         } catch (err: any) {
-          log(`意願填報提醒失敗: ${err.message}`, "cron");
+          withPipeline("push.availability-reminder", () => log(`意願填報提醒失敗: ${err.message}`, "error"));
         }
       },
       { timezone: "Asia/Taipei" },
@@ -227,7 +229,7 @@ export function registerCronJobs(): void {
             "cron",
           );
         } catch (err: any) {
-          log(`週遲到報告推播失敗: ${err.message}`, "cron");
+          withPipeline("report.weekly-late", () => log(`週遲到報告推播失敗: ${err.message}`, "error"));
         }
       },
       { timezone: "Asia/Taipei" },
@@ -244,7 +246,7 @@ export function registerCronJobs(): void {
         if (run.busy) return logBusy("errors.purge");
         log(`錯誤紀錄清理完成: 刪除 ${run.value.deleted} 筆`, "cron");
       } catch (err: any) {
-        log(`錯誤紀錄清理失敗: ${err.message}`, "cron");
+        withPipeline("errors.purge", () => log(`錯誤紀錄清理失敗: ${err.message}`, "error"));
       }
     },
     { timezone: "Asia/Taipei" },
