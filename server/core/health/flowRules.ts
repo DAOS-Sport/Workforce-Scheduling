@@ -111,10 +111,10 @@ export function evaluateFlowPipelines(s: FlowSignals): Pipeline[] {
       p = combine(p, light(d, unreadable(pending) ? "red" : pending > 0 ? "yellow" : "green",
         unreadable(pending) ? "無法觀測：讀取待審申請失敗" : `超過 7 天待審 ${pending} 筆`, `${d.id} pending created_at`));
     }
-    if (d.id === "portal.login" || d.id === "admin.login") p = combine(p, errors(d, s.logins[d.id], "app_logs（登入驗證失敗）", "1 小時", true));
+    if (d.id === "portal.login" || d.id === "admin.login") p = combine(p, errors(d, s.logins[d.id], "pipeline_logs（登入驗證失敗）", "1 小時", true));
     if (d.id === "line.webhook") p = combine(p, errors(d, s.lineWebhook, "line_webhook_events（failed）"));
     if (d.id === "manual.weekly-attendance") {
-      p = combine(p, errors(d, s.weeklyAttendanceErrors, "app_logs（manual.weekly-attendance error）"));
+      p = combine(p, errors(d, s.weeklyAttendanceErrors, "pipeline_logs（manual.weekly-attendance error）"));
       const state = s.weeklyAttendance;
       p = combine(p, unreadable(state)
         ? light(d, "red", "無法觀測：讀取手動通知結果失敗", "health:job:manual.weekly-attendance")
@@ -123,13 +123,13 @@ export function evaluateFlowPipelines(s: FlowSignals): Pipeline[] {
     return p;
   });
   pipelines.push(errors({ id: "server.errors", name: "全站伺服器錯誤" }, s.serverErrors, "app_errors（全站 5xx）", "15 分鐘"));
-  const catchUp = errors({ id: "scheduler.catch-up", name: "排程補跑" }, s.catchUp, "app_logs（scheduler.catch-up）");
+  const catchUp = errors({ id: "scheduler.catch-up", name: "排程補跑" }, s.catchUp, "pipeline_logs（scheduler.catch-up）");
   if (!unreadable(s.catchUp)) catchUp.reason += `；24 小時補跑 ${s.catchUp.attempts24h} 次`;
   pipelines.push(catchUp);
   const restart = { id: "server.restarts", name: "伺服器啟動次數" };
   pipelines.push(unreadable(s.restarts)
-    ? light(restart, "yellow", "無法觀測：讀取啟動次數失敗", "app_logs（server.restarts startup）")
-    : light(restart, s.restarts > 3 ? "yellow" : "green", `24 小時啟動 ${s.restarts} 次（超過 3 次提醒）`, "app_logs（server.restarts startup）"));
+    ? light(restart, "yellow", "無法觀測：讀取啟動次數失敗", "pipeline_logs（server.restarts startup）")
+    : light(restart, s.restarts > 3 ? "yellow" : "green", `24 小時啟動 ${s.restarts} 次（超過 3 次提醒）`, "pipeline_logs（server.restarts startup）"));
   const purge = { id: "errors.purge", name: "錯誤紀錄清理（每天 04:00）", source: "health:job:errors.purge" };
   pipelines.push(unreadable(s.purge)
     ? light(purge, "red", "無法觀測：讀取清理結果失敗", purge.source)

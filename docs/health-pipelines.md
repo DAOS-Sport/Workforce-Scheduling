@@ -23,9 +23,9 @@
 | `guideline.ack` | 工作須知、簽收；`/api/guidelines`、`/api/guideline-ack`、portal guidelines、acknowledge-all | — |
 | `attendance.import` | 出勤匯入、紀錄、刪除；`/api/attendance-upload(s)`、`/api/attendance-records` | — |
 | `summer.schedule` | 暑假排班、課程匯入、發布、意願；`/api/schedule`、admin summer、schedule-assignments、manual-schedule-courses、portal summer 入口 | — |
-| `portal.login` | 員工登入；portal line-callback、verify、dev-login、dev-employees | 對應 `app_logs` warn/error 驗證失敗；24 小時內只黃，路由 5xx 仍照共用規則 |
+| `portal.login` | 員工登入；portal line-callback、verify、dev-login、dev-employees | 對應 `pipeline_logs` warn/error 驗證失敗；24 小時內只黃，路由 5xx 仍照共用規則 |
 | `portal.read` | 員工班表、出勤、同事、外出；portal my-shifts、shifts、my-attendance、workmates、upcoming-coworkers、outing-record(s) 與 `/api/outing-records` | — |
-| `admin.login` | 管理員 login、dev-login、me、logout | 對應 `app_logs` warn/error 驗證失敗；24 小時內只黃，路由 5xx 仍照共用規則 |
+| `admin.login` | 管理員 login、dev-login、me、logout | 對應 `pipeline_logs` warn/error 驗證失敗；24 小時內只黃，路由 5xx 仍照共用規則 |
 | `employee.manage` | 員工管理；`/api/employees`、`/api/employees-all` | — |
 | `venue.manage` | 場館與地區；`/api/venues`、`venues-all`、`regions`、portal region-hours | — |
 | `system.config` | 系統設定、薪資費率；`/api/system-config`、`/api/salary-rates` | — |
@@ -38,7 +38,7 @@
 | `shift.manage` | 一般班次新增、修改、刪除、批次、複製、取消與恢復；`/api/shifts`、`shifts-cancelled` | — |
 | `clock.records` | 打卡紀錄、報表、原因補登；`/api/clock-records`、`/api/reports/clock-records`、`/api/reports/anomalies`、portal clock-records | — |
 | `clock.entry` | LIFF 打卡入口；`/api/liff/clock-in` | — |
-| `manual.weekly-attendance` | 每週出勤報表及手動通知；`/api/weekly-attendance` | 最後一次 job 結果、同管線 `app_logs` error |
+| `manual.weekly-attendance` | 每週出勤報表及手動通知；`/api/weekly-attendance` | 最後一次 job 結果、同管線 `pipeline_logs` error |
 | `line.webhook` | LINE webhook；`/api/line/webhook` | `line_webhook_events.status='failed'` 的 1h/24h 筆數 |
 | `errors.browse` | 管理員錯誤紀錄查詢；`/api/admin/errors` | — |
 
@@ -51,8 +51,8 @@
 | id | 來源 | 綠／黃／紅 |
 | --- | --- | --- |
 | `server.errors` | 全站 `app_errors` 5xx，包含未歸屬路由 | 24h 無錯綠；24h 較舊錯黃；15 分鐘內錯紅 |
-| `server.restarts` | `app_logs` 的 `pipeline='server.restarts'`、`level='info'`、`message='server.started'` | 24h ≤3 次綠；>3 次黃；讀取失敗黃；不會紅 |
-| `scheduler.catch-up` | `app_logs` 的同名 pipeline；`catch-up.started` 計次，error 計失敗 | 無失敗綠；24h 較舊失敗黃；1h 失敗紅；顯示24h補跑次數 |
+| `server.restarts` | `pipeline_logs` 的 `pipeline='server.restarts'`、`level='info'`、`message='server.started'` | 24h ≤3 次綠；>3 次黃；讀取失敗黃；不會紅 |
+| `scheduler.catch-up` | `pipeline_logs` 的同名 pipeline；`catch-up.started` 計次，error 計失敗 | 無失敗綠；24h 較舊失敗黃；1h 失敗紅；顯示24h補跑次數 |
 | `errors.purge` | `system_configs['health:job:errors.purge']` | 每天台北04:00、30分鐘寬限；最近應執行輪次成功綠；無紀錄或本環境不跑排程黃；應跑未成功／失敗紅 |
 
 `server.restarts` 計算持久化啟動事件，涵蓋多個執行個體，不從單一程序的 uptime 推估。`catch-up.completed` 不再多算一次補跑；計次僅表示嘗試次數，不等於每次成功，也不表示有新通知送達。日期欄位為 UTC 的無時區 timestamp 時，查詢明確用 `AT TIME ZONE 'UTC'`；`app_errors.occurred_at` 則使用 timestamptz。
@@ -80,4 +80,4 @@
 - 自由文字錯誤：`server/bootstrap/scheduler.ts:98`、`:112`、`:134`、`:157`、`:180`、`:207`、`:230`、`:247`，`server/modules/ragic/ragic.service.ts:77`、`:136`，`server/shared/health/healthState.ts:36`，以及 `server/bootstrap/migrations.ts:233` 起各 migration catch 的 `err.message`。
 - Error／錯誤字串參數：`server/modules/system/system.service.ts:597`、`:604`；`server/modules/line/lineWebhook.service.ts:183`；`server/modules/mcp/mcp.routes.ts:269`；`server/modules/errors/errors.service.ts:42`；`server/modules/health/health.routes.ts:57`。anomaly、importExport、portal.outing、liff、notification 的 route catch 也會記 Error；`server/shared/http/errorHandler.ts` 會處理原始 message/stack。
 
-一般 info 保持在既有 stdout，只有明確的結構事件持久化；console 物件參數以 `[object omitted]` 記錄，Error 僅取 message。已知秘密格式可遮蔽，但任意姓名、原因、備註及上游自由文字無法可靠自動辨識；字串或 Error.message 仍可能含這些內容，不能宣稱完整個資去敏。普通 info 不進 `app_logs` 也不表示 stdout 已去敏。此工作流盤點不修改上述業務日誌呼叫，也不以遮蔽測試宣稱任意自由文字安全；健康 collector 只回傳數量、時間與固定讀取失敗訊息。
+一般 info 保持在既有 stdout，只有明確的結構事件持久化；console 物件參數以 `[object omitted]` 記錄，Error 僅取 message。已知秘密格式可遮蔽，但任意姓名、原因、備註及上游自由文字無法可靠自動辨識；字串或 Error.message 仍可能含這些內容，不能宣稱完整個資去敏。普通 info 不進 `pipeline_logs` 也不表示 stdout 已去敏。此工作流盤點不修改上述業務日誌呼叫，也不以遮蔽測試宣稱任意自由文字安全；健康 collector 只回傳數量、時間與固定讀取失敗訊息。

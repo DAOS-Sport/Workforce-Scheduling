@@ -13,7 +13,7 @@ async function error(path: string, minutesAgo: number, status = 500) {
   await pool.query("insert into app_errors(request_id,method,path,status,message,occurred_at) values('flow-test','POST',$1,$2,'fixture',$3::timestamptz)", [path, status, at(minutesAgo)]);
 }
 async function event(pipeline: string, level: string, message: string, minutesAgo: number) {
-  await pool.query("insert into app_logs(pipeline,level,message,occurred_at) values($1,$2,$3,$4::timestamptz at time zone 'UTC')", [pipeline, level, message, at(minutesAgo)]);
+  await pool.query("insert into pipeline_logs(pipeline,level,message,occurred_at) values($1,$2,$3,$4::timestamptz at time zone 'UTC')", [pipeline, level, message, at(minutesAgo)]);
 }
 
 describe("read-only workflow signal collection against PostgreSQL", () => {
@@ -28,7 +28,7 @@ describe("read-only workflow signal collection against PostgreSQL", () => {
     const leave = report.pipelines.find((p) => p.id === "leave.request")!;
     expect(leave.level).toBe("red");
     expect(leave.logs).toEqual([expect.objectContaining({ pipeline: "leave.request", message: "synthetic warning" })]);
-    expect((await pool.query("select count(*)::int as count from app_logs")).rows[0].count).toBe(1);
+    expect((await pool.query("select count(*)::int as count from pipeline_logs")).rows[0].count).toBe(1);
     expect((await pool.query("select count(*)::int as count from system_configs")).rows[0].count).toBe(0);
   });
   it("attributes 5xx by exact route prefix and counts the 1h/24h windows", async () => {

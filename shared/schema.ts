@@ -3,7 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 /** Append-only diagnostic records, retained for 14 days. */
-export const appLogs = pgTable("app_logs", {
+export const appLogs = pgTable("pipeline_logs", {
   id: serial("id").primaryKey(),
   occurredAt: timestamp("occurred_at").notNull().defaultNow(),
   level: text("level").notNull(),
@@ -11,8 +11,8 @@ export const appLogs = pgTable("app_logs", {
   requestId: text("request_id"),
   message: text("message").notNull(),
 }, (t) => [
-  index("app_logs_pipeline_time_idx").on(t.pipeline, t.occurredAt, t.id),
-  index("app_logs_time_idx").on(t.occurredAt, t.id),
+  index("pipeline_logs_pipeline_time_idx").on(t.pipeline, t.occurredAt, t.id),
+  index("pipeline_logs_time_idx").on(t.occurredAt, t.id),
 ]);
 
 export const regions = pgTable("regions", {

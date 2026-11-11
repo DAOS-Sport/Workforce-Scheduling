@@ -32,7 +32,7 @@ async function withHealthApp(run: (base: string) => Promise<void>) {
 
 async function insert(at: string, level: string, pipeline: string, message: string) {
   const result = await pool.query<{ id: number }>(
-    "insert into app_logs (occurred_at, level, pipeline, request_id, message) values ($1::timestamp, $2, $3, $4, $5) returning id",
+    "insert into pipeline_logs (occurred_at, level, pipeline, request_id, message) values ($1::timestamp, $2, $3, $4, $5) returning id",
     [at, level, pipeline, "request-itest", message],
   );
   return result.rows[0].id;

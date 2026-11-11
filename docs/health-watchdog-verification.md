@@ -2,6 +2,8 @@
 
 日期：2026-11-11；基底 `0a735744ffeb898011a909bfcfdb0c6e36b811c0`；分支 `boyam01/ws-watchdog-all`。實作快照 `c7e26eb`；最終程式版本 `f060a02`，本文件後續提交僅補驗收收據。原卡 F14、F10 文字與檢查點未改。本紀錄只涵蓋本機合成資料、mock 外部服務及拋棄式 PostgreSQL，不代表正式站驗收。
 
+2026-11-11 整併更新：新診斷表名稱依本輪追加需求統一為 `pipeline_logs`，SQL 檔案路徑仍為 `docs/sql/20261111-app-logs.sql`。下列版本、測試數字及 FAIL／BLOCKED 均為歷史收據，不代表更名後版本已驗；本輪最新驗證結果見文末追加紀錄。
+
 **交付狀態：功能／自動化驗證通過；最終清理 BLOCKED。** 清理命令在 CreateProcess 階段被拒絕（`rejected: blocked by policy`），未執行。依工單平台拒絕即停，沒有換工具重做刪除。`node_modules` junction 與 `.cache/` 兩個本任務測試 helper 仍保留，因此不宣稱工作樹乾淨或 DONE WHEN 全部達成。
 
 ## 結果與驗收對應
@@ -10,7 +12,7 @@
 - F14①／③：token 健康 API 與後台登入健康報告呼叫同一 service，附每條最近 24h、最多 20 筆 warn/error；IT 監控新增一個日誌區塊及查詢／載入更多。
 - F14②：保留錯誤訊息與 requestId；AI 主因判讀依工單排除。
 - F10①：既有 5xx 通用錯誤代碼與 `app_errors` 寫入行為保留；既有錯誤整合測試包含在全套。F10②／③：既有 `/api/admin/errors?requestId=` 保留，新增日誌以時間／管線／等級分頁，顯示 requestId；業務資料關聯仍由 `app_errors.subject` 提供，不複製 request body。
-- 健康查詢排除醒來補跑；真 health service 測試確認 47 條、日誌與查詢不新增 `app_logs`／`system_configs`。
+- 健康查詢排除醒來補跑；真 health service 測試確認 47 條、日誌與查詢不新增 `pipeline_logs`／`system_configs`。
 - 瀏覽器驗視 `NOT_RUN`：CUA `getState` 回傳原文 `aborted before dispatch`，未提供原因；未換工具重做。React DOM 渲染／查詢／分頁互動另有單元測試，不能代稱瀏覽器驗收。
 
 ## 測試與原始證據
@@ -69,8 +71,8 @@
 | `server/shared/logging/context.ts` | 隔離 HTTP／job 的管線 ALS。 |
 | `server/shared/logging/requestLogging.ts` | 依路徑歸管線，只以路徑／狀態記登入拒絕，不記 body/query。 |
 | `server/shared/logging/persistence.ts` | 啟動事件與14天保留期服務。 |
-| `server/shared/logging/persistence.itest.ts` | 真 app_logs 寫入、job映射與保留期清理。 |
-| `server/infra/logs.ts` | 寫入／清理 app_logs 的資料存取。 |
+| `server/shared/logging/persistence.itest.ts` | 真 pipeline_logs 寫入、job映射與保留期清理。 |
+| `server/infra/logs.ts` | 寫入／清理 pipeline_logs 的資料存取。 |
 | `server/shared/log.ts` | 接 warn/error 與既有 error log，不重複收補跑事件。 |
 | `server/shared/http/errorHandler.ts` | 在既有 requestContext 接管線 ALS，保留原錯誤代碼行為。 |
 | `server/shared/health/healthState.ts` | 集中 job 起訖／結果與 integration 失敗日誌。 |
@@ -79,7 +81,7 @@
 | `server/bootstrap/index.ts` | 啟動共用持久日誌與 startup 事件。 |
 | `server/modules/errors/errors.service.ts` | 沿既有 errors.purge 清14天前日誌，維持既有回傳。 |
 | `server/modules/system/system.salary.routes.ts` | 手動週出勤通知記最後一次 job 結果。 |
-| `shared/schema.ts` | 只新增 app_logs 與兩個索引。 |
+| `shared/schema.ts` | 只新增 pipeline_logs 與兩個索引。 |
 | `client/src/components/health-logs.tsx` | 單一日誌清單區塊，管線／時間／等級與載入更多。 |
 | `client/src/components/health-logs.test.tsx` | 同份報告嵌入、查詢及分頁互動測試。 |
 | `client/src/pages/it-monitor.tsx` | 接入日誌清單，維持原健康頁與刷新行為。 |
@@ -100,7 +102,28 @@
 - `/api/health/logs`、`/api/admin/health/logs` 的 since 使用 UTC ISO `Z`；預設50筆，最大100；`level=warn` 包含error，cursor 為不透明 keyset。
 - 日誌 DB 寫入失敗直接丟棄；滿載丟最舊尚未送出的項目；程序被強制終止可遺失未 flush 的最後一批。這是非阻塞批次方案的限制，沒有宣稱無損稽核。
 - 姓名與任意自由文字仍可能存在於原始字串／Error.message；呼叫點清單在盤點文件。已知格式遮蔽通過不代表所有個資已清除。
-- 新資料表／SQL：`app_logs`，僅新增；負責人需在適當資料庫另行執行附帶 SQL，再按既定合併順序整併與部署。本次沒有 push／PR／部署，也未更動監控中樞。
+- 新資料表／SQL：`pipeline_logs`，僅新增；負責人需在適當資料庫另行執行附帶 SQL，再按既定合併順序整併與部署。本次沒有 push／PR／部署，也未更動監控中樞。
 - 最終程式f060a02已測；本文為收據提交，不改程式。原實體依賴保留於TEMP；隔離baseline worktree已移除，共用依賴目標未刪除。最終清理受平台拒絕：main junction與`.cache/ws-watchdog-all-itest-taipei.sh`、`.cache/ws-watchdog-all.itest-taipei.config.ts`仍在，工作樹含`.cache/`未追蹤項目。測試runner均已取得結束碼，兩個執行Agent完成；最後一份OS程序核對命令也未執行，不冒稱已獨立核對程序清零。Obsidian完整回寫專案目標／經驗；遠端同步交既有機制並另行查核。
 - 其他四張工單的分支尚未合入本分支，本結果不代表指定合併順序完成後的整合版本已驗收。
 - 無新增業務決策；後續由負責人執行SQL、依既定順序整併與部署，並安排瀏覽器／正式站驗收。
+
+## 2026-11-11 追加：獨立診斷日誌表
+
+起始 `8254d48400edd15b42d1800acbfcb7df1361a464`，分支 `boyam01/ws-integrate-fix`。本輪只將診斷表改為 `pipeline_logs`，索引為 `pipeline_logs_pipeline_time_idx`、`pipeline_logs_time_idx`；保留 `appLogs` 變數及所有欄位、資料存取函式與燈號門檻。交付 SQL 仍在 [20261111-app-logs.sql](sql/20261111-app-logs.sql)，僅有建立新表與兩索引的三個 `CREATE IF NOT EXISTS` 敘述，未對開發庫或正式庫執行。
+
+新增 `server/shared/logging/pipelineLogs.legacy.itest.ts`：在 `scripts/itest.sh` 新建的拋棄式 PostgreSQL 中，先於獨立 schema 建立不相容遺留表，再執行交付 SQL。使用真正的 DB module、Drizzle batch 寫入、分頁／附加日誌及 flow 訊號查詢，沒有 mock DB；確認新表 5 筆、兩索引存在、四條日誌管線與啟動次數讀取成功，遺留表維持 0 筆且欄位定義不變。該檔是使用者允許的唯一遺留名稱測試例外。
+
+| 檢查 | 本輪實跑結果 |
+| --- | --- |
+| 同一份碰撞 itest，改名前 `8254d48` | 1 檔／1 FAIL；原 SQL 在既有異欄表上建立索引時報 `42703: column pipeline does not exist`。 |
+| 改名後碰撞與相關 PG 回歸 | 4 檔／17 PASS，exit 0。 |
+| `npx vitest run` | 78 檔／816 PASS，exit 0；預設 workers、原 timeout。 |
+| `bash scripts/itest.sh` | 39 檔／403 PASS，exit 0；較前版新增 1 檔／1 case。 |
+| `TZ=Asia/Taipei` 相關健康 unit | 2 檔／141 PASS，exit 0。 |
+| `npx tsc --noEmit -p . --tsBuildInfoFile <worktree 外專屬路徑>`，8GB heap | 30 筆既有診斷，exit 2；與本輪 `8254d48` 基準及前輪保存的 `0a73574` 原始診斷，按檔名／TS code／完整訊息多重集合比對，新增 0／移除 0。 |
+| 三個表綁定突變 | Drizzle 寫入、日誌 raw SQL、flow raw SQL 分別改回錯誤來源，三次均被同一碰撞 itest 捕獲並精準還原。 |
+| 引用盤點 | server／shared／client 僅新增碰撞 itest 的 6 行 fixture／斷言；全 repo 另兩行是原有遺留說明；SQL 零命中。 |
+
+所有完整命令僅另附 default／JSON reporter 取證，未改測試範圍、timeout 或設定。原始 stdout、JSON、RED、突變、獨立 testcase 重算與 tsc 比較保存在 `C:/Users/ians0/AppData/Local/Temp/WS-INTEGRATE-20261111-LOGNAME/`：`collision-red.log/json`、`collision-and-related-green.log/json`、`vitest-final.log/json`、`itest-final.log/json`、`taipei-health.log/json`、`mutation-*.log/json`、`raw-recount-final.json`、`tsc-comparison.json`。新測試只有使用 `scripts/itest.sh` 真入口的結果算入本紀錄；沒有直接連任意本機資料庫。
+
+既有 `node_modules` junction 依本輪指示保留，由主 Session 收尾。本輪拋棄式 PG 由腳本停止，新增測試的獨立 pool 亦在 `finally` 關閉；未啟動其他背景服務。沒有 push／Publish、沒有改中樞，亦未連開發庫或正式庫。原有歷史失敗與清理 BLOCKED 紀錄保留。

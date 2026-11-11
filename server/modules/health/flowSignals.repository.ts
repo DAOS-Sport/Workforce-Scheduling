@@ -42,7 +42,7 @@ async function readLogErrors(pipeline: string, now: Date): Promise<FlowSignal<Fl
     const { rows } = await pool.query(
       `select count(*) filter (where occurred_at >= ($2::timestamptz at time zone 'UTC')) as recent,
               count(*) as day, max(occurred_at) at time zone 'UTC' as last_failure_at
-         from app_logs
+         from pipeline_logs
         where pipeline = $4 and (level = 'error' or ($4 in ('portal.login', 'admin.login') and level = 'warn'))
           and occurred_at >= ($1::timestamptz at time zone 'UTC') and occurred_at <= ($3::timestamptz at time zone 'UTC')`,
       [new Date(now.getTime() - 24 * HOUR).toISOString(), new Date(now.getTime() - HOUR).toISOString(), now.toISOString(), pipeline],
@@ -86,7 +86,7 @@ export async function readFlowSignals(now: Date): Promise<Omit<FlowSignals, "sch
     }),
     read("啟動次數", async () => {
       const { rows } = await pool.query(
-        `select count(*) as count from app_logs where pipeline = 'server.restarts' and level = 'info' and message = 'server.started'
+        `select count(*) as count from pipeline_logs where pipeline = 'server.restarts' and level = 'info' and message = 'server.started'
           and occurred_at >= ($1::timestamptz at time zone 'UTC') and occurred_at <= ($2::timestamptz at time zone 'UTC')`, [day, end]);
       return Number(rows[0].count);
     }),
@@ -106,7 +106,7 @@ export async function readFlowSignals(now: Date): Promise<Omit<FlowSignals, "sch
                 count(*) filter (where level = 'error') as day,
                 max(occurred_at) filter (where level = 'error') at time zone 'UTC' as last_failure_at,
                 count(*) filter (where level = 'info' and message = 'catch-up.started') as attempts
-           from app_logs where pipeline = 'scheduler.catch-up'
+           from pipeline_logs where pipeline = 'scheduler.catch-up'
             and occurred_at >= ($1::timestamptz at time zone 'UTC') and occurred_at <= ($3::timestamptz at time zone 'UTC')`, [day, hour, end]);
       return { ...window(rows[0]), attempts24h: Number(rows[0].attempts) };
     }),
