@@ -5,6 +5,7 @@
 import { taipeiClock } from "../time/taipei";
 import {
   evaluateClockCoverage,
+  evaluateClockNeverSuccess,
   evaluateDatabase,
   evaluateHolidayTable,
   evaluateIntegration,
@@ -16,6 +17,7 @@ import {
   evaluateWebhook,
   type ClockCoverage,
   type PushDelivery,
+  type ClockNeverSuccess,
   type SecuritySignals,
 } from "./rules";
 import { worst, type HealthReport, type IntegrationState, type JobSchedule, type JobState, type Pipeline } from "./types";
@@ -60,6 +62,7 @@ export interface HealthSignals {
   integrations: Record<IntegrationKey, Signal<IntegrationState | undefined>>;
   coverage: Signal<ClockCoverage>;
   pushDelivery: Signal<PushDelivery>;
+  clockNeverSuccess: Signal<ClockNeverSuccess>;
   database: { latencyMs: number | null; error?: string };
   holidayLastDate: string;
   security: SecuritySignals;
@@ -116,6 +119,7 @@ export function assembleReport(s: HealthSignals): HealthReport {
   pipelines.push(evaluateDatabase({ id: "database", name: "資料庫", source: "select 1", latencyMs: s.database.latencyMs, error: s.database.error }));
   pipelines.push(evaluateHolidayTable({ id: "holiday-table", name: "國定假日表", source: "server/core/calendar/taiwanHolidays.ts", lastDate: s.holidayLastDate, today: taipeiClock(s.now).date }));
   pipelines.push(evaluateSecurity({ id: "security-config", name: "安全設定", source: "環境變數", signals: s.security }));
+  pipelines.push(isReadError(s.clockNeverSuccess) ? unreadable("clock.never-success", "有班沒打卡", "shifts / clock_records", { readError: "有班沒打卡訊號讀取失敗" }) : evaluateClockNeverSuccess({ id: "clock.never-success", name: "有班沒打卡", source: "shifts / clock_records", signals: s.clockNeverSuccess }));
 
   return {
     system: SYSTEM_ID,

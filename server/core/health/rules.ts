@@ -200,3 +200,20 @@ export function evaluatePushDelivery(input: Base & { delivery: PushDelivery }): 
   if (pendingCount > 0) return pipeline(input, "yellow", `最近 7 天有 ${pendingCount} 筆較舊推播等待確認超過 10 分鐘，最早 ${at(oldestPendingAt!)}（台北時間）`);
   return pipeline(input, "green", "最近 7 天沒有等待確認超過 10 分鐘的推播");
 }
+
+export const CLOCK_NEVER_SUCCESS_MIN_SHIFTS = 3;
+export const CLOCK_NEVER_SUCCESS_THRESHOLD_DAYS = 7;
+export const CLOCK_NEVER_SUCCESS_LOOKBACK_DAYS = 14;
+export const CLOCK_NEVER_SUCCESS_NEW_HOURS = 24;
+
+export interface ClockNeverSuccess {
+  affectedEmployees: number;
+  newlyQualifiedEmployees: number;
+}
+
+export function evaluateClockNeverSuccess(input: Base & { signals: ClockNeverSuccess }): Pipeline {
+  const { affectedEmployees, newlyQualifiedEmployees } = input.signals;
+  if (newlyQualifiedEmployees > 0) return pipeline(input, "red", `最近 ${CLOCK_NEVER_SUCCESS_NEW_HOURS} 小時新達門檻 ${newlyQualifiedEmployees} 人；有班沒成功上班打卡共 ${affectedEmployees} 人`);
+  if (affectedEmployees > 0) return pipeline(input, "yellow", `有班沒成功上班打卡 ${affectedEmployees} 人（持續中或未達 ${CLOCK_NEVER_SUCCESS_THRESHOLD_DAYS} 天 ${CLOCK_NEVER_SUCCESS_MIN_SHIFTS} 班門檻）`);
+  return pipeline(input, "green", "有班沒成功上班打卡 0 人");
+}
