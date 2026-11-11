@@ -5,6 +5,14 @@ import { ok, created, fail } from "../../shared/http/response";
 import { requireAdmin } from "../../shared/middleware/requireAdmin";
 
 export function mountLeaveRoutes(_httpServer: Server, app: Express): void {
+  app.post("/api/leave-requests/:id/revoke", requireAdmin, async (req, res) => {
+    try { ok(res, await leaveService.revoke(Number(req.params.id), req.body?.reason)); }
+    catch (err: any) { fail(res, err.status || 500, err.message); }
+  });
+  app.patch("/api/leave-requests/:id/adjust", requireAdmin, async (req, res) => {
+    try { ok(res, await leaveService.adjustRequest(Number(req.params.id), req.body)); }
+    catch (err: any) { fail(res, err.name === "ZodError" ? 400 : err.status || 500, err.message); }
+  });
   app.post("/api/portal/leave-request", async (req, res) => {
     try {
       created(res, await leaveService.submit(req.body));

@@ -2,6 +2,10 @@
 import { describe,it,expect,vi } from "vitest";
 import express from "express";
 import { createServer } from "node:http";
+vi.mock("../admin/admin.service", async () => {
+ const { ADMIN_PERMISSION_KEYS } = await import("@shared/admin-permissions");
+ return { adminService: { resolveSession: vi.fn(async () => ({ id: 1, name: "測試操作員", authKind: "personal", permissions: [...ADMIN_PERMISSION_KEYS] })) } };
+});
 const f=vi.hoisted(()=>({
  employees:[
  {id:1,name:"Active",employeeCode:"A",role:"教練",employmentType:"part_time",regionId:1,status:"active",phone:"PRIVATE"},

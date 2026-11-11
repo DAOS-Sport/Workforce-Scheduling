@@ -21,6 +21,8 @@ import { registerInternalApi } from "./modules/internal/internal.routes";
 import { gateAdminApi } from "./shared/middleware/requireAdmin";
 import { registerModuleRoutes } from "./modules/_registry";
 import { mountAdminAuthRoutes } from "./modules/admin/admin.routes";
+import { mountAdminPermissionsRoutes } from "./modules/admin/admin.permissions.routes";
+import { mountAuditRoutes } from "./modules/audit/audit.routes";
 import { corsFor } from "./shared/middleware/cors";
 
 export async function registerRoutes(
@@ -44,6 +46,8 @@ export async function registerRoutes(
   //   c) Single shared admin gate. Public-prefix bypass list lives in
   //      server/config/openApiPrefixes.ts.
   app.use(gateAdminApi);
+  mountAdminPermissionsRoutes(app);
+  mountAuditRoutes(app);
 
   // ── 3. Domain modules ──────────────────────────────────────────────────
   registerModuleRoutes(httpServer, app);

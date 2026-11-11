@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockBuild } = vi.hoisted(() => ({ mockBuild: vi.fn() }));
 vi.mock("./health.service", () => ({ buildHealthReport: mockBuild }));
+vi.mock("../admin/admin.service", () => ({ adminService: {
+  resolveSession: vi.fn(async () => ({ id: 1, name: "測試操作員", authKind: "personal", permissions: ["it-monitor:read"] })),
+} }));
 
 import { gateAdminApi } from "../../shared/middleware/requireAdmin";
 import { mountHealthRoutes } from "./health.routes";

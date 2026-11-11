@@ -1,7 +1,9 @@
 import { db } from "../../infra/db";
 import type { Executor } from "../../infra/db/tx";
+import { auditActorLabel, currentAuditActor } from "../../shared/audit/actor";
+import { auditedAtomic, insertAudit, mutationLink, prepareAudit } from "../../shared/audit/recorder";
 import { httpError } from "../../shared/errors";
-import { eq, and, gte, lte, inArray, desc, not, like, or, isNull } from "drizzle-orm";
+import { eq, and, gte, lte, inArray, desc, not, like, or, isNull, sql } from "drizzle-orm";
 import {
   shifts,
   shiftAuditLog,
@@ -16,7 +18,14 @@ import {
  * A write and its audit row commit together. Called with the shared `db` this opens a transaction; called with
  * a transaction it opens a savepoint, so the caller's own transaction still decides the final commit.
  */
-const atomic = <T>(tx: Executor, fn: (inner: Executor) => Promise<T>): Promise<T> => tx.transaction((inner) => fn(inner));
+const atomic = auditedAtomic;
+
+async function appendAudit(tx: Executor, shiftId: number, action: string, source: string, payload: Record<string, unknown>) {
+  await insertAudit(async () => {
+    const link = await mutationLink(tx, "shifts", shiftId);
+    await tx.insert(shiftAuditLog).values({ shiftId, action, actor: auditActorLabel(), createdAt: sql`timezone('UTC',clock_timestamp())`, payload: { ...payload, actor: currentAuditActor(), source, ...link } });
+  });
+}
 
 export const shiftRepository = {
   async getShiftsByRegionAndDateRange(regionId: number, startDate: string, endDate: string, tx: Executor = db): Promise<Shift[]> {
@@ -89,19 +98,16 @@ export const shiftRepository = {
 
   async createShift(data: InsertShift, actor: string = "system", tx: Executor = db): Promise<Shift> {
     return atomic(tx, async (t) => {
+      await prepareAudit(t);
       const [shift] = await t.insert(shifts).values(data).returning();
-      await t.insert(shiftAuditLog).values({
-        shiftId: shift.id,
-        action: "create",
-        actor,
-        payload: { after: shift },
-      });
+      await appendAudit(t, shift.id, "create", actor, { after: shift });
       return shift;
     });
   },
 
   async updateShift(id: number, data: Partial<InsertShift>, actor: string = "system", force: boolean = false, tx: Executor = db): Promise<Shift | undefined> {
     return atomic(tx, async (t) => {
+      await prepareAudit(t);
       const before = await shiftRepository.getShiftForUpdate(id, t);
       // Task #50 protection: any caller mutating an active shift MUST explicitly
       // opt in with force=true. Admin UI routes set force=true (admin chose to
@@ -112,18 +118,14 @@ export const shiftRepository = {
       }
       const [shift] = await t.update(shifts).set(data).where(eq(shifts.id, id)).returning();
       if (!shift) return undefined;
-      await t.insert(shiftAuditLog).values({
-        shiftId: id,
-        action: "update",
-        actor,
-        payload: { before, after: shift, changes: data },
-      });
+      await appendAudit(t, id, "update", actor, { before, after: shift, changes: data });
       return shift;
     });
   },
 
   async deleteShift(id: number, actor: string = "system", reason?: string, force: boolean = false, tx: Executor = db): Promise<boolean> {
     return atomic(tx, async (t) => {
+      await prepareAudit(t);
       const before = await shiftRepository.getShiftForUpdate(id, t);
       if (!before || before.status === "cancelled") return false;
       // Task #50 protection: explicit force=true required to cancel any active shift.
@@ -133,16 +135,11 @@ export const shiftRepository = {
       const [shift] = await t.update(shifts).set({
         status: "cancelled",
         cancelledAt: new Date(),
-        cancelledBy: actor,
+        cancelledBy: auditActorLabel(),
         cancelReason: reason ?? null,
       }).where(and(eq(shifts.id, id), eq(shifts.status, "active"))).returning();
       if (!shift) return false;
-      await t.insert(shiftAuditLog).values({
-        shiftId: id,
-        action: "cancel",
-        actor,
-        payload: { before, reason: reason ?? null },
-      });
+      await appendAudit(t, id, "cancel", actor, { before, after: shift, reason: reason ?? null });
       return true;
     });
   },
@@ -162,6 +159,7 @@ export const shiftRepository = {
    */
   async restoreShift(id: number, actor: string = "system", tx: Executor = db): Promise<Shift | undefined> {
     return atomic(tx, async (t) => {
+      await prepareAudit(t);
       const before = await shiftRepository.getShiftForUpdate(id, t);
       if (!before || before.status !== "cancelled") return undefined;
       const [shift] = await t.update(shifts).set({
@@ -171,12 +169,7 @@ export const shiftRepository = {
         cancelReason: null,
       }).where(and(eq(shifts.id, id), eq(shifts.status, "cancelled"))).returning();
       if (!shift) return undefined;
-      await t.insert(shiftAuditLog).values({
-        shiftId: id,
-        action: "restore",
-        actor,
-        payload: { before, after: shift },
-      });
+      await appendAudit(t, id, "restore", actor, { before, after: shift });
       return shift;
     });
   },

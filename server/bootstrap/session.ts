@@ -15,6 +15,9 @@ declare module "express-session" {
     adminId: number;
     adminName: string;
     adminLineId: string;
+    adminAuthKind: "personal" | "shared_password";
+    adminOAuthState?: string;
+    adminOAuthRedirectUri?: string;
   }
 }
 

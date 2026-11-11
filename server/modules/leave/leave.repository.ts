@@ -1,5 +1,6 @@
 import { db } from "../../infra/db";
 import type { Executor } from "../../infra/db/tx";
+import { auditedAtomic, prepareAudit, recordOperation } from "../../shared/audit/recorder";
 import { eq, and, desc, getTableColumns, sql, count } from "drizzle-orm";
 import {
   leaveRequests,
@@ -33,13 +34,34 @@ export const leaveRepository = {
     return row;
   },
 
+  async getLeaveRequestForUpdate(id: number, tx: Executor): Promise<LeaveRequest | undefined> {
+    const [row] = await tx.select().from(leaveRequests).where(eq(leaveRequests.id, id)).for("update");
+    return row;
+  },
+
+  async changeLeaveRequest(id: number, changes: Partial<InsertLeaveRequest>, action: string, tx: Executor): Promise<LeaveRequest> {
+    return auditedAtomic(tx, async (t) => {
+      await prepareAudit(t);
+      const before = await leaveRepository.getLeaveRequestForUpdate(id, t);
+      const [row] = await t.update(leaveRequests).set(changes).where(eq(leaveRequests.id, id)).returning();
+      if (!row) throw new Error("找不到請假申請");
+      await recordOperation(t, { entity: "leave_requests", recordId: id, employeeId: row.employeeId, action, before, after: row });
+      return row;
+    });
+  },
+
   /** Moves a pending request to its reviewed status. Undefined means it was not pending, so someone else already reviewed it (or it does not exist). */
   async reviewPendingRequest(id: number, status: string, reviewedBy: number, reviewedByName: string, reviewNote?: string, tx: Executor = db): Promise<LeaveRequest | undefined> {
-    const [row] = await tx.update(leaveRequests)
+    return auditedAtomic(tx, async (t) => {
+    await prepareAudit(t);
+    const before = await leaveRepository.getLeaveRequestForUpdate(id, t);
+    const [row] = await t.update(leaveRequests)
       .set({ status, reviewedBy, reviewedByName, reviewNote: reviewNote || null, reviewedAt: new Date() })
       .where(and(eq(leaveRequests.id, id), eq(leaveRequests.status, "pending")))
       .returning();
+    if (row) await recordOperation(t, { entity: "leave_requests", recordId: id, employeeId: row.employeeId, action: status === "approved" ? "approve" : "reject", before, after: row });
     return row;
+    });
   },
 
   async getLeaveBalance(employeeId: number, year: number, tx: Executor = db): Promise<EmployeeLeaveBalance | undefined> {
@@ -103,6 +125,18 @@ export const leaveRepository = {
       .innerJoin(employees, eq(employees.id, employeeLeaveBalances.employeeId))
       .where(eq(employeeLeaveBalances.year, year))
       .orderBy(employees.name);
+  },
+
+  async moveLeaveHours(employeeId: number, year: number, bucket: "pending" | "used", delta: number, tx: Executor): Promise<boolean> {
+    const column = bucket === "pending" ? sql`pending_hours` : sql`used_hours`;
+    const { rows } = await tx.execute(sql`
+      UPDATE employee_leave_balances
+      SET ${column} = round(${column}::numeric + ${delta}::numeric, 2)::real, updated_at = NOW()
+      WHERE employee_id = ${employeeId} AND year = ${year}
+        AND round(${column}::numeric + ${delta}::numeric, 2) >= 0
+        AND (${delta}::numeric <= 0 OR round(total_hours::numeric - used_hours::numeric - pending_hours::numeric, 2) >= ${delta}::numeric)
+      RETURNING id`);
+    return rows.length > 0;
   },
 
   async appendLeaveBalanceLog(

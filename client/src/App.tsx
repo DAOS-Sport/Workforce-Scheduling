@@ -31,9 +31,20 @@ import GuidelineAcksPage from "@/pages/guideline-acks";
 import SopPage from "@/pages/sop";
 import AvailabilityPage from "@/pages/availability";
 import ItMonitorPage from "@/pages/it-monitor";
+import PermissionsPage from "@/pages/permissions";
+import AuditPage from "@/pages/audit";
+import { ADMIN_PAGES, canReadPage, canonicalAdminPath } from "@shared/admin-permissions";
 import { Loader2 } from "lucide-react";
 
-function AdminRouter() {
+function AdminRouter({ permissions }: { permissions: string[] }) {
+  const [location] = useLocation();
+  let path = location;
+  try { path = canonicalAdminPath(location); } catch { /* The server rejects malformed URLs. */ }
+  if (!canReadPage(permissions, path)) {
+    const firstPage = ADMIN_PAGES.find((page) => canReadPage(permissions, page.path));
+    if (path === "/" && firstPage) return <Redirect to={firstPage.path} />;
+    return <p role="alert">您沒有此頁面的權限。</p>;
+  }
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
@@ -52,13 +63,15 @@ function AdminRouter() {
       <Route path="/sop" component={SopPage} />
       <Route path="/availability" component={AvailabilityPage} />
       <Route path="/it-monitor" component={ItMonitorPage} />
+      <Route path="/permissions" component={PermissionsPage} />
+      <Route path="/audit" component={AuditPage} />
       <Route path="/announcements">{() => <Redirect to="/guidelines" />}</Route>
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-function AdminLayout({ adminName, onLogout }: { adminName: string; onLogout: () => void }) {
+function AdminLayout({ adminName, onLogout, permissions }: { adminName: string; onLogout: () => void; permissions: string[] }) {
   const style = {
     "--sidebar-width": "15rem",
     "--sidebar-width-icon": "3.5rem",
@@ -68,14 +81,14 @@ function AdminLayout({ adminName, onLogout }: { adminName: string; onLogout: () 
     <RegionProvider>
       <SidebarProvider style={style as React.CSSProperties}>
         <div className="flex h-screen w-full">
-          <AppSidebar adminName={adminName} onLogout={onLogout} />
+          <AppSidebar adminName={adminName} onLogout={onLogout} permissions={permissions} />
           <div className="flex flex-col flex-1 min-w-0">
             <header className="flex items-center justify-between gap-2 p-2 border-b">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <ThemeToggle />
             </header>
             <main className="flex-1 overflow-hidden">
-              <AdminRouter />
+              <AdminRouter permissions={permissions} />
             </main>
           </div>
         </div>
@@ -86,7 +99,7 @@ function AdminLayout({ adminName, onLogout }: { adminName: string; onLogout: () 
 
 function AdminGuard() {
   const [authKey, setAuthKey] = useState(0);
-  const { data, isLoading } = useQuery<{ id: number; name: string }>({
+  const { data, isLoading } = useQuery<{ id: number; name: string; permissions: string[] }>({
     queryKey: ["/api/admin/me", authKey],
     queryFn: async () => {
       const res = await fetch("/api/admin/me", { credentials: "include" });
@@ -98,6 +111,7 @@ function AdminGuard() {
 
   const handleLogout = async () => {
     await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
+    queryClient.clear();
     setAuthKey((k) => k + 1);
   };
 
@@ -110,10 +124,10 @@ function AdminGuard() {
   }
 
   if (!data?.id) {
-    return <AdminLoginPage onLoginSuccess={() => setAuthKey((k) => k + 1)} />;
+    return <AdminLoginPage onLoginSuccess={() => { queryClient.clear(); setAuthKey((k) => k + 1); }} />;
   }
 
-  return <AdminLayout adminName={data.name} onLogout={handleLogout} />;
+  return <AdminLayout adminName={data.name} onLogout={handleLogout} permissions={data.permissions} />;
 }
 
 function AppRouter() {

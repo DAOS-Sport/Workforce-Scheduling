@@ -166,7 +166,7 @@ describe("approving a clock amendment", () => {
   it("when adding the clock record fails the amendment stays exactly as submitted: still pending, no review fields, no compensation", async () => {
     const { amendment } = await amendmentOfMissingPunch();
     const before = await amendmentRow(amendment.id);
-    vi.spyOn(clockRepository, "createClockRecord").mockRejectedValue(new Error("disk full"));
+    vi.spyOn(clockRepository, "createManualClockRecord").mockRejectedValue(new Error("disk full"));
 
     await expect(review(amendment.id, "approved")).rejects.toThrow("disk full");
 
@@ -196,7 +196,7 @@ describe("approving a clock amendment", () => {
 
   it("it can be reviewed again after a failed approval", async () => {
     const { amendment } = await amendmentOfMissingPunch();
-    const create = vi.spyOn(clockRepository, "createClockRecord").mockRejectedValueOnce(new Error("disk full"));
+    const create = vi.spyOn(clockRepository, "createManualClockRecord").mockRejectedValueOnce(new Error("disk full"));
 
     await expect(review(amendment.id, "approved")).rejects.toThrow("disk full");
     create.mockRestore();

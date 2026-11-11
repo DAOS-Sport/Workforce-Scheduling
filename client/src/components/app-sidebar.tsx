@@ -14,6 +14,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { useQuery } from "@tanstack/react-query";
+import { canReadPage } from "@shared/admin-permissions";
 
 const mainItems = [
   { title: "排班總覽", url: "/", icon: LayoutGrid },
@@ -31,6 +32,8 @@ const reportItems = [
 const systemItems = [
   { title: "系統 SOP 說明", url: "/sop", icon: ListChecks },
   { title: "IT 監控", url: "/it-monitor", icon: Activity },
+  { title: "角色權限管理", url: "/permissions", icon: ShieldCheck },
+  { title: "操作紀錄", url: "/audit", icon: ListChecks },
 ];
 
 interface PendingCounts {
@@ -42,17 +45,19 @@ interface PendingCounts {
 }
 
 interface AppSidebarProps {
+  permissions: string[];
   adminName?: string;
   onLogout?: () => void;
 }
 
-export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
+export function AppSidebar({ adminName, onLogout, permissions }: AppSidebarProps) {
   const [location] = useLocation();
 
   const { data: pendingCounts } = useQuery<PendingCounts>({
     queryKey: ["/api/pending-counts"],
     staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
+    enabled: ["dashboard", "clock-records", "anomaly-reports", "leave-requests"].some((key) => permissions.includes(`${key}:read`)),
   });
 
   const toolItems = [
@@ -97,7 +102,7 @@ export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
           <SidebarGroupLabel className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/70">排班管理</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainItems.map((item) => (
+              {mainItems.filter((item) => canReadPage(permissions, item.url)).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -125,7 +130,7 @@ export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
           <SidebarGroupLabel className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/70">行政工具</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {toolItems.map((item) => (
+              {toolItems.filter((item) => canReadPage(permissions, item.url)).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -151,7 +156,7 @@ export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
           <SidebarGroupLabel className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/70">報表</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {reportItems.map((item) => (
+              {reportItems.filter((item) => canReadPage(permissions, item.url)).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -172,7 +177,7 @@ export function AppSidebar({ adminName, onLogout }: AppSidebarProps) {
           <SidebarGroupLabel className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/70">系統</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {systemItems.map((item) => (
+              {systemItems.filter((item) => canReadPage(permissions, item.url)).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild

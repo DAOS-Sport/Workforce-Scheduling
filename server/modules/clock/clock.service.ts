@@ -1,4 +1,5 @@
 import type { ClockAmendment, ClockRecord } from "@shared/schema";
+import { z } from "zod";
 import { amendedFailReason, type ClockType } from "../../core/clock/clockRules";
 import { overtimeAfterShift } from "../../core/clock/clockOutOvertime";
 import { taipeiClock } from "../../core/time/taipei";
@@ -12,6 +13,13 @@ import { dispatchService } from "../dispatch/dispatch.service";
 import { overtimeService } from "../overtime/overtime.service";
 
 const LEAVE_ROLES = ["休假", "特休", "病假", "事假", "公假", "喪假", "育嬰", "留職停薪"];
+const adminClockFields = z.object({
+  employeeId: z.number().int().positive(),
+  venueId: z.number().int().positive().nullable().optional(),
+  shiftId: z.number().int().positive().nullable().optional(),
+  clockType: z.enum(["in", "out"]),
+  clockTime: z.preprocess((value) => typeof value === "string" ? new Date(value) : value, z.date()),
+});
 
 /**
  * 判斷 shifts 表的班次是否需要打卡：教練、暑假課程、手動課程不用，其他都要。
@@ -68,7 +76,7 @@ async function writeApprovedClock(amendment: ClockAmendment, tx: Tx): Promise<vo
     if (!applied) throw new Error("找不到原始打卡紀錄");
     return;
   }
-  await clockRepository.createClockRecord(
+  await clockRepository.createManualClockRecord(
     {
       employeeId: amendment.employeeId, venueId: amendment.venueId, shiftId: amendment.shiftId,
       clockType: amendment.clockType, latitude: 0, longitude: 0, distance: 0,
@@ -82,6 +90,41 @@ async function writeApprovedClock(amendment: ClockAmendment, tx: Tx): Promise<vo
 }
 
 export const clockService = {
+  async adminCreateRecord(payload: unknown) {
+    const parsed = adminClockFields.parse(payload);
+    const employee = await employeeService.getEmployee(parsed.employeeId);
+    if (!employee) throw httpError(404, "找不到員工");
+    return withTx(async (tx) => {
+      await lockXact(tx, LOCK_NS.clock, parsed.employeeId);
+      return clockRepository.createManualClockRecord({ ...parsed, latitude: 0, longitude: 0, status: "success", failReason: "後台補登" }, tx);
+    });
+  },
+
+  async adminUpdateRecord(id: number, payload: unknown) {
+    z.number().int().positive().parse(id);
+    const parsed = adminClockFields.partial().parse(payload);
+    if (Object.keys(parsed).length === 0) throw httpError(400, "沒有要更新的欄位");
+    const before = await clockRepository.getClockRecord(id);
+    if (!before) throw httpError(404, "找不到打卡紀錄");
+    if (parsed.employeeId && !await employeeService.getEmployee(parsed.employeeId)) throw httpError(404, "找不到員工");
+    return withTx(async (tx) => {
+      for (const employeeId of [...new Set([before.employeeId, parsed.employeeId ?? before.employeeId])].sort((a, b) => a - b)) await lockXact(tx, LOCK_NS.clock, employeeId);
+      const updated = await clockRepository.updateAdminClockRecord(id, { ...parsed, ...(parsed.clockTime ? { amendedTime: null, amendmentId: null } : {}) }, tx);
+      if (!updated) throw httpError(404, "找不到打卡紀錄");
+      return updated;
+    });
+  },
+
+  async adminDeleteRecord(id: number) {
+    z.number().int().positive().parse(id);
+    const before = await clockRepository.getClockRecord(id);
+    if (!before) throw httpError(404, "找不到打卡紀錄");
+    return withTx(async (tx) => {
+      await lockXact(tx, LOCK_NS.clock, before.employeeId);
+      if (!await clockRepository.deleteAdminClockRecord(id, tx)) throw httpError(404, "找不到打卡紀錄");
+      return { success: true };
+    });
+  },
   async listRecords(opts: { startDate?: string; endDate?: string; employeeId?: number }) {
     const { startDate, endDate, employeeId } = opts;
     if (!startDate || !endDate) throw httpError(400, "startDate and endDate required");

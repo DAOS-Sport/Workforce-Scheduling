@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,38 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [options, setOptions] = useState<{ sharedPasswordEnabled: boolean; lineEnabled: boolean }>();
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/admin/login-options", { credentials: "include" }).then(async (res) => {
+      if (!res.ok) throw new Error("無法讀取登入設定");
+      const data = await res.json();
+      if (active) setOptions(data);
+    }).catch((err) => { if (active) setError(err.message); });
+    const params = new URLSearchParams(window.location.search);
+    if (window.location.pathname === "/admin/line-callback") {
+      if (params.has("error")) setError("LINE 登入已取消，請重新登入");
+      else if (params.get("code") && params.get("state")) {
+        setProcessing(true);
+        apiRequest("POST", "/api/admin/line-callback", { code: params.get("code"), state: params.get("state") })
+          .then(() => { window.history.replaceState({}, "", "/"); onLoginSuccess(); })
+          .catch((err) => { if (active) setError(err.message || "LINE 登入失敗"); })
+          .finally(() => { if (active) setProcessing(false); });
+      }
+    }
+    return () => { active = false; };
+  }, []);
+
+  async function handleLineLogin() {
+    setProcessing(true);
+    setError("");
+    try {
+      const res = await apiRequest("GET", "/api/admin/line-login");
+      const { url } = await res.json();
+      window.location.assign(url);
+    } catch (err: any) { setError(err.message || "LINE 登入失敗"); setProcessing(false); }
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -70,7 +102,8 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <Button type="button" variant="outline" className="w-full h-12 mb-4" onClick={handleLineLogin} disabled={processing || !options?.lineEnabled} data-testid="button-admin-line-login">個人 LINE 登入</Button>
+        {options?.sharedPasswordEnabled && <form onSubmit={handleLogin} className="space-y-4">
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -98,9 +131,10 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
               "登入"
             )}
           </Button>
-        </form>
+        </form>}
+        {options && !options.sharedPasswordEnabled && <p className="text-sm text-muted-foreground">共用密碼登入已停用，請使用個人 LINE 登入。</p>}
 
-        {IS_DEV && (
+        {IS_DEV && options?.sharedPasswordEnabled && (
           <div className="mt-4 pt-4 border-t border-border/50">
             <Button
               type="button"
