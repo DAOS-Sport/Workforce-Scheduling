@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { pushMessages } from "../../adapters/line";
+import { pushMessages, pushMessagesResult } from "../../adapters/line";
 import { MAIL_SENDER, sendMail } from "../../adapters/mail";
 import { wrapNotificationHtml } from "../../shared/email/notificationLayout";
 import type { Venue, Shift, Employee, DispatchShift } from "@shared/schema";
@@ -159,6 +159,10 @@ export async function pushToLine(userId: string, text: string, extraMessages?: o
   return pushMessages(userId, messages);
 }
 
+export function pushToLineResult(userId: string, text: string, retryKey: string): ReturnType<typeof pushMessagesResult> {
+  return pushMessagesResult(userId, [buildDecoratedFlexMessage(text)], retryKey);
+}
+
 export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: string): Promise<void> {
   if (!isValidLineUserId(lineId)) return;
   try {
@@ -207,13 +211,13 @@ export async function pushPendingGuidelinesIfAny(employeeId: number, lineId: str
     const link = "\n\n請至員工入口「守則」頁面確認閱讀。";
     // The signature changes when the unread set or a guideline changes, and a long one would not fit a key.
     const digest = createHash("sha1").update(signature).digest("hex");
-    await pushOnce({ scope: "guideline", period: yearMonth, employeeId, refId: digest }, () => pushToLine(lineId, intro + list + suffix + link));
+    await pushOnce({ scope: "guideline", period: yearMonth, employeeId, refId: digest }, (retryKey) => pushToLineResult(lineId, intro + list + suffix + link, retryKey));
   } catch (err) {
     console.error("[Guidelines Push] Error:", err);
   }
 }
 
-export async function sendShiftReminders(): Promise<{ sent: number; skipped: number; noLineId: number }> {
+export async function sendShiftReminders(): Promise<{ sent: number; unknown: number; skipped: number; noLineId: number }> {
   const taipeiNow = getTaiwanNow();
 
   const tomorrow = new Date(taipeiNow);
@@ -252,10 +256,11 @@ export async function sendShiftReminders(): Promise<{ sent: number; skipped: num
 
   if (allEmpIds.size === 0) {
     console.log(`[推撥] ${tomorrowStr} 無上班班次，跳過推撥`);
-    return { sent: 0, skipped: 0, noLineId: 0 };
+    return { sent: 0, unknown: 0, skipped: 0, noLineId: 0 };
   }
 
   let sent = 0;
+  let unknown = 0;
   let skipped = 0;
   let noLineId = 0;
 
@@ -325,17 +330,17 @@ export async function sendShiftReminders(): Promise<{ sent: number; skipped: num
     const message = lines.join("\n").trim();
     const lineId = emp.lineId;
 
-    const { outcome } = await pushOnce({ scope: "shift-reminder", period: tomorrowStr, employeeId: empId }, () => pushToLine(lineId, message));
+    const { outcome } = await pushOnce({ scope: "shift-reminder", period: tomorrowStr, employeeId: empId }, (retryKey) => pushToLineResult(lineId, message, retryKey));
     if (outcome === "sent") {
       sent++;
     } else {
       if (outcome !== "skipped") console.error(`[推撥] 發送失敗或結果不明 empId=${empId} (${outcome})`);
-      skipped++;
+      if (outcome === "unknown") unknown++; else skipped++;
     }
   }
 
-  console.log(`[推撥] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
-  return { sent, skipped, noLineId };
+  console.log(`[推撥] 完成: 發送 ${sent}, 結果不明 ${unknown}, 跳過 ${skipped}, 無LINE ${noLineId}`);
+  return { sent, unknown, skipped, noLineId };
 }
 
 // 未打卡通知的去重存在資料庫（missing_clock_notifications），重啟不會重複發。
@@ -349,7 +354,7 @@ async function sendMissingClockInEmail(to: string[], subject: string, html: stri
   });
 }
 
-export async function checkMissingClockIn(): Promise<{ notified: number; skipped: number }> {
+export async function checkMissingClockIn(): Promise<{ notified: number; unknown: number; skipped: number }> {
   const taipeiNow = getTaiwanNow();
   const todayStr = formatTaiwanDate(taipeiNow);
   const currentHour = taipeiNow.getHours();
@@ -373,7 +378,7 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
 
   if (workShifts.length === 0) {
     console.log(`[未打卡提醒] ${todayStr} 無上班班次`);
-    return { notified: 0, skipped: 0 };
+    return { notified: 0, unknown: 0, skipped: 0 };
   }
 
   const clockRecords = await clockService.getClockRecordsByDateRange(todayStr, todayStr);
@@ -434,11 +439,12 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
   }
 
   if (missingEmployees.length === 0) {
-    return { notified: 0, skipped };
+    return { notified: 0, unknown: 0, skipped };
   }
 
   let notified = 0;
-  // The managers' email lists an employee once, on the first push for the shift; a retry after a refused push stays quiet.
+  let unknown = 0;
+  // Only a newly inserted slot adds the employee to the managers' email; refused and stale retries stay quiet.
   const reported: typeof missingEmployees = [];
 
   for (const item of missingEmployees) {
@@ -448,8 +454,8 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
     const lineId = emp.lineId;
 
     console.log(`[未打卡提醒] 發送通知: 員工 ID=${emp.id}班次=${shiftStart}-${shiftEnd} 場館=${venueName} lineId=${lineId ? "有" : "無"}`);
-    const sendLine = async () => {
-      if (!lineId) return true; // nobody to push to: the slot is settled so the managers' email does not repeat it
+    const sendLine = async (retryKey: string) => {
+      if (!lineId) return "accepted" as const; // nobody to push to: the slot is settled so the managers' email does not repeat it
       const sysLinkClock = getSystemLink();
       const lineMsg = [
         `⚠️ 打卡提醒`,
@@ -460,17 +466,18 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
         `您尚未打卡，如需補卡請證明您早上未遲到。`,
         ...(sysLinkClock ? [`🔗 請登入系統: ${sysLinkClock}`] : []),
       ].join("\n");
-      return pushToLine(lineId, lineMsg);
+      return pushToLineResult(lineId, lineMsg, retryKey);
     };
 
-    const { outcome, attempt } = await pushOnce({ scope: "missing-clock", period: todayStr, employeeId: emp.id, refId: String(shift.id) }, sendLine);
+    const { outcome, attempt, reclaimed } = await pushOnce({ scope: "missing-clock", period: todayStr, employeeId: emp.id, refId: String(shift.id) }, sendLine);
     if (outcome === "sent") {
       console.log(`[未打卡提醒] LINE推播成功: 員工 ID=${emp.id}`);
       notified++;
     } else if (outcome !== "skipped") {
-      console.error(`[未打卡提醒] LINE推播失敗或結果不明 員工 ID=${emp.id} (${outcome})，${outcome === "failed" ? "下一輪重推" : "不重推"}`);
+      if (outcome === "unknown") unknown++;
+      console.error(`[未打卡提醒] LINE推播失敗或結果不明 員工 ID=${emp.id} (${outcome})，${outcome === "failed" ? "下一輪重推" : "租約到期後可接手重試"}`);
     }
-    if (attempt === 1) reported.push(item);
+    if (attempt === 1 && !reclaimed) reported.push(item);
   }
 
   try {
@@ -521,12 +528,12 @@ export async function checkMissingClockIn(): Promise<{ notified: number; skipped
     console.error("[未打卡提醒] Email發送失敗:", err);
   }
 
-  console.log(`[未打卡提醒] 完成: 通知 ${notified}, 跳過 ${skipped}`);
-  return { notified, skipped };
+  console.log(`[未打卡提醒] 完成: 通知 ${notified}, 結果不明 ${unknown}, 跳過 ${skipped}`);
+  return { notified, unknown, skipped };
 }
 
 // ── 每週班表推播（週日 12:00 推下週班表，排程見 bootstrap/scheduler.ts）─────────────────────────────────────
-export async function sendWeeklySchedulePush(): Promise<{ sent: number; skipped: number; noLineId: number }> {
+export async function sendWeeklySchedulePush(): Promise<{ sent: number; unknown: number; skipped: number; noLineId: number }> {
   const taipeiNow = getTaiwanNow();
 
   // Compute next Monday
@@ -552,7 +559,7 @@ export async function sendWeeklySchedulePush(): Promise<{ sent: number; skipped:
 
   if (workShifts.length === 0) {
     console.log(`[週班表推播] ${weekStartStr}~${weekEndStr} 無班次，跳過`);
-    return { sent: 0, skipped: 0, noLineId: 0 };
+    return { sent: 0, unknown: 0, skipped: 0, noLineId: 0 };
   }
 
   const allVenues = await venueService.findAll();
@@ -567,7 +574,7 @@ export async function sendWeeklySchedulePush(): Promise<{ sent: number; skipped:
   }
 
   const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
-  let sent = 0, skipped = 0, noLineId = 0;
+  let sent = 0, unknown = 0, skipped = 0, noLineId = 0;
 
   for (const [empId, empShifts] of shiftsByEmployee) {
     // Weeks pushed before push_dedup existed were recorded here; nothing writes to it any more.
@@ -631,21 +638,21 @@ export async function sendWeeklySchedulePush(): Promise<{ sent: number; skipped:
 
     const message = lines.join("\n").trim();
     const lineId = emp.lineId;
-    const { outcome } = await pushOnce({ scope: "weekly-schedule", period: weekStartStr, employeeId: empId }, () => pushToLine(lineId, message));
+    const { outcome } = await pushOnce({ scope: "weekly-schedule", period: weekStartStr, employeeId: empId }, (retryKey) => pushToLineResult(lineId, message, retryKey));
     if (outcome === "sent") {
       sent++;
     } else {
       if (outcome !== "skipped") console.error(`[週班表推播] 發送失敗或結果不明 empId=${empId} (${outcome})`);
-      skipped++;
+      if (outcome === "unknown") unknown++; else skipped++;
     }
   }
 
-  console.log(`[週班表推播] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
-  return { sent, skipped, noLineId };
+  console.log(`[週班表推播] 完成: 發送 ${sent}, 結果不明 ${unknown}, 跳過 ${skipped}, 無LINE ${noLineId}`);
+  return { sent, unknown, skipped, noLineId };
 }
 
 // ── 每週遲到報告（週一 09:00 推上週異常）────────────────────────────────────
-export async function sendWeeklyLateReport(): Promise<{ sent: number; skipped: number; noLineId: number }> {
+export async function sendWeeklyLateReport(): Promise<{ sent: number; unknown: number; skipped: number; noLineId: number }> {
   const taipeiNow = getTaiwanNow();
 
   // Compute last Monday (start of last week)
@@ -697,7 +704,7 @@ export async function sendWeeklyLateReport(): Promise<{ sent: number; skipped: n
   const LATE_THRESHOLD_MIN  = 10;
   const EARLY_THRESHOLD_MIN = 10;
 
-  let sent = 0, skipped = 0, noLineId = 0;
+  let sent = 0, unknown = 0, skipped = 0, noLineId = 0;
 
   for (const [empId, empShifts] of shiftsByEmployee) {
     // Weeks pushed before push_dedup existed were recorded here; nothing writes to it any more.
@@ -771,17 +778,17 @@ export async function sendWeeklyLateReport(): Promise<{ sent: number; skipped: n
 
     const message = lines.join("\n").trim();
     const lineId = emp.lineId;
-    const { outcome } = await pushOnce({ scope: "weekly-late", period: weekStartStr, employeeId: empId }, () => pushToLine(lineId, message));
+    const { outcome } = await pushOnce({ scope: "weekly-late", period: weekStartStr, employeeId: empId }, (retryKey) => pushToLineResult(lineId, message, retryKey));
     if (outcome === "sent") {
       sent++;
     } else {
       if (outcome !== "skipped") console.error(`[週遲到報告] 發送失敗或結果不明 empId=${empId} (${outcome})`);
-      skipped++;
+      if (outcome === "unknown") unknown++; else skipped++;
     }
   }
 
-  console.log(`[週遲到報告] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
-  return { sent, skipped, noLineId };
+  console.log(`[週遲到報告] 完成: 發送 ${sent}, 結果不明 ${unknown}, 跳過 ${skipped}, 無LINE ${noLineId}`);
+  return { sent, unknown, skipped, noLineId };
 }
 
 // ── 意願填報截止前提醒（每日 10:00 檢查）────────────────────────────────────
@@ -801,25 +808,25 @@ interface AvailWindowConfig {
 export async function sendAvailabilityReminders(
   force = false,
   reminderDaysBeforeClose = 3
-): Promise<{ sent: number; skipped: number; noLineId: number; windowClosed: boolean }> {
+): Promise<{ sent: number; unknown: number; skipped: number; noLineId: number; windowClosed: boolean }> {
   const taipeiNow = getTaiwanNow();
   const todayStr = formatTaiwanDate(taipeiNow);
 
   const cfg = await systemService.findSystemConfig("availability_window");
   if (!cfg?.value) {
     console.log("[意願提醒] 尚未設定意願填寫視窗，略過");
-    return { sent: 0, skipped: 0, noLineId: 0, windowClosed: true };
+    return { sent: 0, unknown: 0, skipped: 0, noLineId: 0, windowClosed: true };
   }
 
   let raw: AvailWindowConfig;
   try { raw = JSON.parse(cfg.value) as AvailWindowConfig; } catch {
     console.log("[意願提醒] 意願填寫設定格式錯誤，略過");
-    return { sent: 0, skipped: 0, noLineId: 0, windowClosed: true };
+    return { sent: 0, unknown: 0, skipped: 0, noLineId: 0, windowClosed: true };
   }
 
   if (!/^\d{4}-\d{2}$/.test(raw.targetYearMonth)) {
     console.log("[意願提醒] targetYearMonth 格式錯誤，略過");
-    return { sent: 0, skipped: 0, noLineId: 0, windowClosed: true };
+    return { sent: 0, unknown: 0, skipped: 0, noLineId: 0, windowClosed: true };
   }
 
   // Support both new shape (windows array) and legacy flat shape (openFrom/openUntil at top level)
@@ -838,7 +845,7 @@ export async function sendAvailabilityReminders(
 
   if (!activeWindow) {
     console.log(`[意願提醒] 目前無符合提醒條件的開放視窗（今日=${todayStr}，提醒條件：距截止 ≤ ${reminderDaysBeforeClose} 天），略過`);
-    return { sent: 0, skipped: 0, noLineId: 0, windowClosed: true };
+    return { sent: 0, unknown: 0, skipped: 0, noLineId: 0, windowClosed: true };
   }
 
   const { targetYearMonth } = raw;
@@ -857,7 +864,7 @@ export async function sendAvailabilityReminders(
   console.log(`[意願提醒] 活躍員工 ${activeEmployees.length} 人，已填 ${submittedEmployeeIds.size} 人，未填 ${unsubmitted.length} 人`);
 
   if (unsubmitted.length === 0) {
-    return { sent: 0, skipped: 0, noLineId: 0, windowClosed: false };
+    return { sent: 0, unknown: 0, skipped: 0, noLineId: 0, windowClosed: false };
   }
 
   const [y, mStr] = targetYearMonth.split("-");
@@ -865,7 +872,7 @@ export async function sendAvailabilityReminders(
   const deadlineLabel = `${activeWindow.openUntil.slice(5, 7)}/${activeWindow.openUntil.slice(8, 10)}`;
   const sysLink = getSystemLink();
 
-  let sent = 0, skipped = 0, noLineId = 0;
+  let sent = 0, unknown = 0, skipped = 0, noLineId = 0;
 
   for (const emp of unsubmitted) {
     if (!emp.lineId) { noLineId++; continue; }
@@ -886,15 +893,15 @@ export async function sendAvailabilityReminders(
 
     const message = lines.join("\n");
     const lineId = emp.lineId;
-    const { outcome } = await pushOnce({ scope: "availability-reminder", period: todayStr, employeeId: emp.id, refId: targetYearMonth }, () => pushToLine(lineId, message));
+    const { outcome } = await pushOnce({ scope: "availability-reminder", period: todayStr, employeeId: emp.id, refId: targetYearMonth }, (retryKey) => pushToLineResult(lineId, message, retryKey));
     if (outcome === "sent") {
       sent++;
     } else {
       if (outcome !== "skipped") console.error(`[意願提醒] LINE 推播失敗或結果不明 empId=${emp.id} (${outcome})`);
-      skipped++;
+      if (outcome === "unknown") unknown++; else skipped++;
     }
   }
 
-  console.log(`[意願提醒] 完成: 發送 ${sent}, 跳過 ${skipped}, 無LINE ${noLineId}`);
-  return { sent, skipped, noLineId, windowClosed: false };
+  console.log(`[意願提醒] 完成: 發送 ${sent}, 結果不明 ${unknown}, 跳過 ${skipped}, 無LINE ${noLineId}`);
+  return { sent, unknown, skipped, noLineId, windowClosed: false };
 }

@@ -16,26 +16,34 @@ function botHeaders(): Record<string, string> {
   };
 }
 
-/** 推播給一位使用者。成功回 true；HTTP 失敗或連線錯誤回 false。 */
-export async function pushMessages(to: string, messages: object[]): Promise<boolean> {
+export type PushDeliveryOutcome = "accepted" | "rejected" | "unknown";
+
+/** accepted 表示 LINE 接受請求，包含以相同 retry key 查到先前已接受的請求。 */
+export async function pushMessagesResult(to: string, messages: object[], retryKey?: string): Promise<PushDeliveryOutcome> {
   try {
     const resp = await fetch(`${API_BASE}/v2/bot/message/push`, {
       method: "POST",
-      headers: botHeaders(),
+      headers: { ...botHeaders(), ...(retryKey ? { "X-Line-Retry-Key": retryKey } : {}) },
       body: JSON.stringify({ to, messages }),
+      signal: AbortSignal.timeout(10_000),
     });
-    if (!resp.ok) {
-      console.error("[LINE] Push failed:", resp.status, await resp.text());
-      recordIntegration("line", false, `推播 HTTP ${resp.status}`);
-      return false;
+    if (resp.ok || (retryKey && resp.status === 409)) {
+      recordIntegration("line", true);
+      return "accepted";
     }
-    recordIntegration("line", true);
-    return true;
+    console.error("[LINE] Push failed:", resp.status);
+    recordIntegration("line", false, `推播 HTTP ${resp.status}`);
+    return resp.status >= 400 && resp.status < 500 ? "rejected" : "unknown";
   } catch (err) {
     console.error("[LINE] Push failed:", err);
     recordIntegration("line", false, err);
-    return false;
+    return "unknown";
   }
+}
+
+/** 既有呼叫端保留 boolean 契約。 */
+export async function pushMessages(to: string, messages: object[]): Promise<boolean> {
+  return (await pushMessagesResult(to, messages)) === "accepted";
 }
 
 /** ok＝LINE 接受；rejected＝LINE 回非 2xx（通常是 reply token 過期）；error＝連線錯誤。 */

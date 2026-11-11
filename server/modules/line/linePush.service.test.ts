@@ -23,11 +23,11 @@ vi.mock("./pushDedup.repository", () => {
     pushDedupRepository: {
       claim: vi.fn(async (k) => {
         const row = slots.get(id(k));
-        if (!row) { slots.set(id(k), { status: "pending", attempts: 1 }); return 1; }
+        if (!row) { slots.set(id(k), { status: "pending", attempts: 1 }); return { attempt: 1, reclaimed: false }; }
         if (row.status !== "failed") return null;
         row.status = "pending";
         row.attempts += 1;
-        return row.attempts;
+        return { attempt: row.attempts, reclaimed: true };
       }),
       finish: vi.fn(async (k, status) => { slots.get(id(k))!.status = status; }),
       deleteOlderThan: vi.fn(async () => undefined),
@@ -55,6 +55,7 @@ vi.mock("./lineHelpers", async (importOriginal) => {
 });
 
 import { pushToLine, sendShiftReminders, sendWeeklyLateReport, sendWeeklySchedulePush } from "./linePush.service";
+import { pushDedupRepository } from "./pushDedup.repository";
 
 const shift = {
   id: 10,
@@ -108,6 +109,9 @@ describe("sendShiftReminders shift review", () => {
     vi.mocked(mockData.getClockRecordsByDateRange).mockResolvedValue([]);
     vi.mocked(mockData.clearOldWeeklyPushNotifications).mockResolvedValue(undefined as any);
     vi.mocked(mockData.hasWeeklyPushNotification).mockResolvedValue(false);
+    vi.mocked(pushDedupRepository.finish).mockImplementation(async (k, status) => {
+      slots.get([k.scope, k.period, k.employeeId, k.refId].join("|"))!.status = status;
+    });
     slots.clear();
   });
 
@@ -144,7 +148,7 @@ describe("sendShiftReminders shift review", () => {
 
     const result = await sendShiftReminders();
 
-    expect(result).toEqual({ sent: 1, skipped: 0, noLineId: 0 });
+    expect(result).toEqual({ sent: 1, unknown: 0, skipped: 0, noLineId: 0 });
     expect(fetch).toHaveBeenCalledWith(
       "https://api.line.me/v2/bot/message/push",
       expect.objectContaining({
@@ -154,13 +158,24 @@ describe("sendShiftReminders shift review", () => {
     );
   });
 
+  it("counts an unrecorded delivery as unknown instead of skipped", async () => {
+    vi.mocked(mockData.getShiftsByDate).mockResolvedValue([shift as any]);
+    vi.mocked(mockData.getShift).mockResolvedValue(shift as any);
+    vi.mocked(pushDedupRepository.finish).mockRejectedValue(new Error("result storage unavailable"));
+
+    const result = await sendShiftReminders();
+
+    expect(result).toEqual({ sent: 0, unknown: 1, skipped: 0, noLineId: 0 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("skips when the shift is cancelled before the LINE push", async () => {
     vi.mocked(mockData.getShiftsByDate).mockResolvedValue([shift as any]);
     vi.mocked(mockData.getShift).mockResolvedValue({ ...shift, status: "cancelled" } as any);
 
     const result = await sendShiftReminders();
 
-    expect(result).toEqual({ sent: 0, skipped: 1, noLineId: 0 });
+    expect(result).toEqual({ sent: 0, unknown: 0, skipped: 1, noLineId: 0 });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -173,7 +188,7 @@ describe("sendShiftReminders shift review", () => {
 
     const result = await sendWeeklySchedulePush();
 
-    expect(result).toEqual({ sent: 0, skipped: 1, noLineId: 0 });
+    expect(result).toEqual({ sent: 0, unknown: 0, skipped: 1, noLineId: 0 });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -196,7 +211,7 @@ describe("sendShiftReminders shift review", () => {
 
     const result = await sendWeeklyLateReport();
 
-    expect(result).toEqual({ sent: 0, skipped: 0, noLineId: 0 });
+    expect(result).toEqual({ sent: 0, unknown: 0, skipped: 0, noLineId: 0 });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -219,7 +234,7 @@ describe("sendShiftReminders shift review", () => {
 
     const result = await sendWeeklyLateReport();
 
-    expect(result).toEqual({ sent: 1, skipped: 0, noLineId: 0 });
+    expect(result).toEqual({ sent: 1, unknown: 0, skipped: 0, noLineId: 0 });
     expect(fetch).toHaveBeenCalledWith(
       "https://api.line.me/v2/bot/message/push",
       expect.objectContaining({

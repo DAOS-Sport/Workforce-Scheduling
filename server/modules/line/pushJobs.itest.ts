@@ -1,8 +1,8 @@
 import type { AddressInfo } from "node:net";
 import express from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clockRecords, employees, guidelines, notificationRecipients, systemConfigs } from "@shared/schema";
+import { clockRecords, employees, guidelines, notificationRecipients, pushDedup, systemConfigs } from "@shared/schema";
 import { db } from "../../infra/db";
 import { concurrently, createEmployee, createRegion, createShift, createVenue, resetDatabase, warmPool } from "../../test/itest";
 import { lineUserId } from "../../test/clock";
@@ -27,6 +27,13 @@ vi.mock("../../adapters/line", async (importOriginal) => ({
     const how = outbox.behaviour.get(to) ?? "ok";
     if (how === "throw-after-push") throw new Error("process died right after LINE accepted the message");
     return how === "ok";
+  }),
+  pushMessagesResult: vi.fn(async (to: string) => {
+    if (outbox.delayMs) await new Promise((resolve) => setTimeout(resolve, outbox.delayMs));
+    outbox.pushes.push(to);
+    const how = outbox.behaviour.get(to) ?? "ok";
+    if (how === "throw-after-push") throw new Error("process died right after LINE accepted the message");
+    return how === "ok" ? "accepted" : "rejected";
   }),
 }));
 vi.mock("../../adapters/mail", async (importOriginal) => ({
@@ -92,13 +99,13 @@ describe("weekly schedule push", () => {
     const second = await sendWeeklySchedulePush();
 
     expect([first, second]).toEqual([
-      { sent: 2, skipped: 1, noLineId: 0 },
-      { sent: 1, skipped: 2, noLineId: 0 },
+      { sent: 2, unknown: 0, skipped: 1, noLineId: 0 },
+      { sent: 1, unknown: 0, skipped: 2, noLineId: 0 },
     ]);
     expect(people.map((p) => pushesTo(p.lineId))).toEqual([2, 1, 1]);
   });
 
-  it("keeps going after a push died halfway, and does not push that employee again", async () => {
+  it("keeps going after bounded retries and skips the fresh pending slot next round", async () => {
     const people = await crew(["2026-07-06"]);
     setBehaviour(people[0].lineId, "throw-after-push");
 
@@ -106,8 +113,8 @@ describe("weekly schedule push", () => {
     setBehaviour(people[0].lineId, "ok");
     await sendWeeklySchedulePush();
 
-    expect(first).toMatchObject({ sent: 2 });
-    expect(people.map((p) => pushesTo(p.lineId))).toEqual([1, 1, 1]);
+    expect(first).toEqual({ sent: 2, unknown: 1, skipped: 0, noLineId: 0 });
+    expect(people.map((p) => pushesTo(p.lineId))).toEqual([3, 1, 1]);
   });
 });
 
@@ -147,6 +154,15 @@ describe("a scheduled job runs one at a time", () => {
 });
 
 describe("tomorrow shift reminder", () => {
+  it("reports an uncertain delivery separately from skipped employees", async () => {
+    const people = await crew(["2026-07-04"]);
+    setBehaviour(people[0].lineId, "throw-after-push");
+
+    const result = await sendShiftReminders();
+
+    expect(result).toEqual({ sent: 2, unknown: 1, skipped: 0, noLineId: 0 });
+  });
+
   it("gives each employee one message when two instances run it at the same time", async () => {
     const people = await crew(["2026-07-04"]);
     outbox.delayMs = 40;
@@ -171,6 +187,15 @@ describe("tomorrow shift reminder", () => {
 });
 
 describe("missing clock-in reminder", () => {
+  it("reports an uncertain delivery separately from skipped employees", async () => {
+    const people = await crew(["2026-07-03"]);
+    setBehaviour(people[0].lineId, "throw-after-push");
+
+    const result = await checkMissingClockIn();
+
+    expect(result).toEqual({ notified: 2, unknown: 1, skipped: 0 });
+  });
+
   it("pushes again on the next run when LINE refused the first push", async () => {
     const people = await crew(["2026-07-03"]);
     setBehaviour(people[0].lineId, "fail");
@@ -193,7 +218,7 @@ describe("missing clock-in reminder", () => {
     expect(people.map((p) => pushesTo(p.lineId))).toEqual([1, 1, 1]);
   });
 
-  it("does not push again after a push died halfway", async () => {
+  it("does not retry an uncertain push again before the lease expires", async () => {
     const people = await crew(["2026-07-03"]);
     setBehaviour(people[0].lineId, "throw-after-push");
 
@@ -201,7 +226,7 @@ describe("missing clock-in reminder", () => {
     setBehaviour(people[0].lineId, "ok");
     await checkMissingClockIn();
 
-    expect(people.map((p) => pushesTo(p.lineId))).toEqual([1, 1, 1]);
+    expect(people.map((p) => pushesTo(p.lineId))).toEqual([3, 1, 1]);
   });
 
   it("mails the managers once per employee, also when a push is retried or there is no LINE account to push to", async () => {
@@ -219,6 +244,21 @@ describe("missing clock-in reminder", () => {
     expect(pushesTo(people[0].lineId)).toBe(2);
   });
 
+  it("does not mail managers again when taking over a stale first attempt", async () => {
+    const people = await crew(["2026-07-03"]);
+    await db.insert(notificationRecipients).values({ email: "manager@example.invalid" });
+    await checkMissingClockIn();
+    expect(outbox.mails).toHaveLength(1);
+
+    await db.update(pushDedup).set({ status: "pending", attempts: 1, updatedAt: sql`(now() at time zone 'UTC') - interval '11 minutes'` })
+      .where(and(eq(pushDedup.scope, "missing-clock"), eq(pushDedup.employeeId, people[0].employee.id)));
+
+    await checkMissingClockIn();
+
+    expect(pushesTo(people[0].lineId)).toBe(2);
+    expect(outbox.mails).toHaveLength(1);
+  });
+
   it("gives each employee one message when two instances run it at the same time", async () => {
     const people = await crew(["2026-07-03"]);
     outbox.delayMs = 40;
@@ -231,6 +271,21 @@ describe("missing clock-in reminder", () => {
 });
 
 describe("weekly late report", () => {
+  it("reports an uncertain delivery separately from skipped employees", async () => {
+    const people = await crew(["2026-06-22"]);
+    for (const { employee } of people) {
+      await db.insert(clockRecords).values({
+        employeeId: employee.id, clockType: "in", latitude: 25, longitude: 121.5,
+        status: "success", clockTime: new Date("2026-06-22T09:30:00+08:00"),
+      });
+    }
+    setBehaviour(people[0].lineId, "throw-after-push");
+
+    const result = await sendWeeklyLateReport();
+
+    expect(result).toEqual({ sent: 2, unknown: 1, skipped: 0, noLineId: 0 });
+  });
+
   it("gives each employee one message when two instances run it at the same time", async () => {
     const people = await crew(["2026-06-22"]);
     for (const { employee } of people) {
@@ -257,6 +312,16 @@ describe("availability reminder", () => {
     const value = JSON.stringify({ targetYearMonth: "2026-08", windows: [{ openFrom: "2026-07-01", openUntil: "2026-07-05" }] });
     await db.insert(systemConfigs).values({ key: "availability_window", value });
   }
+
+  it("reports an uncertain delivery separately from skipped employees", async () => {
+    const people = await crew([]);
+    await openWindow();
+    setBehaviour(people[0].lineId, "throw-after-push");
+
+    const result = await sendAvailabilityReminders();
+
+    expect(result).toEqual({ sent: 2, unknown: 1, skipped: 0, noLineId: 0, windowClosed: false });
+  });
 
   it("reminds each employee once a day however often it runs", async () => {
     const people = await crew([]);
@@ -310,11 +375,23 @@ describe("pending guideline push after a clock-in", () => {
 });
 
 describe("weekly attendance notice", () => {
+  it("reports an uncertain LINE delivery separately from skipped employees", async () => {
+    const people = await crew(["2026-06-22"]);
+    setBehaviour(people[0].lineId, "throw-after-push");
+
+    const result = await systemService.notifyWeeklyAttendance("2026-06-22");
+
+    expect(result).toMatchObject({ lineSent: 2, lineUnknown: 1, lineSkipped: 0 });
+  });
+
   it("sends each employee and the managers one message however often it is triggered", async () => {
     const people = await crew(["2026-06-22"]);
     await db.insert(notificationRecipients).values({ email: "manager@example.invalid" });
 
     await systemService.notifyWeeklyAttendance("2026-06-22");
+    await systemService.notifyWeeklyAttendance("2026-06-22");
+    await db.update(pushDedup).set({ status: "pending", updatedAt: sql`(now() at time zone 'UTC') - interval '11 minutes'` })
+      .where(eq(pushDedup.scope, "weekly-attendance-mail"));
     await systemService.notifyWeeklyAttendance("2026-06-22");
 
     expect(people.map((p) => pushesTo(p.lineId))).toEqual([1, 1, 1]);

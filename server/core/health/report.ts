@@ -9,11 +9,13 @@ import {
   evaluateHolidayTable,
   evaluateIntegration,
   evaluateManualJob,
+  evaluatePushDelivery,
   evaluateScheduledJob,
   evaluateSecurity,
   evaluateSyncJob,
   evaluateWebhook,
   type ClockCoverage,
+  type PushDelivery,
   type SecuritySignals,
 } from "./rules";
 import { worst, type HealthReport, type IntegrationState, type JobSchedule, type JobState, type Pipeline } from "./types";
@@ -57,6 +59,7 @@ export interface HealthSignals {
   jobs: Record<string, Signal<JobState | undefined>>;
   integrations: Record<IntegrationKey, Signal<IntegrationState | undefined>>;
   coverage: Signal<ClockCoverage>;
+  pushDelivery: Signal<PushDelivery>;
   database: { latencyMs: number | null; error?: string };
   holidayLastDate: string;
   security: SecuritySignals;
@@ -85,6 +88,10 @@ export function assembleReport(s: HealthSignals): HealthReport {
   pipelines.push(isReadError(s.coverage)
     ? unreadable("clock.coverage", "打卡", "clock_records", s.coverage)
     : evaluateClockCoverage({ id: "clock.coverage", name: "打卡", source: "clock_records", coverage: s.coverage }));
+
+  pipelines.push(isReadError(s.pushDelivery)
+    ? unreadable("push.delivery", "推播送達", "push_dedup", s.pushDelivery)
+    : evaluatePushDelivery({ id: "push.delivery", name: "推播送達", source: "push_dedup", delivery: s.pushDelivery }));
 
   for (const j of SCHEDULED_JOBS) {
     const state = job(j.id);
