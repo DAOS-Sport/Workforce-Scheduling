@@ -66,6 +66,8 @@
 
 待負責人決定：夜間 instance 未醒時，`/api/health*` 不觸發補跑，`errors.purge` 可能亮紅。按工單只記錄，不修改此設計取捨。
 
-收尾：完成驗證後，工作區與基準副本兩個 junction 各以 `cmd /c rmdir <絕對路徑>` 一次拆除，兩次均 exit 0；fresh `cleanup.json` 確認連結不存在，共用依賴與工作區起始的實體依賴備份均保留。兩位執行 Agent 已 completed；本任務 runner 皆已退出，按工作區／證據路徑與兩個拋棄 PG cluster 名稱核對的存活程序為 0。未開瀏覽器或其他背景服務。
+收尾：完成驗證後，工作區與基準副本兩個 junction 各以 `cmd /c rmdir <絕對路徑>` 一次拆除，兩次均 exit 0；fresh `cleanup-refined.json` 確認連結不存在，共用依賴與工作區起始的實體依賴備份均保留。兩位執行 Agent 已 completed；本任務 runner 皆已退出，按工作區／證據路徑與兩個拋棄 PG cluster 名稱核對的存活測試／PG 程序為 0。未開瀏覽器或其他背景服務。
+
+收尾更正：第一份 `cleanup.json` 的寬鬆文字比對匹配到 PID 50320。獨立查其啟動 script、父程序及建立時間，確認是執行本 Session 的 `@openai/codex/bin/codex.js`，命令列包含任務文字而誤匹配。它已保留，沒有終止；原始掃描也保留。`cleanup-refined.json` 明確列出排除的 Session host 與重新核對的 0 個測試／PG 程序，取代前版未分辨 host 就寫 0 的敘述。
 
 保留的環境差異：執行期間出現的 `package-lock.json` 非需求變動已完整保全至 TEMP，再回復起始 blob；沒有提交依賴更動。原始實體依賴備份在 `TEMP/WS-INTEGRATE-20261111/preexisting-node_modules`，不刪未授權內容。報告提交後以 `git status --porcelain` 確認工作樹乾淨。
