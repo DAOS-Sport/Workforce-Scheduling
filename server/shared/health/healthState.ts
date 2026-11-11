@@ -8,7 +8,6 @@
  * 記錄失敗只印警告，絕不讓原本的工作失敗。每次寫入是單句 SQL（jsonb 合併、計數在資料庫內加一），
  * 不先讀再寫，多個執行個體同時寫同一個鍵也不會互相蓋掉；同一個程序內對同一個鍵仍依呼叫順序送出。
  */
-import { systemRepository } from "../../modules/system/system.repository";
 import type { IntegrationState, JobState } from "../../core/health/types";
 import { pipelineForJob } from "../../core/health/flowRules";
 import { withPipeline } from "../logging/context";
@@ -31,6 +30,7 @@ function mergeState(key: string, patch: object, options: { increment?: string; s
   const previous = queues.get(key) ?? Promise.resolve();
   const next = previous.then(async () => {
     try {
+      const { systemRepository } = await import("../../modules/system/system.repository");
       await systemRepository.mergeJsonConfig(key, patch as Record<string, unknown>, options);
     } catch (err: any) {
       console.warn(`[health] 無法寫入 ${key}: ${err?.message ?? err}`);
@@ -41,6 +41,7 @@ function mergeState(key: string, patch: object, options: { increment?: string; s
 }
 
 async function readJson<T>(key: string): Promise<T | undefined> {
+  const { systemRepository } = await import("../../modules/system/system.repository");
   const row = await systemRepository.getSystemConfig(key);
   if (!row) return undefined;
   try {

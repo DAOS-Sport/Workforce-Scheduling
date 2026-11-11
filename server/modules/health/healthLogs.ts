@@ -1,5 +1,4 @@
 import type { HealthLogEntry } from "../../core/health/types";
-import { readHealthLogRows, readRecentPipelineLogs } from "./healthLogs.repository";
 
 export interface HealthLogOptions {
   pipeline?: string;
@@ -67,6 +66,7 @@ export function parseHealthLogsOptions(query: Record<string, unknown>): HealthLo
 
 export async function queryHealthLogs(options: HealthLogOptions = {}): Promise<HealthLogPage> {
   const limit = options.limit ?? 50;
+  const { readHealthLogRows } = await import("./healthLogs.repository");
   const rows = await readHealthLogRows({ ...options, limit: limit + 1, before: options.cursor ? decodeCursor(options.cursor) : undefined });
   const logs = rows.slice(0, limit);
   const last = logs.at(-1);
@@ -83,6 +83,7 @@ export async function attachPipelineLogs<T extends { pipelines: Array<{ id: stri
   let logsError: string | undefined;
   if (report.pipelines.length) {
     try {
+      const { readRecentPipelineLogs } = await import("./healthLogs.repository");
       const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
       rows = await readRecentPipelineLogs(report.pipelines.map((pipeline) => pipeline.id), since, now.toISOString());
     } catch {

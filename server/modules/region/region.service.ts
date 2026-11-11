@@ -5,9 +5,13 @@
  * handlers never reach into the repository directly. As region rules grow
  * (region-scoped permissions, lookup caches, etc.) they belong here.
  */
-import { regionRepository } from "./region.repository";
-
 export const regionService = {
-  findAll: () => regionRepository.getRegions(),
-  findByCode: (code: string) => regionRepository.getRegionByCode(code),
+  findAll: async () => {
+    const { regionRepository } = await import("./region.repository");
+    return regionRepository.getRegions();
+  },
+  findByCode: async (code: string) => {
+    const { regionRepository } = await import("./region.repository");
+    return regionRepository.getRegionByCode(code);
+  },
 };
