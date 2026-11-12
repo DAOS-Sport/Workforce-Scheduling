@@ -17,15 +17,16 @@ export default function ItMonitorPage() {
     staleTime: 0,
   });
 
+  const hasReport = Boolean(query.data);
   useEffect(() => {
-    if (!query.data) return;
+    if (!hasReport) return;
     const scrollToPipeline = () => {
       document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: "start" });
     };
     scrollToPipeline();
     window.addEventListener("hashchange", scrollToPipeline);
     return () => window.removeEventListener("hashchange", scrollToPipeline);
-  }, [query.data]);
+  }, [hasReport]);
 
   // API 這一列的恢復時間：失敗之後第一次取報告成功的那一刻，之後的成功不會移動它。
   const [apiRecoveredAt, setApiRecoveredAt] = useState<string | null>(null);
