@@ -100,16 +100,18 @@ describe("errors-v1 real application HTTP with PostgreSQL", () => {
       expect(Date.parse(body.retainedSince)).toBe(Date.parse("2026-11-09T00:00:00Z"));
       expect(body.errors).toHaveLength(4);
       const merged = body.errors.find((entry: { count: number }) => entry.count === 3);
-      expect(merged).toMatchObject({ route: "PATCH /api/employees/:id", code: "500", env: "development", release: "unknown", request_id: `ext-${createHash("sha256").update(externalId).digest("hex").slice(0, 12)}` });
+      expect(merged).toMatchObject({ route: "PATCH /api/employees/:id", code: "500", env: "development", release: "itest-build", pipeline: "employee.manage", request_id: `ext-${createHash("sha256").update(externalId).digest("hex").slice(0, 12)}` });
       expect(Date.parse(merged.first_seen)).toBe(Date.parse("2026-11-11T00:00:00Z"));
       expect(Date.parse(merged.last_seen)).toBe(Date.parse("2026-11-12T01:00:00Z"));
       expect(body.errors[0]).toMatchObject({ route: "GET /api/employees/:regionCode", request_id: UUID });
       expect(body.errors.map((entry: { route: string }) => entry.route)).toContain("PATCH /api/:segment/:segment/:segment/:id");
+      expect(body.errors.find((entry: { route: string }) => entry.route === "PATCH /api/:segment/:segment/:segment/:id").pipeline).toBeNull();
       expect(body.errors.map((entry: { last_seen: string }) => Date.parse(entry.last_seen))).toEqual([
         Date.parse("2026-11-12T04:00:00Z"), Date.parse("2026-11-12T03:00:00Z"), Date.parse("2026-11-12T02:00:00Z"), Date.parse("2026-11-12T01:00:00Z"),
       ]);
       for (const error of body.errors) {
-        expect(Object.keys(error).sort()).toEqual(["code", "count", "env", "fingerprint", "first_seen", "last_seen", "level", "message", "release", "request_id", "route", "system", "ts"]);
+        expect(Object.keys(error).sort()).toEqual(["code", "count", "env", "fingerprint", "first_seen", "last_seen", "level", "message", "pipeline", "release", "request_id", "route", "system", "ts"]);
+        expect(error.release).toBe(body.build);
         expect(error.fingerprint).toMatch(/^[0-9a-f]{12}$/);
         for (const at of [error.ts, error.first_seen, error.last_seen]) expect(at).toMatch(/\+08:00$/);
       }

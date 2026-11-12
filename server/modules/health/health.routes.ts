@@ -53,7 +53,7 @@ export function mountHealthRoutes(app: Express): void {
 
   app.get("/api/health/pipelines", healthToken, async (_req, res) => {
     try {
-      res.json(await buildHealthReport(new Date()));
+      res.json(await buildHealthReport(new Date(), app));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -62,7 +62,7 @@ export function mountHealthRoutes(app: Express): void {
   app.get("/api/admin/health", requireAdmin, async (_req, res) => {
     res.set("Cache-Control", "no-store");
     try {
-      res.json(await buildHealthReport(new Date()));
+      res.json(await buildHealthReport(new Date(), app));
     } catch (err: any) {
       console.error("[health] 後台健康報告產生失敗:", err?.message ?? err);
       res.status(500).json({ message: "無法產生健康報告" });

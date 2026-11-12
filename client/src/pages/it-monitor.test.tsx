@@ -105,6 +105,7 @@ describe("HealthMonitor layout", () => {
     expect(inGroup("database").getByTestId("pipeline-database")).toBeTruthy();
     expect(inGroup("external").getByTestId("pipeline-integration.line")).toBeTruthy();
     expect(inGroup("jobs").getByTestId("pipeline-push.a")).toBeTruthy();
+    expect(screen.getByTestId("pipeline-clock.coverage").id).toBe("clock.coverage");
   });
 
   it("long text can wrap instead of widening the page", () => {
@@ -142,6 +143,7 @@ describe("HealthMonitor API row", () => {
 describe("ItMonitorPage", () => {
   beforeEach(() => {
     vi.useFakeTimers({ now: NOW, toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    window.history.replaceState({}, "", "/it-monitor");
   });
 
   function mount(respond: () => Promise<unknown>) {
@@ -173,6 +175,40 @@ describe("ItMonitorPage", () => {
     expect(calls).toEqual(["/api/admin/health"]);
     expect(level("database")).toBe("red");
     expect(level("api")).toBe("green");
+  });
+
+  it("scrolls to a pipeline when the hash changes after the report loads", async () => {
+    const scrollIntoView = vi.fn();
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, "scrollIntoView");
+    Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+    try {
+      mount(async () => reportOf([pipe("clock.amendment", "red"), pipe("push.daily", "green")]));
+      await flush();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      await act(async () => {
+        window.location.hash = "clock.amendment";
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByTestId("pipeline-clock.amendment"));
+
+      await act(async () => {
+        window.location.hash = "push.daily";
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+      expect(scrollIntoView.mock.contexts[1]).toBe(screen.getByTestId("pipeline-push.daily"));
+
+      await act(async () => {
+        window.location.hash = "unknown.pipeline";
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    } finally {
+      if (original) Object.defineProperty(Element.prototype, "scrollIntoView", original);
+      else Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
   });
 
   it("renders embedded pipeline logs from the report without another request", async () => {

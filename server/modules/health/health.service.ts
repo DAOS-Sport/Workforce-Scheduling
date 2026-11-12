@@ -17,6 +17,9 @@ import type { HealthReport } from "../../core/health/types";
 import { readIntegrationState, readJobState } from "../../shared/health/healthState";
 import { collectFlowSignals } from "./flowSignals";
 import { attachPipelineLogs } from "./healthLogs";
+import type { Express } from "express";
+import { attachPipelineDrilldown } from "./healthDrilldown";
+import { getHealthBuild } from "../../core/health/build";
 
 async function attempt<T>(read: () => Promise<T>): Promise<T | ReadError> {
   try {
@@ -73,7 +76,7 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
   return {
     flow: await collectFlowSignals(now),
     now,
-    build: process.env.HEALTH_BUILD_LABEL || "unknown",
+    build: getHealthBuild(),
     schedulerActive: IS_PRODUCTION,
     flags: { ...featureFlags },
     jobs,
@@ -95,8 +98,9 @@ export async function collectSignals(now: Date): Promise<HealthSignals> {
   };
 }
 
-export async function buildHealthReport(now: Date): Promise<HealthReport> {
-  return attachPipelineLogs(assembleReport(await collectSignals(now)), now);
+export async function buildHealthReport(now: Date, app?: Express): Promise<HealthReport> {
+  const signals = await collectSignals(now);
+  return attachPipelineDrilldown(await attachPipelineLogs(assembleReport(signals), now), signals, app);
 }
 
 async function readPushDelivery(): Promise<PushDelivery> {

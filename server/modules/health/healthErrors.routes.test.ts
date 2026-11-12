@@ -12,12 +12,13 @@ vi.mock("../../infra/db", () => ({ db: { execute: vi.fn() } }));
 
 import { gateAdminApi } from "../../shared/middleware/requireAdmin";
 import { mountHealthRoutes } from "./health.routes";
+import { routeTemplate } from "./healthErrors";
 
 const NOW = "2026-11-12T04:00:00.000Z";
 const TOKEN = { Authorization: "Bearer unit-health-token" };
 const UUID = "b6f0c2d4-8e1b-4c3d-9a22-123456789abc";
 const OUTER = ["system", "build", "checkedAt", "since", "retainedSince", "truncated", "errors"].sort();
-const INNER = ["system", "env", "ts", "level", "code", "message", "request_id", "route", "fingerprint", "count", "first_seen", "last_seen", "release"].sort();
+const INNER = ["system", "env", "ts", "level", "code", "message", "request_id", "route", "fingerprint", "count", "first_seen", "last_seen", "release", "pipeline"].sort();
 
 function row(id: number, overrides: Partial<AppErrorRow> = {}): AppErrorRow {
   return { id, requestId: UUID, method: "PATCH", path: "/api/employees/123", status: 500, message: "TypeError: private detail", stack: null, subject: null, occurredAt: new Date("2026-11-12T03:00:00Z"), ...overrides };
@@ -67,6 +68,11 @@ describe("GET /api/health/errors errors-v1 over HTTP", () => {
     vi.resetAllMocks();
   });
 
+  it("shares the privacy-safe route fallback when no Express instance is supplied", () => {
+    expect(routeTemplate(undefined, { method: "GET", path: "/api/private/fixture.person@example.invalid/123?phone=0912345678" }))
+      .toBe("GET /api/:segment/:segment/:id");
+  });
+
   it("returns 503 with no configured token and never caches or queries", async () => {
     vi.stubEnv("HEALTH_TOKEN", "   ");
     await withApp(async (base) => {
@@ -91,7 +97,7 @@ describe("GET /api/health/errors errors-v1 over HTTP", () => {
     });
   });
 
-  it("passes the real global admin gate using the health token and exports exactly 7 outer / 13 inner fields", async () => {
+  it("passes the real global admin gate using the health token and exports exactly 7 outer / 14 inner fields", async () => {
     stored([row(1)]);
     await withApp(async (base) => {
       const res = await fetch(`${base}/api/health/errors`, { headers: TOKEN });
@@ -103,7 +109,8 @@ describe("GET /api/health/errors errors-v1 over HTTP", () => {
       expect(body.errors).toHaveLength(1);
       const error = body.errors[0];
       expect(Object.keys(error).sort()).toEqual(INNER);
-      expect(error).toMatchObject({ system: "workforce-scheduling", env: "production", level: "error", code: "500", route: "PATCH /api/employees/:id", request_id: UUID, count: 1, release: "unknown" });
+      expect(error).toMatchObject({ system: "workforce-scheduling", env: "production", level: "error", code: "500", route: "PATCH /api/employees/:id", request_id: UUID, count: 1, release: "unit-build", pipeline: "employee.manage" });
+      expect(error.release).toBe(body.build);
       expect(error.fingerprint).toMatch(/^[0-9a-f]{12}$/);
       for (const timestamp of [body.checkedAt, body.since, body.retainedSince, error.ts, error.first_seen, error.last_seen]) {
         expect(timestamp).toMatch(/\+08:00$/);
@@ -111,6 +118,24 @@ describe("GET /api/health/errors errors-v1 over HTTP", () => {
       }
       expect(Date.parse(body.checkedAt)).toBe(Date.parse(NOW));
       expect(error.ts).toBe(error.last_seen);
+    });
+  });
+
+  it.each([
+    ["/API/EMPLOYEES/123?phone=0912345678", "employee.manage"],
+    ["/api/clock-amendments/123", "clock.amendment"],
+    ["/api/internal/trigger-weekly-schedule", "push.weekly-schedule"],
+    ["/api/unregistered/123", null],
+    ["/api/employees-private/123", null],
+  ])("attributes %s only through the existing path mapping", async (path, pipeline) => {
+    stored([row(1, { path })]);
+    await withApp(async (base) => {
+      const res = await fetch(`${base}/api/health/errors`, { headers: TOKEN });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.errors).toHaveLength(1);
+      expect(body.errors[0].pipeline).toBe(pipeline);
+      expect(body.errors[0].release).toBe(body.build);
     });
   });
 
