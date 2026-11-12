@@ -11,6 +11,7 @@ import { timingSafeEqual } from "crypto";
 import { requireAdmin } from "../../shared/middleware/requireAdmin";
 import { buildHealthReport, readClockNeverSuccessEmployees } from "./health.service";
 import { InvalidHealthLogQuery, parseHealthLogsOptions, queryHealthLogs } from "./healthLogs";
+import { InvalidHealthErrorsQuery, queryHealthErrors } from "./healthErrors";
 
 function tokenMatches(received: string, expected: string): boolean {
   const a = Buffer.from(received);
@@ -40,6 +41,15 @@ export function mountHealthRoutes(app: Express): void {
   };
   app.get("/api/health/logs", healthToken, readLogs);
   app.get("/api/admin/health/logs", requireAdmin, readLogs);
+
+  app.get("/api/health/errors", healthToken, async (req, res) => {
+    try {
+      res.json(await queryHealthErrors(app, req.query));
+    } catch (err) {
+      if (err instanceof InvalidHealthErrorsQuery) return void res.status(400).json({ message: "since 必須為有效的 RFC 3339 時間" });
+      res.status(500).json({ message: "無法讀取錯誤清單" });
+    }
+  });
 
   app.get("/api/health/pipelines", healthToken, async (_req, res) => {
     try {
