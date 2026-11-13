@@ -19,6 +19,8 @@ export function worst(levels: Level[]): Level {
 }
 
 export interface Pipeline {
+  evidence?: Array<{ at: string; requestId: string | null; code: string | null; route: string | null; summary: string }>;
+  links?: Array<{ label: string; url: string }>;
   logs?: HealthLogEntry[];
   logsError?: string;
   id: string;

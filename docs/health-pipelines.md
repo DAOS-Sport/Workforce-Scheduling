@@ -2,6 +2,14 @@
 
 健康入口為 `GET /api/health/pipelines`（health token）與 `GET /api/admin/health`（管理員登入）。報告只讀資料，不會補跑排程、寄信、推播或修改業務資料。`overall` 取全部管線最嚴重的燈號；各管線仍保留自己的理由與來源。
 
+## drilldown-v1
+
+紅／黃管線有可用失敗事件時附選填 `evidence`，依時間新到舊最多 5 筆。一般路由管線取最近 24 小時 `app_errors` 5xx metadata，沿 `pipelineForPath()` 歸屬，`server.errors` 同時提供全站 5xx；路由樣板共用 errors-v1 的 `routeTemplate()`。登入、手動週出勤通知另沿既有非 HTTP `pipeline_logs` warn/error 訊號；排程／同步等管線可讀既有 warn/error、job/integration 的 `lastFailureAt`、`schedule.save` 失敗時間；LINE webhook 使用既有事件失敗時間，定位警告另對應 `clock.geolocation`。沒有可自然轉換的事件或綠燈就省略。原 `logs` 保留；`summary` 只用固定文字，不取原始 message、stack 或業務內容。`requestId` 限 1–64 個英數字或 `-`，否則 `null`。
+
+可選設定 `HEALTH_PUBLIC_URL` 為本系統正式 HTTPS 網址。設定有效時，每條管線附一筆 `links`，只用該網址的 origin 組成 `/it-monitor#<pipeline id>`，不傳 query、token 或個資；未設定、非 HTTPS 或含帳密時省略 links。未登入在原網址顯示既有後台登入頁；登入後才讀取監控資料，並捲至對應卡片。
+
+`/api/health/errors` 每筆多選填 `pipeline`；使用同一個 `pipelineForPath()`，對不上回 `null`。health-v1 與 errors-v1 的外層 `build` 共用 `getHealthBuild()`：執行時 `HEALTH_BUILD_LABEL` 優先，其次是 `npm run build` 內嵌的 Git 短 SHA，最後才 `unknown`。沒有 Git 的來源封存檔仍可建置；每筆錯誤的 `release` 表示發生時的部署版本，既有錯誤表沒有歷史版本欄位，因此回 `unknown`。
+
 `server/core/health/flowRules.ts` 定義工作流、路由歸屬與純函式判斷；`server/modules/health/flowSignals.repository.ts` 執行資料庫 SELECT；`flowSignals.ts` 加入目前環境是否執行排程。日誌可直接使用純函式 `pipelineForPath(path)`、`pipelineForJob(job)`，不需載入健康 service 或資料庫。
 
 健康路由不觸發醒來補跑；`catchUpMissedRuns` 排除 `/api/health`、`/api/admin/health` 及其子路徑（不分大小寫），以維持查詢只讀。路由日誌映射同樣不分大小寫，與 Express 預設相同。補跑有自己的 `scheduler.catch-up` logging context，不繼承訪客流程。

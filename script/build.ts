@@ -1,6 +1,7 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
+import { execFileSync } from "node:child_process";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -33,6 +34,12 @@ const allowlist = [
 ];
 
 async function buildAll() {
+  let healthBuildSha = "unknown";
+  try {
+    healthBuildSha = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    // Source archives can be built without Git metadata.
+  }
   await rm("dist", { recursive: true, force: true });
 
   console.log("building client...");
@@ -50,6 +57,7 @@ async function buildAll() {
     format: "cjs",
     outfile: "dist/index.cjs",
     define: {
+      __HEALTH_BUILD_SHA__: JSON.stringify(healthBuildSha),
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,

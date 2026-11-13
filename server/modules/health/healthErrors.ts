@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { Express } from "express";
 import type { AppErrorRow } from "@shared/schema";
 import { SYSTEM_ID } from "../../core/health/report";
+import { getHealthBuild } from "../../core/health/build";
+import { pipelineForPath } from "../../core/health/flowRules";
 
 const ROW_LIMIT = 1000;
 const METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT", "TRACE"]);
@@ -45,13 +47,13 @@ function parseSince(value: unknown, now: Date): { filter: Date | string; display
 type RouteLayer = { route?: { path: string | string[]; methods: Record<string, boolean> } };
 
 /** Use server-owned route literals, never request-owned path segments. */
-function routeTemplate(app: Express, row: AppErrorRow): string {
+export function routeTemplate(app: Express | undefined, row: Pick<AppErrorRow, "method" | "path">): string {
   const method = METHODS.has(row.method.toUpperCase()) ? row.method.toUpperCase() : "HTTP";
   const path = row.path.split(/[?#]/, 1)[0];
   const parts = path.split("/").filter(Boolean).map((part) => {
     try { return decodeURIComponent(part); } catch { return part; }
   });
-  const layers = (app.router as { stack?: RouteLayer[] }).stack ?? [];
+  const layers = (app?.router as { stack?: RouteLayer[] } | undefined)?.stack ?? [];
   for (const { route } of layers) {
     if (!route || !(route.methods[method.toLowerCase()] || route.methods._all || (method === "HEAD" && route.methods.get))) continue;
     for (const template of Array.isArray(route.path) ? route.path : [route.path]) {
@@ -78,6 +80,7 @@ interface HealthError {
   first_seen: string;
   last_seen: string;
   release: string;
+  pipeline: string | null;
 }
 
 /** Counts cover the requested window and, when truncated, the newest 1,000 rows. */
@@ -88,7 +91,7 @@ export async function queryHealthErrors(app: Express, query: Record<string, unkn
     listErrors({ since, limit: ROW_LIMIT + 1 }),
     oldestErrorOccurrence(),
   ]);
-  const build = process.env.HEALTH_BUILD_LABEL || "unknown";
+  const build = getHealthBuild();
   const groups = new Map<string, HealthError>();
   // Keep PostgreSQL's full-precision ordering; Date has already lost sub-millisecond ties.
   const ordered = rows.slice(0, ROW_LIMIT);
@@ -116,8 +119,8 @@ export async function queryHealthErrors(app: Express, query: Record<string, unkn
         count: 1,
         first_seen: ts,
         last_seen: ts,
-        // app_errors has no per-event release; keep its unknown provenance explicit.
         release: "unknown",
+        pipeline: pipelineForPath(row.path) ?? null,
       });
     }
   }

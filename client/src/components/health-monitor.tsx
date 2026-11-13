@@ -58,7 +58,7 @@ function TimeLine({ label, iso, now, testId }: { label: string; iso: string | nu
 function PipelineCard({ pipeline: p, now, errorRef }: { pipeline: Pipeline; now: Date; errorRef?: ErrorRef }) {
   const recovered = recoveredAt(p);
   return (
-    <li className="rounded-lg border bg-card p-3 space-y-2 min-w-0" data-testid={`pipeline-${p.id}`}>
+    <li id={p.id} className="rounded-lg border bg-card p-3 space-y-2 min-w-0" data-testid={`pipeline-${p.id}`}>
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-sm font-semibold leading-tight min-w-0 break-words">{p.name}</h3>
         <Light level={p.level} testId={`light-${p.id}`} />
