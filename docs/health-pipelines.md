@@ -8,7 +8,7 @@
 
 可選設定 `HEALTH_PUBLIC_URL` 為本系統正式 HTTPS 網址。設定有效時，每條管線附一筆 `links`，只用該網址的 origin 組成 `/it-monitor#<pipeline id>`，不傳 query、token 或個資；未設定、非 HTTPS 或含帳密時省略 links。未登入在原網址顯示既有後台登入頁；登入後才讀取監控資料，並捲至對應卡片。
 
-`/api/health/errors` 每筆多選填 `pipeline`；使用同一個 `pipelineForPath()`，對不上回 `null`。health-v1 的 `build`、errors-v1 的 `build`／`release` 共用 `getHealthBuild()`：執行時 `HEALTH_BUILD_LABEL` 優先，其次是 `npm run build` 內嵌的 Git 短 SHA，最後才 `unknown`。沒有 Git 的來源封存檔仍可建置；既有錯誤表沒有歷史版本欄位，`release` 表示目前執行版本。
+`/api/health/errors` 每筆多選填 `pipeline`；使用同一個 `pipelineForPath()`，對不上回 `null`。health-v1 與 errors-v1 的外層 `build` 共用 `getHealthBuild()`：執行時 `HEALTH_BUILD_LABEL` 優先，其次是 `npm run build` 內嵌的 Git 短 SHA，最後才 `unknown`。沒有 Git 的來源封存檔仍可建置；每筆錯誤的 `release` 表示發生時的部署版本，既有錯誤表沒有歷史版本欄位，因此回 `unknown`。
 
 `server/core/health/flowRules.ts` 定義工作流、路由歸屬與純函式判斷；`server/modules/health/flowSignals.repository.ts` 執行資料庫 SELECT；`flowSignals.ts` 加入目前環境是否執行排程。日誌可直接使用純函式 `pipelineForPath(path)`、`pipelineForJob(job)`，不需載入健康 service 或資料庫。
 

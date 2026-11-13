@@ -119,7 +119,7 @@ export async function queryHealthErrors(app: Express, query: Record<string, unkn
         count: 1,
         first_seen: ts,
         last_seen: ts,
-        release: build,
+        release: "unknown",
         pipeline: pipelineForPath(row.path) ?? null,
       });
     }

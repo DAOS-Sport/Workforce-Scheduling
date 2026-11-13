@@ -109,8 +109,8 @@ describe("GET /api/health/errors errors-v1 over HTTP", () => {
       expect(body.errors).toHaveLength(1);
       const error = body.errors[0];
       expect(Object.keys(error).sort()).toEqual(INNER);
-      expect(error).toMatchObject({ system: "workforce-scheduling", env: "production", level: "error", code: "500", route: "PATCH /api/employees/:id", request_id: UUID, count: 1, release: "unit-build", pipeline: "employee.manage" });
-      expect(error.release).toBe(body.build);
+      expect(error).toMatchObject({ system: "workforce-scheduling", env: "production", level: "error", code: "500", route: "PATCH /api/employees/:id", request_id: UUID, count: 1, release: "unknown", pipeline: "employee.manage" });
+      expect(error.release).toBe("unknown");
       expect(error.fingerprint).toMatch(/^[0-9a-f]{12}$/);
       for (const timestamp of [body.checkedAt, body.since, body.retainedSince, error.ts, error.first_seen, error.last_seen]) {
         expect(timestamp).toMatch(/\+08:00$/);
@@ -135,7 +135,7 @@ describe("GET /api/health/errors errors-v1 over HTTP", () => {
       const body = await res.json();
       expect(body.errors).toHaveLength(1);
       expect(body.errors[0].pipeline).toBe(pipeline);
-      expect(body.errors[0].release).toBe(body.build);
+      expect(body.errors[0].release).toBe("unknown");
     });
   });
 
@@ -324,7 +324,7 @@ describe("GET /api/health/errors errors-v1 over HTTP", () => {
     });
   });
 
-  it("uses development and unknown build in non-production row fields", async () => {
+  it("uses development and unknown release in non-production row fields", async () => {
     vi.stubEnv("HEALTH_BUILD_LABEL", "");
     vi.stubEnv("REPLIT_DEPLOYMENT", "0");
     stored([row(1)]);

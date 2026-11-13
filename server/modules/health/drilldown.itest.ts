@@ -112,7 +112,7 @@ describe("drilldown-v1 through health routes and disposable PostgreSQL", () => {
       expect(errors.errors.find((e: any) => e.route.startsWith("GET ")).pipeline).toBeNull();
       for (const e of errors.errors) if (e.pipeline !== null) expect(ids.has(e.pipeline)).toBe(true);
       expect(errors.build).toBe(report.build);
-      expect(errors.errors.every((e: any) => e.release === report.build)).toBe(true);
+      expect(errors.errors.every((e: any) => e.release === "unknown")).toBe(true);
     });
   });
 
