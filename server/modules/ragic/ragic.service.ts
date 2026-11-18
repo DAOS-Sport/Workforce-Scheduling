@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { fetchAllRagicRecords, fetchH02RagicRecords } from "../../adapters/ragic";
-import { SnapshotRejected, assertSnapshotComplete, planEmployeeSync } from "../../core/ragic/employeeSync";
+import { SnapshotRejected, assertSnapshotComplete, planEmployeeSync, type SyncErrorKinds } from "../../core/ragic/employeeSync";
 import { VENUE_DATA } from "../../core/ragic/venueData";
 import { LOCK_NS, withSessionLock, withTx } from "../../infra/db/tx";
 import { trackJob, type JobTrigger } from "../../shared/health/healthState";
@@ -25,6 +25,7 @@ export interface SyncResult {
   skipped: number;
   deactivated: number;
   errors: string[];
+  errorKinds: SyncErrorKinds;
   skipReasons: Record<string, number>;
   totalFetched: number;
 }
@@ -37,7 +38,8 @@ const VENUE_SYNC_KEY = 1;
 
 const DONE_EVENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
-const summarize = (r: SyncResult) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length });
+const summarize = (r: SyncResult) => ({ created: r.created, updated: r.updated, deactivated: r.deactivated, skipped: r.skipped, errors: r.errors.length,
+  errorKinds: { noRegion: r.errorKinds.noRegion, badEmploymentType: r.errorKinds.badEmploymentType, h02ReadFailed: r.errorKinds.h02ReadFailed } });
 
 /**
  * Fetches one Ragic snapshot and applies it to the employees in a single transaction: a write that fails rolls back the
@@ -90,6 +92,7 @@ export async function syncFromRagic(dryRun = false): Promise<SyncResult> {
     skipped: plan.skipped,
     deactivated: plan.deactivated,
     errors: [...plan.errors, ...h02Errors],
+    errorKinds: { ...plan.errorKinds, h02ReadFailed: h02Errors.length },
     skipReasons: plan.skipReasons,
     totalFetched: plan.totalFetched,
   };

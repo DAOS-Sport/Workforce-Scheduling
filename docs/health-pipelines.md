@@ -4,7 +4,9 @@
 
 ## drilldown-v1
 
-紅／黃管線有可用失敗事件時附選填 `evidence`，依時間新到舊最多 5 筆。一般路由管線取最近 24 小時 `app_errors` 5xx metadata，沿 `pipelineForPath()` 歸屬，`server.errors` 同時提供全站 5xx；路由樣板共用 errors-v1 的 `routeTemplate()`。登入、手動週出勤通知另沿既有非 HTTP `pipeline_logs` warn/error 訊號；排程／同步等管線可讀既有 warn/error、job/integration 的 `lastFailureAt`、`schedule.save` 失敗時間；LINE webhook 使用既有事件失敗時間，定位警告另對應 `clock.geolocation`。沒有可自然轉換的事件或綠燈就省略。原 `logs` 保留；`summary` 只用固定文字，不取原始 message、stack 或業務內容。`requestId` 限 1–64 個英數字或 `-`，否則 `null`。
+紅／黃管線有可用失敗事件時附選填 `evidence`，依時間新到舊最多 5 筆。一般路由管線取最近 24 小時 `app_errors` 5xx metadata，沿 `pipelineForPath()` 歸屬，`server.errors` 同時提供全站 5xx；路由樣板共用 errors-v1 的 `routeTemplate()`。登入、手動週出勤通知另沿既有非 HTTP `pipeline_logs` warn/error 訊號；排程／同步等管線可讀既有 warn/error、job/integration 的 `lastFailureAt`、`schedule.save` 失敗時間；LINE webhook 使用既有事件失敗時間，定位警告另對應 `clock.geolocation`。job、integration、flow、webhook 的狀態若有 `lastSuccessAt` 或 `recoveredAt` 晚於 `lastFailureAt`，就不再把該失敗當證據；之後再次失敗則保留。沒有可自然轉換的事件或綠燈就省略。原 `logs` 保留；`summary` 只用固定文字與筆數，不取原始 message、stack 或業務內容。`requestId` 限 1–64 個英數字或 `-`，否則 `null`。
+
+Ragic 員工同步因最近一次成功的 `lastSummary.errors > 0` 亮黃燈時，補上 `at = lastSuccessAt` 的「最近一次同步有 N 筆資料錯誤」證據，`requestId`、`code`、`route` 都是 `null`。`lastSummary.errorKinds` 只存 `noRegion`（部門無對應區域）、`badEmploymentType`（聘雇類別不符）、`h02ReadFailed`（H02 讀取失敗）的筆數；理由與證據附上正數類別，例如「部門無對應區域 8、聘雇類別不符 3」。舊摘要沒有分類時保留原理由。分類不含姓名、員工編號或部門原文，也不改燈號順序與門檻。
 
 可選設定 `HEALTH_PUBLIC_URL` 為本系統正式 HTTPS 網址。設定有效時，每條管線附一筆 `links`，只用該網址的 origin 組成 `/it-monitor#<pipeline id>`，不傳 query、token 或個資；未設定、非 HTTPS 或含帳密時省略 links。未登入在原網址顯示既有後台登入頁；登入後才讀取監控資料，並捲至對應卡片。
 

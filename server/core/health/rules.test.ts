@@ -93,6 +93,18 @@ describe("evaluateSyncJob", () => {
     expect(evaluateSyncJob({ ...base, now, state: { lastStartedAt: iso("2026-10-21", "07:00"), lastSuccessAt: iso("2026-10-21", "03:00"), lastFailureAt: iso("2026-10-21", "07:00") } }).level).toBe("yellow");
     expect(evaluateSyncJob({ ...base, now, state: { lastStartedAt: iso("2026-10-21", "03:00"), lastSuccessAt: iso("2026-10-21", "03:00"), lastSummary: { errors: 2 } } }).level).toBe("yellow");
   });
+
+  it.each([
+    [undefined, "最近一次同步成功，但有 11 筆錯誤"],
+    [{ noRegion: 8, badEmploymentType: 3, h02ReadFailed: 0 }, "最近一次同步成功，但有 11 筆錯誤（部門無對應區域 8、聘雇類別不符 3）"],
+    [{ noRegion: 0, badEmploymentType: 0, h02ReadFailed: 1 }, "最近一次同步成功，但有 1 筆錯誤（H02 讀取失敗 1）"],
+  ])("includes only positive error categories and supports old summaries: %j", (errorKinds, reason) => {
+    const p = evaluateSyncJob({ ...base, now, state: {
+      lastStartedAt: iso("2026-10-21", "03:00"), lastSuccessAt: iso("2026-10-21", "03:01"),
+      lastSummary: { errors: errorKinds?.h02ReadFailed === 1 ? 1 : 11, ...(errorKinds ? { errorKinds } : {}) },
+    } });
+    expect([p.level, p.reason]).toEqual(["yellow", reason]);
+  });
 });
 
 describe("evaluateWebhook", () => {

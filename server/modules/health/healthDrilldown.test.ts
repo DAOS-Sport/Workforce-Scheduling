@@ -2,6 +2,7 @@ import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HealthSignals } from "../../core/health/report";
 import type { HealthReport, Pipeline } from "../../core/health/types";
+import { evaluateSyncJob } from "../../core/health/rules";
 const { readErrors } = vi.hoisted(() => ({ readErrors: vi.fn(async () => []) }));
 vi.mock("./healthDrilldown.repository", () => ({ readDrilldownErrors: readErrors }));
 import { attachPipelineDrilldown } from "./healthDrilldown";
@@ -101,5 +102,51 @@ describe("optional drilldown metadata", () => {
     s.flow = { lineWebhook: { recent: 1, day: 1, lastFailureAt: "2026-11-12T03:00:00Z" } } as HealthSignals["flow"];
     const result = await attachPipelineDrilldown(report(pipe("line.webhook")), s);
     expect(result.pipelines[0].evidence).toEqual([{ at: "2026-11-12T03:00:00.000Z", requestId: null, code: null, route: null, summary: "LINE webhook 處理失敗" }]);
+  });
+
+  it.each(["lastSuccessAt", "recoveredAt"] as const)("omits recovered failures across job, integration, flow and webhook using %s", async recoveryKey => {
+    const s = signals();
+    const recovered = { lastFailureAt: "2026-11-06T19:00:00Z", [recoveryKey]: "2026-11-06T20:00:00Z" };
+    s.jobs = { "ragic.sync": recovered, "ragic.webhook": recovered };
+    s.integrations = { line: recovered } as HealthSignals["integrations"];
+    s.flow = { purge: recovered, weeklyAttendance: recovered, lineWebhook: { recent: 0, day: 0, ...recovered } } as HealthSignals["flow"];
+    const result = await attachPipelineDrilldown(report(...["ragic.employee-sync", "ragic.h01-webhook", "integration.line", "errors.purge", "manual.weekly-attendance", "line.webhook"].map(id => pipe(id, "yellow"))), s);
+    expect(result.pipelines.map(p => p.evidence)).toEqual(Array(6).fill(undefined));
+  });
+
+  it("keeps a new failure after recovery, including a success at the same time as failure", async () => {
+    const s = signals();
+    s.jobs = { "ragic.sync": { recoveredAt: "2026-11-11T02:00:00Z", lastFailureAt: "2026-11-12T03:00:00Z", lastSuccessAt: "2026-11-12T03:00:00Z" } };
+    const result = await attachPipelineDrilldown(report(pipe("ragic.employee-sync", "yellow")), s);
+    expect(result.pipelines[0].evidence).toEqual([{ at: "2026-11-12T03:00:00.000Z", requestId: null, code: null, route: null, summary: "排程執行失敗" }]);
+  });
+
+  it.each([
+    [undefined, "最近一次同步有 11 筆資料錯誤"],
+    [{ noRegion: 8, badEmploymentType: 3, h02ReadFailed: 0 }, "最近一次同步有 11 筆資料錯誤（部門無對應區域 8、聘雇類別不符 3）"],
+    [{ noRegion: 0, badEmploymentType: 0, h02ReadFailed: 1 }, "最近一次同步有 1 筆資料錯誤（H02 讀取失敗 1）"],
+  ])("points row-error evidence at the successful sync: %j", async (errorKinds, summary) => {
+    const s = signals();
+    const state = { lastStartedAt: "2026-11-12T03:00:00Z", lastSuccessAt: "2026-11-12T03:01:00Z",
+      lastFailureAt: "2026-11-06T19:00:00Z", recoveredAt: "2026-11-06T20:00:00Z",
+      lastSummary: { errors: errorKinds?.h02ReadFailed === 1 ? 1 : 11, ...(errorKinds ? { errorKinds } : {}) } };
+    s.jobs = { "ragic.sync": state };
+    const p = evaluateSyncJob({ id: "ragic.employee-sync", name: "Ragic 員工同步", now: NOW, state });
+    const result = await attachPipelineDrilldown(report(p), s);
+    expect(p.level).toBe("yellow");
+    expect(result.pipelines[0].evidence).toEqual([{ at: "2026-11-12T03:01:00.000Z", requestId: null, code: null, route: null, summary }]);
+  });
+
+  it("does not present old row errors as the reason for a newer failed attempt or an overdue sync", async () => {
+    for (const state of [
+      { lastStartedAt: "2026-11-12T03:00:00Z", lastSuccessAt: "2026-11-12T02:00:00Z", lastFailureAt: "2026-11-12T03:00:00Z" },
+      { lastStartedAt: "2026-11-06T19:00:00Z", lastSuccessAt: "2026-11-06T19:00:00Z" },
+    ]) {
+      const s = signals();
+      s.jobs = { "ragic.sync": { ...state, lastSummary: { errors: 11 } } };
+      const p = evaluateSyncJob({ id: "ragic.employee-sync", name: "Ragic 員工同步", now: NOW, state: s.jobs["ragic.sync"] as typeof state });
+      const result = await attachPipelineDrilldown(report(p), s);
+      expect(result.pipelines[0].evidence?.some(e => e.summary.includes("資料錯誤")) ?? false).toBe(false);
+    }
   });
 });
