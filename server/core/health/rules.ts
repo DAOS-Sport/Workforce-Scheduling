@@ -77,6 +77,18 @@ export function evaluateScheduledJob(input: ScheduledJobInput): Pipeline {
   return pipeline(input, "red", `應該在 ${formatTaipeiDateTime(expected)} 執行，但沒有成功紀錄${last}`, state);
 }
 
+/** Public sync diagnostics contain only known category labels and positive counts. */
+export function formatSyncErrorKinds(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  const kinds = value as Record<string, unknown>;
+  const labels = { noRegion: "部門無對應區域", badEmploymentType: "聘雇類別不符", h02ReadFailed: "H02 讀取失敗" };
+  const parts = Object.entries(labels).flatMap(([key, label]) => {
+    const count = kinds[key];
+    return typeof count === "number" && Number.isInteger(count) && count > 0 ? [`${label} ${count}`] : [];
+  });
+  return parts.length ? `（${parts.join("、")}）` : "";
+}
+
 /** Ragic 員工同步：26 小時內要有一次成功。 */
 export function evaluateSyncJob(input: Base & { state?: JobState; now: Date }): Pipeline {
   const { state, now } = input;
@@ -89,7 +101,7 @@ export function evaluateSyncJob(input: Base & { state?: JobState; now: Date }): 
   }
   if (failure > success) return pipeline(input, "yellow", `最近一次失敗（${at(state.lastFailureAt!)}）：${state.lastError ?? "未知錯誤"}；26 小時內有成功`, state);
   const errors = Number(state.lastSummary?.errors ?? 0);
-  if (errors > 0) return pipeline(input, "yellow", `最近一次同步成功，但有 ${errors} 筆錯誤`, state);
+  if (errors > 0) return pipeline(input, "yellow", `最近一次同步成功，但有 ${errors} 筆錯誤${formatSyncErrorKinds(state.lastSummary?.errorKinds)}`, state);
   return pipeline(input, "green", `最近一次成功 ${at(state.lastSuccessAt!)}`, state);
 }
 

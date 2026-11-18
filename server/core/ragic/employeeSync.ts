@@ -10,6 +10,12 @@ import { SYNC_ROLES, employeeCodeOf, jobTitleOf, mapDepartmentToRegionCode, mapR
 
 export type ImpliedStatus = "active" | "inactive";
 
+export interface SyncErrorKinds {
+  noRegion: number;
+  badEmploymentType: number;
+  h02ReadFailed: number;
+}
+
 /** An employee write: the fields Ragic owns, plus `status` only when Ragic has changed its mind. */
 export type SyncOp =
   | { kind: "create"; data: InsertEmployee }
@@ -24,6 +30,7 @@ export interface EmployeeSyncPlan {
   skipped: number;
   deactivated: number;
   errors: string[];
+  errorKinds: SyncErrorKinds;
   skipReasons: Record<string, number>;
   totalFetched: number;
   /** How many distinct employee codes the snapshot lists, blank-name records included. */
@@ -70,6 +77,7 @@ export function planEmployeeSync(input: EmployeeSyncInput): EmployeeSyncPlan {
     skipped: 0,
     deactivated: 0,
     errors: [],
+    errorKinds: { noRegion: 0, badEmploymentType: 0, h02ReadFailed: 0 },
     skipReasons: {},
     totalFetched: Object.keys(input.records).length,
     listedCodeCount: 0,
@@ -149,11 +157,13 @@ export function planEmployeeSync(input: EmployeeSyncInput): EmployeeSyncPlan {
       countedUpdates.add(parsed.employeeCode);
     } else {
       if (!regionId) {
+        plan.errorKinds.noRegion++;
         plan.errors.push(`${parsed.name}(${parsed.employeeCode}): 部門「${parsed.department}」無對應區域，跳過新增`);
         addSkip("部門無對應區域");
         continue;
       }
       if (!parsed.employmentType) {
+        plan.errorKinds.badEmploymentType++;
         plan.errors.push(`${parsed.name}(${parsed.employeeCode}): 聘雇類別「${parsed.rawEmploymentType}」不是正職/兼職，跳過新增`);
         addSkip(`聘雇類別未知(${parsed.rawEmploymentType || "空白"})`);
         continue;

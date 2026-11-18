@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { FLOW_DEFINITIONS, pipelineForJob, pipelineForPath } from "../../core/health/flowRules";
 import type { HealthSignals } from "../../core/health/report";
 import type { HealthReport, Pipeline } from "../../core/health/types";
+import { formatSyncErrorKinds } from "../../core/health/rules";
 import { routeTemplate } from "./healthErrors";
 
 type Evidence = NonNullable<Pipeline["evidence"]>[number];
@@ -46,24 +47,38 @@ export async function attachPipelineDrilldown(report: HealthReport, signals: Hea
       }
     }
   }
-  const failure = (id: string, at: string | undefined, summary: string) => {
+  const failure = (id: string, state: { lastFailureAt?: string | null; lastSuccessAt?: string | null; recoveredAt?: string | null }, summary: string) => {
+    const at = state.lastFailureAt;
+    if (at && [state.lastSuccessAt, state.recoveredAt].some(recovery => recovery && Date.parse(recovery) > Date.parse(at))) return;
     if (at && Number.isFinite(Date.parse(at)) && Date.parse(at) <= signals.now.getTime())
       add(id, { at: new Date(at).toISOString(), requestId: null, code: null, route: null, summary });
   };
   for (const [id, state] of Object.entries(signals.jobs)) {
-    if (state && !("readError" in state)) failure(pipelineForJob(id), state.lastFailureAt, "排程執行失敗");
+    if (!state || "readError" in state) continue;
+    const pipelineId = pipelineForJob(id);
+    failure(pipelineId, state, "排程執行失敗");
+    const errors = Number(state.lastSummary?.errors ?? 0);
+    if (id === "ragic.sync" && state.lastStartedAt && state.lastSuccessAt && errors > 0
+      && !(Date.parse(state.lastFailureAt ?? "") > Date.parse(state.lastSuccessAt))
+      && report.pipelines.some(p => p.id === pipelineId && p.level === "yellow")) {
+      const at = Date.parse(state.lastSuccessAt);
+      if (Number.isFinite(at) && at <= signals.now.getTime()) add(pipelineId, {
+        at: new Date(at).toISOString(), requestId: null, code: null, route: null,
+        summary: `最近一次同步有 ${errors} 筆資料錯誤${formatSyncErrorKinds(state.lastSummary?.errorKinds)}`,
+      });
+    }
   }
   for (const [key, state] of Object.entries(signals.integrations)) {
-    if (state && !("readError" in state)) failure(`integration.${key}`, state.lastFailureAt, "外部服務呼叫失敗");
+    if (state && !("readError" in state)) failure(`integration.${key}`, state, "外部服務呼叫失敗");
   }
   for (const [id, state] of [["errors.purge", signals.flow?.purge], ["manual.weekly-attendance", signals.flow?.weeklyAttendance]] as const) {
-    if (state && !("readError" in state)) failure(id, state.lastFailureAt, "排程執行失敗");
+    if (state && !("readError" in state)) failure(id, state, "排程執行失敗");
   }
   const webhook = signals.flow?.lineWebhook;
-  if (webhook && !("readError" in webhook)) failure("line.webhook", webhook.lastFailureAt ?? undefined, "LINE webhook 處理失敗");
+  if (webhook && !("readError" in webhook)) failure("line.webhook", webhook, "LINE webhook 處理失敗");
   if (!("readError" in signals.scheduleSave)) {
-    failure("schedule.save", signals.scheduleSave.lastCriticalAt, "排班儲存失敗");
-    failure("schedule.save", signals.scheduleSave.lastUnsavedExitAt, "排班尚未儲存即離開");
+    failure("schedule.save", { lastFailureAt: signals.scheduleSave.lastCriticalAt }, "排班儲存失敗");
+    failure("schedule.save", { lastFailureAt: signals.scheduleSave.lastUnsavedExitAt }, "排班尚未儲存即離開");
   }
   return { ...report, pipelines: report.pipelines.map(p => {
     const evidence = (entries.get(p.id) ?? []).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 5);

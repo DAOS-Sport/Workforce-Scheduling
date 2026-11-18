@@ -61,6 +61,7 @@ describe("H02 role sync through the real transaction and health state", () => {
     expect(outcome.result.errors).toEqual(["H02 讀取失敗；本輪僅同步 H01"]);
     const state = await readJobState("ragic.sync");
     expect([state?.lastStatus, state?.lastSummary?.errors]).toEqual(["success", 1]);
+    expect(state?.lastSummary?.errorKinds).toEqual({ noRegion: 0, badEmploymentType: 0, h02ReadFailed: 1 });
     expect((await pipeline()).level).toBe("yellow");
   });
 
@@ -71,6 +72,7 @@ describe("H02 role sync through the real transaction and health state", () => {
     await runRagicSync("manual");
     expect((await pipeline()).level).toBe("green");
     expect((await readJobState("ragic.sync"))?.lastSummary?.errors).toBe(0);
+    expect((await readJobState("ragic.sync"))?.lastSummary?.errorKinds).toEqual({ noRegion: 0, badEmploymentType: 0, h02ReadFailed: 0 });
   });
 
   it("reports red and writes no employee changes when H01 fails before any success", async () => {

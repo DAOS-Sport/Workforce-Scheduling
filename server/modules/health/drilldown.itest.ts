@@ -41,6 +41,26 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("drilldown-v1 through health routes and disposable PostgreSQL", () => {
+  it("shows the successful sync's classified row errors instead of a recovered job failure", async () => {
+    const now = Date.now();
+    const lastSuccessAt = new Date(now - 1000).toISOString();
+    await pool.query("insert into system_configs (key,value) values ('health:job:ragic.sync',$1)", [JSON.stringify({
+      lastStatus: "success", lastStartedAt: new Date(now - 2000).toISOString(), lastSuccessAt,
+      lastFailureAt: new Date(now - 3 * 86400_000).toISOString(), recoveredAt: new Date(now - 2 * 86400_000).toISOString(),
+      lastSummary: { errors: 11, errorKinds: { noRegion: 8, badEmploymentType: 3, h02ReadFailed: 0 } },
+    })]);
+    await withApp(async base => {
+      const response = await fetch(`${base}/api/health/pipelines`, { headers: HEADERS });
+      expect(response.status).toBe(200);
+      const report = await response.json();
+      const sync = report.pipelines.find((p: any) => p.id === "ragic.employee-sync");
+      expect(sync.level).toBe("yellow");
+      expect(sync.reason).toBe("最近一次同步成功，但有 11 筆錯誤（部門無對應區域 8、聘雇類別不符 3）");
+      expect(sync.evidence).toEqual([{ at: lastSuccessAt, requestId: null, code: null, route: null,
+        summary: "最近一次同步有 11 筆資料錯誤（部門無對應區域 8、聘雇類別不符 3）" }]);
+    });
+  });
+
   it("correlates a real 5xx request with its app_errors row and route pipeline evidence", async () => {
     await withApp(async base => {
       const failed = await fetch(`${base}/api/employees/123?phone=${PRIVATE[1]}`, { method: "PATCH", headers: { "X-Request-Id": REQUEST } });

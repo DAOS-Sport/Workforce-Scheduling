@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Employee } from "@shared/schema";
+import * as employeeParse from "./employeeParse";
 import { SnapshotRejected, assertSnapshotComplete, planEmployeeSync, type ImpliedStatus } from "./employeeSync";
 
 const isValidLineId = (id: string) => /^U[0-9a-f]{32}$/.test(id);
@@ -70,6 +71,23 @@ describe("planEmployeeSync", () => {
 
     expect([p.created, p.skipped]).toEqual([1, 0]);
     expect(p.ops[0]).toMatchObject({ kind: "create", data: { employeeCode: "E001", role: "教練", status: "active" } });
+  });
+
+  it("counts missing-region and invalid-employment errors separately", () => {
+    const regionMapping = vi.spyOn(employeeParse, "mapDepartmentToRegionCode")
+      .mockImplementation((department) => department === "測試部門甲" ? "A" : null);
+    try {
+      const p = plan(snapshot(
+        { 姓名: "測試員甲", 員工編號: "T0001", 部門: ["測試未設定部門"], 應徵職務: ["救生員"], 聘雇類別: "兼職", 在職狀態: "在職" },
+        { 姓名: "測試員乙", 員工編號: "T0002", 部門: ["測試未設定部門"], 應徵職務: ["救生員"], 聘雇類別: "正職", 在職狀態: "在職" },
+        { 姓名: "測試員丙", 員工編號: "T0003", 部門: ["測試部門甲"], 應徵職務: ["教練"], 聘雇類別: "測試未知類別", 在職狀態: "在職" },
+      ));
+
+      expect(p.errorKinds).toEqual({ noRegion: 2, badEmploymentType: 1, h02ReadFailed: 0 });
+      expect([p.skipped, p.errors.length]).toEqual([3, 3]);
+    } finally {
+      regionMapping.mockRestore();
+    }
   });
 
   it("deactivates an existing employee whose H01 role is outside the sync scope", () => {
